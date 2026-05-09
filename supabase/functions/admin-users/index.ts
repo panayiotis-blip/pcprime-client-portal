@@ -19,16 +19,28 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Whitelist of origins allowed to call this function. We echo the request
+// origin back if it's in this set; otherwise the browser blocks the call.
+const ALLOWED_ORIGINS = new Set([
+  'https://pcprime-client-portal.vercel.app',
+  'http://localhost:5173',
+]);
 
-function json(body: unknown, status = 200) {
+function corsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || '';
+  const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : '';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Vary': 'Origin',
+  };
+}
+
+function json(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 }
 
@@ -55,10 +67,10 @@ async function requireAdmin(req: Request) {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
 
   const guard = await requireAdmin(req);
-  if ('error' in guard) return json({ error: guard.error }, guard.status);
+  if ('error' in guard) return json(req, { error: guard.error }, guard.status);
 
   const url = new URL(req.url);
   // Path after /functions/v1/admin-users
@@ -69,8 +81,8 @@ Deno.serve(async (req: Request) => {
     if (req.method === 'POST' && !tail) {
       const body = await req.json();
       const { email, password, username, full_name, role, client_ids } = body || {};
-      if (!email || !password) return json({ error: 'email and password required' }, 400);
-      if (role && !['admin', 'client'].includes(role)) return json({ error: 'role must be admin or client' }, 400);
+      if (!email || !password) return json(req, { error: 'email and password required' }, 400);
+      if (role && !['admin', 'client'].includes(role)) return json(req, { error: 'role must be admin or client' }, 400);
 
       const { data, error } = await admin.auth.admin.createUser({
         email,
@@ -82,7 +94,7 @@ Deno.serve(async (req: Request) => {
           role: role || 'client',
         },
       });
-      if (error || !data.user) return json({ error: error?.message || 'Create failed' }, 400);
+      if (error || !data.user) return json(req, { error: error?.message || 'Create failed' }, 400);
 
       const newId = data.user.id;
 
@@ -99,30 +111,30 @@ Deno.serve(async (req: Request) => {
           client_ids.map((cid: number) => ({ user_id: newId, client_id: cid }))
         );
       }
-      return json({ id: newId, email });
+      return json(req, { id: newId, email });
     }
 
     // PATCH /admin-users/<uid>/password  → reset a user's password
     if (req.method === 'PATCH' && tail.endsWith('/password')) {
       const uid = tail.split('/')[0];
       const { password } = await req.json();
-      if (!uid || !password) return json({ error: 'id and password required' }, 400);
+      if (!uid || !password) return json(req, { error: 'id and password required' }, 400);
       const { error } = await admin.auth.admin.updateUserById(uid, { password });
-      if (error) return json({ error: error.message }, 400);
-      return json({ ok: true });
+      if (error) return json(req, { error: error.message }, 400);
+      return json(req, { ok: true });
     }
 
     // DELETE /admin-users/<uid>  → delete a user
     if (req.method === 'DELETE' && tail) {
       const uid = tail.split('/')[0];
-      if (!uid) return json({ error: 'user id required' }, 400);
+      if (!uid) return json(req, { error: 'user id required' }, 400);
       const { error } = await admin.auth.admin.deleteUser(uid);
-      if (error) return json({ error: error.message }, 400);
-      return json({ ok: true });
+      if (error) return json(req, { error: error.message }, 400);
+      return json(req, { ok: true });
     }
 
-    return json({ error: 'Not found', method: req.method, tail }, 404);
+    return json(req, { error: 'Not found', method: req.method, tail }, 404);
   } catch (e) {
-    return json({ error: (e as Error).message || 'Server error' }, 500);
+    return json(req, { error: (e as Error).message || 'Server error' }, 500);
   }
 });
