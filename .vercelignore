@@ -1,0 +1,11 @@
+# Files Vercel doesn't need to read during build.
+# (.gitignore already keeps node_modules / dist / .env out of git.)
+
+scripts/
+supabase/migrations/
+supabase/functions/
+supabase/files/
+_legacy-sqlite-backup/
+clients_import.csv
+*.md
+.env.scripts*
