@@ -15,6 +15,7 @@ import DocumentsPage from './components/Documents/DocumentsPage';
 import UserManagement from './components/Admin/UserManagement';
 import ComplianceDashboard from './components/Admin/ComplianceDashboard';
 import AuditLog from './components/Admin/AuditLog';
+import StaffTasks from './components/Admin/StaffTasks';
 import MergeClients from './components/Client/MergeClients';
 import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
@@ -37,6 +38,7 @@ function AuthedApp() {
             <Route path="/users" element={<UserManagement />} />
             <Route path="/compliance" element={<ComplianceDashboard />} />
             <Route path="/audit" element={<AuditLog />} />
+            <Route path="/tasks" element={<StaffTasks />} />
             <Route path="/merge" element={<MergeClients />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
