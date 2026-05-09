@@ -209,6 +209,48 @@ function computeVatPeriods(group: 1 | 2 | 3, today: Date, lookbackQ: number, loo
   return periods;
 }
 
+// ---------- Cyprus Social Insurance period helpers ----------
+// Monthly contribution period; payment + return due by the end of the month
+// FOLLOWING the contribution month (i.e. May 2026 contributions are due 30 Jun 2026).
+function computeSocialInsurancePeriods(today: Date, lookbackMonths: number, lookaheadMonths: number) {
+  const Y = today.getFullYear();
+  const M = today.getMonth();
+  const periods: { label: string; start: string; end: string; due: string }[] = [];
+  for (let i = -lookbackMonths; i < lookaheadMonths; i++) {
+    const start = new Date(Y, M + i, 1);
+    const end   = new Date(start.getFullYear(), start.getMonth() + 1, 0); // last day of start month
+    const due   = new Date(end.getFullYear(),   end.getMonth() + 2, 0);   // last day of next month
+    const monName = start.toLocaleString('en', { month: 'short' });
+    periods.push({
+      label: `${monName} ${start.getFullYear()}`,
+      start: toIsoDate(start),
+      end:   toIsoDate(end),
+      due:   toIsoDate(due),
+    });
+  }
+  return periods;
+}
+
+// ---------- Cyprus IR7 (annual employer return) helpers ----------
+// Annual return for the calendar year; due 31 May of the following year (electronic).
+function computeIR7Periods(today: Date, lookbackYears: number, lookaheadYears: number) {
+  const Y = today.getFullYear();
+  const periods: { label: string; start: string; end: string; due: string }[] = [];
+  for (let i = -lookbackYears; i < lookaheadYears; i++) {
+    const year  = Y + i;
+    const start = new Date(year,     0,  1);
+    const end   = new Date(year,     11, 31);
+    const due   = new Date(year + 1, 4,  31); // 31 May next year (month index 4)
+    periods.push({
+      label: `${year}`,
+      start: toIsoDate(start),
+      end:   toIsoDate(end),
+      due:   toIsoDate(due),
+    });
+  }
+  return periods;
+}
+
 // Batch month from DD/MM/YYYY → YYYY-MM
 function toBatchMonth(d: string): string {
   if (!d) return '';
@@ -723,6 +765,76 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Staff Tasks ---------
+  async getStaffTasks(params?: {
+    assignee?: string;
+    status?: string;
+    priority?: string;
+    client_id?: number;
+    from?: string;
+    to?: string;
+  }) {
+    let q = supabase.from('staff_tasks')
+      .select('*, client:clients(name, client_code)')
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false });
+    if (params?.assignee)  q = q.eq('assigned_to', params.assignee);
+    if (params?.status)    q = q.eq('status', params.status);
+    if (params?.priority)  q = q.eq('priority', params.priority);
+    if (params?.client_id) q = q.eq('client_id', params.client_id);
+    if (params?.from)      q = q.gte('due_date', params.from);
+    if (params?.to)        q = q.lte('due_date', params.to);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []).map((t: any) => ({
+      ...t,
+      client_name: t.client?.name || null,
+      client_code: t.client?.client_code || null,
+    }));
+  },
+
+  async createStaffTask(data: {
+    title: string;
+    description?: string;
+    client_id?: number | null;
+    assigned_to?: string | null;
+    due_date?: string | null;
+    priority?: string;
+    status?: string;
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('staff_tasks').insert({
+      title:        data.title,
+      description:  data.description || null,
+      client_id:    data.client_id || null,
+      assigned_to:  data.assigned_to || null,
+      created_by:   session?.user?.id || null,
+      due_date:     data.due_date || null,
+      priority:     data.priority || 'medium',
+      status:       data.status || 'open',
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id };
+  },
+
+  async updateStaffTask(id: number, patch: any) {
+    // Auto-stamp completed_at when status flips to 'done'
+    const finalPatch: any = { ...patch };
+    if (patch.status === 'done' && patch.completed_at === undefined) {
+      finalPatch.completed_at = new Date().toISOString();
+    }
+    if (patch.status && patch.status !== 'done' && patch.completed_at === undefined) {
+      finalPatch.completed_at = null;
+    }
+    const { error } = await supabase.from('staff_tasks').update(finalPatch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteStaffTask(id: number) {
+    const { error } = await supabase.from('staff_tasks').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Audit logging ---------
   async getAuditLog(filters?: {
     actor?: string;
@@ -844,17 +956,97 @@ export const api = {
           period_start: p.start,
           period_end: p.end,
           due_date: p.due,
-          status: 'pending',
+          status: 'not_started',
         });
       }
     }
-    if (rows.length === 0) return { created: 0, attempted: 0, vat_clients: 0 };
+    if (rows.length === 0) return { created: 0, attempted: 0, eligible_clients: 0 };
     const { data, error: insErr } = await supabase
       .from('compliance_tasks')
       .upsert(rows, { onConflict: 'client_id,kind,period_start', ignoreDuplicates: true })
       .select('id');
     if (insErr) throw new Error(insErr.message);
-    return { created: data?.length || 0, attempted: rows.length, vat_clients: (vatClients || []).length };
+    return { created: data?.length || 0, attempted: rows.length, eligible_clients: (vatClients || []).length };
+  },
+
+  async generateSocialInsuranceTasks(opts: { lookbackMonths?: number; lookaheadMonths?: number } = {}) {
+    const lookback  = opts.lookbackMonths  ?? 1;
+    const lookahead = opts.lookaheadMonths ?? 6;
+    // Employers = clients with an employer_number set (Cyprus SI registration).
+    const { data: employers, error } = await supabase
+      .from('clients')
+      .select('id, employer_number')
+      .not('employer_number', 'is', null)
+      .neq('employer_number', '');
+    if (error) throw new Error(error.message);
+
+    const today = new Date();
+    const periods = computeSocialInsurancePeriods(today, lookback, lookahead);
+    const rows: any[] = [];
+    for (const c of employers || []) {
+      for (const p of periods) {
+        rows.push({
+          client_id: c.id,
+          kind: 'social_insurance_monthly',
+          period_label: p.label,
+          period_start: p.start,
+          period_end: p.end,
+          due_date: p.due,
+          status: 'not_started',
+        });
+      }
+    }
+    if (rows.length === 0) return { created: 0, attempted: 0, eligible_clients: 0 };
+    const { data, error: insErr } = await supabase
+      .from('compliance_tasks')
+      .upsert(rows, { onConflict: 'client_id,kind,period_start', ignoreDuplicates: true })
+      .select('id');
+    if (insErr) throw new Error(insErr.message);
+    return { created: data?.length || 0, attempted: rows.length, eligible_clients: (employers || []).length };
+  },
+
+  async generateIR7Tasks(opts: { lookbackYears?: number; lookaheadYears?: number } = {}) {
+    const lookback  = opts.lookbackYears  ?? 1;
+    const lookahead = opts.lookaheadYears ?? 1;
+    const { data: employers, error } = await supabase
+      .from('clients')
+      .select('id, employer_number')
+      .not('employer_number', 'is', null)
+      .neq('employer_number', '');
+    if (error) throw new Error(error.message);
+
+    const today = new Date();
+    const periods = computeIR7Periods(today, lookback, lookahead);
+    const rows: any[] = [];
+    for (const c of employers || []) {
+      for (const p of periods) {
+        rows.push({
+          client_id: c.id,
+          kind: 'ir7_annual',
+          period_label: p.label,
+          period_start: p.start,
+          period_end: p.end,
+          due_date: p.due,
+          status: 'not_started',
+        });
+      }
+    }
+    if (rows.length === 0) return { created: 0, attempted: 0, eligible_clients: 0 };
+    const { data, error: insErr } = await supabase
+      .from('compliance_tasks')
+      .upsert(rows, { onConflict: 'client_id,kind,period_start', ignoreDuplicates: true })
+      .select('id');
+    if (insErr) throw new Error(insErr.message);
+    return { created: data?.length || 0, attempted: rows.length, eligible_clients: (employers || []).length };
+  },
+
+  async generateAllComplianceTasks() {
+    const [vat, si, ir7] = await Promise.all([
+      api.generateVatTasks(),
+      api.generateSocialInsuranceTasks(),
+      api.generateIR7Tasks(),
+    ]);
+    return { vat, si, ir7 };
   },
 
   // --------- Journal types ---------

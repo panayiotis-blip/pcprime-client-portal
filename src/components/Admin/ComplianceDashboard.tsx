@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 
+type Status = 'not_started' | 'in_preparation' | 'filed' | 'completed';
+
 type Task = {
   id: number;
   client_id: number;
@@ -13,14 +15,33 @@ type Task = {
   period_start: string;
   period_end: string;
   due_date: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  status: Status;
   completed_at: string | null;
   submitted_at: string | null;
   reference: string | null;
   notes: string | null;
 };
 
-const STATUS_OPTIONS: Task['status'][] = ['pending', 'in_progress', 'completed', 'cancelled'];
+const STATUS_OPTIONS: Status[] = ['not_started', 'in_preparation', 'filed', 'completed'];
+const STATUS_LABEL: Record<Status, string> = {
+  not_started:    'Not Started',
+  in_preparation: 'In Preparation',
+  filed:          'Filed',
+  completed:      'Completed',
+};
+
+const KIND_OPTIONS = [
+  { value: '',                          label: 'All' },
+  { value: 'vat_quarterly',             label: 'VAT' },
+  { value: 'social_insurance_monthly',  label: 'Social Insurance' },
+  { value: 'ir7_annual',                label: 'IR7' },
+] as const;
+
+const KIND_LABEL: Record<string, string> = {
+  vat_quarterly:            'VAT',
+  social_insurance_monthly: 'SI',
+  ir7_annual:               'IR7',
+};
 
 const todayIso = () => {
   const d = new Date();
@@ -33,11 +54,14 @@ const daysFromToday = (iso: string) => {
   return Math.round((d.getTime() - t.getTime()) / 86400000);
 };
 
+const isOpenStatus = (s: Status) => s === 'not_started' || s === 'in_preparation';
+const isClosedStatus = (s: Status) => s === 'filed' || s === 'completed';
+
 const dueClass = (t: Task) => {
-  if (t.status === 'completed') return 'status-exported';
+  if (isClosedStatus(t.status)) return 'status-exported';
   const days = daysFromToday(t.due_date);
-  if (days < 0) return 'status-draft';   // overdue — uses red-ish "draft" badge
-  if (days <= 14) return 'status-reviewed'; // due soon — amber
+  if (days < 0)   return 'status-draft';     // overdue — red
+  if (days <= 14) return 'status-reviewed';  // due soon — amber
   return '';
 };
 
@@ -48,7 +72,8 @@ export default function ComplianceDashboard() {
   const [generating, setGenerating] = useState(false);
 
   const [fClient, setFClient]   = useState<string>('');
-  const [fStatus, setFStatus]   = useState<string>('open'); // 'open' = pending+in_progress
+  const [fStatus, setFStatus]   = useState<string>('open'); // 'open' = not_started + in_preparation
+  const [fKind, setFKind]       = useState<string>('');
   const [fFrom, setFFrom]       = useState<string>('');
   const [fTo, setFTo]           = useState<string>('');
   const [search, setSearch]     = useState<string>('');
@@ -56,8 +81,9 @@ export default function ComplianceDashboard() {
   const reload = async () => {
     setLoading(true);
     try {
-      const params: any = { kind: 'vat_quarterly' };
+      const params: any = {};
       if (fClient)             params.client_id = Number(fClient);
+      if (fKind)               params.kind = fKind;
       if (fStatus && fStatus !== 'all' && fStatus !== 'open') params.status = fStatus;
       if (fFrom)               params.from = fFrom;
       if (fTo)                 params.to = fTo;
@@ -70,11 +96,11 @@ export default function ComplianceDashboard() {
     }
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fClient, fStatus, fFrom, fTo]);
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fClient, fStatus, fKind, fFrom, fTo]);
 
   const visibleTasks = useMemo(() => {
     let out = tasks;
-    if (fStatus === 'open') out = out.filter(t => t.status === 'pending' || t.status === 'in_progress');
+    if (fStatus === 'open') out = out.filter(t => isOpenStatus(t.status));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       out = out.filter(t =>
@@ -89,23 +115,28 @@ export default function ComplianceDashboard() {
   const stats = useMemo(() => {
     const today = todayIso();
     return {
-      total: visibleTasks.length,
-      overdue: visibleTasks.filter(t => t.status !== 'completed' && t.due_date < today).length,
-      due30: visibleTasks.filter(t => {
-        if (t.status === 'completed') return false;
+      total:   visibleTasks.length,
+      overdue: visibleTasks.filter(t => !isClosedStatus(t.status) && t.due_date < today).length,
+      due30:   visibleTasks.filter(t => {
+        if (isClosedStatus(t.status)) return false;
         const d = daysFromToday(t.due_date);
         return d >= 0 && d <= 30;
       }).length,
-      done: visibleTasks.filter(t => t.status === 'completed').length,
+      done: visibleTasks.filter(t => isClosedStatus(t.status)).length,
     };
   }, [visibleTasks]);
 
-  const handleGenerate = async () => {
-    if (!confirm('Generate the current and next 4 VAT quarters for every VAT-registered client? Duplicates will be skipped automatically.')) return;
+  const runGenerator = async (label: string, fn: () => Promise<any>) => {
     setGenerating(true);
     try {
-      const r = await api.generateVatTasks({ lookbackQuarters: 1, lookaheadQuarters: 4 });
-      alert(`Done.\nVAT-registered clients: ${r.vat_clients}\nRows attempted:         ${r.attempted}\nNew tasks created:      ${r.created}`);
+      const r = await fn();
+      // generateAll returns { vat, si, ir7 }; single generators return flat objects.
+      const summarise = (key: string, x: any) =>
+        x ? `\n${key}: ${x.created} created, ${x.eligible_clients} clients` : '';
+      const summary = ('vat' in r && 'si' in r && 'ir7' in r)
+        ? `${summarise('VAT', r.vat)}${summarise('SI', r.si)}${summarise('IR7', r.ir7)}`
+        : `\nCreated: ${r.created}\nEligible clients: ${r.eligible_clients}\nRows attempted: ${r.attempted}`;
+      alert(`Generated ${label} tasks.${summary}`);
       await reload();
     } catch (err: any) {
       alert('Generation failed: ' + err.message);
@@ -123,21 +154,25 @@ export default function ComplianceDashboard() {
     }
   };
 
-  const markDone = (t: Task) => {
+  const markFiled = (t: Task) => {
+    patchTask(t.id, { status: 'filed', submitted_at: t.submitted_at || todayIso() } as Partial<Task>);
+  };
+
+  const markCompleted = (t: Task) => {
     const today = todayIso();
     patchTask(t.id, {
       status: 'completed',
-      completed_at: t.completed_at || today,
       submitted_at: t.submitted_at || today,
+      completed_at: t.completed_at || today,
     } as Partial<Task>);
   };
 
   const reopen = (t: Task) => {
-    patchTask(t.id, { status: 'pending', completed_at: null, submitted_at: null } as Partial<Task>);
+    patchTask(t.id, { status: 'not_started', completed_at: null, submitted_at: null } as Partial<Task>);
   };
 
   const handleDelete = async (t: Task) => {
-    if (!confirm(`Delete this task for ${t.client_name} (${t.period_label})?`)) return;
+    if (!confirm(`Delete this ${KIND_LABEL[t.kind] || t.kind} task for ${t.client_name} (${t.period_label})?`)) return;
     try {
       await api.deleteComplianceTask(t.id);
       setTasks(prev => prev.filter(x => x.id !== t.id));
@@ -149,12 +184,13 @@ export default function ComplianceDashboard() {
   return (
     <div className="dashboard compliance-dashboard">
       <div className="dashboard-header">
-        <h2>Compliance — VAT Returns</h2>
-        <div className="dashboard-actions">
-          <button className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
-            {generating ? 'Generating...' : '+ Generate Quarters'}
-          </button>
-          <button className="btn btn-secondary" onClick={() => window.print()}>Print</button>
+        <h2>Compliance</h2>
+        <div className="dashboard-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <button className="btn btn-secondary btn-sm" disabled={generating} onClick={() => runGenerator('VAT', () => api.generateVatTasks())}>+ VAT</button>
+          <button className="btn btn-secondary btn-sm" disabled={generating} onClick={() => runGenerator('SI',  () => api.generateSocialInsuranceTasks())}>+ SI</button>
+          <button className="btn btn-secondary btn-sm" disabled={generating} onClick={() => runGenerator('IR7', () => api.generateIR7Tasks())}>+ IR7</button>
+          <button className="btn btn-primary    btn-sm" disabled={generating} onClick={() => runGenerator('all', () => api.generateAllComplianceTasks())}>{generating ? 'Generating...' : '+ Generate All'}</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>
 
@@ -162,10 +198,21 @@ export default function ComplianceDashboard() {
         <div className="stat-card"><div className="stat-number">{stats.total}</div><div className="stat-label">Tasks</div></div>
         <div className="stat-card stat-draft"><div className="stat-number">{stats.overdue}</div><div className="stat-label">Overdue</div></div>
         <div className="stat-card stat-reviewed"><div className="stat-number">{stats.due30}</div><div className="stat-label">Due ≤ 30d</div></div>
-        <div className="stat-card stat-exported"><div className="stat-number">{stats.done}</div><div className="stat-label">Completed</div></div>
+        <div className="stat-card stat-exported"><div className="stat-number">{stats.done}</div><div className="stat-label">Closed</div></div>
       </div>
 
-      <div className="filters-bar no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', margin: '16px 0' }}>
+      {/* Kind chip row */}
+      <div className="no-print" style={{ display: 'flex', gap: 6, margin: '14px 0 6px 0', flexWrap: 'wrap' }}>
+        {KIND_OPTIONS.map(k => (
+          <button
+            key={k.value}
+            className={`btn btn-sm ${fKind === k.value ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setFKind(k.value)}
+          >{k.label}</button>
+        ))}
+      </div>
+
+      <div className="filters-bar no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', margin: '6px 0 16px 0' }}>
         <div className="form-group" style={{ minWidth: 200 }}>
           <label>Client</label>
           <select className="form-input" value={fClient} onChange={e => setFClient(e.target.value)}>
@@ -175,12 +222,12 @@ export default function ComplianceDashboard() {
             ))}
           </select>
         </div>
-        <div className="form-group" style={{ minWidth: 160 }}>
+        <div className="form-group" style={{ minWidth: 180 }}>
           <label>Status</label>
           <select className="form-input" value={fStatus} onChange={e => setFStatus(e.target.value)}>
-            <option value="open">Open (pending + in progress)</option>
+            <option value="open">Open (not started + in preparation)</option>
             <option value="all">All</option>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
         </div>
         <div className="form-group">
@@ -202,7 +249,11 @@ export default function ComplianceDashboard() {
       ) : visibleTasks.length === 0 ? (
         <div className="empty-state">
           <p>No tasks match the current filters.</p>
-          <p>Mark clients as VAT-registered (with a period group) on their detail page, then click <strong>+ Generate Quarters</strong>.</p>
+          <p>
+            For VAT: mark clients as VAT-registered with a period group on their detail page.<br/>
+            For Social Insurance & IR7: clients need an <code>employer_number</code> set.<br/>
+            Then click <strong>+ Generate All</strong> above.
+          </p>
         </div>
       ) : (
         <div className="compliance-table-wrapper">
@@ -210,11 +261,12 @@ export default function ComplianceDashboard() {
             <thead>
               <tr>
                 <th>Client</th>
+                <th>Type</th>
                 <th>Period</th>
                 <th>Due</th>
                 <th>Status</th>
-                <th>Completed</th>
                 <th>Submitted</th>
+                <th>Completed</th>
                 <th>Reference</th>
                 <th className="no-print">Actions</th>
               </tr>
@@ -228,28 +280,18 @@ export default function ComplianceDashboard() {
                       {t.client_name}
                     </Link>
                   </td>
+                  <td><span className="status-badge">{KIND_LABEL[t.kind] || t.kind}</span></td>
                   <td>{t.period_label || `${t.period_start} → ${t.period_end}`}</td>
-                  <td>
-                    <span className={`status-badge ${dueClass(t)}`}>{t.due_date}</span>
-                  </td>
+                  <td><span className={`status-badge ${dueClass(t)}`}>{t.due_date}</span></td>
                   <td>
                     <select
                       className="form-input form-input-sm no-print"
                       value={t.status}
-                      onChange={e => patchTask(t.id, { status: e.target.value as Task['status'] } as any)}
+                      onChange={e => patchTask(t.id, { status: e.target.value as Status } as any)}
                     >
-                      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                      {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                     </select>
-                    <span className="print-only">{t.status}</span>
-                  </td>
-                  <td>
-                    <input
-                      type="date"
-                      className="form-input form-input-sm no-print"
-                      value={t.completed_at || ''}
-                      onChange={e => patchTask(t.id, { completed_at: e.target.value || null } as any)}
-                    />
-                    <span className="print-only">{t.completed_at || ''}</span>
+                    <span className="print-only">{STATUS_LABEL[t.status]}</span>
                   </td>
                   <td>
                     <input
@@ -262,6 +304,15 @@ export default function ComplianceDashboard() {
                   </td>
                   <td>
                     <input
+                      type="date"
+                      className="form-input form-input-sm no-print"
+                      value={t.completed_at || ''}
+                      onChange={e => patchTask(t.id, { completed_at: e.target.value || null } as any)}
+                    />
+                    <span className="print-only">{t.completed_at || ''}</span>
+                  </td>
+                  <td>
+                    <input
                       type="text"
                       className="form-input form-input-sm no-print"
                       placeholder="Receipt / ref"
@@ -271,10 +322,13 @@ export default function ComplianceDashboard() {
                     <span className="print-only">{t.reference || ''}</span>
                   </td>
                   <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                    {t.status === 'completed' ? (
+                    {isClosedStatus(t.status) ? (
                       <button className="btn btn-secondary btn-sm" onClick={() => reopen(t)}>Reopen</button>
                     ) : (
-                      <button className="btn btn-primary btn-sm" onClick={() => markDone(t)}>Mark Done</button>
+                      <>
+                        <button className="btn btn-secondary btn-sm" onClick={() => markFiled(t)}>File</button>
+                        <button className="btn btn-primary btn-sm" style={{ marginLeft: 6 }} onClick={() => markCompleted(t)}>Complete</button>
+                      </>
                     )}
                     <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} style={{ marginLeft: 6 }}>Delete</button>
                   </td>
