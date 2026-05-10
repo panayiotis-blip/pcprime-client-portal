@@ -2,13 +2,16 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
 import { useApp } from '../../context/AppContext';
-import { api } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { api, isSupervisorOrHigher } from '../../services/api';
 import MergeClients from './MergeClients';
 
 type ViewMode = 'cards' | 'table' | 'list';
 
 export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
+  const { user } = useAuth();
+  const canSeeDeleted = isSupervisorOrHigher(user);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
@@ -103,7 +106,7 @@ export default function ClientManager() {
           <button className="btn btn-secondary btn-sm" onClick={handleGenerateMissing} title="Auto-generate codes for clients without one">
             #️⃣ Gen Codes
           </button>
-          <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>
+          {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
           </button>

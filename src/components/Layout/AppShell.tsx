@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { isStaffRole, roleLabel } from '../../services/api';
+import { isStaffRole, isSupervisorOrHigher, isOwner, roleLabel } from '../../services/api';
 
-const adminNav = [
+// Each entry can declare a `requires` predicate to gate visibility by role.
+// No predicate = visible to any internal-firm user (owner / supervisor / admin / staff).
+type NavItem = { path: string; label: string; icon: string; requires?: (u: any) => boolean };
+
+const adminNav: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: '⌂' },
   { path: '/scan', label: 'Scan Invoice', icon: '⊞' },
   { path: '/invoices', label: 'Invoices', icon: '☰' },
@@ -12,11 +16,11 @@ const adminNav = [
   { path: '/tasks', label: 'Tasks', icon: '☑' },
   { path: '/documents', label: 'Documents', icon: '⊟' },
   { path: '/export', label: 'Export', icon: '↓' },
-  { path: '/users', label: 'Users', icon: '⊙' },
-  { path: '/audit', label: 'Audit Log', icon: '⌚' },
+  { path: '/users', label: 'Users', icon: '⊙', requires: isOwner },
+  { path: '/audit', label: 'Audit Log', icon: '⌚', requires: isSupervisorOrHigher },
 ];
 
-const clientNav = [
+const clientNav: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: '⌂' },
   { path: '/documents', label: 'Documents', icon: '⊟' },
   { path: '/invoices', label: 'Invoices', icon: '☰' },
@@ -27,7 +31,8 @@ export default function AppShell() {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const navItems = isStaffRole(user) ? adminNav : clientNav;
+  const navItems = (isStaffRole(user) ? adminNav : clientNav)
+    .filter(item => !item.requires || item.requires(user));
 
   return (
     <div className="app-shell">

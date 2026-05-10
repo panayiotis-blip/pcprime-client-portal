@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { api } from '../../services/api';
+import { api, isSupervisorOrHigher } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 type AuditEntry = {
   id: number;
@@ -44,6 +45,18 @@ function summarize(e: AuditEntry): string {
 }
 
 export default function AuditLog() {
+  const { user } = useAuth();
+  if (!isSupervisorOrHigher(user)) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header"><h2>Audit Log</h2></div>
+        <div className="empty-state">
+          <p>The audit log is visible to Owner and Supervisor roles only.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [entries, setEntries]   = useState<AuditEntry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [hasMore, setHasMore]   = useState(false);

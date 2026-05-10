@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../services/api';
+import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 type Client = {
   id: number;
@@ -13,6 +14,17 @@ type Client = {
 };
 
 export default function DeletedClients() {
+  const { user } = useAuth();
+  if (!isSupervisorOrHigher(user)) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header"><h2>Deleted Clients</h2></div>
+        <div className="empty-state">
+          <p>Restoring deleted clients is restricted to Owner and Supervisor roles.</p>
+        </div>
+      </div>
+    );
+  }
   const { refreshClients } = useApp();
   const [rows, setRows] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);

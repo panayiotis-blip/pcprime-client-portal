@@ -45,6 +45,18 @@ export function isStaffRole(user: AuthUser | null | undefined): boolean {
       || user.role === 'admin' || user.role === 'staff';
 }
 
+// True for the leadership tier (owner + supervisor). Used for the
+// destructive / sensitive operations: credentials, audit log, soft-delete.
+export function isSupervisorOrHigher(user: AuthUser | null | undefined): boolean {
+  if (!user) return false;
+  return user.role === 'owner' || user.role === 'supervisor';
+}
+
+// True for owner only. Used for user management.
+export function isOwner(user: AuthUser | null | undefined): boolean {
+  return !!user && user.role === 'owner';
+}
+
 // Display label for a role.
 export function roleLabel(role: UserRole | undefined): string {
   switch (role) {

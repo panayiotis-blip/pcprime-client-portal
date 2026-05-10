@@ -2,7 +2,7 @@ import { useState, useEffect, createContext, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { api, isStaffRole } from '../../services/api';
+import { api, isStaffRole, isSupervisorOrHigher } from '../../services/api';
 import InvoiceList from '../Invoice/InvoiceList';
 import ChartOfAccounts from './ChartOfAccounts';
 import ClientDocuments from '../Documents/ClientDocuments';
@@ -53,6 +53,8 @@ export default function ClientDetail() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const isAdmin = isStaffRole(user);
+  const canDelete = isSupervisorOrHigher(user);
+  const canSeeCredentials = isSupervisorOrHigher(user);
   const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'accounts' | 'patterns' | 'credentials' | 'kyc'>('info');
   const [client, setClient] = useState<any>(null);
   const [editing, setEditing] = useState(false);
@@ -118,7 +120,7 @@ export default function ClientDetail() {
     { key: 'documents', label: 'Documents' },
     { key: 'accounts', label: 'Chart of Accounts' },
     { key: 'patterns', label: 'Vendor Patterns' },
-    { key: 'credentials', label: 'Platform Logins' },
+    ...(canSeeCredentials ? [{ key: 'credentials', label: 'Platform Logins' }] : []),
   ];
 
   return (
@@ -133,7 +135,7 @@ export default function ClientDetail() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className={`status-badge status-${client.status === 'active' ? 'reviewed' : 'draft'}`}>{client.status || 'active'}</span>
-          {isAdmin && <button className="btn btn-danger btn-sm" onClick={handleDelete}>Delete Client</button>}
+          {canDelete && <button className="btn btn-danger btn-sm" onClick={handleDelete}>Delete Client</button>}
         </div>
       </div>
 

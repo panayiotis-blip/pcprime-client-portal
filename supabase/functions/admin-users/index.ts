@@ -57,11 +57,10 @@ async function requireAdmin(req: Request) {
   const { data: { user }, error: whoErr } = await caller.auth.getUser();
   if (whoErr || !user) return { error: 'Invalid token', status: 401 };
 
-  // Check their profile role — owner/supervisor/admin/staff all qualify
+  // User management is owner-only (per role-tier policy from migration 014).
   const { data: profile } = await admin.from('profiles').select('role, active').eq('id', user.id).maybeSingle();
-  const STAFF_ROLES = ['owner', 'supervisor', 'admin', 'staff'];
-  if (!profile || !STAFF_ROLES.includes(profile.role) || !profile.active) {
-    return { error: 'Admin privilege required', status: 403 };
+  if (!profile || profile.role !== 'owner' || !profile.active) {
+    return { error: 'Owner privilege required', status: 403 };
   }
   return { userId: user.id };
 }

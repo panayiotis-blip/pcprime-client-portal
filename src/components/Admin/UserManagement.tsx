@@ -1,11 +1,24 @@
 import { useState, useEffect } from 'react';
-import { api, roleLabel } from '../../services/api';
+import { api, roleLabel, isOwner } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
+
+  // Page-level guard. The admin-users edge function ALSO blocks non-owners
+  // server-side; this is just a friendlier UX.
+  if (!isOwner(currentUser)) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header"><h2>Users</h2></div>
+        <div className="empty-state">
+          <p>User management is restricted to the Owner role.</p>
+        </div>
+      </div>
+    );
+  }
   const { clients } = useApp();
   const [users, setUsers] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
