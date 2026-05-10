@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import FileUpload from './FileUpload';
 import CameraCapture from './CameraCapture';
 import { recognizeImage } from '../../services/ocr/ocrService';
-import { extractPdfText, renderPdfToImages } from '../../services/ocr/pdfRenderer';
+import { extractPdfText, renderPdfToImages, getPdfPageCount, renderPdfPageToJpegBlob } from '../../services/ocr/pdfRenderer';
 import { parseInvoiceText } from '../../services/ocr/invoiceParser';
 import { type ScannedInvoice } from '../../context/ScanContext';
 import { useApp } from '../../context/AppContext';
@@ -17,6 +17,10 @@ export default function ScannerPage() {
   const [scanning, setScanning] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // Per-file metadata: page count for PDFs + whether the user wants to split
+  // a multi-page PDF into one invoice per page. Map keyed by File identity
+  // (which is stable for the lifetime of a picked file).
+  const [fileMeta, setFileMeta] = useState<Map<File, { pageCount: number | null; splitMode: boolean }>>(new Map());
   const [journalCode, setJournalCode] = useState('INP');
   const [clientId, setClientId] = useState<number>(0);
   const [journalTypes, setJournalTypes] = useState<any[]>([]);
@@ -50,16 +54,54 @@ export default function ScannerPage() {
 
   const handleFilesSelect = (files: File[]) => {
     setSelectedFiles((prev) => [...prev, ...files]);
+    // Add placeholder meta immediately so the UI can show "checking pages..."
+    setFileMeta((prev) => {
+      const next = new Map(prev);
+      for (const f of files) if (!next.has(f)) next.set(f, { pageCount: null, splitMode: true });
+      return next;
+    });
+    // Async: compute page counts for PDFs (other types are 1 page).
+    files.forEach(async (file) => {
+      let pages = 1;
+      if (file.type === 'application/pdf') {
+        try { pages = await getPdfPageCount(file); } catch { pages = 1; }
+      }
+      setFileMeta((prev) => {
+        const next = new Map(prev);
+        if (next.has(file)) next.set(file, { pageCount: pages, splitMode: pages > 1 });
+        return next;
+      });
+    });
   };
 
   const removeFile = (index: number) => {
+    const file = selectedFiles[index];
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setFileMeta((prev) => {
+      const next = new Map(prev);
+      next.delete(file);
+      return next;
+    });
   };
 
   const handleCameraCapture = (blob: Blob) => {
     const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
     setSelectedFiles((prev) => [...prev, file]);
+    setFileMeta((prev) => {
+      const next = new Map(prev);
+      next.set(file, { pageCount: 1, splitMode: false });
+      return next;
+    });
     setShowCamera(false);
+  };
+
+  const toggleSplitMode = (file: File) => {
+    setFileMeta((prev) => {
+      const next = new Map(prev);
+      const meta = next.get(file);
+      if (meta) next.set(file, { ...meta, splitMode: !meta.splitMode });
+      return next;
+    });
   };
 
   const scanSingleFile = async (file: File): Promise<{ text: string; confidence: number }> => {
@@ -95,10 +137,34 @@ export default function ScannerPage() {
     }
     setScanning(true);
 
+    // First, expand any multi-page PDFs that the user wants split into per-page jobs.
+    // Each job becomes one invoice.
+    type Job = { file: File; displayName: string };
+    const jobs: Job[] = [];
+    for (const file of selectedFiles) {
+      const meta = fileMeta.get(file);
+      const shouldSplit = file.type === 'application/pdf' && meta?.pageCount && meta.pageCount > 1 && meta.splitMode;
+      if (shouldSplit) {
+        const baseName = file.name.replace(/\.pdf$/i, '');
+        for (let pageNum = 1; pageNum <= (meta.pageCount as number); pageNum++) {
+          setStatusText(`Splitting ${file.name}: page ${pageNum} of ${meta.pageCount}…`);
+          try {
+            const blob = await renderPdfPageToJpegBlob(file, pageNum);
+            const pageFile = new File([blob], `${baseName}-page-${pageNum}.jpg`, { type: 'image/jpeg' });
+            jobs.push({ file: pageFile, displayName: `${file.name} (page ${pageNum})` });
+          } catch (err) {
+            console.warn(`Failed to render ${file.name} page ${pageNum}:`, err);
+          }
+        }
+      } else {
+        jobs.push({ file, displayName: file.name });
+      }
+    }
+
     const results: ScannedInvoice[] = [];
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      setStatusText(`Scanning file ${i + 1} of ${selectedFiles.length}: ${file.name}`);
+    for (let i = 0; i < jobs.length; i++) {
+      const { file, displayName } = jobs[i];
+      setStatusText(`Scanning ${i + 1} of ${jobs.length}: ${displayName}`);
       try {
         const { text, confidence } = await scanSingleFile(file);
         const parsed = parseInvoiceText(text);
@@ -238,13 +304,31 @@ export default function ScannerPage() {
       {selectedFiles.length > 0 && (
         <div className="file-list">
           <h3>{selectedFiles.length} file(s) selected</h3>
-          {selectedFiles.map((file, i) => (
-            <div key={i} className="file-list-item">
-              <span className="file-name">{file.name}</span>
-              <span className="file-size">{(file.size / 1024).toFixed(0)} KB</span>
-              <button className="btn btn-danger btn-sm" onClick={() => removeFile(i)}>X</button>
-            </div>
-          ))}
+          {selectedFiles.map((file, i) => {
+            const meta = fileMeta.get(file);
+            const pages = meta?.pageCount;
+            const isMultiPagePdf = file.type === 'application/pdf' && pages !== null && (pages || 0) > 1;
+            return (
+              <div key={i} className="file-list-item" style={{ flexWrap: 'wrap' }}>
+                <span className="file-name">{file.name}</span>
+                <span className="file-size">{(file.size / 1024).toFixed(0)} KB</span>
+                {file.type === 'application/pdf' && pages === null && (
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>checking pages…</span>
+                )}
+                {isMultiPagePdf && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', marginLeft: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!meta?.splitMode}
+                      onChange={() => toggleSplitMode(file)}
+                    />
+                    Split {pages} pages → {pages} invoices
+                  </label>
+                )}
+                <button className="btn btn-danger btn-sm" onClick={() => removeFile(i)}>X</button>
+              </div>
+            );
+          })}
         </div>
       )}
 
