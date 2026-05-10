@@ -3,7 +3,7 @@ import { api, type AuthUser } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout';
 
-const INACTIVITY_MS = 10 * 60 * 1000;
+const INACTIVITY_MS = 8 * 60 * 60 * 1000; // 8 hours of inactivity → auto sign-out
 
 interface MfaState {
   enrolled: boolean;        // user has at least one verified TOTP factor
