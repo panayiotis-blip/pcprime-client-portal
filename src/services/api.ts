@@ -198,6 +198,57 @@ async function learnFromInvoice(clientId: number, vendorName: string, data: any)
 //   Group 3: Mar–May, Jun–Aug, Sep–Nov, Dec–Feb
 // Filing/payment due 40 days after period end → 10th of the 2nd month after period end.
 
+// -----------------------------------------------------------------
+// File-type validation by magic bytes (file signature).
+// Reads the first 16 bytes of the file and compares against known
+// signatures. Trusting the browser's claimed Content-Type is unsafe
+// (any user can rename .exe → .pdf and the browser happily reports
+// "application/pdf"), so we read the actual content here.
+//
+// LIMITATION: this is client-side only. A determined attacker who
+// calls Supabase Storage's REST API directly with a crafted
+// Content-Type header can still bypass this. Storage RLS limits
+// blast radius (uploads only land in folders the user has access
+// to), but a true belt-and-braces fix would be server-side
+// validation in an edge function. Flagged as a Phase-2 task.
+// -----------------------------------------------------------------
+const ALLOWED_TYPES_DESCRIPTION = 'PDF, JPG, PNG, HEIC, XLSX, DOCX, or ZIP';
+
+async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: string; reason?: string }> {
+  // Empty file is suspicious but not always a security issue. Reject.
+  if (!file.size) return { ok: false, type: 'empty', reason: 'File is empty.' };
+
+  const buffer = await file.slice(0, 16).arrayBuffer();
+  const b = new Uint8Array(buffer);
+  if (b.length < 4) return { ok: false, type: 'too_small', reason: 'File is too small to identify.' };
+
+  // PDF: "%PDF-"
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2D) {
+    return { ok: true, type: 'pdf' };
+  }
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) {
+    return { ok: true, type: 'png' };
+  }
+  // JPEG (any variant): FF D8 FF
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) {
+    return { ok: true, type: 'jpeg' };
+  }
+  // HEIC / HEIF: bytes 4-7 must be "ftyp"; subtype at 8-11 is heic / heix / mif1 / msf1 / hevc / heim / etc.
+  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    const subtype = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase();
+    if (['heic', 'heix', 'mif1', 'msf1', 'heim', 'hevc', 'heis', 'avif'].includes(subtype)) {
+      return { ok: true, type: 'heic' };
+    }
+  }
+  // ZIP-based (XLSX, DOCX, ODT, ZIP itself): "PK\x03\x04" or empty-archive "PK\x05\x06"
+  if (b[0] === 0x50 && b[1] === 0x4B && (b[2] === 0x03 || b[2] === 0x05) && (b[3] === 0x04 || b[3] === 0x06)) {
+    return { ok: true, type: 'zip-based' };
+  }
+
+  return { ok: false, type: 'unknown', reason: `File type not recognised. Allowed: ${ALLOWED_TYPES_DESCRIPTION}.` };
+}
+
 // Sanitize a single segment of a storage path so user-supplied input cannot
 // escape the intended folder. Removes path separators, runs of dots
 // (path traversal), control chars, and trims to a sensible length. Falls
@@ -683,6 +734,8 @@ export const api = {
     }
 
     if (file) {
+      const check = await detectAllowedFileType(file);
+      if (!check.ok) throw new Error(`Upload blocked for "${file.name}": ${check.reason}`);
       const path = `${data.client_id}/${invoiceId}/${Date.now()}_${safeStorageSegment(file.name)}`;
       const up = await supabase.storage.from('invoice-files').upload(path, file);
       if (!up.error) {
@@ -796,6 +849,8 @@ export const api = {
     const year = params.year || (params.month ? params.month.split('-')[0] : '');
     const rows: any[] = [];
     for (const f of params.files) {
+      const check = await detectAllowedFileType(f);
+      if (!check.ok) throw new Error(`Upload blocked for "${f.name}": ${check.reason}`);
       const safeCategory = safeStorageSegment(params.category || 'other');
       const path = `${params.clientId}/${safeCategory}/${Date.now()}_${safeStorageSegment(f.name)}`;
       const up = await supabase.storage.from('documents').upload(path, f);
