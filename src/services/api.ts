@@ -471,23 +471,61 @@ export const api = {
   },
 
   // --------- Platform Credentials ---------
+  // Passwords are encrypted at rest via migration 011. They never appear in the
+  // table response — use getCredentialPassword(id) to decrypt (and audit-log).
   async getCredentials(clientId: number) {
-    const { data, error } = await supabase.from('platform_credentials').select('*').eq('client_id', clientId);
+    const { data, error } = await supabase.from('platform_credentials')
+      .select('id, client_id, platform, username, notes, password_enc')
+      .eq('client_id', clientId);
     if (error) throw new Error(error.message);
-    return data || [];
+    return (data || []).map((r: any) => ({
+      ...r,
+      // Convenience flag for the UI: was a password ever set?
+      has_password: !!r.password_enc,
+      password_enc: undefined, // strip raw bytea from the response
+    }));
   },
-  async createCredential(clientId: number, data: any) {
-    const { data: row, error } = await supabase.from('platform_credentials').insert({ ...data, client_id: clientId }).select().single();
+
+  async createCredential(clientId: number, data: { platform: string; username?: string; notes?: string; password?: string }) {
+    const { data: row, error } = await supabase.from('platform_credentials').insert({
+      client_id: clientId,
+      platform: data.platform,
+      username: data.username || '',
+      notes:    data.notes    || '',
+    }).select().single();
     if (error) throw new Error(error.message);
+    if (data.password) {
+      const { error: rpcErr } = await supabase.rpc('set_credential_password', { p_id: row.id, p_password: data.password });
+      if (rpcErr) throw new Error(rpcErr.message);
+    }
     return { id: row.id };
   },
-  async updateCredential(_clientId: number, credId: number, data: any) {
-    const { error } = await supabase.from('platform_credentials').update(data).eq('id', credId);
-    if (error) throw new Error(error.message);
+
+  async updateCredential(_clientId: number, credId: number, data: { platform?: string; username?: string; notes?: string; password?: string }) {
+    const patch: any = {};
+    if (data.platform !== undefined) patch.platform = data.platform;
+    if (data.username !== undefined) patch.username = data.username;
+    if (data.notes    !== undefined) patch.notes    = data.notes;
+    if (Object.keys(patch).length > 0) {
+      const { error } = await supabase.from('platform_credentials').update(patch).eq('id', credId);
+      if (error) throw new Error(error.message);
+    }
+    if (data.password !== undefined) {
+      const { error: rpcErr } = await supabase.rpc('set_credential_password', { p_id: credId, p_password: data.password });
+      if (rpcErr) throw new Error(rpcErr.message);
+    }
   },
+
   async deleteCredential(_clientId: number, credId: number) {
     const { error } = await supabase.from('platform_credentials').delete().eq('id', credId);
     if (error) throw new Error(error.message);
+  },
+
+  // Decrypt a credential's password. Server-side function audit-logs every call.
+  async getCredentialPassword(credId: number): Promise<string> {
+    const { data, error } = await supabase.rpc('get_credential_password', { p_id: credId });
+    if (error) throw new Error(error.message);
+    return (data as string) || '';
   },
 
   // --------- Invoices ---------

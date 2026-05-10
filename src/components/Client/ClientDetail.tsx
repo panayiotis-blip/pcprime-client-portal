@@ -7,6 +7,7 @@ import InvoiceList from '../Invoice/InvoiceList';
 import ChartOfAccounts from './ChartOfAccounts';
 import ClientDocuments from '../Documents/ClientDocuments';
 import VendorPatterns from './VendorPatterns';
+import PlatformCredentials from './PlatformCredentials';
 import KYCPanel from './KYCPanel';
 
 // FieldCtx + Field are defined OUTSIDE ClientDetail on purpose.
@@ -52,7 +53,7 @@ export default function ClientDetail() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const isAdmin = isStaffRole(user);
-  const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'accounts' | 'patterns' | 'kyc'>('info');
+  const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'accounts' | 'patterns' | 'credentials' | 'kyc'>('info');
   const [client, setClient] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -117,8 +118,7 @@ export default function ClientDetail() {
     { key: 'documents', label: 'Documents' },
     { key: 'accounts', label: 'Chart of Accounts' },
     { key: 'patterns', label: 'Vendor Patterns' },
-    // 'Platform Logins' tab removed in Phase 0 — credentials must
-    // not be stored in plaintext. Existing rows preserved read-only.
+    { key: 'credentials', label: 'Platform Logins' },
   ];
 
   return (
@@ -257,6 +257,7 @@ export default function ClientDetail() {
       {tab === 'documents' && <ClientDocuments clientId={clientId} />}
       {tab === 'accounts' && <ChartOfAccounts clientId={clientId} />}
       {tab === 'patterns' && <VendorPatterns clientId={clientId} />}
+      {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
       {tab === 'kyc' && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
     </div>
   );
