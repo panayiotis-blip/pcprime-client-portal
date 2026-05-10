@@ -35,12 +35,22 @@ const KIND_OPTIONS = [
   { value: 'vat_quarterly',             label: 'VAT' },
   { value: 'social_insurance_monthly',  label: 'Social Insurance' },
   { value: 'ir7_annual',                label: 'IR7' },
+  { value: 'provisional_tax',           label: 'Provisional Tax' },
+  { value: 'he32_annual',               label: 'HE32' },
 ] as const;
 
 const KIND_LABEL: Record<string, string> = {
   vat_quarterly:            'VAT',
   social_insurance_monthly: 'SI',
   ir7_annual:               'IR7',
+  provisional_tax:          'Prov. Tax',
+  he32_annual:              'HE32',
+};
+
+// Default month picker value: this month, formatted YYYY-MM (HTML <input type="month">).
+const currentYyyyMm = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
 const todayIso = () => {
@@ -77,6 +87,7 @@ export default function ComplianceDashboard() {
   const [fFrom, setFFrom]       = useState<string>('');
   const [fTo, setFTo]           = useState<string>('');
   const [search, setSearch]     = useState<string>('');
+  const [genMonth, setGenMonth] = useState<string>(currentYyyyMm());
 
   const reload = async () => {
     setLoading(true);
@@ -126,17 +137,23 @@ export default function ComplianceDashboard() {
     };
   }, [visibleTasks]);
 
-  const runGenerator = async (label: string, fn: () => Promise<any>) => {
+  const runGenerateForMonth = async () => {
+    if (!genMonth) { alert('Pick a month first'); return; }
     setGenerating(true);
     try {
-      const r = await fn();
-      // generateAll returns { vat, si, ir7 }; single generators return flat objects.
-      const summarise = (key: string, x: any) =>
-        x ? `\n${key}: ${x.created} created, ${x.eligible_clients} clients` : '';
-      const summary = ('vat' in r && 'si' in r && 'ir7' in r)
-        ? `${summarise('VAT', r.vat)}${summarise('SI', r.si)}${summarise('IR7', r.ir7)}`
-        : `\nCreated: ${r.created}\nEligible clients: ${r.eligible_clients}\nRows attempted: ${r.attempted}`;
-      alert(`Generated ${label} tasks.${summary}`);
+      const r = await api.generateForMonth(genMonth);
+      const lines = [
+        `Routine (due by end of ${genMonth} or overdue):`,
+        `  VAT:             ${r.vat.created} new`,
+        `  Social Insurance:${r.si.created} new`,
+        `  IR7:             ${r.ir7.created} new`,
+        `Important (forward-looking):`,
+        `  Provisional Tax: ${r.ptax.created} new (${r.ptax.eligible_clients} clients)`,
+        `  HE32:            ${r.he32.created} new (${r.he32.eligible_clients} clients with incorporation_date)`,
+        ``,
+        `Total new tasks: ${r.total}`,
+      ];
+      alert(lines.join('\n'));
       await reload();
     } catch (err: any) {
       alert('Generation failed: ' + err.message);
@@ -185,11 +202,18 @@ export default function ComplianceDashboard() {
     <div className="dashboard compliance-dashboard">
       <div className="dashboard-header">
         <h2>Compliance</h2>
-        <div className="dashboard-actions" style={{ flexWrap: 'wrap', gap: 6 }}>
-          <button className="btn btn-secondary btn-sm" disabled={generating} onClick={() => runGenerator('VAT', () => api.generateVatTasks())}>+ VAT</button>
-          <button className="btn btn-secondary btn-sm" disabled={generating} onClick={() => runGenerator('SI',  () => api.generateSocialInsuranceTasks())}>+ SI</button>
-          <button className="btn btn-secondary btn-sm" disabled={generating} onClick={() => runGenerator('IR7', () => api.generateIR7Tasks())}>+ IR7</button>
-          <button className="btn btn-primary    btn-sm" disabled={generating} onClick={() => runGenerator('all', () => api.generateAllComplianceTasks())}>{generating ? 'Generating...' : '+ Generate All'}</button>
+        <div className="dashboard-actions" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+          <label style={{ fontSize: 13, color: '#475569' }}>Focus month:</label>
+          <input
+            type="month"
+            value={genMonth}
+            onChange={(e) => setGenMonth(e.target.value)}
+            className="form-input"
+            style={{ width: 160, padding: '6px 8px' }}
+          />
+          <button className="btn btn-primary btn-sm" disabled={generating} onClick={runGenerateForMonth}>
+            {generating ? 'Generating...' : '+ Generate'}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}>Print</button>
         </div>
       </div>

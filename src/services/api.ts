@@ -285,6 +285,58 @@ function computeIR7Periods(today: Date, lookbackYears: number, lookaheadYears: n
   return periods;
 }
 
+// ---------- Cyprus Provisional Tax (Temporary Tax) helpers ----------
+// Two installments per tax year: 31 July and 31 December.
+function computeProvisionalTaxPeriods(asOf: Date, lookbackYears: number, lookaheadYears: number) {
+  const Y = asOf.getFullYear();
+  const periods: { label: string; start: string; end: string; due: string }[] = [];
+  for (let i = -lookbackYears; i <= lookaheadYears; i++) {
+    const year = Y + i;
+    // 1st installment: covers Jan–Jun of the year, due 31 Jul
+    periods.push({
+      label: `${year} — 1st installment`,
+      start: toIsoDate(new Date(year, 0,  1)),
+      end:   toIsoDate(new Date(year, 5, 30)),
+      due:   toIsoDate(new Date(year, 6, 31)),
+    });
+    // 2nd installment: covers Jul–Dec of the year, due 31 Dec
+    periods.push({
+      label: `${year} — 2nd installment`,
+      start: toIsoDate(new Date(year,  6,  1)),
+      end:   toIsoDate(new Date(year, 11, 31)),
+      due:   toIsoDate(new Date(year, 11, 31)),
+    });
+  }
+  return periods;
+}
+
+// ---------- Cyprus HE32 (Annual Return to Registrar) helpers ----------
+// Per-company anniversary. We approximate due date as
+// (incorporation anniversary + 28 days) — close enough; real Cyprus
+// rules around AGM date are more nuanced but this catches the spirit.
+function computeHE32Periods(asOf: Date, incorporation: Date, lookbackYears: number, lookaheadYears: number) {
+  const Y = asOf.getFullYear();
+  const incY = incorporation.getFullYear();
+  const incM = incorporation.getMonth();
+  const incD = incorporation.getDate();
+  const periods: { label: string; start: string; end: string; due: string }[] = [];
+  for (let i = -lookbackYears; i <= lookaheadYears; i++) {
+    const year = Y + i;
+    if (year < incY) continue;          // skip years before the company existed
+    const anniversary = new Date(year, incM, incD);
+    const due         = new Date(year, incM, incD + 28);  // Date ctor handles month overflow
+    periods.push({
+      label: `HE32 — ${year}`,
+      start: toIsoDate(new Date(year, 0,  1)),
+      end:   toIsoDate(new Date(year, 11, 31)),
+      due:   toIsoDate(due),
+      // anniversary unused but kept here in case we want to display it later
+      _anniversary: toIsoDate(anniversary),
+    } as any);
+  }
+  return periods;
+}
+
 // Batch month from DD/MM/YYYY → YYYY-MM
 function toBatchMonth(d: string): string {
   if (!d) return '';
@@ -1113,7 +1165,8 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
-  async generateVatTasks(opts: { lookbackQuarters?: number; lookaheadQuarters?: number } = {}) {
+  async generateVatTasks(opts: { lookbackQuarters?: number; lookaheadQuarters?: number; asOf?: Date; dueOnOrBefore?: string } = {}) {
+    const asOf      = opts.asOf || new Date();
     const lookback  = opts.lookbackQuarters  ?? 1;
     const lookahead = opts.lookaheadQuarters ?? 4;
     const { data: vatClients, error } = await supabase
@@ -1123,11 +1176,11 @@ export const api = {
       .not('vat_period_group', 'is', null);
     if (error) throw new Error(error.message);
 
-    const today = new Date();
     const rows: any[] = [];
     for (const c of vatClients || []) {
       const group = c.vat_period_group as 1 | 2 | 3;
-      for (const p of computeVatPeriods(group, today, lookback, lookahead)) {
+      for (const p of computeVatPeriods(group, asOf, lookback, lookahead)) {
+        if (opts.dueOnOrBefore && p.due > opts.dueOnOrBefore) continue;
         rows.push({
           client_id: c.id,
           kind: 'vat_quarterly',
@@ -1148,7 +1201,8 @@ export const api = {
     return { created: data?.length || 0, attempted: rows.length, eligible_clients: (vatClients || []).length };
   },
 
-  async generateSocialInsuranceTasks(opts: { lookbackMonths?: number; lookaheadMonths?: number } = {}) {
+  async generateSocialInsuranceTasks(opts: { lookbackMonths?: number; lookaheadMonths?: number; asOf?: Date; dueOnOrBefore?: string } = {}) {
+    const asOf      = opts.asOf || new Date();
     const lookback  = opts.lookbackMonths  ?? 1;
     const lookahead = opts.lookaheadMonths ?? 6;
     // Employers = clients with an employer_number set (Cyprus SI registration).
@@ -1159,11 +1213,11 @@ export const api = {
       .neq('employer_number', '');
     if (error) throw new Error(error.message);
 
-    const today = new Date();
-    const periods = computeSocialInsurancePeriods(today, lookback, lookahead);
+    const periods = computeSocialInsurancePeriods(asOf, lookback, lookahead);
     const rows: any[] = [];
     for (const c of employers || []) {
       for (const p of periods) {
+        if (opts.dueOnOrBefore && p.due > opts.dueOnOrBefore) continue;
         rows.push({
           client_id: c.id,
           kind: 'social_insurance_monthly',
@@ -1184,7 +1238,8 @@ export const api = {
     return { created: data?.length || 0, attempted: rows.length, eligible_clients: (employers || []).length };
   },
 
-  async generateIR7Tasks(opts: { lookbackYears?: number; lookaheadYears?: number } = {}) {
+  async generateIR7Tasks(opts: { lookbackYears?: number; lookaheadYears?: number; asOf?: Date; dueOnOrBefore?: string } = {}) {
+    const asOf      = opts.asOf || new Date();
     const lookback  = opts.lookbackYears  ?? 1;
     const lookahead = opts.lookaheadYears ?? 1;
     const { data: employers, error } = await supabase
@@ -1194,11 +1249,11 @@ export const api = {
       .neq('employer_number', '');
     if (error) throw new Error(error.message);
 
-    const today = new Date();
-    const periods = computeIR7Periods(today, lookback, lookahead);
+    const periods = computeIR7Periods(asOf, lookback, lookahead);
     const rows: any[] = [];
     for (const c of employers || []) {
       for (const p of periods) {
+        if (opts.dueOnOrBefore && p.due > opts.dueOnOrBefore) continue;
         rows.push({
           client_id: c.id,
           kind: 'ir7_annual',
@@ -1226,6 +1281,108 @@ export const api = {
       api.generateIR7Tasks(),
     ]);
     return { vat, si, ir7 };
+  },
+
+  // -- New "important" generators -------------------------------
+
+  async generateProvisionalTaxTasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number } = {}) {
+    const asOf      = opts.asOf || new Date();
+    const lookback  = opts.lookbackYears  ?? 0;
+    const lookahead = opts.lookaheadYears ?? 1;
+
+    // Eligible: VAT-registered clients OR clients with an employer_number
+    // (proxy for "has business income subject to provisional tax").
+    const { data: clients, error } = await supabase
+      .from('clients')
+      .select('id, vat_registered, employer_number');
+    if (error) throw new Error(error.message);
+    const eligible = (clients || []).filter(c =>
+      c.vat_registered === true || (c.employer_number && String(c.employer_number).trim() !== '')
+    );
+
+    const periods = computeProvisionalTaxPeriods(asOf, lookback, lookahead);
+    const rows: any[] = [];
+    for (const c of eligible) {
+      for (const p of periods) {
+        rows.push({
+          client_id: c.id,
+          kind: 'provisional_tax',
+          period_label: p.label,
+          period_start: p.start,
+          period_end: p.end,
+          due_date: p.due,
+          status: 'not_started',
+        });
+      }
+    }
+    if (rows.length === 0) return { created: 0, attempted: 0, eligible_clients: eligible.length };
+    const { data, error: insErr } = await supabase
+      .from('compliance_tasks')
+      .upsert(rows, { onConflict: 'client_id,kind,period_start', ignoreDuplicates: true })
+      .select('id');
+    if (insErr) throw new Error(insErr.message);
+    return { created: data?.length || 0, attempted: rows.length, eligible_clients: eligible.length };
+  },
+
+  async generateHE32Tasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number } = {}) {
+    const asOf      = opts.asOf || new Date();
+    const lookback  = opts.lookbackYears  ?? 0;
+    const lookahead = opts.lookaheadYears ?? 1;
+
+    // Eligible: clients with an incorporation_date (used as the anniversary anchor).
+    const { data: clients, error } = await supabase
+      .from('clients')
+      .select('id, incorporation_date')
+      .not('incorporation_date', 'is', null);
+    if (error) throw new Error(error.message);
+
+    const rows: any[] = [];
+    for (const c of clients || []) {
+      const inc = new Date(c.incorporation_date as string);
+      if (isNaN(inc.getTime())) continue;
+      for (const p of computeHE32Periods(asOf, inc, lookback, lookahead)) {
+        rows.push({
+          client_id: c.id,
+          kind: 'he32_annual',
+          period_label: p.label,
+          period_start: p.start,
+          period_end: p.end,
+          due_date: p.due,
+          status: 'not_started',
+        });
+      }
+    }
+    if (rows.length === 0) return { created: 0, attempted: 0, eligible_clients: (clients || []).length };
+    const { data, error: insErr } = await supabase
+      .from('compliance_tasks')
+      .upsert(rows, { onConflict: 'client_id,kind,period_start', ignoreDuplicates: true })
+      .select('id');
+    if (insErr) throw new Error(insErr.message);
+    return { created: data?.length || 0, attempted: rows.length, eligible_clients: (clients || []).length };
+  },
+
+  // -- Unified orchestrator --------------------------------------
+  // Picks generators tuned for the focus month:
+  //   Routine (VAT / SI / IR7): only periods due ON OR BEFORE end of yyyymm.
+  //   Important (Provisional Tax / HE32): always current + next year.
+  async generateForMonth(yyyymm: string) {
+    const m = /^(\d{4})-(\d{2})$/.exec(yyyymm);
+    if (!m) throw new Error('Expected YYYY-MM, got: ' + yyyymm);
+    const y = Number(m[1]);
+    const mo = Number(m[2]) - 1;
+    const endOfMonth      = new Date(y, mo + 1, 0);
+    const endOfMonthIso   = toIsoDate(endOfMonth);
+
+    const [vat, si, ir7, ptax, he32] = await Promise.all([
+      api.generateVatTasks({ asOf: endOfMonth, lookbackQuarters: 8, lookaheadQuarters: 2, dueOnOrBefore: endOfMonthIso }),
+      api.generateSocialInsuranceTasks({ asOf: endOfMonth, lookbackMonths: 24, lookaheadMonths: 2, dueOnOrBefore: endOfMonthIso }),
+      api.generateIR7Tasks({ asOf: endOfMonth, lookbackYears: 3, lookaheadYears: 1, dueOnOrBefore: endOfMonthIso }),
+      api.generateProvisionalTaxTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
+      api.generateHE32Tasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
+    ]);
+
+    const total = vat.created + si.created + ir7.created + ptax.created + he32.created;
+    return { vat, si, ir7, ptax, he32, total, focus_month: yyyymm };
   },
 
   // --------- Journal types ---------
