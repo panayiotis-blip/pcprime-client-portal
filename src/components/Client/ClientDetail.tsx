@@ -9,6 +9,7 @@ import ClientDocuments from '../Documents/ClientDocuments';
 import VendorPatterns from './VendorPatterns';
 import PlatformCredentials from './PlatformCredentials';
 import KYCPanel from './KYCPanel';
+import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
 // FieldCtx + Field are defined OUTSIDE ClientDetail on purpose.
 // Defining a component inside another component creates a new
@@ -60,6 +61,7 @@ export default function ClientDetail() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [showApplyTemplate, setShowApplyTemplate] = useState(false);
 
   const clientId = parseInt(id || '0');
 
@@ -135,6 +137,9 @@ export default function ClientDetail() {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span className={`status-badge status-${client.status === 'active' ? 'reviewed' : 'draft'}`}>{client.status || 'active'}</span>
+          {isAdmin && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowApplyTemplate(true)}>Apply template</button>
+          )}
           {canDelete && <button className="btn btn-danger btn-sm" onClick={handleDelete}>Delete Client</button>}
         </div>
       </div>
@@ -261,6 +266,14 @@ export default function ClientDetail() {
       {tab === 'patterns' && <VendorPatterns clientId={clientId} />}
       {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
       {tab === 'kyc' && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
+
+      {showApplyTemplate && (
+        <ApplyTaskTemplateModal
+          preSelectedClientId={clientId}
+          onClose={() => setShowApplyTemplate(false)}
+          onApplied={(n) => alert(`Created ${n} task(s) for ${client.name}.`)}
+        />
+      )}
     </div>
   );
 }

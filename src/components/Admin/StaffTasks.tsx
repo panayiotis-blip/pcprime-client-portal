@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
@@ -69,6 +70,7 @@ export default function StaffTasks() {
     () => (localStorage.getItem('staff_tasks_view') as 'table' | 'list') || 'table'
   );
   const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('staff_tasks_view', m); };
+  const [showApplyTemplate, setShowApplyTemplate] = useState(false);
 
   // Filters
   const [fAssignee, setFAssignee] = useState<string>('');
@@ -210,7 +212,10 @@ export default function StaffTasks() {
       <div className="dashboard-header">
         <h2>Tasks</h2>
         <div className="dashboard-actions">
-          <button className="btn btn-primary" onClick={() => setShowForm(s => !s)}>
+          <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)}>
+            From template
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowForm(s => !s)} style={{ marginLeft: 6 }}>
             {showForm ? 'Cancel' : '+ New Task'}
           </button>
         </div>
@@ -435,6 +440,13 @@ export default function StaffTasks() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showApplyTemplate && (
+        <ApplyTaskTemplateModal
+          onClose={() => setShowApplyTemplate(false)}
+          onApplied={() => reload()}
+        />
       )}
     </div>
   );

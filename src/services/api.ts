@@ -1081,6 +1081,89 @@ export const api = {
     return data;
   },
 
+  // --------- Task Templates ---------
+  async getTaskTemplates() {
+    const { data, error } = await supabase.from('task_templates').select('*').order('name');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async getTaskTemplate(id: number) {
+    const [tplR, itemsR] = await Promise.all([
+      supabase.from('task_templates').select('*').eq('id', id).single(),
+      supabase.from('task_template_items').select('*').eq('template_id', id)
+        .order('ordinal', { ascending: true })
+        .order('id', { ascending: true }),
+    ]);
+    if (tplR.error)   throw new Error(tplR.error.message);
+    if (itemsR.error) throw new Error(itemsR.error.message);
+    return { ...tplR.data, items: itemsR.data || [] };
+  },
+
+  async createTaskTemplate(data: { name: string; description?: string }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('task_templates').insert({
+      name: data.name,
+      description: data.description || null,
+      created_by: session?.user?.id || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id };
+  },
+
+  async updateTaskTemplate(id: number, patch: { name?: string; description?: string | null }) {
+    const { error } = await supabase.from('task_templates').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteTaskTemplate(id: number) {
+    const { error } = await supabase.from('task_templates').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async createTaskTemplateItem(templateId: number, data: {
+    title: string; description?: string | null;
+    default_priority?: 'low' | 'medium' | 'high' | 'urgent';
+    days_offset?: number | null; default_assignee?: string | null;
+    ordinal?: number;
+  }) {
+    const { data: row, error } = await supabase.from('task_template_items').insert({
+      template_id: templateId,
+      ordinal:          data.ordinal ?? 0,
+      title:            data.title,
+      description:      data.description || null,
+      default_priority: data.default_priority || 'medium',
+      days_offset:      data.days_offset ?? null,
+      default_assignee: data.default_assignee || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id };
+  },
+
+  async updateTaskTemplateItem(id: number, patch: any) {
+    const { error } = await supabase.from('task_template_items').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteTaskTemplateItem(id: number) {
+    const { error } = await supabase.from('task_template_items').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async applyTaskTemplate(
+    templateId: number,
+    opts: { client_id?: number | null; apply_date?: string; assignee?: string | null } = {}
+  ) {
+    const { data, error } = await supabase.rpc('apply_task_template', {
+      p_template_id:       templateId,
+      p_client_id:         opts.client_id || null,
+      p_apply_date:        opts.apply_date || null,
+      p_assignee_override: opts.assignee || null,
+    });
+    if (error) throw new Error(error.message);
+    return { count: Number(data || 0) };
+  },
+
   // --------- Staff Tasks ---------
   async getStaffTasks(params?: {
     assignee?: string;

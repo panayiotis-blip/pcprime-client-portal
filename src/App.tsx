@@ -16,6 +16,7 @@ import UserManagement from './components/Admin/UserManagement';
 import ComplianceDashboard from './components/Admin/ComplianceDashboard';
 import AuditLog from './components/Admin/AuditLog';
 import StaffTasks from './components/Admin/StaffTasks';
+import TaskTemplates from './components/Admin/TaskTemplates';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
 import MergeClients from './components/Client/MergeClients';
@@ -50,6 +51,7 @@ function AuthedApp() {
             <Route path="/compliance" element={<ComplianceDashboard />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/tasks" element={<StaffTasks />} />
+            <Route path="/task-templates" element={<TaskTemplates />} />
             <Route path="/security" element={<Security />} />
             <Route path="/merge" element={<MergeClients />} />
             <Route path="*" element={<Navigate to="/" />} />

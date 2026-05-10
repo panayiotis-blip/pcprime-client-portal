@@ -14,6 +14,7 @@ const adminNav: NavItem[] = [
   { path: '/clients', label: 'Clients', icon: '⊡' },
   { path: '/compliance', label: 'Compliance', icon: '✓' },
   { path: '/tasks', label: 'Tasks', icon: '☑' },
+  { path: '/task-templates', label: 'Templates', icon: '⊕' },
   { path: '/documents', label: 'Documents', icon: '⊟' },
   { path: '/export', label: 'Export', icon: '↓' },
   { path: '/users', label: 'Users', icon: '⊙', requires: (u) => hasPermission(u, 'users.read') },
