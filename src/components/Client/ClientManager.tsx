@@ -66,7 +66,8 @@ export default function ClientManager() {
 
   const handleDelete = async (id: number) => {
     const count = invoices.filter((inv: any) => inv.client_id === id).length;
-    const msg = count > 0 ? `This client has ${count} invoice(s). Delete all?` : 'Delete this client?';
+    const detail = count > 0 ? ` (${count} invoice${count === 1 ? '' : 's'} on file)` : '';
+    const msg = `Hide this client${detail}? All their data is preserved and they can be restored later from Clients → Deleted.`;
     if (confirm(msg)) { await api.deleteClient(id); await refreshClients(); }
   };
 

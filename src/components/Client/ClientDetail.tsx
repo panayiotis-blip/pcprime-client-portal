@@ -81,9 +81,12 @@ export default function ClientDetail() {
 
   const handleDelete = async () => {
     const count = invoices.filter((i: any) => i.client_id === clientId).length;
-    const msg = count > 0
-      ? `This client has ${count} invoice(s). Deleting will remove them and all documents, credentials, and accounts for this client. Continue?`
-      : 'Delete this client and all their data?';
+    const detail = count > 0 ? ` (${count} invoice${count === 1 ? '' : 's'} on file)` : '';
+    const msg =
+      `Hide "${client?.name || 'this client'}"${detail}?\n\n` +
+      `The client is removed from the active list, but invoices, documents, ` +
+      `compliance tasks, and credentials are preserved. You can restore the ` +
+      `client at any time from Clients → Deleted.`;
     if (!confirm(msg)) return;
     try {
       await api.deleteClient(clientId);
