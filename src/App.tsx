@@ -17,6 +17,7 @@ import ComplianceDashboard from './components/Admin/ComplianceDashboard';
 import AuditLog from './components/Admin/AuditLog';
 import StaffTasks from './components/Admin/StaffTasks';
 import Security from './components/Admin/Security';
+import DeletedClients from './components/Admin/DeletedClients';
 import MergeClients from './components/Client/MergeClients';
 import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
@@ -40,6 +41,7 @@ function AuthedApp() {
             <Route path="/invoices/new" element={<InvoiceEditor />} />
             <Route path="/invoices/:id" element={<InvoiceEditor />} />
             <Route path="/clients" element={<ClientManager />} />
+            <Route path="/clients/deleted" element={<DeletedClients />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/export" element={<ExportPage />} />
             <Route path="/documents" element={<DocumentsPage />} />

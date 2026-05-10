@@ -419,6 +419,12 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  async getDeletedClients() {
+    const { data, error } = await supabase.rpc('list_deleted_clients');
+    if (error) throw new Error(error.message);
+    return (data as any[]) || [];
+  },
+
   async mergeClient(_targetId: number, _sourceId: number, _fields?: Record<string, string>) {
     throw new Error('Merge clients: deferred — will port from Express soon.');
   },

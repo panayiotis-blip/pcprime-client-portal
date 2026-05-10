@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
+// (Link is also used below for the "deleted clients" affordance)
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import MergeClients from './MergeClients';
@@ -102,6 +103,7 @@ export default function ClientManager() {
           <button className="btn btn-secondary btn-sm" onClick={handleGenerateMissing} title="Auto-generate codes for clients without one">
             #️⃣ Gen Codes
           </button>
+          <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
           </button>
