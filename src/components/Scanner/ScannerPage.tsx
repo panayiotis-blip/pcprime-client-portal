@@ -119,6 +119,7 @@ export default function ScannerPage() {
     // Auto-save all scanned invoices as drafts
     setStatusText('Saving invoices...');
     let savedCount = 0;
+    const failures: { name: string; reason: string }[] = [];
     for (const scan of results) {
       try {
         const details = scan.parsed.vendorName
@@ -148,8 +149,9 @@ export default function ScannerPage() {
           : new File([scan.fileBlob], scan.fileName, { type: scan.mimeType });
         await api.createInvoice(data, file);
         savedCount++;
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to save invoice:', err);
+        failures.push({ name: scan.fileName, reason: err?.message || String(err) });
       }
     }
 
@@ -157,8 +159,13 @@ export default function ScannerPage() {
     setStatusText('');
     setSelectedFiles([]);
     await refreshInvoices();
-    alert(`${savedCount} invoice(s) scanned and saved as drafts. You can now edit and correct them.`);
-    navigate('/invoices');
+    let msg = `${savedCount} invoice(s) scanned and saved as drafts. You can now edit and correct them.`;
+    if (failures.length) {
+      msg += `\n\n${failures.length} file(s) failed:\n` +
+             failures.map(f => `  • ${f.name}: ${f.reason}`).join('\n');
+    }
+    alert(msg);
+    if (savedCount > 0) navigate('/invoices');
   };
 
   return (

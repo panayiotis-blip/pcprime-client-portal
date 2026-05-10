@@ -214,17 +214,6 @@ async function learnFromInvoice(clientId: number, vendorName: string, data: any)
 // -----------------------------------------------------------------
 const ALLOWED_TYPES_DESCRIPTION = 'PDF, JPG, PNG, HEIC, XLSX, DOCX, or ZIP';
 
-// Allowed file extensions per detected magic-byte family.
-// A file's filename extension MUST match its actual content type, otherwise
-// we reject the upload — this catches the "rename .docx to .pdf" trick.
-const EXT_FOR_TYPE: Record<string, string[]> = {
-  pdf:         ['pdf'],
-  png:         ['png'],
-  jpeg:        ['jpg', 'jpeg'],
-  heic:        ['heic', 'heif', 'avif'],
-  'zip-based': ['xlsx', 'docx', 'pptx', 'odt', 'ods', 'odp', 'zip'],
-};
-
 async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: string; reason?: string }> {
   if (!file.size) return { ok: false, type: 'empty', reason: 'File is empty.' };
 
@@ -232,56 +221,33 @@ async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: s
   const b = new Uint8Array(buffer);
   if (b.length < 4) return { ok: false, type: 'too_small', reason: 'File is too small to identify.' };
 
-  let detected: string | null = null;
-
   // PDF: "%PDF-"
   if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2D) {
-    detected = 'pdf';
+    return { ok: true, type: 'pdf' };
   }
   // PNG: 89 50 4E 47 0D 0A 1A 0A
-  else if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) {
-    detected = 'png';
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) {
+    return { ok: true, type: 'png' };
   }
   // JPEG (any variant): FF D8 FF
-  else if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) {
-    detected = 'jpeg';
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) {
+    return { ok: true, type: 'jpeg' };
   }
   // HEIC / HEIF / AVIF: bytes 4-7 = "ftyp"; subtype at 8-11
-  else if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
     const subtype = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase();
     if (['heic', 'heix', 'mif1', 'msf1', 'heim', 'hevc', 'heis', 'avif'].includes(subtype)) {
-      detected = 'heic';
+      return { ok: true, type: 'heic' };
     }
   }
   // ZIP-based (XLSX, DOCX, PPTX, ODT, plain ZIP): PK 03 04 / PK 05 06
-  if (!detected
-      && b[0] === 0x50 && b[1] === 0x4B
+  if (b[0] === 0x50 && b[1] === 0x4B
       && (b[2] === 0x03 || b[2] === 0x05)
       && (b[3] === 0x04 || b[3] === 0x06)) {
-    detected = 'zip-based';
+    return { ok: true, type: 'zip-based' };
   }
 
-  if (!detected) {
-    return { ok: false, type: 'unknown', reason: `File type not recognised. Allowed: ${ALLOWED_TYPES_DESCRIPTION}.` };
-  }
-
-  // Cross-check the extension against the detected type. This catches
-  // someone renaming "report.docx" → "report.pdf" (the bytes are still
-  // ZIP, but the extension now claims PDF — block it).
-  const ext = (file.name.toLowerCase().match(/\.([a-z0-9]+)$/) || [, ''])[1];
-  const allowedExts = EXT_FOR_TYPE[detected] || [];
-  if (!ext) {
-    return { ok: false, type: detected, reason: `File has no extension. Expected one of: ${allowedExts.join(', ')}.` };
-  }
-  if (!allowedExts.includes(ext)) {
-    return {
-      ok: false,
-      type: detected,
-      reason: `File extension ".${ext}" doesn't match its actual content (${detected.toUpperCase()}). Expected one of: ${allowedExts.map(e => '.' + e).join(', ')}.`,
-    };
-  }
-
-  return { ok: true, type: detected };
+  return { ok: false, type: 'unknown', reason: `File type not recognised. Allowed: ${ALLOWED_TYPES_DESCRIPTION}.` };
 }
 
 // Sanitize a single segment of a storage path so user-supplied input cannot
