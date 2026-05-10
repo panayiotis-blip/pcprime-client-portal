@@ -845,10 +845,25 @@ export const api = {
   async uploadDocumentsToFolder(params: { clientId: number; folderId?: number | null; docType: string; category: string; month: string; year?: string; files: File[]; notes?: string }) {
     const { data: { session } } = await supabase.auth.getSession();
     const year = params.year || (params.month ? params.month.split('-')[0] : '');
+
+    // Validate EVERY file before uploading any of them — otherwise a rejection
+    // partway through would leave the earlier files orphaned in storage
+    // (uploaded but never inserted into the documents table).
+    const checks = await Promise.all(
+      params.files.map(async f => ({ name: f.name, ...(await detectAllowedFileType(f)) }))
+    );
+    const rejected = checks.filter(c => !c.ok);
+    if (rejected.length) {
+      const lines = rejected.map(r => `  • ${r.name}: ${r.reason}`).join('\n');
+      throw new Error(
+        rejected.length === params.files.length
+          ? `Upload blocked. ${rejected.length} file(s) rejected:\n${lines}`
+          : `Upload blocked — fix or remove the bad file(s) and try again. ${rejected.length} of ${params.files.length} rejected:\n${lines}`
+      );
+    }
+
     const rows: any[] = [];
     for (const f of params.files) {
-      const check = await detectAllowedFileType(f);
-      if (!check.ok) throw new Error(`Upload blocked for "${f.name}": ${check.reason}`);
       const safeCategory = safeStorageSegment(params.category || 'other');
       const path = `${params.clientId}/${safeCategory}/${Date.now()}_${safeStorageSegment(f.name)}`;
       const up = await supabase.storage.from('documents').upload(path, f);
