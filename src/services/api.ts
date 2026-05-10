@@ -310,6 +310,23 @@ function computeProvisionalTaxPeriods(asOf: Date, lookbackYears: number, lookahe
   return periods;
 }
 
+// ---------- Cyprus UBO (Beneficial Ownership) annual confirmation ----------
+// Universal annual deadline: 31 December every year.
+function computeUboPeriods(asOf: Date, lookbackYears: number, lookaheadYears: number) {
+  const Y = asOf.getFullYear();
+  const periods: { label: string; start: string; end: string; due: string }[] = [];
+  for (let i = -lookbackYears; i <= lookaheadYears; i++) {
+    const year = Y + i;
+    periods.push({
+      label: `UBO — ${year}`,
+      start: toIsoDate(new Date(year,  0,  1)),
+      end:   toIsoDate(new Date(year, 11, 31)),
+      due:   toIsoDate(new Date(year, 11, 31)),
+    });
+  }
+  return periods;
+}
+
 // ---------- Cyprus HE32 (Annual Return to Registrar) helpers ----------
 // Per-company anniversary. We approximate due date as
 // (incorporation anniversary + 28 days) — close enough; real Cyprus
@@ -1361,6 +1378,48 @@ export const api = {
     return { created: data?.length || 0, attempted: rows.length, eligible_clients: (clients || []).length };
   },
 
+  async generateUboTasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number } = {}) {
+    const asOf      = opts.asOf || new Date();
+    const lookback  = opts.lookbackYears  ?? 0;
+    const lookahead = opts.lookaheadYears ?? 1;
+
+    // Eligible: clients with a registration_number (HE for ltd companies,
+    // S/LP for partnerships) OR business_type matching /partnership/.
+    // Individual clients without a company structure are skipped.
+    const { data: clients, error } = await supabase
+      .from('clients')
+      .select('id, registration_number, business_type');
+    if (error) throw new Error(error.message);
+    const eligible = (clients || []).filter(c => {
+      const hasReg       = c.registration_number && String(c.registration_number).trim() !== '';
+      const isPartnership = (c.business_type || '').toLowerCase().includes('partnership');
+      return hasReg || isPartnership;
+    });
+
+    const periods = computeUboPeriods(asOf, lookback, lookahead);
+    const rows: any[] = [];
+    for (const c of eligible) {
+      for (const p of periods) {
+        rows.push({
+          client_id: c.id,
+          kind: 'ubo_annual',
+          period_label: p.label,
+          period_start: p.start,
+          period_end: p.end,
+          due_date: p.due,
+          status: 'not_started',
+        });
+      }
+    }
+    if (rows.length === 0) return { created: 0, attempted: 0, eligible_clients: eligible.length };
+    const { data, error: insErr } = await supabase
+      .from('compliance_tasks')
+      .upsert(rows, { onConflict: 'client_id,kind,period_start', ignoreDuplicates: true })
+      .select('id');
+    if (insErr) throw new Error(insErr.message);
+    return { created: data?.length || 0, attempted: rows.length, eligible_clients: eligible.length };
+  },
+
   // -- Unified orchestrator --------------------------------------
   // Picks generators tuned for the focus month:
   //   Routine (VAT / SI / IR7): only periods due ON OR BEFORE end of yyyymm.
@@ -1373,16 +1432,17 @@ export const api = {
     const endOfMonth      = new Date(y, mo + 1, 0);
     const endOfMonthIso   = toIsoDate(endOfMonth);
 
-    const [vat, si, ir7, ptax, he32] = await Promise.all([
+    const [vat, si, ir7, ptax, he32, ubo] = await Promise.all([
       api.generateVatTasks({ asOf: endOfMonth, lookbackQuarters: 8, lookaheadQuarters: 2, dueOnOrBefore: endOfMonthIso }),
       api.generateSocialInsuranceTasks({ asOf: endOfMonth, lookbackMonths: 24, lookaheadMonths: 2, dueOnOrBefore: endOfMonthIso }),
       api.generateIR7Tasks({ asOf: endOfMonth, lookbackYears: 3, lookaheadYears: 1, dueOnOrBefore: endOfMonthIso }),
       api.generateProvisionalTaxTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
       api.generateHE32Tasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
+      api.generateUboTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
     ]);
 
-    const total = vat.created + si.created + ir7.created + ptax.created + he32.created;
-    return { vat, si, ir7, ptax, he32, total, focus_month: yyyymm };
+    const total = vat.created + si.created + ir7.created + ptax.created + he32.created + ubo.created;
+    return { vat, si, ir7, ptax, he32, ubo, total, focus_month: yyyymm };
   },
 
   // --------- Journal types ---------

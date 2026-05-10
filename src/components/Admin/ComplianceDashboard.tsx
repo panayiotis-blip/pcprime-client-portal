@@ -37,6 +37,7 @@ const KIND_OPTIONS = [
   { value: 'ir7_annual',                label: 'IR7' },
   { value: 'provisional_tax',           label: 'Provisional Tax' },
   { value: 'he32_annual',               label: 'HE32' },
+  { value: 'ubo_annual',                label: 'UBO' },
 ] as const;
 
 const KIND_LABEL: Record<string, string> = {
@@ -45,6 +46,7 @@ const KIND_LABEL: Record<string, string> = {
   ir7_annual:               'IR7',
   provisional_tax:          'Prov. Tax',
   he32_annual:              'HE32',
+  ubo_annual:               'UBO',
 };
 
 // Default month picker value: this month, formatted YYYY-MM (HTML <input type="month">).
@@ -150,6 +152,7 @@ export default function ComplianceDashboard() {
         `Important (forward-looking):`,
         `  Provisional Tax: ${r.ptax.created} new (${r.ptax.eligible_clients} clients)`,
         `  HE32:            ${r.he32.created} new (${r.he32.eligible_clients} clients with incorporation_date)`,
+        `  UBO:             ${r.ubo.created} new (${r.ubo.eligible_clients} eligible companies/partnerships)`,
         ``,
         `Total new tasks: ${r.total}`,
       ];
