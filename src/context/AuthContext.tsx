@@ -3,13 +3,23 @@ import { api, type AuthUser } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { useInactivityTimeout } from '../hooks/useInactivityTimeout';
 
-const INACTIVITY_MS = 8 * 60 * 60 * 1000; // 8 hours of inactivity → auto sign-out
+// Inactivity timeouts:
+//   - 8 hours on a "trusted" device (user has ticked the box after MFA)
+//   - 1 hour otherwise
+// Auto-logout invalidates the session and forces a fresh password (and MFA, if
+// untrusted) on next visit.
+const INACTIVITY_TRUSTED_MS   = 8 * 60 * 60 * 1000;
+const INACTIVITY_UNTRUSTED_MS = 1 * 60 * 60 * 1000;
+
+// localStorage key used to remember a per-device trust token.
+export const TRUSTED_DEVICE_TOKEN_KEY = 'pcprime_trusted_device_token';
 
 interface MfaState {
-  enrolled: boolean;        // user has at least one verified TOTP factor
-  challenge_required: boolean; // session is at aal1 but the user has aal2-eligible factors
+  enrolled: boolean;
+  challenge_required: boolean;
+  trusted_device_validated: boolean;   // true if a stored token verified successfully
   current_level: 'aal1' | 'aal2' | null;
-  next_level: 'aal1' | 'aal2' | null;
+  next_level:    'aal1' | 'aal2' | null;
 }
 
 interface AuthState {
@@ -25,6 +35,7 @@ interface AuthState {
 const initialMfa: MfaState = {
   enrolled: false,
   challenge_required: false,
+  trusted_device_validated: false,
   current_level: null,
   next_level: null,
 };
@@ -49,9 +60,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]);
       const totp: any[] = (factors as any)?.totp || [];
       const enrolled = totp.some(f => f.status === 'verified');
+
+      // Check trusted-device token (only if user actually has MFA enrolled —
+      // otherwise the trust check is moot).
+      let trusted = false;
+      if (enrolled) {
+        const token = localStorage.getItem(TRUSTED_DEVICE_TOKEN_KEY);
+        if (token) {
+          trusted = await api.verifyTrustedDevice(token);
+          if (!trusted) {
+            // Stale or revoked token; clean up so we don't keep re-checking it.
+            localStorage.removeItem(TRUSTED_DEVICE_TOKEN_KEY);
+          }
+        }
+      }
+
       setMfa({
         enrolled,
         challenge_required: aal.currentLevel === 'aal1' && aal.nextLevel === 'aal2',
+        trusted_device_validated: trusted,
         current_level: (aal.currentLevel as any) || null,
         next_level:    (aal.nextLevel as any)    || null,
       });
@@ -98,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMfa(initialMfa);
   };
 
-  useInactivityTimeout(INACTIVITY_MS, () => { if (user) logout(); });
+  // Inactivity timeout — duration depends on whether this device is trusted.
+  const inactivityMs = mfa.trusted_device_validated ? INACTIVITY_TRUSTED_MS : INACTIVITY_UNTRUSTED_MS;
+  useInactivityTimeout(inactivityMs, () => { if (user) logout(); });
 
   return (
     <AuthContext.Provider value={{ user, loading, mfa, refreshMfa: loadMfa, login, sendMagicLink, logout }}>

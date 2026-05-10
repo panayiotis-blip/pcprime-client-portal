@@ -829,6 +829,38 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Trusted devices ---------
+  async trustThisDevice(label: string, userAgent: string, days = 30): Promise<string> {
+    const { data, error } = await supabase.rpc('trust_this_device', {
+      p_label:      label,
+      p_user_agent: userAgent,
+      p_days:       days,
+    });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+
+  async verifyTrustedDevice(token: string): Promise<boolean> {
+    if (!token) return false;
+    const { data, error } = await supabase.rpc('verify_trusted_device', { p_token: token });
+    if (error) return false;
+    return Boolean(data);
+  },
+
+  async listMyTrustedDevices(userId: string) {
+    const { data, error } = await supabase.from('trusted_devices')
+      .select('id, device_label, user_agent, expires_at, created_at, last_used_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async revokeTrustedDevice(id: string) {
+    const { error } = await supabase.rpc('revoke_trusted_device', { p_id: id });
+    if (error) throw new Error(error.message);
+  },
+
   // --------- MFA (TOTP) ---------
   async listMfaFactors() {
     const { data, error } = await supabase.auth.mfa.listFactors();

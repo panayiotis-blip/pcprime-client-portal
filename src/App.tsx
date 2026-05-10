@@ -27,8 +27,9 @@ function AuthedApp() {
   const { mfa } = useAuth();
 
   // Hard gate: if the user has MFA enrolled but the session is at aal1,
-  // block the entire app behind the 6-digit challenge.
-  if (mfa.challenge_required) return <MFAChallenge />;
+  // block the entire app behind the 6-digit challenge — unless this device
+  // has been marked as trusted (then the prompt is skipped).
+  if (mfa.challenge_required && !mfa.trusted_device_validated) return <MFAChallenge />;
 
   return (
     <AppProvider>
