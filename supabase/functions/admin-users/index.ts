@@ -57,11 +57,11 @@ async function requireAdmin(req: Request) {
   const { data: { user }, error: whoErr } = await caller.auth.getUser();
   if (whoErr || !user) return { error: 'Invalid token', status: 401 };
 
-  // User management is owner-only (per role-tier policy from migration 014).
-  const { data: profile } = await admin.from('profiles').select('role, active').eq('id', user.id).maybeSingle();
-  if (!profile || profile.role !== 'owner' || !profile.active) {
-    return { error: 'Owner privilege required', status: 403 };
-  }
+  // Permission check via has_permission RPC. Run as the caller (their JWT) so
+  // auth.uid() inside the function resolves to them.
+  const { data: hasPerm, error: permErr } = await caller.rpc('has_permission', { p_perm: 'users.write' });
+  if (permErr) return { error: permErr.message, status: 500 };
+  if (!hasPerm)  return { error: 'users.write permission required', status: 403 };
   return { userId: user.id };
 }
 

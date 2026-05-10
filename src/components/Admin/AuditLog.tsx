@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { api, isSupervisorOrHigher } from '../../services/api';
+import { api, hasPermission } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 type AuditEntry = {
@@ -46,7 +46,7 @@ function summarize(e: AuditEntry): string {
 
 export default function AuditLog() {
   const { user } = useAuth();
-  if (!isSupervisorOrHigher(user)) {
+  if (!hasPermission(user, 'audit.read')) {
     return (
       <div className="dashboard">
         <div className="dashboard-header"><h2>Audit Log</h2></div>

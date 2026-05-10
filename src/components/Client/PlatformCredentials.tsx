@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../services/api';
+import { api, hasPermission } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const DEFAULT_PLATFORMS = [
   'TFA (Tax For All)',
@@ -32,6 +33,9 @@ type FormState = {
 const blankForm: FormState = { platform: '', username: '', password: '', notes: '' };
 
 export default function PlatformCredentials({ clientId }: { clientId: number }) {
+  const { user } = useAuth();
+  const canReveal = hasPermission(user, 'credentials.reveal');
+  const canWrite  = hasPermission(user, 'credentials.write');
   const [credentials, setCredentials] = useState<Cred[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -127,9 +131,11 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
     <div className="platform-credentials">
       <div className="list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>Platform Logins & Credentials</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => (showAdd ? (setShowAdd(false), setEditId(null), setForm(blankForm)) : startAdd())}>
-          {showAdd ? 'Cancel' : '+ Add Credentials'}
-        </button>
+        {canWrite && (
+          <button className="btn btn-primary btn-sm" onClick={() => (showAdd ? (setShowAdd(false), setEditId(null), setForm(blankForm)) : startAdd())}>
+            {showAdd ? 'Cancel' : '+ Add Credentials'}
+          </button>
+        )}
       </div>
 
       <div style={{
@@ -189,10 +195,12 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
             <div key={cred.id} className="cred-card card" style={{ padding: 12, marginBottom: 10 }}>
               <div className="cred-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <h4 style={{ margin: 0 }}>{cred.platform}</h4>
-                <div className="cred-card-actions">
-                  <button className="btn btn-secondary btn-sm" onClick={() => startEdit(cred)}>Edit</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(cred.id)} style={{ marginLeft: 6 }}>Delete</button>
-                </div>
+                {canWrite && (
+                  <div className="cred-card-actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => startEdit(cred)}>Edit</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(cred.id)} style={{ marginLeft: 6 }}>Delete</button>
+                  </div>
+                )}
               </div>
               <div className="cred-fields">
                 <div className="cred-field" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -209,7 +217,7 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
                       : revealed[cred.id] != null ? revealed[cred.id]
                       : '••••••••'}
                   </span>
-                  {cred.has_password && (
+                  {cred.has_password && canReveal && (
                     revealed[cred.id] != null ? (
                       <>
                         <button className="btn btn-link btn-sm" onClick={() => copy(revealed[cred.id])}>Copy</button>

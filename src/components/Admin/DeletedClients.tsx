@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, isSupervisorOrHigher } from '../../services/api';
+import { api, hasPermission } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
@@ -15,7 +15,7 @@ type Client = {
 
 export default function DeletedClients() {
   const { user } = useAuth();
-  if (!isSupervisorOrHigher(user)) {
+  if (!hasPermission(user, 'clients.restore')) {
     return (
       <div className="dashboard">
         <div className="dashboard-header"><h2>Deleted Clients</h2></div>

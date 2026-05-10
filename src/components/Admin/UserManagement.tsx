@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react';
-import { api, roleLabel, isOwner } from '../../services/api';
+import { api, roleLabel, hasPermission } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import UserPermissionsEditor from './UserPermissionsEditor';
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
 
   // Page-level guard. The admin-users edge function ALSO blocks non-owners
   // server-side; this is just a friendlier UX.
-  if (!isOwner(currentUser)) {
+  if (!hasPermission(currentUser, 'users.read')) {
     return (
       <div className="dashboard">
         <div className="dashboard-header"><h2>Users</h2></div>
         <div className="empty-state">
-          <p>User management is restricted to the Owner role.</p>
+          <p>User management requires the <code>users.read</code> permission.</p>
         </div>
       </div>
     );
@@ -26,7 +27,9 @@ export default function UserManagement() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [changePasswordId, setChangePasswordId] = useState<string | null>(null);
+  const [permsForUser, setPermsForUser] = useState<{ id: string; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const canEditRoles = hasPermission(currentUser, 'roles.write');
   const [myPassword, setMyPassword] = useState('');
   const [myPasswordConfirm, setMyPasswordConfirm] = useState('');
   const [showMyPassword, setShowMyPassword] = useState(false);
@@ -158,6 +161,14 @@ export default function UserManagement() {
         </div>
       )}
 
+      {permsForUser && (
+        <UserPermissionsEditor
+          userId={permsForUser.id}
+          userName={permsForUser.name}
+          onClose={() => setPermsForUser(null)}
+        />
+      )}
+
       {/* User list */}
       <div className="export-table-wrapper">
         <table className="export-table">
@@ -222,6 +233,9 @@ export default function UserManagement() {
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(u)}>Edit</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => setChangePasswordId(u.id)}>🔑</button>
+                        {canEditRoles && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => setPermsForUser({ id: u.id, name: u.display_name || u.username })}>Perms</button>
+                        )}
                         {u.id !== currentUser?.id && <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u)}>Delete</button>}
                       </div>
                     )}

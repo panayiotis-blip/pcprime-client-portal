@@ -35,6 +35,14 @@ export interface AuthUser {
   role: UserRole;
   client_id: number | null;   // convenience: first linked client
   client_ids: number[];
+  permissions: string[];      // effective permissions (role defaults ± per-user overrides)
+}
+
+// True if the user effectively has the given permission key.
+// Use this anywhere we previously gated by role.
+export function hasPermission(user: AuthUser | null | undefined, perm: string): boolean {
+  if (!user) return false;
+  return Array.isArray(user.permissions) && user.permissions.includes(perm);
 }
 
 // True for any internal-firm role (owner, supervisor, admin, staff).
@@ -311,9 +319,10 @@ export const api = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return { user: null };
     const uid = session.user.id;
-    const [{ data: prof }, client_ids] = await Promise.all([
+    const [{ data: prof }, client_ids, permsResult] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', uid).maybeSingle(),
       getClientIdsForUser(uid),
+      supabase.rpc('get_my_permissions'),
     ]);
     if (!prof) return { user: null };
     return {
@@ -325,6 +334,7 @@ export const api = {
         role: prof.role,
         client_ids,
         client_id: client_ids[0] ?? null,
+        permissions: (permsResult.data as string[]) || [],
       },
     };
   },
@@ -826,6 +836,25 @@ export const api = {
 
   async restoreDocument(id: number) {
     const { error } = await supabase.rpc('restore_document', { p_id: id });
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Permissions ---------
+  // Get the permission matrix for any user (admin-only via roles.write).
+  async getUserPermissions(userId: string): Promise<{ permission: string; granted_by_default: boolean; override: boolean | null }[]> {
+    const { data, error } = await supabase.rpc('get_user_permissions', { p_user_id: userId });
+    if (error) throw new Error(error.message);
+    return (data as any[]) || [];
+  },
+
+  // Grant / revoke a single permission. Pass null to remove the override
+  // and fall back to the role default.
+  async setUserPermission(userId: string, permission: string, granted: boolean | null): Promise<void> {
+    const { error } = await supabase.rpc('set_user_permission', {
+      p_user_id: userId,
+      p_permission: permission,
+      p_granted: granted,
+    });
     if (error) throw new Error(error.message);
   },
 

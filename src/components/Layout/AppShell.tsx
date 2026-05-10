@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { isStaffRole, isSupervisorOrHigher, isOwner, roleLabel } from '../../services/api';
+import { isStaffRole, hasPermission, roleLabel } from '../../services/api';
 
 // Each entry can declare a `requires` predicate to gate visibility by role.
 // No predicate = visible to any internal-firm user (owner / supervisor / admin / staff).
@@ -16,8 +16,8 @@ const adminNav: NavItem[] = [
   { path: '/tasks', label: 'Tasks', icon: '☑' },
   { path: '/documents', label: 'Documents', icon: '⊟' },
   { path: '/export', label: 'Export', icon: '↓' },
-  { path: '/users', label: 'Users', icon: '⊙', requires: isOwner },
-  { path: '/audit', label: 'Audit Log', icon: '⌚', requires: isSupervisorOrHigher },
+  { path: '/users', label: 'Users', icon: '⊙', requires: (u) => hasPermission(u, 'users.read') },
+  { path: '/audit', label: 'Audit Log', icon: '⌚', requires: (u) => hasPermission(u, 'audit.read') },
 ];
 
 const clientNav: NavItem[] = [
