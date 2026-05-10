@@ -404,18 +404,16 @@ export const api = {
   },
 
   async deleteClient(id: number) {
-    // Soft-delete: hard DELETE is blocked by RLS. The audit trigger detects
-    // the deleted_at transition and logs as 'clients.delete'.
-    const { error } = await supabase.from('clients')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    // Soft-delete via SECURITY DEFINER RPC — sidesteps an RLS edge case
+    // where the post-update row state failed a permissive WITH CHECK
+    // clause on the linked-user UPDATE policy. The audit trigger still
+    // fires on the underlying UPDATE.
+    const { error } = await supabase.rpc('soft_delete_client', { p_id: id });
     if (error) throw new Error(error.message);
   },
 
   async restoreClient(id: number) {
-    const { error } = await supabase.from('clients')
-      .update({ deleted_at: null })
-      .eq('id', id);
+    const { error } = await supabase.rpc('restore_client', { p_id: id });
     if (error) throw new Error(error.message);
   },
 
@@ -808,19 +806,14 @@ export const api = {
   },
 
   async deleteDocument(id: number) {
-    // Soft-delete: row hidden via RLS, file kept in storage. A future
-    // hard-purge job will delete storage objects for rows where
-    // deleted_at < now() - retention.
-    const { error } = await supabase.from('documents')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    // Soft-delete via SECURITY DEFINER RPC (see deleteClient comment).
+    // File stays in storage; future hard-purge job removes it after retention.
+    const { error } = await supabase.rpc('soft_delete_document', { p_id: id });
     if (error) throw new Error(error.message);
   },
 
   async restoreDocument(id: number) {
-    const { error } = await supabase.from('documents')
-      .update({ deleted_at: null })
-      .eq('id', id);
+    const { error } = await supabase.rpc('restore_document', { p_id: id });
     if (error) throw new Error(error.message);
   },
 
