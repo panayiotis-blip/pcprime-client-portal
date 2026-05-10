@@ -178,6 +178,20 @@ async function learnFromInvoice(clientId: number, vendorName: string, data: any)
 //   Group 3: Mar–May, Jun–Aug, Sep–Nov, Dec–Feb
 // Filing/payment due 40 days after period end → 10th of the 2nd month after period end.
 
+// Sanitize a single segment of a storage path so user-supplied input cannot
+// escape the intended folder. Removes path separators, runs of dots
+// (path traversal), control chars, and trims to a sensible length. Falls
+// back to 'unnamed' if the result is empty.
+function safeStorageSegment(input: unknown): string {
+  const s = (input == null ? '' : String(input)).trim();
+  if (!s) return 'unnamed';
+  const cleaned = s
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/\.\.+/g, '_')
+    .replace(/^[\s.]+|[\s.]+$/g, '');
+  return cleaned.slice(0, 200) || 'unnamed';
+}
+
 function toIsoDate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -536,7 +550,7 @@ export const api = {
     }
 
     if (file) {
-      const path = `${data.client_id}/${invoiceId}/${Date.now()}_${file.name}`;
+      const path = `${data.client_id}/${invoiceId}/${Date.now()}_${safeStorageSegment(file.name)}`;
       const up = await supabase.storage.from('invoice-files').upload(path, file);
       if (!up.error) {
         await supabase.from('invoice_files').insert({
@@ -649,7 +663,8 @@ export const api = {
     const year = params.year || (params.month ? params.month.split('-')[0] : '');
     const rows: any[] = [];
     for (const f of params.files) {
-      const path = `${params.clientId}/${params.category || 'other'}/${Date.now()}_${f.name}`;
+      const safeCategory = safeStorageSegment(params.category || 'other');
+      const path = `${params.clientId}/${safeCategory}/${Date.now()}_${safeStorageSegment(f.name)}`;
       const up = await supabase.storage.from('documents').upload(path, f);
       if (up.error) throw new Error(up.error.message);
       rows.push({
