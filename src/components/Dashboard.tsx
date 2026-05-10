@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { isStaffRole } from '../services/api';
 
 export default function Dashboard() {
   const { invoices, clients } = useApp();
-  const { user } = useAuth();
+  const { user, mfa } = useAuth();
+  const showMfaNag = isStaffRole(user) && !mfa.enrolled;
 
   if (user?.role === 'client') {
     // Client view — just show their stats
@@ -39,6 +41,26 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
+      {showMfaNag && (
+        <div style={{
+          padding: '12px 16px',
+          marginBottom: 16,
+          background: '#fef3c7',
+          border: '1px solid #fbbf24',
+          borderRadius: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}>
+          <div>
+            <strong>Two-factor authentication is not enabled.</strong>{' '}
+            We strongly recommend enabling it on your account.
+          </div>
+          <Link to="/security" className="btn btn-primary btn-sm">Enable now</Link>
+        </div>
+      )}
       <div className="dashboard-header">
         <h2>Clients Overview</h2>
         <div className="dashboard-actions">

@@ -16,11 +16,19 @@ import UserManagement from './components/Admin/UserManagement';
 import ComplianceDashboard from './components/Admin/ComplianceDashboard';
 import AuditLog from './components/Admin/AuditLog';
 import StaffTasks from './components/Admin/StaffTasks';
+import Security from './components/Admin/Security';
 import MergeClients from './components/Client/MergeClients';
 import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
+import MFAChallenge from './components/Auth/MFAChallenge';
 
 function AuthedApp() {
+  const { mfa } = useAuth();
+
+  // Hard gate: if the user has MFA enrolled but the session is at aal1,
+  // block the entire app behind the 6-digit challenge.
+  if (mfa.challenge_required) return <MFAChallenge />;
+
   return (
     <AppProvider>
       <ScanProvider>
@@ -39,6 +47,7 @@ function AuthedApp() {
             <Route path="/compliance" element={<ComplianceDashboard />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/tasks" element={<StaffTasks />} />
+            <Route path="/security" element={<Security />} />
             <Route path="/merge" element={<MergeClients />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>

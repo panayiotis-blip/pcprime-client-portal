@@ -765,6 +765,60 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- MFA (TOTP) ---------
+  async listMfaFactors() {
+    const { data, error } = await supabase.auth.mfa.listFactors();
+    if (error) throw new Error(error.message);
+    return data; // { all, totp }
+  },
+
+  async enrollTotp(friendlyName?: string) {
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: friendlyName || 'Authenticator app',
+      issuer: 'PC Prime Portal',
+    } as any);
+    if (error) throw new Error(error.message);
+    // data contains: { id, type, totp: { qr_code, secret, uri }, friendly_name }
+    return data as any;
+  },
+
+  async verifyMfaEnrollment(factorId: string, code: string) {
+    const challenge = await supabase.auth.mfa.challenge({ factorId });
+    if (challenge.error) throw new Error(challenge.error.message);
+    const { data, error } = await supabase.auth.mfa.verify({
+      factorId,
+      challengeId: challenge.data.id,
+      code,
+    });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async challengeMfa(factorId: string) {
+    const { data, error } = await supabase.auth.mfa.challenge({ factorId });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async verifyMfa(factorId: string, challengeId: string, code: string) {
+    const { data, error } = await supabase.auth.mfa.verify({ factorId, challengeId, code });
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async unenrollMfa(factorId: string) {
+    const { error } = await supabase.auth.mfa.unenroll({ factorId });
+    if (error) throw new Error(error.message);
+  },
+
+  async getMfaAal() {
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error) throw new Error(error.message);
+    // { currentLevel: 'aal1' | 'aal2', nextLevel: 'aal1' | 'aal2', currentAuthenticationMethods: [...] }
+    return data;
+  },
+
   // --------- Staff Tasks ---------
   async getStaffTasks(params?: {
     assignee?: string;

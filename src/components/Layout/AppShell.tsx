@@ -62,6 +62,7 @@ export default function AppShell() {
             <span className="user-name">{user?.display_name}</span>
             <span className="user-role">{roleLabel(user?.role)}</span>
           </div>
+          <Link to="/security" className="btn btn-link sidebar-logout" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>Security</Link>
           <button className="btn btn-link sidebar-logout" onClick={logout}>Sign Out</button>
         </div>
       </nav>
