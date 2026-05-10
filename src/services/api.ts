@@ -247,18 +247,29 @@ async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: s
   return { ok: false, type: 'unknown', reason: `File type not viewable in the browser. Allowed: ${ALLOWED_TYPES_DESCRIPTION}.` };
 }
 
-// Sanitize a single segment of a storage path so user-supplied input cannot
-// escape the intended folder. Removes path separators, runs of dots
-// (path traversal), control chars, and trims to a sensible length. Falls
-// back to 'unnamed' if the result is empty.
+// Sanitize a single segment of a storage path. Supabase Storage object keys
+// are restricted to ASCII alphanumerics + dot/dash/underscore (plus '/' for
+// folders, which we handle separately). Anything else — Unicode (Greek,
+// Cyrillic etc.), spaces, ampersands, parens — gets replaced with '_' so
+// the upload doesn't fail with "Invalid key".
+//
+// The displayed filename in the documents table is the ORIGINAL f.name,
+// so users still see the proper text in the UI; this only affects the
+// internal storage path.
 function safeStorageSegment(input: unknown): string {
   const s = (input == null ? '' : String(input)).trim();
   if (!s) return 'unnamed';
   const cleaned = s
-    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    // Replace anything that isn't ASCII alphanumeric, dot, dash, or underscore
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    // Collapse runs of underscores so the result is readable
+    .replace(/_+/g, '_')
+    // Block path-traversal: drop runs of dots (also covers '..')
     .replace(/\.\.+/g, '_')
-    .replace(/^[\s.]+|[\s.]+$/g, '');
-  return cleaned.slice(0, 200) || 'unnamed';
+    // Trim leading/trailing punctuation so we don't end up with "_xxx" or "xxx."
+    .replace(/^[._-]+|[._-]+$/g, '')
+    .slice(0, 200);
+  return cleaned || 'unnamed';
 }
 
 function toIsoDate(d: Date): string {
