@@ -15,7 +15,7 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
   const { user } = useAuth();
   const [selectedClientId, setSelectedClientId] = useState<number>(propClientId || (user?.role === 'client' ? user.client_id! : 0));
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('invoices_view') as ViewMode) || 'table');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('invoices_view') as ViewMode) || 'list');
   const setView = (m: ViewMode) => { setViewMode(m); localStorage.setItem('invoices_view', m); };
 
   const embedded = !!propClientId;
@@ -143,9 +143,9 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
           placeholder="Search by number, vendor, batch, status..." className="form-input client-search"
         />
         <div className="view-toggle">
-          <button className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')} title="Card view">▦</button>
-          <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰</button>
-          <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="Compact list">≡</button>
+          <button className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')} title="Card view">▦ Cards</button>
+          <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
+          <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="Compact list">≡ List</button>
         </div>
       </div>
 

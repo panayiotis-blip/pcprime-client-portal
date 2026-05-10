@@ -65,6 +65,10 @@ export default function StaffTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'table' | 'list'>(
+    () => (localStorage.getItem('staff_tasks_view') as 'table' | 'list') || 'table'
+  );
+  const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('staff_tasks_view', m); };
 
   // Filters
   const [fAssignee, setFAssignee] = useState<string>('');
@@ -314,6 +318,13 @@ export default function StaffTasks() {
           <label>Search</label>
           <input type="text" className="form-input" placeholder="title, description, client..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <div className="form-group">
+          <label>View</label>
+          <div className="view-toggle">
+            <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
+            <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -322,6 +333,27 @@ export default function StaffTasks() {
         <div className="empty-state">
           <p>No tasks match the current filters.</p>
           <p>Click <strong>+ New Task</strong> to create one.</p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="compact-list">
+          {visibleTasks.map(t => {
+            const overdue = t.due_date && t.due_date < todayIso();
+            return (
+              <div key={t.id} className="compact-row">
+                <span className="cl-badge" style={{ background: priorityClass(t.priority) === 'status-draft' ? '#fee2e2' : '#e0e7ff', color: priorityClass(t.priority) === 'status-draft' ? '#b91c1c' : '#3730a3' }}>
+                  {t.priority}
+                </span>
+                <span className="cl-strong">{t.title}</span>
+                <span className="cl-muted">
+                  {t.client_id ? <Link to={`/clients/${t.client_id}`} style={{ color: 'inherit' }}>{t.client_code ? `${t.client_code} — ` : ''}{t.client_name}</Link> : '—'}
+                </span>
+                <span className="cl-muted" style={{ color: overdue ? '#b91c1c' : undefined, whiteSpace: 'nowrap' }}>
+                  {t.due_date || '—'}
+                </span>
+                <span className="status-badge" style={{ whiteSpace: 'nowrap' }}>{STATUS_LABEL[t.status]}</span>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="compliance-table-wrapper">

@@ -90,6 +90,10 @@ export default function ComplianceDashboard() {
   const [fTo, setFTo]           = useState<string>('');
   const [search, setSearch]     = useState<string>('');
   const [genMonth, setGenMonth] = useState<string>(currentYyyyMm());
+  const [viewMode, setViewMode] = useState<'table' | 'list'>(
+    () => (localStorage.getItem('compliance_view') as 'table' | 'list') || 'table'
+  );
+  const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('compliance_view', m); };
 
   const reload = async () => {
     setLoading(true);
@@ -228,18 +232,13 @@ export default function ComplianceDashboard() {
         <div className="stat-card stat-exported"><div className="stat-number">{stats.done}</div><div className="stat-label">Closed</div></div>
       </div>
 
-      {/* Kind chip row */}
-      <div className="no-print" style={{ display: 'flex', gap: 6, margin: '14px 0 6px 0', flexWrap: 'wrap' }}>
-        {KIND_OPTIONS.map(k => (
-          <button
-            key={k.value}
-            className={`btn btn-sm ${fKind === k.value ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setFKind(k.value)}
-          >{k.label}</button>
-        ))}
-      </div>
-
-      <div className="filters-bar no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', margin: '6px 0 16px 0' }}>
+      <div className="filters-bar no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', margin: '14px 0 16px 0' }}>
+        <div className="form-group" style={{ minWidth: 160 }}>
+          <label>Type</label>
+          <select className="form-input" value={fKind} onChange={e => setFKind(e.target.value)}>
+            {KIND_OPTIONS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+        </div>
         <div className="form-group" style={{ minWidth: 200 }}>
           <label>Client</label>
           <select className="form-input" value={fClient} onChange={e => setFClient(e.target.value)}>
@@ -269,6 +268,13 @@ export default function ComplianceDashboard() {
           <label>Search</label>
           <input type="text" className="form-input" placeholder="client, code, period..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <div className="form-group">
+          <label>View</label>
+          <div className="view-toggle">
+            <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
+            <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -281,6 +287,18 @@ export default function ComplianceDashboard() {
             For Social Insurance & IR7: clients need an <code>employer_number</code> set.<br/>
             Then click <strong>+ Generate All</strong> above.
           </p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="compact-list">
+          {visibleTasks.map(t => (
+            <Link key={t.id} to={`/clients/${t.client_id}`} className="compact-row">
+              <span className="cl-badge">{KIND_LABEL[t.kind] || t.kind}</span>
+              <span className="cl-strong">{t.client_code ? `${t.client_code} — ` : ''}{t.client_name}</span>
+              <span className="cl-muted">{t.period_label || `${t.period_start} → ${t.period_end}`}</span>
+              <span className={`status-badge ${dueClass(t)}`} style={{ whiteSpace: 'nowrap' }}>{t.due_date}</span>
+              <span className="status-badge" style={{ whiteSpace: 'nowrap' }}>{STATUS_LABEL[t.status]}</span>
+            </Link>
+          ))}
         </div>
       ) : (
         <div className="compliance-table-wrapper">

@@ -233,9 +233,9 @@ export default function ClientManager() {
       <div className="client-toolbar">
         <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by name, code, TIC..." className="form-input client-search" />
         <div className="view-toggle">
-          <button className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')} title="Card view">▦</button>
-          <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰</button>
-          <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="Compact list">≡</button>
+          <button className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')} title="Card view">▦ Cards</button>
+          <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
+          <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="Compact list">≡ List</button>
         </div>
       </div>
 

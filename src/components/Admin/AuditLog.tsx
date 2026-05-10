@@ -58,6 +58,10 @@ export default function AuditLog() {
   }
 
   const [entries, setEntries]   = useState<AuditEntry[]>([]);
+  const [viewMode, setViewMode] = useState<'table' | 'list'>(
+    () => (localStorage.getItem('audit_view') as 'table' | 'list') || 'table'
+  );
+  const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('audit_view', m); };
   const [loading, setLoading]   = useState(true);
   const [hasMore, setHasMore]   = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -161,6 +165,13 @@ export default function AuditLog() {
           <label>Search</label>
           <input type="text" className="form-input" placeholder="actor, action, target id..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+        <div className="form-group">
+          <label>View</label>
+          <div className="view-toggle">
+            <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
+            <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
+          </div>
+        </div>
       </div>
 
       {loading && entries.length === 0 ? (
@@ -168,6 +179,24 @@ export default function AuditLog() {
       ) : visible.length === 0 ? (
         <div className="empty-state">
           <p>No audit entries match these filters.</p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="compact-list">
+          {visible.map(e => (
+            <div key={e.id} className="compact-row">
+              <span className="cl-muted" style={{ whiteSpace: 'nowrap' }}>{formatTime(e.ts)}</span>
+              <span className="cl-strong">{e.actor_email || 'system'}</span>
+              <code className="cl-muted">{e.action}</code>
+              <span className="cl-muted">{e.target_type ? `${e.target_type}${e.target_id ? ' #' + e.target_id : ''}` : '—'}</span>
+            </div>
+          ))}
+          {hasMore && (
+            <div style={{ textAlign: 'center', margin: '16px 0' }}>
+              <button className="btn btn-secondary" onClick={() => reload(true)} disabled={loading}>
+                {loading ? 'Loading...' : 'Load older entries'}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>

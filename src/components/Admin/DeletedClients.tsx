@@ -27,6 +27,10 @@ export default function DeletedClients() {
   }
   const { refreshClients } = useApp();
   const [rows, setRows] = useState<Client[]>([]);
+  const [viewMode, setViewMode] = useState<'table' | 'list'>(
+    () => (localStorage.getItem('deleted_clients_view') as 'table' | 'list') || 'table'
+  );
+  const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('deleted_clients_view', m); };
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState<Record<number, boolean>>({});
 
@@ -62,6 +66,10 @@ export default function DeletedClients() {
       <div className="dashboard-header">
         <h2>Deleted Clients</h2>
         <div className="dashboard-actions">
+          <div className="view-toggle">
+            <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
+            <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
+          </div>
           <Link to="/clients" className="btn btn-secondary">← Back to Clients</Link>
         </div>
       </div>
@@ -81,6 +89,19 @@ export default function DeletedClients() {
       ) : rows.length === 0 ? (
         <div className="empty-state">
           <p>No deleted clients.</p>
+        </div>
+      ) : viewMode === 'list' ? (
+        <div className="compact-list">
+          {rows.map(c => (
+            <div key={c.id} className="compact-row">
+              <span className="cl-strong">{c.client_code ? `${c.client_code} — ` : ''}{c.name}</span>
+              <span className="cl-muted">{c.tax_number || '—'}</span>
+              <span className="cl-muted">deleted {c.deleted_at?.slice(0, 10)}</span>
+              <button className="btn btn-primary btn-sm" disabled={!!restoring[c.id]} onClick={() => handleRestore(c)}>
+                {restoring[c.id] ? 'Restoring…' : 'Restore'}
+              </button>
+            </div>
+          ))}
         </div>
       ) : (
         <div className="compliance-table-wrapper">
