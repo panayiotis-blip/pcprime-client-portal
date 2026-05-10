@@ -33,3 +33,7 @@ dist-ssr
 _legacy-sqlite-backup/
 clients_import.csv
 .vercel/
+.claude/
+
+# Per-task brief files (transient, kept locally)
+*-instructions.md

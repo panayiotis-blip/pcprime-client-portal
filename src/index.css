@@ -2106,6 +2106,87 @@ body {
 .form-input-sm { padding: 4px 6px; font-size: 13px; min-width: 110px; }
 .compliance-dashboard .filters-bar .form-group { margin: 0; }
 
+/* ---------- New 3-row dashboard ---------- */
+.dashboard-grid-3row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+.dashboard-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.kpi-tile {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-height: 96px;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.kpi-tile:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+.kpi-tile-value { font-size: 30px; font-weight: 700; line-height: 1.05; color: #0f172a; }
+.kpi-tile-label { font-size: 13px; color: #64748b; margin-top: 4px; }
+.kpi-tile-hint  { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.kpi-tile-warning .kpi-tile-value { color: #b45309; }
+.kpi-tile-danger  .kpi-tile-value { color: #b91c1c; }
+.kpi-tile-success .kpi-tile-value { color: #047857; }
+
+.dashboard-widget {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+.dashboard-widget h3 { font-size: 15px; }
+
+.quick-action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: #0f172a;
+  font-size: 14px;
+  transition: background 0.15s, transform 0.15s;
+  min-height: 90px;
+}
+.quick-action-card:hover {
+  background: #eef2ff;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 1100px) {
+  .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 720px) {
+  .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-row-2col { grid-template-columns: 1fr; }
+}
+
 /* Print/screen toggling */
 .print-only { display: none; }
 @media print {
