@@ -1098,8 +1098,10 @@ export const api = {
 
   // --------- Appointments / Calendar ---------
   async getAppointments(params?: { from?: string; to?: string; owner_id?: string }) {
+    // owner_id references auth.users, so PostgREST can't auto-join to profiles.
+    // The Calendar component looks owner names up from its staffUsers list.
     let q = supabase.from('appointments')
-      .select('*, owner:profiles!owner_id(username, full_name), client:clients(name, client_code)')
+      .select('*, client:clients(name, client_code)')
       .order('starts_at', { ascending: true });
     if (params?.from)     q = q.gte('ends_at',   params.from);
     if (params?.to)       q = q.lte('starts_at', params.to);
@@ -1108,7 +1110,6 @@ export const api = {
     if (error) throw new Error(error.message);
     return (data || []).map((a: any) => ({
       ...a,
-      owner_name:  a.owner?.full_name || a.owner?.username || '',
       client_name: a.client?.name || null,
       client_code: a.client?.client_code || null,
     }));
