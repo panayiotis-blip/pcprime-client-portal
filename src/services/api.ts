@@ -862,18 +862,21 @@ export const api = {
       );
     }
 
+    // KYC files go to a dedicated, more-restricted bucket per migration 019.
+    const bucket = params.category === 'kyc' ? 'kyc-documents' : 'documents';
+
     const rows: any[] = [];
     for (const f of params.files) {
       const safeCategory = safeStorageSegment(params.category || 'other');
       const path = `${params.clientId}/${safeCategory}/${Date.now()}_${safeStorageSegment(f.name)}`;
-      const up = await supabase.storage.from('documents').upload(path, f);
+      const up = await supabase.storage.from(bucket).upload(path, f);
       if (up.error) throw new Error(up.error.message);
       rows.push({
         client_id: params.clientId, folder_id: params.folderId || null,
         doc_type: params.docType, category: params.category,
         year, month: params.month,
         file_name: f.name, mime_type: f.type || 'application/octet-stream',
-        storage_path: path, notes: params.notes || '',
+        storage_path: path, storage_bucket: bucket, notes: params.notes || '',
         uploaded_by: session?.user?.id || null,
       });
     }
@@ -957,9 +960,10 @@ export const api = {
   },
 
   async downloadDocumentUrl(id: number): Promise<string> {
-    const { data } = await supabase.from('documents').select('storage_path').eq('id', id).single();
+    const { data } = await supabase.from('documents').select('storage_path, storage_bucket').eq('id', id).single();
     if (!data) throw new Error('Document not found');
-    const signed = await supabase.storage.from('documents').createSignedUrl(data.storage_path, 300);
+    const bucket = data.storage_bucket || 'documents';
+    const signed = await supabase.storage.from(bucket).createSignedUrl(data.storage_path, 300);
     if (signed.error) throw new Error(signed.error.message);
     return signed.data.signedUrl;
   },
