@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { api, isStaffRole } from '../services/api';
 import KpiTile from './Dashboard/KpiTile';
-import RecentActivity from './Dashboard/RecentActivity';
+import MyTasks from './Dashboard/MyTasks';
 import ComplianceCalendar from './Dashboard/ComplianceCalendar';
 import InvoiceTrendChart from './Dashboard/InvoiceTrendChart';
 import QuickActions from './Dashboard/QuickActions';
@@ -118,7 +118,7 @@ export default function Dashboard() {
 
         {/* Row 2 */}
         <div className="dashboard-row dashboard-row-2col">
-          <RecentActivity />
+          <MyTasks />
           <ComplianceCalendar />
         </div>
 
