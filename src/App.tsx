@@ -19,6 +19,7 @@ import StaffTasks from './components/Admin/StaffTasks';
 import TaskTemplates from './components/Admin/TaskTemplates';
 import Reports from './components/Admin/Reports';
 import Calendar from './components/Admin/Calendar';
+import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
 import MergeClients from './components/Client/MergeClients';
@@ -56,6 +57,7 @@ function AuthedApp() {
             <Route path="/task-templates" element={<TaskTemplates />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/phone-log" element={<PhoneLog />} />
             <Route path="/security" element={<Security />} />
             <Route path="/merge" element={<MergeClients />} />
             <Route path="*" element={<Navigate to="/" />} />

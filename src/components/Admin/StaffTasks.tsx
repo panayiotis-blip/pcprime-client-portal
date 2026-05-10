@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
+import LogMessageModal from './LogMessageModal';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
@@ -71,6 +72,7 @@ export default function StaffTasks() {
   );
   const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('staff_tasks_view', m); };
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
+  const [showLogMessage,    setShowLogMessage]    = useState(false);
 
   // Filters
   const [fAssignee, setFAssignee] = useState<string>('');
@@ -212,7 +214,10 @@ export default function StaffTasks() {
       <div className="dashboard-header">
         <h2>Tasks</h2>
         <div className="dashboard-actions">
-          <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)}>
+          <button className="btn btn-secondary" onClick={() => setShowLogMessage(true)}>
+            Log message
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)} style={{ marginLeft: 6 }}>
             From template
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(s => !s)} style={{ marginLeft: 6 }}>
@@ -446,6 +451,13 @@ export default function StaffTasks() {
         <ApplyTaskTemplateModal
           onClose={() => setShowApplyTemplate(false)}
           onApplied={() => reload()}
+        />
+      )}
+
+      {showLogMessage && (
+        <LogMessageModal
+          onClose={() => setShowLogMessage(false)}
+          onSaved={() => reload()}
         />
       )}
     </div>
