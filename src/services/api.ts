@@ -1096,6 +1096,62 @@ export const api = {
     return data;
   },
 
+  // --------- Appointments / Calendar ---------
+  async getAppointments(params?: { from?: string; to?: string; owner_id?: string }) {
+    let q = supabase.from('appointments')
+      .select('*, owner:profiles!owner_id(username, full_name), client:clients(name, client_code)')
+      .order('starts_at', { ascending: true });
+    if (params?.from)     q = q.gte('ends_at',   params.from);
+    if (params?.to)       q = q.lte('starts_at', params.to);
+    if (params?.owner_id) q = q.eq('owner_id', params.owner_id);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []).map((a: any) => ({
+      ...a,
+      owner_name:  a.owner?.full_name || a.owner?.username || '',
+      client_name: a.client?.name || null,
+      client_code: a.client?.client_code || null,
+    }));
+  },
+
+  async createAppointment(data: {
+    owner_id: string;
+    title: string;
+    description?: string | null;
+    location?: string | null;
+    starts_at: string;
+    ends_at: string;
+    all_day?: boolean;
+    status?: 'confirmed' | 'tentative' | 'cancelled';
+    client_id?: number | null;
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('appointments').insert({
+      owner_id:    data.owner_id,
+      created_by:  session?.user?.id || null,
+      title:       data.title,
+      description: data.description || null,
+      location:    data.location || null,
+      starts_at:   data.starts_at,
+      ends_at:     data.ends_at,
+      all_day:     !!data.all_day,
+      status:      data.status || 'confirmed',
+      client_id:   data.client_id || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id };
+  },
+
+  async updateAppointment(id: number, patch: any) {
+    const { error } = await supabase.from('appointments').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteAppointment(id: number) {
+    const { error } = await supabase.from('appointments').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Task Templates ---------
   async getTaskTemplates() {
     const { data, error } = await supabase.from('task_templates').select('*').order('name');

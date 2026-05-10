@@ -13,6 +13,7 @@ const adminNav: NavItem[] = [
   { path: '/invoices', label: 'Invoices', icon: '☰' },
   { path: '/clients', label: 'Clients', icon: '⊡' },
   { path: '/compliance', label: 'Compliance', icon: '✓' },
+  { path: '/calendar', label: 'Calendar', icon: '◷' },
   { path: '/tasks', label: 'Tasks', icon: '☑' },
   { path: '/task-templates', label: 'Templates', icon: '⊕' },
   { path: '/reports', label: 'Reports', icon: '◈' },
