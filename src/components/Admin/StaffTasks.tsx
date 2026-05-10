@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 import LogMessageModal from './LogMessageModal';
+import LogCallModal from './LogCallModal';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
@@ -73,6 +74,7 @@ export default function StaffTasks() {
   const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('staff_tasks_view', m); };
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showLogMessage,    setShowLogMessage]    = useState(false);
+  const [logCallForTask,    setLogCallForTask]    = useState<{ task_id: number; client_id: number | null } | null>(null);
 
   // Filters
   const [fAssignee, setFAssignee] = useState<string>('');
@@ -438,7 +440,8 @@ export default function StaffTasks() {
                     <span className="print-only">{STATUS_LABEL[t.status]}</span>
                   </td>
                   <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)}>Delete</button>
+                    <button className="btn btn-link btn-sm" title="Log a call about this task" onClick={() => setLogCallForTask({ task_id: t.id, client_id: t.client_id })}>📞 Log call</button>
+                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} style={{ marginLeft: 4 }}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -458,6 +461,15 @@ export default function StaffTasks() {
         <LogMessageModal
           onClose={() => setShowLogMessage(false)}
           onSaved={() => reload()}
+        />
+      )}
+
+      {logCallForTask && (
+        <LogCallModal
+          preSelectedTaskId={logCallForTask.task_id}
+          preSelectedClientId={logCallForTask.client_id}
+          onClose={() => setLogCallForTask(null)}
+          onSaved={() => setLogCallForTask(null)}
         />
       )}
     </div>

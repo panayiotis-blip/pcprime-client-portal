@@ -1097,13 +1097,14 @@ export const api = {
   },
 
   // --------- Call logs ---------
-  async getCallLogs(params?: { client_id?: number; staff_id?: string; direction?: string; from?: string; to?: string }) {
+  async getCallLogs(params?: { client_id?: number; staff_id?: string; direction?: string; from?: string; to?: string; task_id?: number }) {
     let q = supabase.from('call_logs')
-      .select('*, client:clients(name, client_code)')
+      .select('*, client:clients(name, client_code), task:staff_tasks!task_id(title, status)')
       .order('call_at', { ascending: false });
     if (params?.client_id) q = q.eq('client_id', params.client_id);
     if (params?.staff_id)  q = q.eq('staff_id',  params.staff_id);
     if (params?.direction) q = q.eq('direction', params.direction);
+    if (params?.task_id)   q = q.eq('task_id',   params.task_id);
     if (params?.from)      q = q.gte('call_at',  params.from);
     if (params?.to)        q = q.lte('call_at',  params.to + 'T23:59:59');
     const { data, error } = await q;
@@ -1112,6 +1113,8 @@ export const api = {
       ...c,
       client_name: c.client?.name || null,
       client_code: c.client?.client_code || null,
+      task_title:  c.task?.title || null,
+      task_status: c.task?.status || null,
     }));
   },
 
@@ -1120,6 +1123,7 @@ export const api = {
     direction: 'inbound' | 'outbound';
     contact_name?: string | null; contact_phone?: string | null;
     call_at?: string; duration_min?: number | null; notes?: string | null;
+    task_id?: number | null;
   }) {
     const { data: { session } } = await supabase.auth.getSession();
     const { data: row, error } = await supabase.from('call_logs').insert({
@@ -1131,6 +1135,7 @@ export const api = {
       call_at:       data.call_at || new Date().toISOString(),
       duration_min:  data.duration_min ?? null,
       notes:         data.notes || null,
+      task_id:       data.task_id || null,
     }).select().single();
     if (error) throw new Error(error.message);
     return { id: row.id };
