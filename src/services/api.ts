@@ -212,7 +212,7 @@ async function learnFromInvoice(clientId: number, vendorName: string, data: any)
 // to), but a true belt-and-braces fix would be server-side
 // validation in an edge function. Flagged as a Phase-2 task.
 // -----------------------------------------------------------------
-const ALLOWED_TYPES_DESCRIPTION = 'PDF, JPG, PNG, HEIC, XLSX, DOCX, or ZIP';
+const ALLOWED_TYPES_DESCRIPTION = 'PDF, JPG, PNG, or HEIC';
 
 async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: string; reason?: string }> {
   if (!file.size) return { ok: false, type: 'empty', reason: 'File is empty.' };
@@ -240,14 +240,11 @@ async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: s
       return { ok: true, type: 'heic' };
     }
   }
-  // ZIP-based (XLSX, DOCX, PPTX, ODT, plain ZIP): PK 03 04 / PK 05 06
-  if (b[0] === 0x50 && b[1] === 0x4B
-      && (b[2] === 0x03 || b[2] === 0x05)
-      && (b[3] === 0x04 || b[3] === 0x06)) {
-    return { ok: true, type: 'zip-based' };
-  }
+  // Note: we DO NOT allow ZIP-based files (XLSX, DOCX, ZIP). They can't be
+  // previewed in the browser, only downloaded — the user wants every uploaded
+  // file to be viewable in-app, so we reject them here.
 
-  return { ok: false, type: 'unknown', reason: `File type not recognised. Allowed: ${ALLOWED_TYPES_DESCRIPTION}.` };
+  return { ok: false, type: 'unknown', reason: `File type not viewable in the browser. Allowed: ${ALLOWED_TYPES_DESCRIPTION}.` };
 }
 
 // Sanitize a single segment of a storage path so user-supplied input cannot
