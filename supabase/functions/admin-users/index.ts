@@ -41,6 +41,20 @@ function json(req: Request, body: unknown, status = 200) {
   });
 }
 
+// Decode an unverified JWT payload to read its claims. Safe to inspect claims
+// without verifying the signature here because we ALSO verify the token via
+// caller.auth.getUser() below — that step rejects invalid/forged tokens.
+function jwtAal(token: string): string {
+  try {
+    const payload = JSON.parse(
+      atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))
+    );
+    return payload.aal || 'aal1';
+  } catch {
+    return 'aal1';
+  }
+}
+
 async function requireAdmin(req: Request) {
   const auth = req.headers.get('Authorization') || '';
   const token = auth.replace(/^Bearer\s+/i, '');
@@ -53,6 +67,11 @@ async function requireAdmin(req: Request) {
   });
   const { data: { user }, error: whoErr } = await caller.auth.getUser();
   if (whoErr || !user) return { error: 'Invalid token', status: 401 };
+
+  // Step-up: user management requires fresh MFA verification in this session.
+  if (jwtAal(token) !== 'aal2') {
+    return { error: 'MFA verification required. Sign out and sign in again, entering your authenticator code.', status: 403 };
+  }
 
   // Permission check via has_permission RPC. Run as the caller (their JWT) so
   // auth.uid() inside the function resolves to them.
