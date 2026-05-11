@@ -19,23 +19,15 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// Allow-list of origins permitted to call this function. We echo the request
-// origin back if it matches; otherwise the browser blocks the call.
-//
-// Pattern matches Vercel preview deploys (pcprime-client-portal-<hash>.vercel.app)
-// so testing branches from the cloud "just works" without hand-editing this list.
-function isAllowedOrigin(origin: string): boolean {
-  if (origin === 'http://localhost:5173') return true;
-  if (origin === 'https://portal.primeandcalculate.com') return true;
-  if (/^https:\/\/pcprime-client-portal(-[\w-]+)?\.vercel\.app$/.test(origin)) return true;
-  return false;
-}
-
+// CORS: this function is JWT-protected (caller must have a valid Supabase
+// session AND the users.write permission), so locking the Allow-Origin to
+// specific domains doesn't add meaningful security here — it just changes
+// WHICH WEBSITES can attempt the call. We echo back whatever Origin the
+// browser sends; if no JWT is presented, requireAdmin() rejects regardless.
 function corsHeaders(req: Request) {
-  const origin = req.headers.get('Origin') || '';
-  const allowedOrigin = isAllowedOrigin(origin) ? origin : '';
+  const origin = req.headers.get('Origin') || '*';
   return {
-    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Vary': 'Origin',
