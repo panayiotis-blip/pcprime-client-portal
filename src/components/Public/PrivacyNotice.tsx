@@ -116,6 +116,7 @@ export default function PrivacyNotice() {
           <li><strong>Accounting records and supporting documents</strong> — at least 6 years from the end of the tax year, as required by Cyprus tax law.</li>
           <li><strong>KYC and AML records</strong> — 5 years from the end of the client relationship.</li>
           <li><strong>Audit logs of portal activity</strong> — 2 years from the date of the action.</li>
+          <li><strong>Raw OCR scratch text</strong> — 90 days. The structured invoice record (vendor, amount, date, attached file) is kept for the full statutory period, but the intermediate OCR output we use to fill those fields is wiped after 90 days.</li>
           <li><strong>Other personal data</strong> — for as long as you are a client, plus the statutory retention period above.</li>
         </ul>
         <p>After these periods we securely delete or anonymise the data.</p>
