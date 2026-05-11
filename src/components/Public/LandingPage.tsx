@@ -128,6 +128,9 @@ export default function LandingPage() {
         </div>
         <div className="landing-section-inner footer-bottom">
           <span>© {new Date().getFullYear()} PC Prime &amp; Calculate Consultants Ltd</span>
+          <span style={{ marginLeft: 16 }}>
+            <Link to="/privacy" style={{ color: 'inherit' }}>Privacy Notice</Link>
+          </span>
         </div>
       </footer>
     </div>

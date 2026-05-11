@@ -25,6 +25,7 @@ import DeletedClients from './components/Admin/DeletedClients';
 import MergeClients from './components/Client/MergeClients';
 import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
+import PrivacyNotice from './components/Public/PrivacyNotice';
 import MFAChallenge from './components/Auth/MFAChallenge';
 
 function AuthedApp() {
@@ -86,6 +87,7 @@ function AppRoutes() {
       {/* Always-public routes */}
       <Route path="/tax" element={<TaxCalculator />} />
       <Route path="/tax-calculator" element={<Navigate to="/tax" replace />} />
+      <Route path="/privacy" element={<PrivacyNotice />} />
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
 
       {/* Everything else: authed → real app, anonymous → landing */}
