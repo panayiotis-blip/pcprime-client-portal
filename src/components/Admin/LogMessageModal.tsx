@@ -48,12 +48,13 @@ export default function LogMessageModal({ onClose, onSaved }: Props) {
       const callerLabel = from.trim() || phone.trim();
       const phoneInfo   = phone.trim() ? ` (${phone.trim()})` : '';
       const r = await api.createStaffTask({
-        title:       `Phone message: ${callerLabel}`,
+        title:       `Return call: ${callerLabel}`,
         description: `From: ${callerLabel}${phoneInfo}\n\n${message.trim()}`,
         client_id:   clientId ? Number(clientId) : null,
         assigned_to: forUser || null,
         priority,
         status:      'open',
+        category:    'return_call',
       });
       if (onSaved) onSaved(r.id);
       onClose();

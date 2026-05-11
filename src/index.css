@@ -177,6 +177,19 @@ body {
 
 .nav-icon { font-size: 18px; width: 24px; text-align: center; }
 
+.nav-badge {
+  margin-left: auto;
+  background: #dc2626;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  min-width: 18px;
+  text-align: center;
+}
+
 .sidebar-overlay {
   display: none;
   position: fixed;

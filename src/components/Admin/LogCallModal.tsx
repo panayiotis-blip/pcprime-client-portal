@@ -4,11 +4,10 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
 interface Props {
-  preSelectedTaskId?: number | null;
   preSelectedClientId?: number | null;
-  // For "edit existing call" use case — pass an existing log row
+  // For "edit existing call" — pass an existing log row
   editingId?: number | null;
-  initial?: Partial<FormState>;
+  initial?: Partial<FormState> & { task_id?: number | null; task_title?: string | null; task_recipient?: string | null };
   onClose: () => void;
   onSaved?: () => void;
 }
@@ -22,7 +21,8 @@ type FormState = {
   call_at:       string;
   duration_min:  string;
   notes:         string;
-  task_id:       string;
+  // For NEW inbound calls only — who the message is for. Drives staff_task creation.
+  recipient_id:  string;
 };
 
 const toLocalInput = (iso: string) => {
@@ -33,25 +33,28 @@ const toLocalInput = (iso: string) => {
 };
 
 export default function LogCallModal({
-  preSelectedTaskId, preSelectedClientId, editingId, initial, onClose, onSaved,
+  preSelectedClientId, editingId, initial, onClose, onSaved,
 }: Props) {
   const { user } = useAuth();
   const { clients } = useApp();
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
-  const [openTasks, setOpenTasks]   = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
+
+  const initialDirection = (initial?.direction as any) || 'inbound';
 
   const [form, setForm] = useState<FormState>({
     client_id:     preSelectedClientId ? String(preSelectedClientId) : '',
     staff_id:      user?.id || '',
-    direction:     'outbound',  // logging-from-task is usually a callback
+    direction:     initialDirection,
     contact_name:  '',
     contact_phone: '',
     call_at:       toLocalInput(new Date().toISOString()),
     duration_min:  '',
     notes:         '',
-    task_id:       preSelectedTaskId ? String(preSelectedTaskId) : '',
+    // Default the message recipient to the current user — staff usually takes
+    // a message for themselves or hand-picks; pre-filling is just a sane start.
+    recipient_id:  user?.id || '',
     ...(initial as any || {}),
   });
 
@@ -59,14 +62,9 @@ export default function LogCallModal({
     let cancelled = false;
     (async () => {
       try {
-        const [users, tasks] = await Promise.all([
-          api.getUsers(),
-          api.getStaffTasks({}),
-        ]);
+        const users = await api.getUsers();
         if (cancelled) return;
         setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
-        // Show only OPEN-ish tasks in the picker (anything you might still be calling about)
-        setOpenTasks((tasks as any[]).filter(t => t.status !== 'done' && t.status !== 'cancelled'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -78,9 +76,32 @@ export default function LogCallModal({
     if (!form.contact_name.trim() && !form.contact_phone.trim()) {
       alert('Provide a name or phone number for the call'); return;
     }
+    if (form.direction === 'inbound' && !editingId && !form.recipient_id) {
+      alert('Pick who the message is for'); return;
+    }
     setSaving(true);
     try {
       const dur = form.duration_min === '' ? null : parseInt(form.duration_min, 10);
+      const callerLabel = form.contact_name.trim() || form.contact_phone.trim();
+      const phoneInfo   = form.contact_phone.trim() ? ` (${form.contact_phone.trim()})` : '';
+
+      let taskId: number | null = (initial as any)?.task_id ?? null;
+
+      // For a NEW inbound call with a recipient set → create the return-call task first,
+      // then link the call_log to it via task_id.
+      if (form.direction === 'inbound' && !editingId && form.recipient_id) {
+        const created = await api.createStaffTask({
+          title:       `Return call: ${callerLabel}`,
+          description: `From: ${callerLabel}${phoneInfo}${form.notes.trim() ? `\n\n${form.notes.trim()}` : ''}`,
+          client_id:   form.client_id ? Number(form.client_id) : null,
+          assigned_to: form.recipient_id,
+          priority:    'medium',
+          status:      'open',
+          category:    'return_call',
+        });
+        taskId = created.id;
+      }
+
       const payload = {
         client_id:     form.client_id ? Number(form.client_id) : null,
         staff_id:      form.staff_id || null,
@@ -90,7 +111,7 @@ export default function LogCallModal({
         call_at:       new Date(form.call_at).toISOString(),
         duration_min:  Number.isNaN(dur as number) ? null : dur,
         notes:         form.notes.trim() || null,
-        task_id:       form.task_id ? Number(form.task_id) : null,
+        task_id:       taskId,
       };
       if (editingId) {
         await api.updateCallLog(editingId, payload);
@@ -106,11 +127,13 @@ export default function LogCallModal({
     }
   };
 
-  const taskLabel = (t: any) => {
-    const c = clients.find((x: any) => x.id === t.client_id);
-    const cName = c ? `${c.client_code ? c.client_code + ' — ' : ''}${c.name}` : '';
-    return `${t.title}${cName ? ` · ${cName}` : ''}`;
+  const recipientName = (uid: string | null | undefined) => {
+    if (!uid) return '—';
+    const u = staffUsers.find(s => s.id === uid);
+    return u?.display_name || u?.username || uid.slice(0, 8);
   };
+
+  const isInbound = form.direction === 'inbound';
 
   return (
     <div style={{
@@ -123,6 +146,7 @@ export default function LogCallModal({
           <p>Loading…</p>
         ) : (
           <>
+            {/* Direction comes FIRST so the recipient field can show/hide based on it */}
             <div className="form-grid">
               <div className="form-group">
                 <label>Direction *</label>
@@ -135,6 +159,42 @@ export default function LogCallModal({
                 <label>When *</label>
                 <input type="datetime-local" className="form-input" value={form.call_at} onChange={e => setForm({ ...form, call_at: e.target.value })} />
               </div>
+            </div>
+
+            {/* The big new field — message recipient — only relevant for inbound calls */}
+            {isInbound && !editingId && (
+              <div className="form-group" style={{
+                marginTop: 8, padding: 12, background: '#eef2ff',
+                border: '1px solid #c7d2fe', borderRadius: 6,
+              }}>
+                <label style={{ fontWeight: 600, color: '#3730a3' }}>📨 Message for *</label>
+                <select
+                  className="form-input"
+                  value={form.recipient_id}
+                  onChange={e => setForm({ ...form, recipient_id: e.target.value })}
+                  style={{ marginTop: 4 }}
+                >
+                  <option value="">— Pick recipient —</option>
+                  {staffUsers.map(u => (
+                    <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+                  ))}
+                </select>
+                <p style={{ fontSize: 12, color: '#475569', margin: '6px 0 0 0' }}>
+                  Saving will add a <strong>Return call</strong> task to {recipientName(form.recipient_id)}'s task list.
+                </p>
+              </div>
+            )}
+
+            {isInbound && editingId && (initial as any)?.task_id && (
+              <div className="form-group" style={{
+                marginTop: 8, padding: 10, background: '#f1f5f9',
+                border: '1px solid #cbd5e1', borderRadius: 6, fontSize: 13,
+              }}>
+                Linked to return-call task: <strong>{(initial as any)?.task_title || `#${(initial as any).task_id}`}</strong>
+              </div>
+            )}
+
+            <div className="form-grid" style={{ marginTop: 8 }}>
               <div className="form-group">
                 <label>Contact name</label>
                 <input type="text" className="form-input" value={form.contact_name} onChange={e => setForm({ ...form, contact_name: e.target.value })} />
@@ -151,7 +211,7 @@ export default function LogCallModal({
                 </select>
               </div>
               <div className="form-group">
-                <label>Staff handler</label>
+                <label>Handled by (staff)</label>
                 <select className="form-input" value={form.staff_id} onChange={e => setForm({ ...form, staff_id: e.target.value })}>
                   <option value="">— None —</option>
                   {staffUsers.map(u => <option key={u.id} value={u.id}>{u.display_name || u.username}</option>)}
@@ -161,17 +221,10 @@ export default function LogCallModal({
                 <label>Duration (minutes)</label>
                 <input type="number" min={0} className="form-input" value={form.duration_min} onChange={e => setForm({ ...form, duration_min: e.target.value })} />
               </div>
-              <div className="form-group">
-                <label>Linked task (optional)</label>
-                <select className="form-input" value={form.task_id} onChange={e => setForm({ ...form, task_id: e.target.value })}>
-                  <option value="">— None —</option>
-                  {openTasks.map(t => <option key={t.id} value={t.id}>{taskLabel(t)}</option>)}
-                </select>
-              </div>
             </div>
             <div className="form-group">
-              <label>Notes</label>
-              <textarea className="form-input" rows={4} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="What was the call about?" />
+              <label>Notes / Message</label>
+              <textarea className="form-input" rows={4} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder={isInbound ? 'What did they say? What do they want?' : 'Notes about the call'} />
             </div>
           </>
         )}

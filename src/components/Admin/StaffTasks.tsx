@@ -5,7 +5,6 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 import LogMessageModal from './LogMessageModal';
-import LogCallModal from './LogCallModal';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
@@ -22,6 +21,7 @@ type Task = {
   due_date: string | null;
   priority: Priority;
   status: Status;
+  category: 'general' | 'return_call' | 'message' | string;
   completed_at: string | null;
   created_at: string;
 };
@@ -74,10 +74,9 @@ export default function StaffTasks() {
   const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('staff_tasks_view', m); };
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showLogMessage,    setShowLogMessage]    = useState(false);
-  const [logCallForTask,    setLogCallForTask]    = useState<{ task_id: number; client_id: number | null } | null>(null);
 
-  // Filters
-  const [fAssignee, setFAssignee] = useState<string>('');
+  // Filters — default to showing only MY tasks (changeable to "All" any time)
+  const [fAssignee, setFAssignee] = useState<string>(user?.id || '');
   const [fStatus, setFStatus]     = useState<string>('open'); // 'open' = open + in_progress + blocked
   const [fPriority, setFPriority] = useState<string>('');
   const [fClient, setFClient]     = useState<string>('');
@@ -128,14 +127,28 @@ export default function StaffTasks() {
   useEffect(() => { loadStaff(); }, []);
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fAssignee, fStatus, fPriority, fClient, fFrom, fTo]);
 
+  // Stamp the "I've now seen the Tasks page" marker, so the sidebar badge
+  // resets to 0 — also fires on every visit so newly-arrived tasks get cleared.
+  useEffect(() => {
+    if (user?.id) localStorage.setItem(`tasks_last_seen_${user.id}`, new Date().toISOString());
+  }, [user?.id, tasks.length]);
+
   const userById = useMemo(() => {
     const m = new Map<string, any>();
     for (const u of staffUsers) m.set(u.id, u);
     return m;
   }, [staffUsers]);
 
+  // Return-call tasks get their own section at the top, so we exclude them
+  // from the main list to avoid duplication.
+  const returnCalls = useMemo(() => {
+    return tasks
+      .filter(t => t.category === 'return_call' && isOpenStatus(t.status))
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  }, [tasks]);
+
   const visibleTasks = useMemo(() => {
-    let out = tasks;
+    let out = tasks.filter(t => t.category !== 'return_call');
     if (fStatus === 'open') out = out.filter(t => isOpenStatus(t.status));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -233,6 +246,81 @@ export default function StaffTasks() {
         <div className="stat-card stat-draft"><div className="stat-number">{stats.overdue}</div><div className="stat-label">Overdue</div></div>
         <div className="stat-card stat-reviewed"><div className="stat-number">{stats.due7}</div><div className="stat-label">Due ≤ 7d</div></div>
         <div className="stat-card stat-exported"><div className="stat-number">{stats.doneWeek}</div><div className="stat-label">Done this week</div></div>
+      </div>
+
+      {/* ===== Return Calls section — always visible, even when empty ===== */}
+      <div style={{
+        marginTop: 16, padding: 16, background: '#eef2ff',
+        border: '1px solid #c7d2fe', borderRadius: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: returnCalls.length ? 10 : 0 }}>
+          <h3 style={{ margin: 0, color: '#3730a3' }}>
+            📞 Return Calls
+            {returnCalls.length > 0 && (
+              <span style={{
+                marginLeft: 8, background: '#dc2626', color: 'white',
+                fontSize: 12, padding: '2px 8px', borderRadius: 999,
+              }}>{returnCalls.length}</span>
+            )}
+          </h3>
+          <span style={{ fontSize: 12, color: '#64748b' }}>
+            {fAssignee === user?.id ? 'For you' : fAssignee ? `For ${assigneeName(fAssignee)}` : 'All staff'}
+          </span>
+        </div>
+        {returnCalls.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>No calls to return ✓</p>
+        ) : (
+          <div className="compliance-table-wrapper">
+            <table className="compliance-table" style={{ background: 'white' }}>
+              <thead>
+                <tr>
+                  <th>Caller</th>
+                  <th>Client</th>
+                  <th>For</th>
+                  <th>Received</th>
+                  <th>Message</th>
+                  <th className="no-print">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {returnCalls.map(t => {
+                  const desc = t.description || '';
+                  const callerMatch = /^From:\s*([^\n(]+)/.exec(desc);
+                  const caller = callerMatch ? callerMatch[1].trim() : t.title.replace(/^Return call:\s*/i, '');
+                  const messageBody = desc.split('\n\n').slice(1).join('\n\n').trim() || desc;
+                  return (
+                    <tr key={t.id}>
+                      <td><strong>{caller}</strong></td>
+                      <td>
+                        {t.client_id ? (
+                          <Link to={`/clients/${t.client_id}`}>{t.client_code ? `${t.client_code} — ` : ''}{t.client_name}</Link>
+                        ) : '—'}
+                      </td>
+                      <td>{assigneeName(t.assigned_to)}</td>
+                      <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
+                        {new Date(t.created_at).toLocaleString()}
+                      </td>
+                      <td style={{ maxWidth: 360, fontSize: 13 }}>
+                        <span style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>
+                          {messageBody}
+                        </span>
+                      </td>
+                      <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => patchTask(t.id, { status: 'done' } as any)}
+                          title="Call returned — close this task"
+                        >
+                          ✓ Mark as Returned
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {showForm && (
@@ -440,8 +528,7 @@ export default function StaffTasks() {
                     <span className="print-only">{STATUS_LABEL[t.status]}</span>
                   </td>
                   <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-link btn-sm" title="Log a call about this task" onClick={() => setLogCallForTask({ task_id: t.id, client_id: t.client_id })}>📞 Log call</button>
-                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} style={{ marginLeft: 4 }}>Delete</button>
+                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -461,15 +548,6 @@ export default function StaffTasks() {
         <LogMessageModal
           onClose={() => setShowLogMessage(false)}
           onSaved={() => reload()}
-        />
-      )}
-
-      {logCallForTask && (
-        <LogCallModal
-          preSelectedTaskId={logCallForTask.task_id}
-          preSelectedClientId={logCallForTask.client_id}
-          onClose={() => setLogCallForTask(null)}
-          onSaved={() => setLogCallForTask(null)}
         />
       )}
     </div>

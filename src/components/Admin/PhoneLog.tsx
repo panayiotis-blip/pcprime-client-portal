@@ -115,7 +115,8 @@ export default function PhoneLog() {
         call_at:       toLocalInput(l.call_at),
         duration_min:  l.duration_min != null ? String(l.duration_min) : '',
         notes:         l.notes || '',
-        task_id:       l.task_id ? String(l.task_id) : '',
+        task_id:       l.task_id,
+        task_title:    l.task_title,
       },
     });
   };

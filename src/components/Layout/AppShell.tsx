@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { isStaffRole, hasPermission, roleLabel } from '../../services/api';
+import { api, isStaffRole, hasPermission, roleLabel } from '../../services/api';
 
 // Each entry can declare a `requires` predicate to gate visibility by role.
 // No predicate = visible to any internal-firm user (owner / supervisor / admin / staff).
@@ -34,9 +34,34 @@ export default function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { user, logout } = useAuth();
+  const [newTaskCount, setNewTaskCount] = useState(0);
 
   const navItems = (isStaffRole(user) ? adminNav : clientNav)
     .filter(item => !item.requires || item.requires(user));
+
+  const refreshTaskBadge = useCallback(async () => {
+    if (!user?.id || !isStaffRole(user)) return;
+    let lastSeen = localStorage.getItem(`tasks_last_seen_${user.id}`);
+    if (!lastSeen) {
+      // First-ever visit: anchor "since" to now so badge starts clean
+      lastSeen = new Date().toISOString();
+      localStorage.setItem(`tasks_last_seen_${user.id}`, lastSeen);
+    }
+    try {
+      const count = await api.countNewTasksForUser(user.id, lastSeen);
+      setNewTaskCount(count);
+    } catch {}
+  }, [user]);
+
+  // Poll every 60s for fresh assigned tasks
+  useEffect(() => {
+    refreshTaskBadge();
+    const id = setInterval(refreshTaskBadge, 60000);
+    return () => clearInterval(id);
+  }, [refreshTaskBadge]);
+
+  // Also refresh on route change (so visiting /tasks resets it within a beat)
+  useEffect(() => { refreshTaskBadge(); }, [location.pathname, refreshTaskBadge]);
 
   return (
     <div className="app-shell">
@@ -62,6 +87,11 @@ export default function AppShell() {
               <Link to={item.path} className={location.pathname === item.path ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
+                {item.path === '/tasks' && newTaskCount > 0 && (
+                  <span className="nav-badge" title={`${newTaskCount} new task${newTaskCount === 1 ? '' : 's'} assigned to you`}>
+                    {newTaskCount > 9 ? '9+' : newTaskCount}
+                  </span>
+                )}
               </Link>
             </li>
           ))}

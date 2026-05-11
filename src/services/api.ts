@@ -1299,6 +1299,7 @@ export const api = {
     client_id?: number;
     from?: string;
     to?: string;
+    category?: string;
   }) {
     let q = supabase.from('staff_tasks')
       .select('*, client:clients(name, client_code)')
@@ -1308,6 +1309,7 @@ export const api = {
     if (params?.status)    q = q.eq('status', params.status);
     if (params?.priority)  q = q.eq('priority', params.priority);
     if (params?.client_id) q = q.eq('client_id', params.client_id);
+    if (params?.category)  q = q.eq('category', params.category);
     if (params?.from)      q = q.gte('due_date', params.from);
     if (params?.to)        q = q.lte('due_date', params.to);
     const { data, error } = await q;
@@ -1327,6 +1329,7 @@ export const api = {
     due_date?: string | null;
     priority?: string;
     status?: string;
+    category?: string;
   }) {
     const { data: { session } } = await supabase.auth.getSession();
     const { data: row, error } = await supabase.from('staff_tasks').insert({
@@ -1338,6 +1341,7 @@ export const api = {
       due_date:     data.due_date || null,
       priority:     data.priority || 'medium',
       status:       data.status || 'open',
+      category:     data.category || 'general',
     }).select().single();
     if (error) throw new Error(error.message);
     return { id: row.id };
@@ -1359,6 +1363,19 @@ export const api = {
   async deleteStaffTask(id: number) {
     const { error } = await supabase.from('staff_tasks').delete().eq('id', id);
     if (error) throw new Error(error.message);
+  },
+
+  // For the sidebar badge: count of new (still-open) tasks assigned to me
+  // that were created after I last viewed the Tasks page.
+  async countNewTasksForUser(userId: string, sinceIso: string) {
+    const { count, error } = await supabase
+      .from('staff_tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_to', userId)
+      .in('status', ['open', 'in_progress', 'blocked'])
+      .gt('created_at', sinceIso);
+    if (error) throw new Error(error.message);
+    return count || 0;
   },
 
   // --------- Audit logging ---------
