@@ -19,16 +19,21 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// Whitelist of origins allowed to call this function. We echo the request
-// origin back if it's in this set; otherwise the browser blocks the call.
-const ALLOWED_ORIGINS = new Set([
-  'https://pcprime-client-portal.vercel.app',
-  'http://localhost:5173',
-]);
+// Allow-list of origins permitted to call this function. We echo the request
+// origin back if it matches; otherwise the browser blocks the call.
+//
+// Pattern matches Vercel preview deploys (pcprime-client-portal-<hash>.vercel.app)
+// so testing branches from the cloud "just works" without hand-editing this list.
+function isAllowedOrigin(origin: string): boolean {
+  if (origin === 'http://localhost:5173') return true;
+  if (origin === 'https://portal.primeandcalculate.com') return true;
+  if (/^https:\/\/pcprime-client-portal(-[\w-]+)?\.vercel\.app$/.test(origin)) return true;
+  return false;
+}
 
 function corsHeaders(req: Request) {
   const origin = req.headers.get('Origin') || '';
-  const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : '';
+  const allowedOrigin = isAllowedOrigin(origin) ? origin : '';
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'POST, PATCH, DELETE, OPTIONS',
