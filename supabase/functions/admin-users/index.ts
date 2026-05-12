@@ -130,6 +130,45 @@ Deno.serve(async (req: Request) => {
     }
 
     // PATCH /admin-users/<uid>/password  → reset a user's password
+    // POST /admin-users/invite  → invite a client to the portal by email.
+    // No password is set: Supabase emails them a magic link, they click it,
+    // land logged in, and can set a password on the Security page.
+    if (req.method === 'POST' && tail === 'invite') {
+      const body = await req.json();
+      const { email, full_name, client_id } = body || {};
+      if (!email) return json(req, { error: 'email required' }, 400);
+      if (!client_id) return json(req, { error: 'client_id required' }, 400);
+
+      const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+        data: {
+          username: email.split('@')[0],
+          full_name: full_name || '',
+          role: 'client',
+        },
+        redirectTo: 'https://portal.primeandcalculate.com/',
+      });
+      if (error || !data.user) return json(req, { error: error?.message || 'Invite failed' }, 400);
+
+      const newId = data.user.id;
+
+      // The auth trigger creates a profiles stub from metadata; lock the
+      // role/active fields explicitly so RLS treats them as a client.
+      await admin.from('profiles').update({
+        username: email.split('@')[0],
+        full_name: full_name || '',
+        role: 'client',
+        active: true,
+      }).eq('id', newId);
+
+      // Link to the client record. Upsert in case of re-invite collisions.
+      await admin.from('user_clients').upsert(
+        { user_id: newId, client_id },
+        { onConflict: 'user_id,client_id' }
+      );
+
+      return json(req, { id: newId, email });
+    }
+
     if (req.method === 'PATCH' && tail.endsWith('/password')) {
       const uid = tail.split('/')[0];
       const { password } = await req.json();

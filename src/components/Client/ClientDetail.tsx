@@ -56,12 +56,16 @@ export default function ClientDetail() {
   const isAdmin = isStaffRole(user);
   const canDelete = hasPermission(user, 'clients.delete');
   const canSeeCredentials = hasPermission(user, 'credentials.read');
+  const canInviteUsers = hasPermission(user, 'users.write');
   const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'accounts' | 'patterns' | 'credentials' | 'kyc'>('info');
   const [client, setClient] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '' });
+  const [inviting, setInviting] = useState(false);
 
   const clientId = parseInt(id || '0');
 
@@ -77,6 +81,32 @@ export default function ClientDetail() {
 
   const handleChange = (field: string, value: string) => {
     setForm((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  const openInvite = () => {
+    setInviteForm({
+      email: client?.email || '',
+      full_name: client?.director_name || client?.name || '',
+    });
+    setShowInvite(true);
+  };
+
+  const handleSendInvite = async () => {
+    if (!inviteForm.email.trim()) { alert('Email is required'); return; }
+    setInviting(true);
+    try {
+      await api.inviteClient({
+        email: inviteForm.email.trim(),
+        full_name: inviteForm.full_name.trim() || undefined,
+        client_id: clientId,
+      });
+      alert(`Invite sent to ${inviteForm.email}. They'll get an email with a one-time link to set up their account.`);
+      setShowInvite(false);
+    } catch (err: any) {
+      alert('Invite failed: ' + err.message);
+    } finally {
+      setInviting(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -163,7 +193,14 @@ export default function ClientDetail() {
                 <button className="btn btn-secondary" onClick={() => { setEditing(false); setForm(client); }}>Cancel</button>
               </>
             ) : (
-              <button className="btn btn-primary" onClick={() => setEditing(true)}>Edit Client</button>
+              <>
+                <button className="btn btn-primary" onClick={() => setEditing(true)}>Edit Client</button>
+                {canInviteUsers && (
+                  <button className="btn btn-secondary" onClick={openInvite} style={{ marginLeft: 8 }} title="Send this client a portal access invite by email">
+                    ✉️ Invite to portal
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -276,6 +313,47 @@ export default function ClientDetail() {
           onClose={() => setShowApplyTemplate(false)}
           onApplied={(n) => alert(`Created ${n} task(s) for ${client.name}.`)}
         />
+      )}
+
+      {showInvite && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+        }}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 480 }}>
+            <h3 style={{ marginTop: 0 }}>Invite {client?.name} to the portal</h3>
+            <p style={{ fontSize: 13, color: '#475569', marginBottom: 16 }}>
+              They'll get an email with a one-time link. Clicking it signs them in;
+              they then set their own password on the Security page.
+            </p>
+            <div className="form-group">
+              <label>Email *</label>
+              <input
+                type="email"
+                className="form-input"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                placeholder="client@example.com"
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label>Full name (optional)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={inviteForm.full_name}
+                onChange={(e) => setInviteForm({ ...inviteForm, full_name: e.target.value })}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="btn btn-secondary" onClick={() => setShowInvite(false)} disabled={inviting}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSendInvite} disabled={inviting}>
+                {inviting ? 'Sending…' : 'Send invite'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -521,6 +521,14 @@ export const api = {
     return adminFn(`/${id}/password`, 'PATCH', { password });
   },
 
+  async inviteClient(data: { email: string; full_name?: string; client_id: number }) {
+    return adminFn('/invite', 'POST', {
+      email: data.email,
+      full_name: data.full_name,
+      client_id: data.client_id,
+    });
+  },
+
   // --------- Clients ---------
   async getClients() {
     const { data, error } = await supabase.from('clients').select('*').order('name');
