@@ -8,6 +8,7 @@ import MyTasks from './Dashboard/MyTasks';
 import ComplianceCalendar from './Dashboard/ComplianceCalendar';
 import InvoiceTrendChart from './Dashboard/InvoiceTrendChart';
 import QuickActions from './Dashboard/QuickActions';
+import SecurityAlertsBanner from './Dashboard/SecurityAlertsBanner';
 
 const todayIso = () => {
   const d = new Date();
@@ -80,6 +81,7 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard">
+      <SecurityAlertsBanner />
       {showMfaNag && (
         <div style={{
           padding: '12px 16px',

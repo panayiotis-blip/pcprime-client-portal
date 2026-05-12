@@ -1410,6 +1410,24 @@ export const api = {
     return data || [];
   },
 
+  // --------- Audit alerts (security banner) ---------
+  async getAuditAlerts(opts?: { open_only?: boolean; limit?: number }) {
+    const limit = opts?.limit ?? 20;
+    let q = supabase.from('audit_alerts')
+      .select('*')
+      .order('triggered_at', { ascending: false })
+      .limit(limit);
+    if (opts?.open_only !== false) q = q.is('acknowledged_at', null);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async acknowledgeAuditAlert(id: number) {
+    const { error } = await supabase.rpc('acknowledge_audit_alert', { p_id: id });
+    if (error) throw new Error(error.message);
+  },
+
   async logAction(action: string, targetType?: string, targetId?: string | number, summary?: any) {
     try {
       await supabase.rpc('log_action', {
