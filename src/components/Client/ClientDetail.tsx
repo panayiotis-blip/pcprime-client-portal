@@ -202,6 +202,16 @@ export default function ClientDetail() {
                     ✉️ Invite to portal
                   </button>
                 )}
+                <a
+                  href={`/clients/${clientId}/print`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary"
+                  style={{ marginLeft: 8 }}
+                  title="Open a print-friendly client card in a new tab"
+                >
+                  🖨 Print Client Card
+                </a>
               </>
             )}
           </div>

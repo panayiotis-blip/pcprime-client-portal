@@ -2341,6 +2341,182 @@ body {
 /* (legacy .kpi-strip / .dashboard-row-2col responsive rules removed —
     replaced by .dashboard-grid-12 system above) */
 
+/* ============================================================
+   Printable Client Card (Task 4)
+   Brand palette: navy #1a2e4a, gold #b8963e
+   Renders on screen as an A4-shaped preview; print CSS locks page
+   size + margins.
+   ============================================================ */
+.print-card-page {
+  background: #f1f5f9;
+  min-height: 100vh;
+  padding: 32px 16px;
+}
+.print-card-toolbar {
+  max-width: 760px;
+  margin: 0 auto 16px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.print-card {
+  width: 210mm;
+  min-height: 297mm;
+  max-width: 100%;
+  margin: 0 auto;
+  background: white;
+  color: #0f172a;
+  padding: 18mm;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  position: relative;
+}
+
+/* Letterhead */
+.pc-header { display: flex; gap: 18mm; align-items: flex-start; }
+.pc-header-brand { flex: 0 0 auto; }
+.pc-logo { height: 80px; width: auto; display: block; }
+.pc-header-details { flex: 1; text-align: right; }
+.pc-firm-name { font-size: 16pt; font-weight: 700; color: #1a2e4a; line-height: 1.1; }
+.pc-tagline   { font-size: 10pt; font-style: italic; color: #b8963e; margin-top: 2pt; }
+.pc-firm-contact { font-size: 9.5pt; color: #475569; margin-top: 6pt; line-height: 1.5; }
+.pc-header-rule { border-top: 2px solid #b8963e; margin: 8mm 0 6mm; }
+
+/* Title / printed date */
+.pc-title-row {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  margin-bottom: 4mm;
+}
+.pc-doc-title { font-size: 20pt; font-weight: 700; color: #1a2e4a; margin: 0; line-height: 1; }
+.pc-doc-subtitle { font-size: 10pt; color: #64748b; margin-top: 2pt; }
+.pc-printed-on { font-size: 9pt; color: #94a3b8; }
+
+/* Client name banner */
+.pc-name-banner {
+  background: #f8fafc;
+  border-left: 4px solid #1a2e4a;
+  padding: 6pt 10pt;
+  margin: 4mm 0 6mm;
+  display: flex; align-items: baseline; gap: 8pt; flex-wrap: wrap;
+}
+.pc-code-badge {
+  background: #1a2e4a; color: white;
+  font-size: 9pt; font-weight: 600;
+  padding: 2pt 6pt; border-radius: 3pt;
+  font-family: 'Courier New', monospace;
+}
+.pc-client-name { font-size: 16pt; font-weight: 700; color: #1a2e4a; margin: 0; }
+.pc-trading-name { font-size: 10pt; color: #64748b; width: 100%; margin-top: 1pt; }
+
+/* Sections */
+.pc-section { margin-bottom: 5mm; break-inside: avoid; page-break-inside: avoid; }
+.pc-section-title {
+  font-size: 11pt; font-weight: 700;
+  color: #1a2e4a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #b8963e;
+  padding-bottom: 2pt;
+  margin: 0 0 3mm 0;
+}
+.pc-section-body { font-size: 10.5pt; }
+
+/* Field grid (two-column) */
+.pc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2pt 16pt;
+}
+.pc-field { display: flex; gap: 6pt; padding: 1.5pt 0; }
+.pc-field-full { grid-column: 1 / -1; }
+.pc-field-label {
+  flex: 0 0 auto;
+  min-width: 110pt;
+  font-weight: 600;
+  color: #475569;
+}
+.pc-field-value { color: #0f172a; }
+
+/* Compliance table */
+.pc-compliance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+.pc-compliance-table th {
+  text-align: left;
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+  border-bottom: 1px solid #cbd5e1;
+  padding: 3pt 6pt 3pt 0;
+}
+.pc-compliance-table td {
+  padding: 3pt 6pt 3pt 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.pc-compliance-status { text-transform: capitalize; font-weight: 500; }
+.pc-compliance-status-filed,
+.pc-compliance-status-completed { color: #047857; }
+.pc-compliance-status-overdue { color: #b91c1c; }
+
+/* Notes */
+.pc-notes-body {
+  margin: 0;
+  font-size: 10pt;
+  color: #334155;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+}
+
+/* Footer */
+.pc-footer {
+  position: absolute;
+  left: 18mm; right: 18mm; bottom: 14mm;
+}
+.pc-footer-rule { border-top: 1px solid #b8963e; margin-bottom: 3mm; }
+.pc-footer-content {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 8.5pt; color: #64748b;
+  margin-bottom: 1mm;
+}
+.pc-confidential { font-style: italic; flex: 1; padding-right: 12pt; }
+.pc-page-number { white-space: nowrap; }
+.pc-footer-firm {
+  text-align: center;
+  font-size: 8.5pt;
+  color: #1a2e4a;
+  font-weight: 600;
+}
+
+/* Print rules */
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+@media print {
+  body, html { background: white !important; }
+  .print-card-page {
+    background: white !important;
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+  .print-card-toolbar { display: none !important; }
+  .print-card {
+    width: auto;
+    min-height: auto;
+    max-width: none;
+    margin: 0;
+    padding: 18mm;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+}
+
 /* Print/screen toggling */
 .print-only { display: none; }
 @media print {
