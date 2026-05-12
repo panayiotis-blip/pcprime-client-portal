@@ -1440,6 +1440,31 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Dashboard layout preferences ---------
+  async getMyDashboardLayout(): Promise<{ widgets: any[] } | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return null;
+    const { data, error } = await supabase
+      .from('user_dashboard_preferences')
+      .select('layout')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return (data.layout as { widgets: any[] }) || null;
+  },
+
+  async setMyDashboardLayout(layout: { widgets: any[] }): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const { error } = await supabase
+      .from('user_dashboard_preferences')
+      .upsert(
+        { user_id: session.user.id, layout },
+        { onConflict: 'user_id' }
+      );
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Audit alerts (security banner) ---------
   async getAuditAlerts(opts?: { open_only?: boolean; limit?: number }) {
     const limit = opts?.limit ?? 20;
