@@ -10,6 +10,7 @@ import ClientDocuments from '../Documents/ClientDocuments';
 import VendorPatterns from './VendorPatterns';
 import PlatformCredentials from './PlatformCredentials';
 import KYCPanel from './KYCPanel';
+import ClientEmails from './ClientEmails';
 import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
 // FieldCtx + Field are defined OUTSIDE ClientDetail on purpose.
@@ -59,7 +60,8 @@ export default function ClientDetail() {
   const canDelete = hasPermission(user, 'clients.delete');
   const canSeeCredentials = hasPermission(user, 'credentials.read');
   const canInviteUsers = hasPermission(user, 'users.write');
-  const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'accounts' | 'patterns' | 'credentials' | 'kyc'>('info');
+  const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'emails' | 'accounts' | 'patterns' | 'credentials' | 'kyc'>('info');
+  const [copiedEmail, setCopiedEmail] = useState(false);
   const [client, setClient] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -155,10 +157,22 @@ export default function ClientDetail() {
     { key: 'kyc', label: 'KYC' },
     { key: 'invoices', label: 'Invoices' },
     { key: 'documents', label: 'Documents' },
+    { key: 'emails', label: 'Emails' },
     { key: 'accounts', label: 'Chart of Accounts' },
     { key: 'patterns', label: 'Vendor Patterns' },
     ...(canSeeCredentials ? [{ key: 'credentials', label: 'Platform Logins' }] : []),
   ];
+
+  const copyUniqueEmail = async () => {
+    if (!client?.unique_email) return;
+    try {
+      await navigator.clipboard.writeText(client.unique_email);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 1500);
+    } catch {
+      alert('Copy failed — your browser blocked clipboard access.');
+    }
+  };
 
   return (
     <div className="client-detail">
@@ -215,6 +229,24 @@ export default function ClientDetail() {
               </>
             )}
           </div>
+
+          {client.unique_email && (
+            <div className="unique-email-banner">
+              <div className="ueb-content">
+                <div className="ueb-label">📧 Client's portal capture email</div>
+                <div className="ueb-address">{client.unique_email}</div>
+                <div className="ueb-hint">BCC or forward emails here to capture them in the Emails tab.</div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={copyUniqueEmail}
+                title="Copy to clipboard"
+              >
+                {copiedEmail ? '✓ Copied' : '⧉ Copy'}
+              </button>
+            </div>
+          )}
 
           <div className="form-section">
             <h3>Company / Individual</h3>
@@ -318,6 +350,7 @@ export default function ClientDetail() {
       {tab === 'patterns' && <VendorPatterns clientId={clientId} />}
       {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
       {tab === 'kyc' && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
+      {tab === 'emails' && <ClientEmails clientId={clientId} />}
 
       {showApplyTemplate && (
         <ApplyTaskTemplateModal

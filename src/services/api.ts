@@ -1440,6 +1440,47 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Client emails (inbound + outbound captured via Mailgun) ---------
+  async getClientEmails(clientId: number) {
+    const { data, error } = await supabase
+      .from('client_emails')
+      .select('id, client_id, direction, sender_email, sender_name, recipient_emails, cc_emails, subject, received_at, attachment_count')
+      .eq('client_id', clientId)
+      .order('received_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async getClientEmailDetail(id: number) {
+    const { data, error } = await supabase
+      .from('client_emails')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw new Error(error.message);
+    // Log the view — sensitive content, want a trail.
+    api.logAction('client_emails.view', 'client_emails', id, { subject: (data as any)?.subject }).catch(() => {});
+    return data;
+  },
+
+  async getClientEmailAttachments(emailId: number) {
+    const { data, error } = await supabase
+      .from('client_email_attachments')
+      .select('*')
+      .eq('email_id', emailId)
+      .order('id', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async getClientEmailAttachmentSignedUrl(storagePath: string, expiresInSeconds = 60): Promise<string> {
+    const { data, error } = await supabase.storage
+      .from('client-email-attachments')
+      .createSignedUrl(storagePath, expiresInSeconds);
+    if (error || !data?.signedUrl) throw new Error(error?.message || 'Failed to sign URL');
+    return data.signedUrl;
+  },
+
   // --------- Dashboard layout preferences ---------
   async getMyDashboardLayout(): Promise<{ widgets: any[] } | null> {
     const { data: { session } } = await supabase.auth.getSession();
