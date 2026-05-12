@@ -1,58 +1,58 @@
 // Supabase Edge Function: inbound-email
-// Receives Mailgun's inbound-parse webhook (multipart/form-data POST), verifies
-// the signature, and stores the email + attachments against the client whose
+// Receives CloudMailin's webhook ("JSON Normalized" format), authenticates via
+// HTTP Basic Auth, and stores the email + attachments against the client whose
 // unique_email matches the recipient.
 //
 // Deploy:
-//   1. Set secrets in Supabase Dashboard → Edge Functions → secrets:
-//        MAILGUN_SIGNING_KEY = <Mailgun's "HTTP webhook signing key">
+//   1. In Supabase Dashboard → Edge Functions → Secrets, add:
+//        CLOUDMAILIN_AUTH_USER  (any short string, e.g. 'cloudmailin')
+//        CLOUDMAILIN_AUTH_PASS  (a long random secret — paste the same value
+//                                into CloudMailin's webhook Auth password)
 //   2. Paste this file's contents into Supabase Dashboard → Edge Functions
-//      → New Function → inbound-email → Deploy
-//   3. Configure Mailgun Route: match_recipient(".*@inbox.primeandcalculate.com")
-//      → forward("https://<project>.supabase.co/functions/v1/inbound-email")
+//      → inbound-email → Deploy.
+//   3. IMPORTANT: When creating the function, untick "Enforce JWT verification"
+//      so CloudMailin can POST to it. (CloudMailin uses Basic Auth, not JWT.)
+//   4. In CloudMailin: create an Address Target pointing at this function's
+//      URL, set HTTP Auth with the user/pass above, and pick "JSON Normalized"
+//      as the message format.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MAILGUN_SIGNING_KEY = Deno.env.get('MAILGUN_SIGNING_KEY') || '';
+const AUTH_USER = Deno.env.get('CLOUDMAILIN_AUTH_USER') || '';
+const AUTH_PASS = Deno.env.get('CLOUDMAILIN_AUTH_PASS') || '';
 const FIRM_DOMAIN = 'primeandcalculate.com';
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// Verify Mailgun's HMAC-SHA256(signing_key, timestamp + token) signature.
-// Also rejects timestamps older than 10 min to prevent replay attacks.
-async function verifyMailgunSignature(timestamp: string, token: string, signature: string): Promise<boolean> {
-  if (!timestamp || !token || !signature || !MAILGUN_SIGNING_KEY) return false;
-  const ts = parseInt(timestamp, 10);
-  if (!Number.isFinite(ts)) return false;
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - ts) > 600) return false;
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(MAILGUN_SIGNING_KEY),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(timestamp + token));
-  const hex = Array.from(new Uint8Array(sigBuf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  return hex === signature;
+// Verify CloudMailin's HTTP Basic Auth header against the Supabase secrets.
+// CloudMailin sends Authorization: Basic base64(user:pass) on every POST when
+// the target is configured with HTTP Auth.
+function verifyBasicAuth(req: Request): boolean {
+  if (!AUTH_USER || !AUTH_PASS) return false;
+  const header = req.headers.get('Authorization') || '';
+  if (!header.startsWith('Basic ')) return false;
+  try {
+    const decoded = atob(header.slice(6).trim());
+    const idx = decoded.indexOf(':');
+    if (idx < 0) return false;
+    const user = decoded.slice(0, idx);
+    const pass = decoded.slice(idx + 1);
+    return user === AUTH_USER && pass === AUTH_PASS;
+  } catch {
+    return false;
+  }
 }
 
 function safeFilename(name: string): string {
-  // ASCII-only filename — strip anything that could cause path issues or
-  // confuse the storage layer. Keep alphanumerics, dot, dash, underscore.
   return (name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100) || 'file';
 }
 
+// Parse "Display Name <user@domain>" or "user@domain"
 function parseFromHeader(rawFrom: string): { email: string; name: string | null } {
-  // "Display Name <user@domain>" or just "user@domain"
   const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(rawFrom || '');
   if (m) {
     const name = m[1].replace(/^"|"$/g, '').trim();
@@ -61,42 +61,87 @@ function parseFromHeader(rawFrom: string): { email: string; name: string | null 
   return { name: null, email: (rawFrom || '').trim().toLowerCase() };
 }
 
+// CloudMailin "JSON Normalized" payload shape (the bits we use)
+interface CloudMailinPayload {
+  headers?: {
+    from?: string;
+    to?: string | string[];
+    cc?: string | string[];
+    subject?: string;
+    message_id?: string;
+    date?: string;
+  };
+  envelope?: {
+    from?: string;
+    to?: string;
+    recipients?: string[];
+    helo_domain?: string;
+  };
+  plain?: string;
+  html?: string;
+  reply_plain?: string;
+  attachments?: Array<{
+    file_name?: string;
+    content_type?: string;
+    size?: number;
+    content?: string;     // base64-encoded
+    disposition?: string;
+    url?: string;         // for "stored attachments" mode (not used here)
+  }>;
+}
+
+function toArrayMaybe(v: string | string[] | undefined): string[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  return v.split(',').map(s => s.trim()).filter(Boolean);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  let form: FormData;
+  // ---- 1. Authenticate ----
+  if (!verifyBasicAuth(req)) {
+    console.warn('inbound-email: bad or missing Basic Auth');
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  let payload: CloudMailinPayload;
   try {
-    form = await req.formData();
+    payload = await req.json();
   } catch {
-    return new Response('Invalid form data', { status: 400 });
+    return new Response('Invalid JSON', { status: 400 });
   }
 
-  // ---- 1. Verify signature ----
-  const timestamp = String(form.get('timestamp') || '');
-  const token     = String(form.get('token') || '');
-  const signature = String(form.get('signature') || '');
-
-  const ok = await verifyMailgunSignature(timestamp, token, signature);
-  if (!ok) {
-    console.warn('inbound-email: invalid Mailgun signature');
-    return new Response('Forbidden', { status: 403 });
-  }
-
-  // ---- 2. Pull useful fields ----
-  const recipient = String(form.get('recipient') || '').trim().toLowerCase();
-  const fromRaw   = String(form.get('From') || form.get('from') || form.get('sender') || '');
-  const subject   = String(form.get('subject') || form.get('Subject') || '');
-  const bodyPlain = String(form.get('body-plain') || form.get('stripped-text') || '');
-  const bodyHtml  = String(form.get('body-html')  || form.get('stripped-html') || '');
-  const messageId = String(form.get('Message-Id') || form.get('message-id') || '') || null;
-  const ccHeader  = String(form.get('Cc') || form.get('cc') || '');
-  const attCount  = parseInt(String(form.get('attachment-count') || '0'), 10) || 0;
+  // ---- 2. Extract fields ----
+  const envelopeTo = payload.envelope?.to || '';
+  const headerTo   = Array.isArray(payload.headers?.to) ? payload.headers!.to![0] : (payload.headers?.to || '');
+  const recipientRaw = (envelopeTo || headerTo || '').trim();
+  const { email: recipient } = parseFromHeader(recipientRaw);
 
   if (!recipient) {
     return new Response('OK (no recipient)', { status: 200 });
   }
+
+  const fromRaw = payload.headers?.from || payload.envelope?.from || '';
+  const { email: senderEmail, name: senderName } = parseFromHeader(fromRaw);
+
+  const subject = payload.headers?.subject || '';
+  const messageId = payload.headers?.message_id || null;
+  const cc = toArrayMaybe(payload.headers?.cc);
+  const bodyPlain = payload.plain || payload.reply_plain || '';
+  const bodyHtml = payload.html || '';
+
+  // Use the email's Date header if present, otherwise server time
+  let receivedAt = new Date().toISOString();
+  if (payload.headers?.date) {
+    const parsed = new Date(payload.headers.date);
+    if (!Number.isNaN(parsed.getTime())) receivedAt = parsed.toISOString();
+  }
+
+  const attachments = (payload.attachments || []).filter(a => a.content);
+  const attCount = attachments.length;
 
   // ---- 3. Resolve recipient → client ----
   const { data: client, error: clientErr } = await admin
@@ -118,15 +163,10 @@ Deno.serve(async (req: Request) => {
     return new Response('OK (deleted client)', { status: 200 });
   }
 
-  // ---- 4. Direction: anything from our own domain = outbound (we BCC'd) ----
-  const { email: senderEmail, name: senderName } = parseFromHeader(fromRaw);
+  // ---- 4. Direction: own-domain sender = outbound (we BCC'd ourselves) ----
   const direction = senderEmail.endsWith('@' + FIRM_DOMAIN) ? 'outbound' : 'inbound';
 
-  const ccEmails = ccHeader
-    ? ccHeader.split(',').map(s => s.trim()).filter(Boolean)
-    : [];
-
-  // ---- 5. Insert email row ----
+  // ---- 5. Insert email ----
   const { data: inserted, error: insErr } = await admin
     .from('client_emails')
     .insert({
@@ -135,11 +175,11 @@ Deno.serve(async (req: Request) => {
       sender_email:     senderEmail || null,
       sender_name:      senderName,
       recipient_emails: [recipient],
-      cc_emails:        ccEmails,
+      cc_emails:        cc,
       subject:          subject || null,
       body_html:        bodyHtml || null,
       body_plain:       bodyPlain || null,
-      received_at:      new Date(parseInt(timestamp, 10) * 1000).toISOString(),
+      received_at:      receivedAt,
       attachment_count: attCount,
       raw_message_id:   messageId,
     })
@@ -147,8 +187,6 @@ Deno.serve(async (req: Request) => {
     .single();
 
   if (insErr) {
-    // 23505 = unique violation = same (client_id, raw_message_id) already
-    // exists, i.e. Mailgun retried. Treat as success.
     if ((insErr as any).code === '23505') {
       return new Response('OK (duplicate)', { status: 200 });
     }
@@ -158,31 +196,35 @@ Deno.serve(async (req: Request) => {
 
   const emailId = inserted.id;
 
-  // ---- 6. Upload attachments ----
-  for (let i = 1; i <= attCount; i++) {
-    const att = form.get(`attachment-${i}`);
-    if (!(att instanceof File)) continue;
+  // ---- 6. Decode base64 attachments and upload to Storage ----
+  for (let i = 0; i < attachments.length; i++) {
+    const att = attachments[i];
+    if (!att.content) continue;
 
-    const safeName = safeFilename(att.name);
-    const storagePath = `${client.id}/${emailId}/${i}__${safeName}`;
+    const safeName = safeFilename(att.file_name || `file-${i + 1}`);
+    const storagePath = `${client.id}/${emailId}/${i + 1}__${safeName}`;
 
     try {
-      const bytes = new Uint8Array(await att.arrayBuffer());
+      // Base64 decode → Uint8Array
+      const binary = atob(att.content);
+      const bytes = new Uint8Array(binary.length);
+      for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+
       const { error: upErr } = await admin.storage
         .from('client-email-attachments')
         .upload(storagePath, bytes, {
-          contentType: att.type || 'application/octet-stream',
+          contentType: att.content_type || 'application/octet-stream',
           upsert: false,
         });
       if (upErr) {
-        console.error('inbound-email: attachment upload failed:', att.name, upErr.message);
+        console.error('inbound-email: attachment upload failed:', safeName, upErr.message);
         continue;
       }
       await admin.from('client_email_attachments').insert({
         email_id:     emailId,
-        filename:     att.name,
-        mime_type:    att.type || null,
-        size_bytes:   att.size,
+        filename:     att.file_name || safeName,
+        mime_type:    att.content_type || null,
+        size_bytes:   att.size ?? bytes.length,
         storage_path: storagePath,
       });
     } catch (e) {
