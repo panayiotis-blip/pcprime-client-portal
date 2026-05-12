@@ -3,6 +3,7 @@ import { api, roleLabel, hasPermission } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import UserPermissionsEditor from './UserPermissionsEditor';
 
 export default function UserManagement() {
@@ -21,6 +22,7 @@ export default function UserManagement() {
     );
   }
   const { clients } = useApp();
+  const { runWith } = useMFAStepUp();
   const [users, setUsers] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<any>({ email: '', username: '', password: '', display_name: '', role: 'client', client_ids: [] as number[] });
@@ -40,16 +42,18 @@ export default function UserManagement() {
   const handleAdd = async () => {
     if (!form.email || !form.password || !form.display_name) { alert('Email, password and display name are required'); return; }
     try {
-      await api.createUser({
+      await runWith(() => api.createUser({
         email: form.email, password: form.password,
         username: form.username || form.email.split('@')[0],
         display_name: form.display_name,
         role: form.role, client_ids: form.role === 'client' ? form.client_ids : [],
-      });
+      }));
       setForm({ email: '', username: '', password: '', display_name: '', role: 'client', client_ids: [] });
       setShowAdd(false);
       await load();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert(err.message);
+    }
   };
 
   const handleEdit = (u: any) => {
@@ -68,18 +72,22 @@ export default function UserManagement() {
   const handleDelete = async (u: any) => {
     if (!confirm(`Delete user "${u.display_name}" (${u.username})? This cannot be undone.`)) return;
     try {
-      await api.deleteUser(u.id);
+      await runWith(() => api.deleteUser(u.id));
       await load();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert(err.message);
+    }
   };
 
   const handleChangePassword = async (userId: string) => {
     if (!newPassword) return;
     try {
-      await api.resetUserPassword(userId, newPassword);
+      await runWith(() => api.resetUserPassword(userId, newPassword));
       setNewPassword(''); setChangePasswordId(null);
       alert('Password changed.');
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert(err.message);
+    }
   };
 
   const handleChangeMyPassword = async () => {

@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { api, isStaffRole, hasPermission } from '../../services/api';
 import InvoiceList from '../Invoice/InvoiceList';
 import ChartOfAccounts from './ChartOfAccounts';
@@ -53,6 +54,7 @@ export default function ClientDetail() {
   const navigate = useNavigate();
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
+  const { runWith } = useMFAStepUp();
   const isAdmin = isStaffRole(user);
   const canDelete = hasPermission(user, 'clients.delete');
   const canSeeCredentials = hasPermission(user, 'credentials.read');
@@ -95,15 +97,15 @@ export default function ClientDetail() {
     if (!inviteForm.email.trim()) { alert('Email is required'); return; }
     setInviting(true);
     try {
-      await api.inviteClient({
+      await runWith(() => api.inviteClient({
         email: inviteForm.email.trim(),
         full_name: inviteForm.full_name.trim() || undefined,
         client_id: clientId,
-      });
+      }));
       alert(`Invite sent to ${inviteForm.email}. They'll get an email with a one-time link to set up their account.`);
       setShowInvite(false);
     } catch (err: any) {
-      alert('Invite failed: ' + err.message);
+      if (err.message !== MFA_CANCELLED) alert('Invite failed: ' + err.message);
     } finally {
       setInviting(false);
     }
@@ -119,11 +121,11 @@ export default function ClientDetail() {
       `client at any time from Clients → Deleted.`;
     if (!confirm(msg)) return;
     try {
-      await api.deleteClient(clientId);
+      await runWith(() => api.deleteClient(clientId));
       await refreshClients();
       navigate('/clients');
     } catch (err: any) {
-      alert('Delete failed: ' + err.message);
+      if (err.message !== MFA_CANCELLED) alert('Delete failed: ' + err.message);
     }
   };
 

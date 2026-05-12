@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ScanProvider } from './context/ScanContext';
+import { MFAStepUpProvider } from './context/MFAStepUpContext';
 import AppShell from './components/Layout/AppShell';
 import LoginPage from './components/Auth/LoginPage';
 import Dashboard from './components/Dashboard';
@@ -39,6 +40,7 @@ function AuthedApp() {
   return (
     <AppProvider>
       <ScanProvider>
+        <MFAStepUpProvider>
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
@@ -64,6 +66,7 @@ function AuthedApp() {
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
+        </MFAStepUpProvider>
       </ScanProvider>
     </AppProvider>
   );

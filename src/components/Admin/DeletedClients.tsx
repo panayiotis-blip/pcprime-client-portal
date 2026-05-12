@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, hasPermission } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 
 type Client = {
   id: number;
@@ -26,6 +27,7 @@ export default function DeletedClients() {
     );
   }
   const { refreshClients } = useApp();
+  const { runWith } = useMFAStepUp();
   const [rows, setRows] = useState<Client[]>([]);
   const [viewMode, setViewMode] = useState<'table' | 'list'>(
     () => (localStorage.getItem('deleted_clients_view') as 'table' | 'list') || 'table'
@@ -51,11 +53,11 @@ export default function DeletedClients() {
     if (!confirm(`Restore client "${c.name}"?`)) return;
     setRestoring(s => ({ ...s, [c.id]: true }));
     try {
-      await api.restoreClient(c.id);
+      await runWith(() => api.restoreClient(c.id));
       // Refresh both this page and the global client list
       await Promise.all([load(), refreshClients()]);
     } catch (err: any) {
-      alert('Restore failed: ' + err.message);
+      if (err.message !== MFA_CANCELLED) alert('Restore failed: ' + err.message);
     } finally {
       setRestoring(s => ({ ...s, [c.id]: false }));
     }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { api, hasPermission } from '../../services/api';
 import MergeClients from './MergeClients';
 
@@ -11,6 +12,7 @@ type ViewMode = 'cards' | 'table' | 'list';
 export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
+  const { runWith } = useMFAStepUp();
   const canSeeDeleted = hasPermission(user, 'clients.restore');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
@@ -68,7 +70,13 @@ export default function ClientManager() {
     const count = invoices.filter((inv: any) => inv.client_id === id).length;
     const detail = count > 0 ? ` (${count} invoice${count === 1 ? '' : 's'} on file)` : '';
     const msg = `Hide this client${detail}? All their data is preserved and they can be restored later from Clients → Deleted.`;
-    if (confirm(msg)) { await api.deleteClient(id); await refreshClients(); }
+    if (!confirm(msg)) return;
+    try {
+      await runWith(() => api.deleteClient(id));
+      await refreshClients();
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert('Delete failed: ' + err.message);
+    }
   };
 
   const handleImport = async () => {

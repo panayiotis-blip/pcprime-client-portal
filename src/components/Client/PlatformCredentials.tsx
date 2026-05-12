@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api, hasPermission } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 
 const DEFAULT_PLATFORMS = [
   'TFA (Tax For All)',
@@ -34,6 +35,7 @@ const blankForm: FormState = { platform: '', username: '', password: '', notes: 
 
 export default function PlatformCredentials({ clientId }: { clientId: number }) {
   const { user } = useAuth();
+  const { runWith } = useMFAStepUp();
   const canReveal = hasPermission(user, 'credentials.reveal');
   const canWrite  = hasPermission(user, 'credentials.write');
   const [credentials, setCredentials] = useState<Cred[]>([]);
@@ -109,10 +111,10 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
   const reveal = async (credId: number) => {
     setRevealing(r => ({ ...r, [credId]: true }));
     try {
-      const pwd = await api.getCredentialPassword(credId);
+      const pwd = await runWith(() => api.getCredentialPassword(credId));
       setRevealed(r => ({ ...r, [credId]: pwd }));
     } catch (err: any) {
-      alert('Reveal failed: ' + err.message);
+      if (err.message !== MFA_CANCELLED) alert('Reveal failed: ' + err.message);
     } finally {
       setRevealing(r => ({ ...r, [credId]: false }));
     }
