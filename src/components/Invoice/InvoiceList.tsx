@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import { api, isStaffRole } from '../../services/api';
+import ViewToggle from '../shared/ViewToggle';
 
-type ViewMode = 'cards' | 'table' | 'list';
+type SortKey = 'invoice_number' | 'vendor_name' | 'invoice_date' | 'total_amount' | 'status';
+type SortDir = 'asc' | 'desc';
 
 interface InvoiceListProps {
   clientId?: number;
@@ -13,10 +16,19 @@ interface InvoiceListProps {
 export default function InvoiceList({ clientId: propClientId }: InvoiceListProps) {
   const { invoices, clients, refreshInvoices } = useApp();
   const { user } = useAuth();
+  const { getMode, setMode } = useViewPreferences();
   const [selectedClientId, setSelectedClientId] = useState<number>(propClientId || (user?.role === 'client' ? user.client_id! : 0));
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('invoices_view') as ViewMode) || 'list');
-  const setView = (m: ViewMode) => { setViewMode(m); localStorage.setItem('invoices_view', m); };
+  const viewMode = getMode('invoices', 'list');
+
+  // Column sort state for List view
+  const [sortKey, setSortKey] = useState<SortKey>('invoice_date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const onSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const sortIndicator = (key: SortKey) => sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   const embedded = !!propClientId;
   const effectiveClientId = embedded ? propClientId! : selectedClientId;
@@ -32,6 +44,18 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
       || (inv.vendor_name || '').toLowerCase().includes(t)
       || (inv.batch_month || '').toLowerCase().includes(t)
       || (inv.status || '').toLowerCase().includes(t);
+  });
+
+  const sortedFiltered = [...matchedFiltered].sort((a: any, b: any) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'total_amount') {
+      return dir * ((a.total_amount || 0) - (b.total_amount || 0));
+    }
+    const av = String(a[sortKey] || '').toLowerCase();
+    const bv = String(b[sortKey] || '').toLowerCase();
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
   });
 
   const getClientName = (cId: number) => clients.find((c: any) => c.id === cId)?.name || 'Unknown';
@@ -142,11 +166,7 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
           type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search by number, vendor, batch, status..." className="form-input client-search"
         />
-        <div className="view-toggle">
-          <button className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')} title="Card view">▦ Cards</button>
-          <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
-          <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="Compact list">≡ List</button>
-        </div>
+        <ViewToggle value={viewMode} onChange={(m) => setMode('invoices', m)} />
       </div>
 
       {matchedFiltered.length === 0 ? (
@@ -154,7 +174,7 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
           <p>{filtered.length === 0 ? 'No invoices yet for this client.' : 'No invoices match your search.'}</p>
           {filtered.length === 0 && <Link to="/scan" className="btn btn-primary">Scan Invoices</Link>}
         </div>
-      ) : viewMode === 'cards' ? (
+      ) : viewMode === 'grid' ? (
         <div className="invoice-cards">
           {matchedFiltered.map((inv: any) => (
             <div key={inv.id} className="invoice-card">
@@ -179,24 +199,39 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
             </div>
           ))}
         </div>
-      ) : viewMode === 'table' ? (
+      ) : viewMode === 'compact' ? (
+        <div className="invoice-cards invoice-cards-compact">
+          {matchedFiltered.map((inv: any) => (
+            <Link key={inv.id} to={`/invoices/${inv.id}`} className="invoice-card invoice-card-compact">
+              <div className="card-header">
+                <span className="invoice-number">{inv.invoice_number || 'No #'}</span>
+                <span className={`status-badge status-${inv.status}`}>{inv.status}</span>
+              </div>
+              <div className="card-body">
+                <p className="vendor">{inv.vendor_name || '—'}</p>
+                <p className="amount">{fmtAmount(inv)}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
         <div className="export-table-wrapper">
-          <table className="export-table">
+          <table className="export-table sortable-table">
             <thead>
               <tr>
                 <th>Journal</th>
-                <th>Number</th>
-                <th>Vendor</th>
+                <th className="sortable" onClick={() => onSort('invoice_number')}>Number{sortIndicator('invoice_number')}</th>
+                <th className="sortable" onClick={() => onSort('vendor_name')}>Vendor{sortIndicator('vendor_name')}</th>
                 {!embedded && <th>Client</th>}
-                <th>Date</th>
+                <th className="sortable" onClick={() => onSort('invoice_date')}>Date{sortIndicator('invoice_date')}</th>
                 <th>Batch</th>
-                <th style={{ textAlign: 'right' }}>Amount</th>
-                <th>Status</th>
+                <th className="sortable" style={{ textAlign: 'right' }} onClick={() => onSort('total_amount')}>Amount{sortIndicator('total_amount')}</th>
+                <th className="sortable" onClick={() => onSort('status')}>Status{sortIndicator('status')}</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {matchedFiltered.map((inv: any) => (
+              {sortedFiltered.map((inv: any) => (
                 <tr key={inv.id}>
                   <td><span className="status-badge">{inv.journal || 'JV'}</span></td>
                   <td><strong>{inv.invoice_number || '—'}</strong></td>
@@ -219,21 +254,6 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
               ))}
             </tbody>
           </table>
-        </div>
-      ) : (
-        // Compact list
-        <div className="compact-list">
-          {matchedFiltered.map((inv: any) => (
-            <Link key={inv.id} to={`/invoices/${inv.id}`} className="compact-row">
-              <span className="cl-badge">{inv.journal || 'JV'}</span>
-              <span className="cl-strong">{inv.invoice_number || 'No number'}</span>
-              <span className="cl-muted">{inv.vendor_name || '—'}</span>
-              {!embedded && <span className="cl-muted">{inv.client_name || getClientName(inv.client_id)}</span>}
-              <span className="cl-muted">{inv.invoice_date || '—'}</span>
-              <span className="cl-amount">{fmtAmount(inv)}</span>
-              <span className={`status-badge status-${inv.status}`}>{inv.status}</span>
-            </Link>
-          ))}
         </div>
       )}
     </div>

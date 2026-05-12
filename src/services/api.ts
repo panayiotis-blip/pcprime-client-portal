@@ -1410,6 +1410,36 @@ export const api = {
     return data || [];
   },
 
+  // --------- View preferences (per-user, cross-device) ---------
+  async getMyViewPreferences(): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return {};
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('view_preferences')
+      .eq('id', session.user.id)
+      .single();
+    if (error || !data) return {};
+    return (data.view_preferences as Record<string, string>) || {};
+  },
+
+  async setMyViewPreference(page: string, mode: string): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    // Read-modify-write so we don't clobber other preferences in the same JSONB.
+    const { data: row } = await supabase
+      .from('profiles')
+      .select('view_preferences')
+      .eq('id', session.user.id)
+      .single();
+    const next = { ...(row?.view_preferences || {}), [page]: mode };
+    const { error } = await supabase
+      .from('profiles')
+      .update({ view_preferences: next })
+      .eq('id', session.user.id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Audit alerts (security banner) ---------
   async getAuditAlerts(opts?: { open_only?: boolean; limit?: number }) {
     const limit = opts?.limit ?? 20;

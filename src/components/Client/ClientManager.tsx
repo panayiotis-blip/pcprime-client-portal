@@ -4,21 +4,25 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
+import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import { api, hasPermission } from '../../services/api';
+import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
 
-type ViewMode = 'cards' | 'table' | 'list';
+type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
+type SortDir = 'asc' | 'desc';
 
 export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const { runWith } = useMFAStepUp();
+  const { getMode, setMode } = useViewPreferences();
   const canSeeDeleted = hasPermission(user, 'clients.restore');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
   const [userForm, setUserForm] = useState({ username: '', password: '', display_name: '' });
-  const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem('clients_view') as ViewMode) || 'cards');
+  const viewMode = getMode('clients', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [showImport, setShowImport] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
@@ -27,7 +31,14 @@ export default function ClientManager() {
   const [importResult, setImportResult] = useState<any>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const setView = (m: ViewMode) => { setViewMode(m); localStorage.setItem('clients_view', m); };
+  // Column sort state for List view
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const onSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const sortIndicator = (key: SortKey) => sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   const handleAdd = async () => {
     if (!form.name.trim()) return;
@@ -105,6 +116,19 @@ export default function ClientManager() {
       || (c.client_code || '').toLowerCase().includes(t)
       || (c.tax_number || '').toLowerCase().includes(t)
       || (c.trading_name || '').toLowerCase().includes(t);
+  });
+
+  // Sort the filtered list — applied to the List view, also to Compact for stability.
+  const sortedFiltered = [...filtered].sort((a: any, b: any) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'invoice_count') {
+      return dir * (getInvoiceCount(a.id) - getInvoiceCount(b.id));
+    }
+    const av = String(a[sortKey] || '').toLowerCase();
+    const bv = String(b[sortKey] || '').toLowerCase();
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
   });
 
   return (
@@ -241,18 +265,14 @@ export default function ClientManager() {
       {/* Search + View toggle */}
       <div className="client-toolbar">
         <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by name, code, TIC..." className="form-input client-search" />
-        <div className="view-toggle">
-          <button className={`view-btn ${viewMode === 'cards' ? 'active' : ''}`} onClick={() => setView('cards')} title="Card view">▦ Cards</button>
-          <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
-          <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="Compact list">≡ List</button>
-        </div>
+        <ViewToggle value={viewMode} onChange={(m) => setMode('clients', m)} />
       </div>
 
       {clients.length === 0 ? (
         <div className="empty-state"><p>No clients yet.</p></div>
       ) : filtered.length === 0 ? (
         <div className="empty-state"><p>No clients match your search.</p></div>
-      ) : viewMode === 'cards' ? (
+      ) : viewMode === 'grid' ? (
         <div className="client-cards">
           {filtered.map((client: any) => (
             <Link to={`/clients/${client.id}`} key={client.id} className="dashboard-client-card">
@@ -272,16 +292,39 @@ export default function ClientManager() {
             </Link>
           ))}
         </div>
-      ) : viewMode === 'table' ? (
+      ) : viewMode === 'compact' ? (
+        <div className="client-cards client-cards-compact">
+          {filtered.map((client: any) => (
+            <Link to={`/clients/${client.id}`} key={client.id} className="dashboard-client-card dashboard-client-card-compact">
+              <div className="dc-card-header">
+                {client.client_code && <span className="client-code-badge">{client.client_code}</span>}
+                <h3>{client.name}</h3>
+              </div>
+              <div className="dc-card-info">
+                {client.tax_number && <p>TIC: {client.tax_number}</p>}
+                <p>{getInvoiceCount(client.id)} invoices</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
         <div className="export-table-wrapper">
-          <table className="export-table">
+          <table className="export-table sortable-table">
             <thead>
               <tr>
-                <th>Code</th><th>Name</th><th>Type</th><th>TIC</th><th>VAT</th><th>Contact</th><th>Phone</th><th>Invoices</th><th></th>
+                <th className="sortable" onClick={() => onSort('client_code')}>Code{sortIndicator('client_code')}</th>
+                <th className="sortable" onClick={() => onSort('name')}>Name{sortIndicator('name')}</th>
+                <th>Type</th>
+                <th className="sortable" onClick={() => onSort('tax_number')}>TIC{sortIndicator('tax_number')}</th>
+                <th>VAT</th>
+                <th>Contact</th>
+                <th>Phone</th>
+                <th className="sortable" onClick={() => onSort('invoice_count')}>Invoices{sortIndicator('invoice_count')}</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c: any) => (
+              {sortedFiltered.map((c: any) => (
                 <tr key={c.id}>
                   <td><strong>{c.client_code || '-'}</strong></td>
                   <td>
@@ -302,17 +345,6 @@ export default function ClientManager() {
               ))}
             </tbody>
           </table>
-        </div>
-      ) : (
-        <div className="client-compact-list">
-          {filtered.map((c: any) => (
-            <Link to={`/clients/${c.id}`} key={c.id} className="client-compact-item">
-              <span className="compact-code">{c.client_code || '-'}</span>
-              <span className="compact-name">{c.name}</span>
-              <span className="compact-tic">{c.tax_number || '-'}</span>
-              <span className="compact-count">{getInvoiceCount(c.id)} inv</span>
-            </Link>
-          ))}
         </div>
       )}
     </div>

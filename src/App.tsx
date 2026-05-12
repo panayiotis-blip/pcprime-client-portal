@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ScanProvider } from './context/ScanContext';
 import { MFAStepUpProvider } from './context/MFAStepUpContext';
+import { ViewPreferencesProvider } from './context/ViewPreferencesContext';
 import AppShell from './components/Layout/AppShell';
 import LoginPage from './components/Auth/LoginPage';
 import Dashboard from './components/Dashboard';
@@ -40,6 +41,7 @@ function AuthedApp() {
   return (
     <AppProvider>
       <ScanProvider>
+        <ViewPreferencesProvider>
         <MFAStepUpProvider>
         <Routes>
           <Route element={<AppShell />}>
@@ -67,6 +69,7 @@ function AuthedApp() {
           </Route>
         </Routes>
         </MFAStepUpProvider>
+        </ViewPreferencesProvider>
       </ScanProvider>
     </AppProvider>
   );

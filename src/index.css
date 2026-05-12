@@ -1223,6 +1223,32 @@ body {
 .view-btn:last-child { border-right: none; }
 .view-btn:hover { background: #f1f5f9; }
 .view-btn.active { background: var(--primary); color: white; }
+.view-btn svg { display: block; }
+
+/* ===== Compact card variants (used by Grid/Compact/List view toggle) ===== */
+/* Compact = same grid container as Grid, but cards are about half-density:
+   smaller min-column, tighter padding, fewer fields shown. */
+.client-cards-compact { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.dashboard-client-card-compact { padding: 10px 12px; }
+.dashboard-client-card-compact .dc-card-header h3 { font-size: 14px; margin: 4px 0 2px; }
+.dashboard-client-card-compact .dc-card-header { padding-bottom: 6px; margin-bottom: 6px; }
+.dashboard-client-card-compact .dc-card-info p { font-size: 12px; margin: 2px 0; }
+
+.invoice-cards-compact { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.invoice-card-compact { padding: 10px 12px; text-decoration: none; color: inherit; }
+.invoice-card-compact .card-header { padding-bottom: 6px; margin-bottom: 6px; }
+.invoice-card-compact .invoice-number { font-size: 13px; }
+.invoice-card-compact .card-body p { font-size: 12px; margin: 2px 0; }
+.invoice-card-compact .vendor { font-weight: 500; }
+.invoice-card-compact .amount { font-weight: 600; }
+
+/* ===== Sortable table columns (used by List view) ===== */
+.sortable-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.sortable-table th.sortable:hover { background: rgba(0, 0, 0, 0.04); }
 
 /* Generic compact-row list (used by InvoiceList and other screens) */
 .compact-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
