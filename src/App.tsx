@@ -15,6 +15,7 @@ import ClientManager from './components/Client/ClientManager';
 import ClientDetail from './components/Client/ClientDetail';
 import ClientCardPrint from './components/Client/ClientCardPrint';
 import BulkImport from './components/Admin/BulkImport';
+import BulkImportV3 from './components/Admin/BulkImportV3';
 import TaxFilingsPage from './components/Admin/TaxFilingsPage';
 import ExportPage from './components/Export/ExportPage';
 import DocumentsPage from './components/Documents/DocumentsPage';
@@ -58,6 +59,7 @@ function AuthedApp() {
             <Route path="/clients" element={<ClientManager />} />
             <Route path="/clients/deleted" element={<DeletedClients />} />
             <Route path="/clients/bulk-import" element={<BulkImport />} />
+            <Route path="/clients/bulk-import-v3" element={<BulkImportV3 />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/export" element={<ExportPage />} />

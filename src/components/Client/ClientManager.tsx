@@ -144,7 +144,10 @@ export default function ClientManager() {
           </button>
           {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
           {(user?.role === 'owner' || user?.role === 'supervisor') && (
-            <Link to="/clients/bulk-import" className="btn btn-secondary">📥 Bulk Import</Link>
+            <>
+              <Link to="/clients/bulk-import-v3" className="btn btn-primary">📥 Bulk Import V3</Link>
+              <Link to="/clients/bulk-import" className="btn btn-secondary" title="Legacy single-sheet import">📥 Bulk Import (legacy)</Link>
+            </>
           )}
           {isOwner && (
             <button

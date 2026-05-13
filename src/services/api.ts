@@ -1513,6 +1513,27 @@ export const api = {
     return (data || []) as any;
   },
 
+  async bulkImportV3(payload: {
+    clients:     any[];
+    contacts:    any[];
+    directors:   any[];
+    credentials: any[];
+    tax_filings: any[];
+  }): Promise<{
+    batch_id: string;
+    clients: number;
+    contacts: number;
+    directors: number;
+    credentials: number;
+    tax_filings: number;
+    errors: number;
+    error_details: any[];
+  }> {
+    const { data, error } = await supabase.rpc('bulk_import_v3', { p_payload: payload });
+    if (error) throw new Error(error.message);
+    return data as any;
+  },
+
   async upsertCredentialForClient(clientId: number, row: { platform: string; username?: string; password?: string; notes?: string }) {
     // Insert a credential row, then encrypt the password via the existing
     // set_credential_password RPC (audit-logged + permission-gated).
