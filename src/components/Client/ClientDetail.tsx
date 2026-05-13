@@ -93,7 +93,12 @@ export default function ClientDetail() {
 
   const clientId = parseInt(id || '0');
   const isActive = client?.is_active !== false;
-  const editable = isAdmin && canEditClient && isActive;
+  // canToggleActive is the broad "can manage this client" perm — used for the
+  // active/inactive switch and Save button. It does NOT depend on is_active,
+  // otherwise an inactive client could never be reactivated.
+  const canToggleActive = isAdmin && canEditClient;
+  // editable is the form-fields gate — additionally requires the client to be active.
+  const editable = canToggleActive && isActive;
 
   const loadClient = async () => {
     try {
@@ -148,7 +153,7 @@ export default function ClientDetail() {
   };
 
   const handleToggleActive = () => {
-    if (!editable) return;
+    if (!canToggleActive) return;
     handleChange('is_active', !(form.is_active !== false));
   };
 
@@ -243,6 +248,7 @@ export default function ClientDetail() {
         isDirty={isDirty}
         isSaving={saving}
         canEdit={editable}
+        canToggleActive={canToggleActive}
         prevClientId={prevClientId}
         nextClientId={nextClientId}
         onSave={handleSave}

@@ -6,7 +6,8 @@ interface Props {
   form: any;
   isDirty: boolean;
   isSaving: boolean;
-  canEdit: boolean;
+  canEdit: boolean;          // form-edit (requires active client)
+  canToggleActive: boolean;  // toggle the active/inactive switch (works on inactive too)
   prevClientId: number | null;
   nextClientId: number | null;
   onSave: () => void;
@@ -20,7 +21,7 @@ interface Props {
 // active/inactive switch, and the toolbar of action buttons.
 // Pure-presentation — all behaviour passed in as props.
 export default function ClientHeader({
-  client, form, isDirty, isSaving, canEdit,
+  client, form, isDirty, isSaving, canEdit, canToggleActive,
   prevClientId, nextClientId,
   onSave, onClear, onDelete, onCopy, onToggleActive,
 }: Props) {
@@ -42,12 +43,12 @@ export default function ClientHeader({
           {client.client_code && (
             <span className="chb-code-badge">{client.client_code}</span>
           )}
-          <label className={`chb-active-switch ${isActive ? 'active' : 'inactive'}`} title={canEdit ? 'Toggle active/inactive' : 'Read-only'}>
+          <label className={`chb-active-switch ${isActive ? 'active' : 'inactive'}`} title={canToggleActive ? 'Toggle active/inactive' : 'Read-only'}>
             <input
               type="checkbox"
               checked={isActive}
               onChange={onToggleActive}
-              disabled={!canEdit}
+              disabled={!canToggleActive}
             />
             <span className="chb-active-label">{isActive ? '● Active' : '○ Inactive'}</span>
           </label>
@@ -105,7 +106,7 @@ export default function ClientHeader({
         <button
           className={`btn btn-primary btn-sm ${isDirty ? 'chb-save-dirty' : ''}`}
           onClick={onSave}
-          disabled={!isDirty || !canEdit || isSaving}
+          disabled={!isDirty || !canToggleActive || isSaving}
           title={isDirty ? 'Save unsaved changes' : 'No changes to save'}
         >
           {isSaving ? 'Saving…' : isDirty ? '● Save' : 'Save'}
