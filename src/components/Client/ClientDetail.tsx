@@ -1,9 +1,21 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { api, isStaffRole, hasPermission } from '../../services/api';
+
+import { FieldCtx } from './fieldContext';
+import ClientHeader from './ClientHeader';
+
+import ClientInfoTab from './tabs/ClientInfoTab';
+import ContactsTab from './tabs/ContactsTab';
+import TaxRegistrationTab from './tabs/TaxRegistrationTab';
+import DirectorsTab from './tabs/DirectorsTab';
+import ComplianceTab from './tabs/ComplianceTab';
+import NotesTab from './tabs/NotesTab';
+import AuditTab from './tabs/AuditTab';
+
 import InvoiceList from '../Invoice/InvoiceList';
 import ChartOfAccounts from './ChartOfAccounts';
 import ClientDocuments from '../Documents/ClientDocuments';
@@ -13,41 +25,46 @@ import KYCPanel from './KYCPanel';
 import ClientEmails from './ClientEmails';
 import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
-// FieldCtx + Field are defined OUTSIDE ClientDetail on purpose.
-// Defining a component inside another component creates a new
-// component identity on every render, which causes React to
-// unmount and remount the inputs — and you lose focus after every
-// keystroke. Hoisting Field out and pulling shared state from
-// context fixes that without changing the call sites below.
-const FieldCtx = createContext<{
-  editing: boolean;
-  form: any;
-  client: any;
-  onChange: (field: string, value: string) => void;
-}>({ editing: false, form: {}, client: {}, onChange: () => {} });
+type TabKey =
+  | 'info' | 'contacts' | 'tax'
+  | 'kyc' | 'directors' | 'credentials'
+  | 'documents' | 'invoices'
+  | 'compliance' | 'emails'
+  | 'notes' | 'audit'
+  | 'accounts' | 'patterns';
 
-function Field({ label, field, type = 'text', options }:
-  { label: string; field: string; type?: string; options?: string[] }) {
-  const { editing, form, client, onChange } = useContext(FieldCtx);
-  return (
-    <div className="form-group">
-      <label>{label}</label>
-      {editing ? (
-        options ? (
-          <select value={form[field] || ''} onChange={(e) => onChange(field, e.target.value)} className="form-input">
-            <option value="">--</option>
-            {options.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        ) : type === 'textarea' ? (
-          <textarea value={form[field] || ''} onChange={(e) => onChange(field, e.target.value)} className="form-input" rows={3} />
-        ) : (
-          <input type={type} value={form[field] || ''} onChange={(e) => onChange(field, e.target.value)} className="form-input" />
-        )
-      ) : (
-        <p className="field-value">{client[field] || '-'}</p>
-      )}
-    </div>
-  );
+const PRIMARY_TABS: { key: TabKey; label: string }[] = [
+  { key: 'info',        label: 'Client Info' },
+  { key: 'contacts',    label: 'Contacts' },
+  { key: 'tax',         label: 'Tax & Reg' },
+  { key: 'kyc',         label: 'KYC' },
+  { key: 'directors',   label: 'Directors' },
+  { key: 'credentials', label: 'Credentials' },
+  { key: 'documents',   label: 'Documents' },
+  { key: 'invoices',    label: 'Invoices' },
+  { key: 'compliance',  label: 'Compliance' },
+  { key: 'emails',      label: 'Emails' },
+  { key: 'notes',       label: 'Notes' },
+  { key: 'audit',       label: 'Audit' },
+];
+
+const MORE_TABS: { key: TabKey; label: string }[] = [
+  { key: 'accounts',    label: 'Chart of Accounts' },
+  { key: 'patterns',    label: 'Vendor Patterns' },
+];
+
+// Shallow compare to detect dirty form
+function isFormDirty(form: any, client: any): boolean {
+  if (!client) return false;
+  for (const k of Object.keys(form)) {
+    const f = form[k];
+    const c = client[k];
+    // Coerce nullish to empty for comparison so '' and null are equal
+    const fNorm = (f === null || f === undefined) ? '' : f;
+    const cNorm = (c === null || c === undefined) ? '' : c;
+    if (String(fNorm) !== String(cNorm)) return true;
+  }
+  return false;
 }
 
 export default function ClientDetail() {
@@ -56,22 +73,27 @@ export default function ClientDetail() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const { runWith } = useMFAStepUp();
+
   const isAdmin = isStaffRole(user);
-  const canDelete = hasPermission(user, 'clients.delete');
-  const canSeeCredentials = hasPermission(user, 'credentials.read');
-  const canInviteUsers = hasPermission(user, 'users.write');
-  const [tab, setTab] = useState<'info' | 'invoices' | 'documents' | 'emails' | 'accounts' | 'patterns' | 'credentials' | 'kyc'>('info');
-  const [copiedEmail, setCopiedEmail] = useState(false);
+  const canDelete       = hasPermission(user, 'clients.delete');
+  const canInviteUsers  = hasPermission(user, 'users.write');
+  const canEditClient   = hasPermission(user, 'clients.write');
+
   const [client, setClient] = useState<any>(null);
-  const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<TabKey>('info');
+  const [moreOpen, setMoreOpen] = useState(false);
+
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', full_name: '' });
   const [inviting, setInviting] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
 
   const clientId = parseInt(id || '0');
+  const isActive = client?.is_active !== false;
+  const editable = isAdmin && canEditClient && isActive;
 
   const loadClient = async () => {
     try {
@@ -81,10 +103,94 @@ export default function ClientDetail() {
     } catch {}
   };
 
-  useEffect(() => { loadClient(); }, [id]);
+  useEffect(() => { loadClient(); /* eslint-disable-next-line */ }, [id]);
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: any) => {
     setForm((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  // Prev / Next by client_code order across all live clients
+  const { prevClientId, nextClientId } = useMemo(() => {
+    if (!clients || !client) return { prevClientId: null, nextClientId: null };
+    const sorted = [...clients].sort((a: any, b: any) => (a.client_code || '').localeCompare(b.client_code || ''));
+    const idx = sorted.findIndex(c => c.id === client.id);
+    if (idx === -1) return { prevClientId: null, nextClientId: null };
+    return {
+      prevClientId: idx > 0 ? sorted[idx - 1].id : null,
+      nextClientId: idx < sorted.length - 1 ? sorted[idx + 1].id : null,
+    };
+  }, [clients, client]);
+
+  const isDirty = useMemo(() => isFormDirty(form, client), [form, client]);
+
+  const handleSave = async () => {
+    if (!isDirty) return;
+    setSaving(true);
+    try {
+      if (isAdmin) {
+        await api.updateClient(clientId, form);
+      } else {
+        await api.selfUpdateClient(clientId, form);
+      }
+      await refreshClients();
+      await loadClient();
+    } catch (err: any) {
+      alert('Failed to save: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = () => {
+    if (!isDirty) return;
+    if (!confirm('Discard unsaved changes?')) return;
+    setForm(client);
+  };
+
+  const handleToggleActive = () => {
+    if (!editable) return;
+    handleChange('is_active', !(form.is_active !== false));
+  };
+
+  const handleDelete = async () => {
+    if (!canDelete) { alert('You do not have permission to delete clients.'); return; }
+    const count = invoices.filter((i: any) => i.client_id === clientId).length;
+    const detail = count > 0 ? ` (${count} invoice${count === 1 ? '' : 's'} on file)` : '';
+    const msg =
+      `Hide "${client?.name || 'this client'}"${detail}?\n\n` +
+      `The client is removed from the active list, but invoices, documents, ` +
+      `compliance tasks, and credentials are preserved. You can restore the ` +
+      `client at any time from Clients → Deleted.`;
+    if (!confirm(msg)) return;
+    try {
+      await runWith(() => api.deleteClient(clientId));
+      await refreshClients();
+      navigate('/clients');
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert('Delete failed: ' + err.message);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!editable) return;
+    if (!confirm(`Create a new client copied from "${client.name}"?`)) return;
+    try {
+      const copy: any = { ...form };
+      // Strip identifying / unique fields so the new record gets fresh values
+      delete copy.id;
+      delete copy.client_code;     // auto-generated by trigger
+      delete copy.unique_email;    // auto-generated by trigger
+      delete copy.created_at;
+      delete copy.updated_at;
+      delete copy.deleted_at;
+      delete copy.bulk_import_batch_id;
+      copy.name = (form.name || '') + ' (copy)';
+      const result = await api.createClient(copy);
+      await refreshClients();
+      navigate(`/clients/${result.id}`);
+    } catch (err: any) {
+      alert('Copy failed: ' + err.message);
+    }
   };
 
   const openInvite = () => {
@@ -113,56 +219,6 @@ export default function ClientDetail() {
     }
   };
 
-  const handleDelete = async () => {
-    const count = invoices.filter((i: any) => i.client_id === clientId).length;
-    const detail = count > 0 ? ` (${count} invoice${count === 1 ? '' : 's'} on file)` : '';
-    const msg =
-      `Hide "${client?.name || 'this client'}"${detail}?\n\n` +
-      `The client is removed from the active list, but invoices, documents, ` +
-      `compliance tasks, and credentials are preserved. You can restore the ` +
-      `client at any time from Clients → Deleted.`;
-    if (!confirm(msg)) return;
-    try {
-      await runWith(() => api.deleteClient(clientId));
-      await refreshClients();
-      navigate('/clients');
-    } catch (err: any) {
-      if (err.message !== MFA_CANCELLED) alert('Delete failed: ' + err.message);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // Clients can only self-update basic info; admins can update everything
-      if (isAdmin) {
-        await api.updateClient(clientId, form);
-      } else {
-        await api.selfUpdateClient(clientId, form);
-      }
-      await refreshClients();
-      await loadClient();
-      setEditing(false);
-    } catch (err: any) {
-      alert('Failed to save: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!client) return <div className="loading-screen">Loading...</div>;
-
-  const tabs = [
-    { key: 'info', label: 'Client Info' },
-    { key: 'kyc', label: 'KYC' },
-    { key: 'invoices', label: 'Invoices' },
-    { key: 'documents', label: 'Documents' },
-    { key: 'emails', label: 'Emails' },
-    { key: 'accounts', label: 'Chart of Accounts' },
-    { key: 'patterns', label: 'Vendor Patterns' },
-    ...(canSeeCredentials ? [{ key: 'credentials', label: 'Platform Logins' }] : []),
-  ];
-
   const copyUniqueEmail = async () => {
     if (!client?.unique_email) return;
     try {
@@ -174,183 +230,107 @@ export default function ClientDetail() {
     }
   };
 
+  if (!client) return <div className="loading-screen">Loading...</div>;
+
+  const ctxValue = { editing: editable, form, client, onChange: handleChange };
+
   return (
-    <div className="client-detail">
-      <div className="client-detail-header">
-        <div>
-          <h2>
-            {client.client_code && <span className="client-code-inline">{client.client_code}</span>}
-            {client.name}
-          </h2>
-          {client.trading_name && <p className="trading-name">{client.trading_name}</p>}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span className={`status-badge status-${client.status === 'active' ? 'reviewed' : 'draft'}`}>{client.status || 'active'}</span>
-          {isAdmin && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowApplyTemplate(true)}>Apply template</button>
-          )}
-          {canDelete && <button className="btn btn-danger btn-sm" onClick={handleDelete}>Delete Client</button>}
-        </div>
+    <FieldCtx.Provider value={ctxValue}>
+    <div className="client-detail-v2">
+      <ClientHeader
+        client={client}
+        form={form}
+        isDirty={isDirty}
+        isSaving={saving}
+        canEdit={editable}
+        prevClientId={prevClientId}
+        nextClientId={nextClientId}
+        onSave={handleSave}
+        onClear={handleClear}
+        onDelete={handleDelete}
+        onCopy={handleCopy}
+        onToggleActive={handleToggleActive}
+      />
+
+      {/* Quick-action strip (not part of the BTMS-style toolbar) */}
+      <div className="cd-quick-strip">
+        {canInviteUsers && (
+          <button className="btn btn-secondary btn-sm" onClick={openInvite}>
+            ✉️ Invite to portal
+          </button>
+        )}
+        {isAdmin && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowApplyTemplate(true)}>
+            📋 Apply task template
+          </button>
+        )}
       </div>
 
-      <div className="tab-bar">
-        {tabs.map(t => (
-          <button key={t.key} className={`tab-btn ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key as any)}>{t.label}</button>
-        ))}
-      </div>
-
-      {tab === 'info' && (
-        <FieldCtx.Provider value={{ editing, form, client, onChange: handleChange }}>
-        <div className="client-info-full">
-          <div className="info-actions">
-            {editing ? (
-              <>
-                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
-                <button className="btn btn-secondary" onClick={() => { setEditing(false); setForm(client); }}>Cancel</button>
-              </>
-            ) : (
-              <>
-                <button className="btn btn-primary" onClick={() => setEditing(true)}>Edit Client</button>
-                {canInviteUsers && (
-                  <button className="btn btn-secondary" onClick={openInvite} style={{ marginLeft: 8 }} title="Send this client a portal access invite by email">
-                    ✉️ Invite to portal
-                  </button>
-                )}
-                <a
-                  href={`/clients/${clientId}/print`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-secondary"
-                  style={{ marginLeft: 8 }}
-                  title="Open a print-friendly client card in a new tab"
-                >
-                  🖨 Print Client Card
-                </a>
-              </>
-            )}
+      {/* Unique-email banner (Task 5 feature, kept) */}
+      {client.unique_email && (
+        <div className="unique-email-banner">
+          <div className="ueb-content">
+            <div className="ueb-label">📧 Client's portal capture email</div>
+            <div className="ueb-address">{client.unique_email}</div>
+            <div className="ueb-hint">BCC or forward emails here to capture them in the Emails tab.</div>
           </div>
-
-          {client.unique_email && (
-            <div className="unique-email-banner">
-              <div className="ueb-content">
-                <div className="ueb-label">📧 Client's portal capture email</div>
-                <div className="ueb-address">{client.unique_email}</div>
-                <div className="ueb-hint">BCC or forward emails here to capture them in the Emails tab.</div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={copyUniqueEmail}
-                title="Copy to clipboard"
-              >
-                {copiedEmail ? '✓ Copied' : '⧉ Copy'}
-              </button>
-            </div>
-          )}
-
-          <div className="form-section">
-            <h3>Company / Individual</h3>
-            <div className="form-grid">
-              <Field label="Client Code" field="client_code" />
-              <Field label="Legal Name" field="name" />
-              <Field label="Trading Name" field="trading_name" />
-              <Field label="Business Type" field="business_type" options={['Sole Trader', 'Limited Company', 'Partnership', 'Self-Employed', 'Non-Profit', 'Trust', 'Other']} />
-              <Field label="Status" field="status" options={['active', 'inactive', 'suspended']} />
-              <Field label="Registration Number (HE)" field="registration_number" />
-              <Field label="Director Name" field="director_name" />
-              <Field label="Incorporation Date" field="incorporation_date" type="date" />
-              <Field label="Financial Year End" field="financial_year_end" />
-              <Field label="Services" field="services" />
-              <Field label="Monthly Fee" field="monthly_fee" />
-            </div>
-          </div>
-
-          <div className="form-section">
-            <h3>Tax & Government IDs</h3>
-            <div className="form-grid">
-              <Field label="Tax Number (TIC)" field="tax_number" />
-              <Field label="VAT Number" field="vat_number" />
-              <div className="form-group">
-                <label>VAT Registered</label>
-                {editing ? (
-                  <select
-                    value={form.vat_registered ? 'yes' : 'no'}
-                    onChange={(e) => setForm((p: any) => ({ ...p, vat_registered: e.target.value === 'yes' }))}
-                    className="form-input"
-                  >
-                    <option value="no">No</option>
-                    <option value="yes">Yes</option>
-                  </select>
-                ) : (
-                  <p className="field-value">{client.vat_registered ? 'Yes' : 'No'}</p>
-                )}
-              </div>
-              <div className="form-group">
-                <label>VAT Period Group (Cyprus)</label>
-                {editing ? (
-                  <select
-                    value={form.vat_period_group ?? ''}
-                    onChange={(e) => setForm((p: any) => ({ ...p, vat_period_group: e.target.value === '' ? null : Number(e.target.value) }))}
-                    className="form-input"
-                    disabled={!form.vat_registered}
-                  >
-                    <option value="">--</option>
-                    <option value="1">Group 1 — Jan/Apr/Jul/Oct</option>
-                    <option value="2">Group 2 — Feb/May/Aug/Nov</option>
-                    <option value="3">Group 3 — Mar/Jun/Sep/Dec</option>
-                  </select>
-                ) : (
-                  <p className="field-value">
-                    {client.vat_period_group ? `Group ${client.vat_period_group}` : '-'}
-                  </p>
-                )}
-              </div>
-              <Field label="Social Insurance Number" field="social_insurance_number" />
-              <Field label="Employer Number (SI)" field="employer_number" />
-              <Field label="Ergani Number" field="ergani_number" />
-              <Field label="ID Number" field="id_number" />
-              <Field label="Passport Number" field="passport_number" />
-              <Field label="Date of Birth" field="date_of_birth" type="date" />
-              <Field label="Nationality" field="nationality" />
-            </div>
-          </div>
-
-          <div className="form-section">
-            <h3>Contact Details</h3>
-            <div className="form-grid">
-              <Field label="Contact Person" field="contact_person" />
-              <Field label="Email" field="email" type="email" />
-              <Field label="Phone" field="phone" />
-              <Field label="Mobile" field="mobile" />
-              <Field label="Website" field="website" />
-            </div>
-          </div>
-
-          <div className="form-section">
-            <h3>Address</h3>
-            <div className="form-grid">
-              <Field label="Address" field="address" />
-              <Field label="City" field="city" />
-              <Field label="Postal Code" field="postal_code" />
-              <Field label="Country" field="country" />
-            </div>
-          </div>
-
-          <div className="form-section">
-            <h3>Notes</h3>
-            <Field label="" field="notes" type="textarea" />
-          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={copyUniqueEmail} title="Copy to clipboard">
+            {copiedEmail ? '✓ Copied' : '⧉ Copy'}
+          </button>
         </div>
-        </FieldCtx.Provider>
       )}
 
-      {tab === 'invoices' && <InvoiceList clientId={clientId} />}
-      {tab === 'documents' && <ClientDocuments clientId={clientId} />}
-      {tab === 'accounts' && <ChartOfAccounts clientId={clientId} />}
-      {tab === 'patterns' && <VendorPatterns clientId={clientId} />}
-      {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
-      {tab === 'kyc' && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
-      {tab === 'emails' && <ClientEmails clientId={clientId} />}
+      {/* Tab bar */}
+      <div className="cd-tabbar">
+        {PRIMARY_TABS.map(t => (
+          <button
+            key={t.key}
+            className={`cd-tab ${tab === t.key ? 'active' : ''}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+        <div className="cd-more-wrap">
+          <button
+            className={`cd-tab cd-tab-more ${MORE_TABS.some(t => t.key === tab) ? 'active' : ''}`}
+            onClick={() => setMoreOpen(o => !o)}
+          >
+            More ▾
+          </button>
+          {moreOpen && (
+            <div className="cd-more-menu" onMouseLeave={() => setMoreOpen(false)}>
+              {MORE_TABS.map(t => (
+                <button
+                  key={t.key}
+                  className={`cd-more-item ${tab === t.key ? 'active' : ''}`}
+                  onClick={() => { setTab(t.key); setMoreOpen(false); }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tab content */}
+      <div className="cd-tab-pane">
+        {tab === 'info'        && <ClientInfoTab />}
+        {tab === 'contacts'    && <ContactsTab />}
+        {tab === 'tax'         && <TaxRegistrationTab />}
+        {tab === 'kyc'         && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
+        {tab === 'directors'   && <DirectorsTab clientId={clientId} canEdit={editable} />}
+        {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
+        {tab === 'documents'   && <ClientDocuments clientId={clientId} />}
+        {tab === 'invoices'    && <InvoiceList clientId={clientId} />}
+        {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
+        {tab === 'emails'      && <ClientEmails clientId={clientId} />}
+        {tab === 'notes'       && <NotesTab />}
+        {tab === 'audit'       && <AuditTab clientId={clientId} />}
+        {tab === 'accounts'    && <ChartOfAccounts clientId={clientId} />}
+        {tab === 'patterns'    && <VendorPatterns clientId={clientId} />}
+      </div>
 
       {showApplyTemplate && (
         <ApplyTaskTemplateModal
@@ -401,5 +381,6 @@ export default function ClientDetail() {
         </div>
       )}
     </div>
+    </FieldCtx.Provider>
   );
 }
