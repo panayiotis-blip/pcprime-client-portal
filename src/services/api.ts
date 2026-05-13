@@ -6,6 +6,24 @@ import { supabase } from '../lib/supabase';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
+// ---- Email column boundary translation (migration 035 made clients.email text[]) ----
+// Forms and display code work with a "; "-joined string; the DB stores text[].
+// These two helpers translate at the API boundary so callers don't have to care.
+function normaliseClientForRead(c: any): any {
+  if (c && Array.isArray(c.email)) {
+    return { ...c, email: c.email.join('; ') };
+  }
+  return c;
+}
+function normaliseClientForWrite(data: any): any {
+  if (!data || typeof data !== 'object') return data;
+  if (typeof data.email === 'string') {
+    const parts = data.email.split(/[;,]+/).map((p: string) => p.trim()).filter(Boolean);
+    return { ...data, email: parts.length === 0 ? null : parts };
+  }
+  return data;
+}
+
 // Call a Supabase Edge Function with the current user's JWT.
 async function adminFn(pathSuffix: string, method: string, body?: any): Promise<any> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -530,16 +548,19 @@ export const api = {
   },
 
   // --------- Clients ---------
+  // After migration 035, clients.email is text[]. To keep frontend code (forms,
+  // displays) working with a string, translate at the API boundary: arrays come
+  // out as "; "-joined strings on read; strings go in as arrays on write.
   async getClients() {
     const { data, error } = await supabase.from('clients').select('*').order('name');
     if (error) throw new Error(error.message);
-    return data || [];
+    return (data || []).map((c: any) => normaliseClientForRead(c));
   },
 
   async getClient(id: number) {
     const { data, error } = await supabase.from('clients').select('*').eq('id', id).single();
     if (error) throw new Error(error.message);
-    return data;
+    return data ? normaliseClientForRead(data) : data;
   },
 
   async createClient(data: any) {
@@ -549,7 +570,8 @@ export const api = {
   },
 
   async updateClient(id: number, data: any) {
-    const { error } = await supabase.from('clients').update(data).eq('id', id);
+    const patch = normaliseClientForWrite(data);
+    const { error } = await supabase.from('clients').update(patch).eq('id', id);
     if (error) throw new Error(error.message);
   },
 
@@ -558,6 +580,7 @@ export const api = {
     const allowed = ['address','phone','email','mobile','contact_person','website','city','postal_code','country'];
     const patch: any = {};
     for (const k of allowed) if (k in data) patch[k] = data[k];
+    Object.assign(patch, normaliseClientForWrite(patch));
     const { error } = await supabase.from('clients').update(patch).eq('id', id);
     if (error) throw new Error(error.message);
   },
