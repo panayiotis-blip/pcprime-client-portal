@@ -1459,6 +1459,61 @@ export const api = {
     return data as string;
   },
 
+  async bulkImportClients(rows: any[]): Promise<{
+    batch_id: string;
+    inserted: number;
+    errors: number;
+    codes_to_ids: Record<string, number>;
+    error_details: Array<{ row: number; client_code?: string; error: string }>;
+  }> {
+    const { data, error } = await supabase.rpc('bulk_import_clients', { p_rows: rows });
+    if (error) throw new Error(error.message);
+    return data as any;
+  },
+
+  async rollbackBulkImport(batchId: string): Promise<{ batch_id: string; rolled_back: number }> {
+    const { data, error } = await supabase.rpc('rollback_bulk_import', { p_batch_id: batchId });
+    if (error) throw new Error(error.message);
+    return data as any;
+  },
+
+  async listRecentBulkImports(): Promise<Array<{
+    batch_id: string;
+    imported_at: string;
+    client_count: number;
+    active_count: number;
+    age_hours: number;
+    can_rollback: boolean;
+  }>> {
+    const { data, error } = await supabase.rpc('list_recent_bulk_imports');
+    if (error) throw new Error(error.message);
+    return (data || []) as any;
+  },
+
+  async upsertCredentialForClient(clientId: number, row: { platform: string; username?: string; password?: string; notes?: string }) {
+    // Insert a credential row, then encrypt the password via the existing
+    // set_credential_password RPC (audit-logged + permission-gated).
+    const { data, error } = await supabase
+      .from('platform_credentials')
+      .insert({
+        client_id: clientId,
+        platform: row.platform,
+        username: row.username || '',
+        notes: row.notes || '',
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    if (row.password) {
+      const { error: pwErr } = await supabase.rpc('set_credential_password', {
+        p_id: (data as any).id,
+        p_password: row.password,
+      });
+      if (pwErr) throw new Error(pwErr.message);
+    }
+    return data;
+  },
+
   // --------- Client directors (Phase 1B of clients v2) ---------
   async getClientDirectors(clientId: number) {
     const { data, error } = await supabase

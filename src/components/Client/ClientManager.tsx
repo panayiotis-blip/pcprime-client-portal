@@ -143,6 +143,9 @@ export default function ClientManager() {
             #️⃣ Gen Codes
           </button>
           {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
+          {(user?.role === 'owner' || user?.role === 'supervisor') && (
+            <Link to="/clients/bulk-import" className="btn btn-secondary">📥 Bulk Import</Link>
+          )}
           {isOwner && (
             <button
               className="btn btn-danger"
