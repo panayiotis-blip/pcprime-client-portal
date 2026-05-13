@@ -15,6 +15,7 @@ import ClientManager from './components/Client/ClientManager';
 import ClientDetail from './components/Client/ClientDetail';
 import ClientCardPrint from './components/Client/ClientCardPrint';
 import BulkImport from './components/Admin/BulkImport';
+import TaxFilingsPage from './components/Admin/TaxFilingsPage';
 import ExportPage from './components/Export/ExportPage';
 import DocumentsPage from './components/Documents/DocumentsPage';
 import UserManagement from './components/Admin/UserManagement';
@@ -63,6 +64,7 @@ function AuthedApp() {
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/users" element={<UserManagement />} />
             <Route path="/compliance" element={<ComplianceDashboard />} />
+            <Route path="/tax-filings" element={<TaxFilingsPage />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/tasks" element={<StaffTasks />} />
             <Route path="/task-templates" element={<TaskTemplates />} />

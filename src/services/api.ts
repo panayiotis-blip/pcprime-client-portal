@@ -1589,6 +1589,147 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Tax filings (clients-v3 Part C) ---------
+  async getClientTaxFilings(clientId: number) {
+    const { data, error } = await supabase
+      .from('client_tax_filings')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('tax_year', { ascending: false })
+      .order('filing_type', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async getAllTaxFilings(filters?: {
+    year?: number;
+    filing_type?: string;
+    status?: string;
+    client_id?: number;
+    filed_by?: string;
+    due_from?: string;
+    due_to?: string;
+    overdue_only?: boolean;
+    due_this_month?: boolean;
+  }) {
+    let q = supabase
+      .from('client_tax_filings')
+      .select('*, client:clients(name, client_code, deleted_at)')
+      .order('tax_year', { ascending: false })
+      .order('due_date', { ascending: true, nullsFirst: false });
+    if (filters?.year)        q = q.eq('tax_year', filters.year);
+    if (filters?.filing_type) q = q.eq('filing_type', filters.filing_type);
+    if (filters?.status)      q = q.eq('status', filters.status);
+    if (filters?.client_id)   q = q.eq('client_id', filters.client_id);
+    if (filters?.filed_by)    q = q.eq('filed_by_user_id', filters.filed_by);
+    if (filters?.due_from)    q = q.gte('due_date', filters.due_from);
+    if (filters?.due_to)      q = q.lte('due_date', filters.due_to);
+    if (filters?.overdue_only) {
+      const today = new Date().toISOString().slice(0, 10);
+      q = q.lt('due_date', today).in('status', ['pending', 'in_progress', 'overdue']);
+    }
+    if (filters?.due_this_month) {
+      const d = new Date();
+      const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+      const lastOfMonth  = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+      q = q.gte('due_date', firstOfMonth).lte('due_date', lastOfMonth);
+    }
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || [])
+      .filter((r: any) => !r.client?.deleted_at)
+      .map((r: any) => ({
+        ...r,
+        client_name: r.client?.name || null,
+        client_code: r.client?.client_code || null,
+      }));
+  },
+
+  async createTaxFiling(row: any) {
+    const { data, error } = await supabase
+      .from('client_tax_filings')
+      .insert(row)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async updateTaxFiling(id: number, patch: any) {
+    const { error } = await supabase
+      .from('client_tax_filings')
+      .update(patch)
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteTaxFiling(id: number) {
+    const { error } = await supabase
+      .from('client_tax_filings')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async bulkUpdateTaxFilings(ids: number[], patch: any) {
+    if (ids.length === 0) return;
+    const { error } = await supabase
+      .from('client_tax_filings')
+      .update(patch)
+      .in('id', ids);
+    if (error) throw new Error(error.message);
+  },
+
+  async countTaxFilings(filters: { overdue_only?: boolean; due_this_month?: boolean } = {}) {
+    let q = supabase.from('client_tax_filings').select('id', { count: 'exact', head: true });
+    if (filters.overdue_only) {
+      const today = new Date().toISOString().slice(0, 10);
+      q = q.lt('due_date', today).in('status', ['pending', 'in_progress', 'overdue']);
+    }
+    if (filters.due_this_month) {
+      const d = new Date();
+      const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+      const lastOfMonth  = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+      q = q.gte('due_date', firstOfMonth).lte('due_date', lastOfMonth)
+           .in('status', ['pending', 'in_progress', 'overdue']);
+    }
+    const { count, error } = await q;
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
+
+  // --------- Saved filters (clients-v3 B4) ---------
+  async getSavedFilters(scope: 'clients' | 'tax_filings') {
+    const { data, error } = await supabase
+      .from('user_saved_filters')
+      .select('*')
+      .eq('scope', scope)
+      .order('is_default', { ascending: false })
+      .order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async createSavedFilter(row: { name: string; scope: string; filter_config: any }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error('Not authenticated');
+    const { data, error } = await supabase
+      .from('user_saved_filters')
+      .insert({ ...row, user_id: session.user.id, is_default: false })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async deleteSavedFilter(id: number) {
+    const { error } = await supabase
+      .from('user_saved_filters')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Client emails (inbound + outbound captured via Mailgun) ---------
   async getClientEmails(clientId: number) {
     const { data, error } = await supabase

@@ -23,13 +23,14 @@ import VendorPatterns from './VendorPatterns';
 import PlatformCredentials from './PlatformCredentials';
 import KYCPanel from './KYCPanel';
 import ClientEmails from './ClientEmails';
+import TaxFilingsTab from './tabs/TaxFilingsTab';
 import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
 type TabKey =
   | 'info' | 'contacts' | 'tax'
   | 'kyc' | 'directors' | 'credentials'
   | 'documents' | 'invoices'
-  | 'compliance' | 'emails'
+  | 'compliance' | 'tax_filings' | 'emails'
   | 'notes' | 'audit'
   | 'accounts' | 'patterns';
 
@@ -43,6 +44,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'documents',   label: 'Documents' },
   { key: 'invoices',    label: 'Invoices' },
   { key: 'compliance',  label: 'Compliance' },
+  { key: 'tax_filings', label: 'Tax Filings' },
   { key: 'emails',      label: 'Emails' },
   { key: 'notes',       label: 'Notes' },
   { key: 'audit',       label: 'Audit' },
@@ -342,6 +344,7 @@ export default function ClientDetail() {
         {tab === 'documents'   && <ClientDocuments clientId={clientId} />}
         {tab === 'invoices'    && <InvoiceList clientId={clientId} />}
         {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
+        {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} />}
         {tab === 'emails'      && <ClientEmails clientId={clientId} />}
         {tab === 'notes'       && <NotesTab />}
         {tab === 'audit'       && <AuditTab clientId={clientId} />}

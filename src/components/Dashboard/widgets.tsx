@@ -26,6 +26,8 @@ import InvoiceTrendChart from './InvoiceTrendChart';
 import QuickActions from './QuickActions';
 import RecentlyAddedClients from './RecentlyAddedClients';
 import PendingComplianceWeek from './PendingComplianceWeek';
+import FilingsDueThisMonth from './FilingsDueThisMonth';
+import OverdueFilings from './OverdueFilings';
 
 export const WIDGET_REGISTRY: WidgetSpec[] = [
   // ---- KPIs (rendered inline by Dashboard so the parent owns the data fetch) ----
@@ -33,7 +35,9 @@ export const WIDGET_REGISTRY: WidgetSpec[] = [
   { id: 'kpi-invoices', label: 'Active Invoices',   category: 'kpi', defaultSize: 'small',  defaultVisible: true  },
   { id: 'kpi-vat',      label: 'Pending VAT',       category: 'kpi', defaultSize: 'small',  defaultVisible: true  },
   { id: 'kpi-overdue',  label: 'Overdue Tasks',     category: 'kpi', defaultSize: 'small',  defaultVisible: true  },
-  { id: 'kpi-alerts',   label: 'Compliance Alerts', category: 'kpi', defaultSize: 'small',  defaultVisible: true  },
+  { id: 'kpi-alerts',          label: 'Compliance Alerts',     category: 'kpi', defaultSize: 'small',  defaultVisible: true,  Component: undefined },
+  { id: 'kpi-filings-month',   label: 'Filings Due This Month', category: 'kpi', defaultSize: 'small',  defaultVisible: true,  Component: FilingsDueThisMonth },
+  { id: 'kpi-filings-overdue', label: 'Overdue Filings',        category: 'kpi', defaultSize: 'small',  defaultVisible: true,  Component: OverdueFilings },
 
   // ---- Content widgets ----
   { id: 'tasks',           label: 'My Tasks',                category: 'content', defaultSize: 'medium', defaultVisible: true,  Component: MyTasks },
