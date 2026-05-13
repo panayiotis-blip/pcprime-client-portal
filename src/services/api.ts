@@ -1569,6 +1569,69 @@ export const api = {
     return data || [];
   },
 
+  // Unlinked directors — name present but director_client_id is null.
+  // Used by the /admin/unlinked-directors page.
+  async getUnlinkedDirectors() {
+    const { data, error } = await supabase
+      .from('client_directors')
+      .select('*, company:clients!client_id(id, name, client_code, deleted_at)')
+      .is('director_client_id', null)
+      .order('id', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || [])
+      .filter((d: any) => !d.company?.deleted_at)
+      .map((d: any) => ({
+        ...d,
+        company_id:   d.company?.id || null,
+        company_name: d.company?.name || null,
+        company_code: d.company?.client_code || null,
+      }));
+  },
+
+  async countUnlinkedDirectors(): Promise<number> {
+    const { count, error } = await supabase
+      .from('client_directors')
+      .select('id', { count: 'exact', head: true })
+      .is('director_client_id', null);
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
+
+  // Create a new individual client from a director name, then link the
+  // director row to it. Two sequential calls — the new client gets its
+  // PC-IN-NNN code from generate_client_code_v3, then the director row is
+  // updated to point at it.
+  async createClientFromDirector(directorId: number, directorName: string) {
+    const code = await api.generateClientCodeV3('IND');
+    const { data: newClient, error: cErr } = await supabase
+      .from('clients')
+      .insert({
+        client_code: code,
+        name:        directorName,
+        client_category: 'individual',
+        client_status:   'active',
+        is_active:       true,
+        status:          'active',
+      })
+      .select('id, client_code, name')
+      .single();
+    if (cErr) throw new Error('Create client failed: ' + cErr.message);
+    const { error: linkErr } = await supabase
+      .from('client_directors')
+      .update({ director_client_id: (newClient as any).id })
+      .eq('id', directorId);
+    if (linkErr) throw new Error('Linked client created but link failed: ' + linkErr.message);
+    return newClient;
+  },
+
+  // We don't currently have generate_client_code_v3 wired to the JS API.
+  // Add a thin wrapper here so the page above can call it cleanly.
+  async generateClientCodeV3(type: 'IND' | 'CO' | 'PART'): Promise<string> {
+    const { data, error } = await supabase.rpc('generate_client_code_v3', { p_type: type });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+
   // Reverse lookup: which companies/clients list this client as a director / UBO etc.
   async getDirectorshipsForClient(linkedClientId: number) {
     const { data, error } = await supabase

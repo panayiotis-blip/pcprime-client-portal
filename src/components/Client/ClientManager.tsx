@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
 import { useApp } from '../../context/AppContext';
@@ -21,6 +21,11 @@ export default function ClientManager() {
   const canSeeDeleted = hasPermission(user, 'clients.restore');
   const isOwner = user?.role === 'owner';
   const [showWipe, setShowWipe] = useState(false);
+  const [unlinkedCount, setUnlinkedCount] = useState(0);
+
+  useEffect(() => {
+    api.countUnlinkedDirectors().then(setUnlinkedCount).catch(() => {});
+  }, [clients.length]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
@@ -148,6 +153,11 @@ export default function ClientManager() {
               <Link to="/clients/bulk-import-v3" className="btn btn-primary">📥 Bulk Import V3</Link>
               <Link to="/clients/bulk-import" className="btn btn-secondary" title="Legacy single-sheet import">📥 Bulk Import (legacy)</Link>
             </>
+          )}
+          {unlinkedCount > 0 && (
+            <Link to="/clients/unlinked-directors" className="btn btn-secondary" style={{ borderColor: '#f59e0b' }} title="Director rows without a linked client">
+              ⚠ Unlinked Directors ({unlinkedCount})
+            </Link>
           )}
           {isOwner && (
             <button
