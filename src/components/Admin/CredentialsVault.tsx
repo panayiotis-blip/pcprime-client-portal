@@ -193,6 +193,16 @@ export default function CredentialsVault() {
     }
   };
 
+  // Inline link: change just the client_id on an existing credential
+  const handleQuickLink = async (id: number, clientId: number | null) => {
+    try {
+      await api.updateCredentialV2(id, { client_id: clientId });
+      await load();
+    } catch (err: any) {
+      alert('Link failed: ' + err.message);
+    }
+  };
+
   const handleDelete = async (r: Credential) => {
     const label = r.client_code ? `${r.platform} for ${r.client_code}` : `${r.platform} (${r.owner_label || 'unlinked'})`;
     if (!confirm(`Delete credential: ${label}?`)) return;
@@ -285,14 +295,50 @@ export default function CredentialsVault() {
                   <td>{r.sub_type || '—'}</td>
                   <td>
                     {r.client_id && r.client_code ? (
-                      <Link to={`/clients/${r.client_id}`}>
-                        <span className="client-code-inline">{r.client_code}</span>
-                        {r.client_name}
-                      </Link>
-                    ) : r.owner_label ? (
-                      <span style={{ fontStyle: 'italic', color: '#475569' }}>🏢 {r.owner_label}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Link to={`/clients/${r.client_id}`}>
+                          <span className="client-code-inline">{r.client_code}</span>
+                          {r.client_name}
+                        </Link>
+                        {canWrite && (
+                          <button
+                            className="btn btn-link btn-sm"
+                            onClick={() => handleQuickLink(r.id, null)}
+                            title="Unlink (mark as firm-owned)"
+                            style={{ color: '#94a3b8', fontSize: 11 }}
+                          >
+                            unlink
+                          </button>
+                        )}
+                      </div>
                     ) : (
-                      <span style={{ color: '#94a3b8' }}>(unlinked)</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {r.owner_label ? (
+                          <span style={{ fontStyle: 'italic', color: '#475569' }}>🏢 {r.owner_label}</span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>(unlinked)</span>
+                        )}
+                        {canWrite && (
+                          <select
+                            className="form-input form-input-sm"
+                            defaultValue=""
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v) handleQuickLink(r.id, Number(v));
+                              e.target.value = '';
+                            }}
+                            style={{ fontSize: 11, padding: '2px 4px', maxWidth: 220 }}
+                            title="Link to a client"
+                          >
+                            <option value="">→ Link to client…</option>
+                            {clients.map((c: any) => (
+                              <option key={c.id} value={c.id}>
+                                {c.client_code ? c.client_code + ' — ' : ''}{c.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td>{r.username || '—'}</td>
