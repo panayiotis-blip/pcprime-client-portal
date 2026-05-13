@@ -2385,6 +2385,12 @@ body {
 .chb-active-switch.active   { background: #d1fae5; color: #047857; }
 .chb-active-switch.inactive { background: #fee2e2; color: #b91c1c; }
 .chb-active-switch input:disabled + .chb-active-label { cursor: not-allowed; opacity: 0.6; }
+.chb-status-select {
+  font-size: 12px; padding: 4px 8px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: white;
+  max-width: 200px;
+}
 
 .chb-inactive-banner {
   margin-top: 10px;

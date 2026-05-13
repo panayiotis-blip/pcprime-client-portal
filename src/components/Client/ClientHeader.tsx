@@ -15,7 +15,21 @@ interface Props {
   onDelete: () => void;
   onCopy: () => void;
   onToggleActive: () => void;
+  onChangeStatus: (status: string) => void;
 }
+
+const CLIENT_STATUSES: { value: string; label: string }[] = [
+  { value: 'active',             label: 'Active' },
+  { value: 'liquidated_dormant', label: 'Liquidated / Dormant' },
+  { value: 'deceased',           label: 'Deceased' },
+  { value: 'old_client',         label: 'Old Client' },
+  { value: 'defence_tax_only',   label: 'Defence Tax Only' },
+  { value: 'internal',           label: 'Internal' },
+];
+
+// Statuses that are "definitive" — flipping the toggle back to Active asks for confirmation
+const DEFINITIVE_INACTIVE = new Set(['deceased', 'liquidated_dormant']);
+export { CLIENT_STATUSES, DEFINITIVE_INACTIVE };
 
 // BTMS-style header band: client name + tax-office name, code badge,
 // active/inactive switch, and the toolbar of action buttons.
@@ -23,7 +37,7 @@ interface Props {
 export default function ClientHeader({
   client, form, isDirty, isSaving, canEdit, canToggleActive,
   prevClientId, nextClientId,
-  onSave, onClear, onDelete, onCopy, onToggleActive,
+  onSave, onClear, onDelete, onCopy, onToggleActive, onChangeStatus,
 }: Props) {
   const navigate = useNavigate();
   const [findOpen, setFindOpen] = useState(false);
@@ -52,6 +66,18 @@ export default function ClientHeader({
             />
             <span className="chb-active-label">{isActive ? '● Active' : '○ Inactive'}</span>
           </label>
+          {canToggleActive && (
+            <select
+              className="form-input form-input-sm chb-status-select"
+              value={form.client_status || client.client_status || 'active'}
+              onChange={(e) => onChangeStatus(e.target.value)}
+              title="Detailed client status — drives the Active/Inactive toggle"
+            >
+              {CLIENT_STATUSES.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

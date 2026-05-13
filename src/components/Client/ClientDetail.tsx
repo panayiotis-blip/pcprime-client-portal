@@ -157,6 +157,15 @@ export default function ClientDetail() {
     handleChange('is_active', !(form.is_active !== false));
   };
 
+  const handleChangeStatus = (status: string) => {
+    if (!canToggleActive) return;
+    // If user picks a non-active status, also flip the toggle. The SQL trigger
+    // would do this server-side, but we mirror it client-side so the toggle
+    // updates immediately for visual feedback.
+    handleChange('client_status', status);
+    handleChange('is_active', status === 'active');
+  };
+
   const handleDelete = async () => {
     if (!canDelete) { alert('You do not have permission to delete clients.'); return; }
     const count = invoices.filter((i: any) => i.client_id === clientId).length;
@@ -256,6 +265,7 @@ export default function ClientDetail() {
         onDelete={handleDelete}
         onCopy={handleCopy}
         onToggleActive={handleToggleActive}
+        onChangeStatus={handleChangeStatus}
       />
 
       {/* Quick-action strip (not part of the BTMS-style toolbar) */}

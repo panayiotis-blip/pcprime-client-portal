@@ -1548,6 +1548,21 @@ export const api = {
     return data || [];
   },
 
+  // Reverse lookup: which companies/clients list this client as a director / UBO etc.
+  async getDirectorshipsForClient(linkedClientId: number) {
+    const { data, error } = await supabase
+      .from('client_directors')
+      .select('*, company:clients!client_id(id, name, client_code)')
+      .eq('director_client_id', linkedClientId)
+      .order('id', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || []).map((d: any) => ({
+      ...d,
+      company_name: d.company?.name || null,
+      company_code: d.company?.client_code || null,
+    }));
+  },
+
   async createClientDirector(row: any) {
     const { data, error } = await supabase
       .from('client_directors')
