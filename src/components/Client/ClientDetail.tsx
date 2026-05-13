@@ -272,8 +272,9 @@ export default function ClientDetail() {
         )}
       </div>
 
-      {/* Unique-email banner (Task 5 feature, kept) */}
-      {client.unique_email && (
+      {/* Unique-email banner hidden until Email Integration (Task 5 / CloudMailin) is live.
+          Re-enable by reverting this block once the inbound webhook is configured. */}
+      {false && client.unique_email && (
         <div className="unique-email-banner">
           <div className="ueb-content">
             <div className="ueb-label">📧 Client's portal capture email</div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { EmailLinks } from '../shared/MultiEmail';
 
 type ComplianceTask = {
   id: number;
@@ -197,7 +198,7 @@ export default function ClientCardPrint() {
           <Section title="Contact Details">
             <div className="pc-grid">
               <Field label="Contact Person" value={client.contact_person} />
-              <Field label="Email"          value={client.email} />
+              <Field label="Email"          value={client.email ? <EmailLinks value={client.email} fallback="" /> : null} />
               <Field label="Phone"          value={client.phone} />
               <Field label="Mobile"         value={client.mobile} />
               <Field label="Website"        value={client.website} />

@@ -112,9 +112,13 @@ function validateRow(row: ParsedClient, idx: number): Validation {
     level = 'error';
   }
 
-  if (row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(row.email))) {
-    msgs.push('email looks invalid');
-    if (level !== 'error') level = 'warn';
+  if (row.email) {
+    const parts = String(row.email).split(/[;,]+/).map(p => p.trim()).filter(Boolean);
+    const allOk = parts.every(p => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p));
+    if (!allOk) {
+      msgs.push(`one or more emails look invalid (${parts.length} addresses)`);
+      if (level !== 'error') level = 'warn';
+    }
   }
 
   if (row.year_end_date && !/^(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])$/.test(String(row.year_end_date))) {
