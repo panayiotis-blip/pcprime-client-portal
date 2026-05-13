@@ -18,6 +18,7 @@ import BulkImport from './components/Admin/BulkImport';
 import BulkImportV3 from './components/Admin/BulkImportV3';
 import TaxFilingsPage from './components/Admin/TaxFilingsPage';
 import UnlinkedDirectors from './components/Admin/UnlinkedDirectors';
+import CredentialsVault from './components/Admin/CredentialsVault';
 import ExportPage from './components/Export/ExportPage';
 import DocumentsPage from './components/Documents/DocumentsPage';
 import UserManagement from './components/Admin/UserManagement';
@@ -69,6 +70,7 @@ function AuthedApp() {
             <Route path="/users" element={<UserManagement />} />
             <Route path="/compliance" element={<ComplianceDashboard />} />
             <Route path="/tax-filings" element={<TaxFilingsPage />} />
+            <Route path="/credentials" element={<CredentialsVault />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/tasks" element={<StaffTasks />} />
             <Route path="/task-templates" element={<TaskTemplates />} />

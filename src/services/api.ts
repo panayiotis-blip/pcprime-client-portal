@@ -1534,6 +1534,87 @@ export const api = {
     return data as any;
   },
 
+  // Standalone Passwords/Credentials page — all credentials across all clients
+  // plus firm-owned (client_id IS NULL) ones with an owner_label.
+  async getAllCredentials() {
+    const { data, error } = await supabase
+      .from('platform_credentials')
+      .select('id, client_id, platform, sub_type, username, notes, owner_label, client:clients(name, client_code, deleted_at)')
+      .order('platform', { ascending: true })
+      .order('sub_type', { ascending: true, nullsFirst: true })
+      .order('id', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || [])
+      .filter((r: any) => !r.client?.deleted_at)
+      .map((r: any) => ({
+        ...r,
+        client_name: r.client?.name || null,
+        client_code: r.client?.client_code || null,
+      }));
+  },
+
+  async createCredentialV2(row: {
+    client_id?: number | null;
+    owner_label?: string;
+    platform: string;
+    sub_type?: string;
+    username?: string;
+    password?: string;
+    notes?: string;
+  }) {
+    const insertRow: any = {
+      client_id:   row.client_id || null,
+      owner_label: row.owner_label || null,
+      platform:    row.platform,
+      sub_type:    row.sub_type || null,
+      username:    row.username || null,
+      notes:       row.notes || null,
+    };
+    const { data, error } = await supabase
+      .from('platform_credentials')
+      .insert(insertRow)
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    if (row.password) {
+      const { error: pwErr } = await supabase.rpc('set_credential_password', {
+        p_id: (data as any).id, p_password: row.password,
+      });
+      if (pwErr) throw new Error(pwErr.message);
+    }
+    return data;
+  },
+
+  async updateCredentialV2(id: number, patch: any) {
+    const { password, ...rest } = patch;
+    if (Object.keys(rest).length > 0) {
+      const cleaned: any = { ...rest };
+      if (cleaned.client_id === '' || cleaned.client_id === undefined) cleaned.client_id = null;
+      for (const k of ['owner_label', 'sub_type', 'username', 'notes']) {
+        if (cleaned[k] === '') cleaned[k] = null;
+      }
+      const { error } = await supabase
+        .from('platform_credentials')
+        .update(cleaned)
+        .eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+    if (password !== undefined && password !== null) {
+      const { error: pwErr } = await supabase.rpc('set_credential_password', {
+        p_id: id, p_password: password,
+      });
+      if (pwErr) throw new Error(pwErr.message);
+    }
+  },
+
+  async deleteCredentialV2(id: number) {
+    const { error } = await supabase
+      .from('platform_credentials')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   async upsertCredentialForClient(clientId: number, row: { platform: string; username?: string; password?: string; notes?: string }) {
     // Insert a credential row, then encrypt the password via the existing
     // set_credential_password RPC (audit-logged + permission-gated).
