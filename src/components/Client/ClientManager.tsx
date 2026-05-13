@@ -8,6 +8,7 @@ import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import { api, hasPermission } from '../../services/api';
 import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
+import BulkWipeModal from '../Admin/BulkWipeModal';
 
 type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
 type SortDir = 'asc' | 'desc';
@@ -18,6 +19,8 @@ export default function ClientManager() {
   const { runWith } = useMFAStepUp();
   const { getMode, setMode } = useViewPreferences();
   const canSeeDeleted = hasPermission(user, 'clients.restore');
+  const isOwner = user?.role === 'owner';
+  const [showWipe, setShowWipe] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
@@ -140,6 +143,15 @@ export default function ClientManager() {
             #️⃣ Gen Codes
           </button>
           {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
+          {isOwner && (
+            <button
+              className="btn btn-danger"
+              onClick={() => setShowWipe(true)}
+              title="Pre-go-live: wipe all test data"
+            >
+              ⚠️ Bulk Wipe
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
           </button>
@@ -151,6 +163,13 @@ export default function ClientManager() {
           </button>
         </div>
       </div>
+
+      {showWipe && (
+        <BulkWipeModal
+          onClose={() => setShowWipe(false)}
+          onWiped={() => refreshClients()}
+        />
+      )}
 
       {/* Merge UI */}
       {showMerge && (

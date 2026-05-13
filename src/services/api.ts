@@ -1440,6 +1440,62 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Bulk wipe / code-gen v2 (Phase 1-3 of clients v2) ---------
+  async estimateWipeTestClients(): Promise<Record<string, number>> {
+    const { data, error } = await supabase.rpc('estimate_wipe_test_clients');
+    if (error) throw new Error(error.message);
+    return (data || {}) as Record<string, number>;
+  },
+
+  async wipeTestClients(confirmation: string): Promise<Record<string, number>> {
+    const { data, error } = await supabase.rpc('wipe_test_clients', { p_confirmation: confirmation });
+    if (error) throw new Error(error.message);
+    return (data || {}) as Record<string, number>;
+  },
+
+  async generateClientCodeV2(name: string): Promise<string> {
+    const { data, error } = await supabase.rpc('generate_client_code_v2', { p_name: name });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+
+  // --------- Client directors (Phase 1B of clients v2) ---------
+  async getClientDirectors(clientId: number) {
+    const { data, error } = await supabase
+      .from('client_directors')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('id', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async createClientDirector(row: any) {
+    const { data, error } = await supabase
+      .from('client_directors')
+      .insert(row)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async updateClientDirector(id: number, patch: any) {
+    const { error } = await supabase
+      .from('client_directors')
+      .update(patch)
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteClientDirector(id: number) {
+    const { error } = await supabase
+      .from('client_directors')
+      .delete()
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Client emails (inbound + outbound captured via Mailgun) ---------
   async getClientEmails(clientId: number) {
     const { data, error } = await supabase
