@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
 import { useApp } from '../../context/AppContext';
@@ -9,9 +9,53 @@ import { api, hasPermission } from '../../services/api';
 import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
 import BulkWipeModal from '../Admin/BulkWipeModal';
+import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
 
 type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
 type SortDir = 'asc' | 'desc';
+
+// Column registry for the List view. Order = display order.
+const CLIENT_COLUMNS: ColumnDef[] = [
+  { id: 'client_code',         label: 'Code',           required: true,  defaultVisible: true  },
+  { id: 'name',                label: 'Name',           required: true,  defaultVisible: true  },
+  { id: 'client_category',     label: 'Category',                        defaultVisible: true  },
+  { id: 'client_status',       label: 'Status',                          defaultVisible: true  },
+  { id: 'tax_number',          label: 'TIC',                             defaultVisible: true  },
+  { id: 'registration_number', label: 'HE Number',                       defaultVisible: true  },
+  { id: 'city',                label: 'City',                            defaultVisible: true  },
+  { id: 'updated_at',          label: 'Last Updated',                    defaultVisible: true  },
+  { id: 'vat_number',          label: 'VAT',                             defaultVisible: false },
+  { id: 'business_type',       label: 'Business Type',                   defaultVisible: false },
+  { id: 'phone',               label: 'Phone',                           defaultVisible: false },
+  { id: 'mobile',              label: 'Mobile',                          defaultVisible: false },
+  { id: 'email',               label: 'Email',                           defaultVisible: false },
+  { id: 'contact_person',      label: 'Contact Person',                  defaultVisible: false },
+  { id: 'invoices_count',      label: 'Invoices',                        defaultVisible: false },
+  { id: 'created_at',          label: 'Created',                         defaultVisible: false },
+];
+
+const DEFAULT_VISIBLE_COLS = CLIENT_COLUMNS.filter(c => c.defaultVisible).map(c => c.id);
+
+const CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'company',        label: 'Company' },
+  { value: 'partnership',    label: 'Partnership' },
+  { value: 'individual',     label: 'Individual' },
+  { value: 'sole_trader',    label: 'Sole Trader' },
+  { value: 'self_employed',  label: 'Self-Employed' },
+  { value: 'deceased',       label: 'Deceased' },
+  { value: 'dormant',        label: 'Dormant' },
+  { value: 'prospective',    label: 'Prospective' },
+  { value: 'other',          label: 'Other' },
+];
+
+const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'active',             label: 'Active' },
+  { value: 'liquidated_dormant', label: 'Liquidated / Dormant' },
+  { value: 'deceased',           label: 'Deceased' },
+  { value: 'old_client',         label: 'Old Client' },
+  { value: 'defence_tax_only',   label: 'Defence Tax Only' },
+  { value: 'internal',           label: 'Internal' },
+];
 
 export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
@@ -26,6 +70,32 @@ export default function ClientManager() {
   useEffect(() => {
     api.countUnlinkedDirectors().then(setUnlinkedCount).catch(() => {});
   }, [clients.length]);
+
+  // Filter state (Phase 6 / clients-v3 Part E2)
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterStatus,   setFilterStatus]   = useState('');
+  const [filterCity,     setFilterCity]     = useState('');
+  const [filterHasVat,   setFilterHasVat]   = useState<'all' | 'yes' | 'no'>('all');
+
+  // Column visibility (Phase 6 / clients-v3 Part E1)
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLS);
+  const [showColumnsModal, setShowColumnsModal] = useState(false);
+
+  // Load column prefs once
+  useEffect(() => {
+    api.getColumnPreferences()
+      .then(prefs => {
+        const saved = prefs?.clients;
+        if (Array.isArray(saved) && saved.length > 0) setVisibleColumns(saved);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveColumns = (ids: string[]) => {
+    setVisibleColumns(ids);
+    api.setColumnPreferences('clients', ids).catch(() => {});
+  };
+  const resetColumns = () => saveColumns(DEFAULT_VISIBLE_COLS);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
@@ -118,13 +188,68 @@ export default function ClientManager() {
   const getInvoiceCount = (clientId: number) => invoices.filter((inv: any) => inv.client_id === clientId).length;
 
   const filtered = clients.filter((c: any) => {
-    if (!searchTerm) return true;
-    const t = searchTerm.toLowerCase();
-    return (c.name || '').toLowerCase().includes(t)
-      || (c.client_code || '').toLowerCase().includes(t)
-      || (c.tax_number || '').toLowerCase().includes(t)
-      || (c.trading_name || '').toLowerCase().includes(t);
+    // Free-text search
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      const matches = (c.name || '').toLowerCase().includes(t)
+        || (c.client_code || '').toLowerCase().includes(t)
+        || (c.tax_number || '').toLowerCase().includes(t)
+        || (c.trading_name || '').toLowerCase().includes(t)
+        || (c.city || '').toLowerCase().includes(t);
+      if (!matches) return false;
+    }
+    // Structured filters
+    if (filterCategory && c.client_category !== filterCategory) return false;
+    if (filterStatus   && c.client_status   !== filterStatus)   return false;
+    if (filterCity     && c.city            !== filterCity)     return false;
+    if (filterHasVat === 'yes' && !c.vat_number) return false;
+    if (filterHasVat === 'no'  &&  c.vat_number) return false;
+    return true;
   });
+
+  // Distinct cities present in the data — drives the City dropdown
+  const cities = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of clients as any[]) if (c.city) s.add(c.city);
+    return Array.from(s).sort();
+  }, [clients]);
+
+  // Active filter chips
+  const activeFilters: { key: string; label: string; clear: () => void }[] = [];
+  if (filterCategory)         activeFilters.push({ key: 'cat',  label: 'Category: ' + (CATEGORY_OPTIONS.find(o => o.value === filterCategory)?.label || filterCategory), clear: () => setFilterCategory('') });
+  if (filterStatus)           activeFilters.push({ key: 'stat', label: 'Status: '   + (STATUS_OPTIONS.find(o => o.value === filterStatus)?.label || filterStatus),     clear: () => setFilterStatus('') });
+  if (filterCity)             activeFilters.push({ key: 'city', label: 'City: ' + filterCity,                                             clear: () => setFilterCity('') });
+  if (filterHasVat !== 'all') activeFilters.push({ key: 'vat',  label: 'VAT: '  + filterHasVat,                                           clear: () => setFilterHasVat('all') });
+  const clearAllFilters = () => { setFilterCategory(''); setFilterStatus(''); setFilterCity(''); setFilterHasVat('all'); };
+
+  // Helper: render any column's cell content for a given client row
+  const renderCell = (col: string, c: any) => {
+    switch (col) {
+      case 'client_code':          return <strong>{c.client_code || '-'}</strong>;
+      case 'name':                 return (
+        <>
+          <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.name}</Link>
+          {c.trading_name && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.trading_name}</div>}
+        </>
+      );
+      case 'client_category':      return c.client_category || '-';
+      case 'client_status':        return c.client_status || '-';
+      case 'tax_number':           return c.tax_number || '-';
+      case 'registration_number':  return c.registration_number || '-';
+      case 'city':                 return c.city || '-';
+      case 'vat_number':           return c.vat_number || '-';
+      case 'business_type':        return c.business_type || '-';
+      case 'phone':                return c.phone || '-';
+      case 'mobile':                return c.mobile || '-';
+      case 'email':                return c.email || '-';
+      case 'contact_person':       return c.contact_person || '-';
+      case 'invoices_count':       return getInvoiceCount(c.id);
+      case 'created_at':           return c.created_at ? new Date(c.created_at).toLocaleDateString() : '-';
+      case 'updated_at':           return c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '-';
+      default:                     return '-';
+    }
+  };
+  const visibleColumnDefs = CLIENT_COLUMNS.filter(c => visibleColumns.includes(c.id));
 
   // Sort the filtered list — applied to the List view, also to Compact for stability.
   const sortedFiltered = [...filtered].sort((a: any, b: any) => {
@@ -297,11 +422,64 @@ export default function ClientManager() {
         </div>
       )}
 
-      {/* Search + View toggle */}
-      <div className="client-toolbar">
-        <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by name, code, TIC..." className="form-input client-search" />
+      {/* Search + Filters + Columns + View toggle */}
+      <div className="client-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by name, code, TIC, city..." className="form-input client-search" />
+        <select className="form-input" value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={{ maxWidth: 170 }} title="Filter by category">
+          <option value="">All categories</option>
+          {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ maxWidth: 180 }} title="Filter by status">
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select className="form-input" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ maxWidth: 150 }} title="Filter by city">
+          <option value="">All cities</option>
+          {cities.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select className="form-input" value={filterHasVat} onChange={e => setFilterHasVat(e.target.value as any)} style={{ maxWidth: 140 }} title="Filter by VAT registration">
+          <option value="all">VAT: any</option>
+          <option value="yes">Has VAT</option>
+          <option value="no">No VAT</option>
+        </select>
+        {viewMode === 'list' && (
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowColumnsModal(true)} title="Show/hide columns in the list view">
+            ☰ Columns
+          </button>
+        )}
         <ViewToggle value={viewMode} onChange={(m) => setMode('clients', m)} />
       </div>
+
+      {activeFilters.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0 0 12px 0' }}>
+          {activeFilters.map(f => (
+            <span key={f.key} style={{
+              background: '#eef2ff', color: '#3730a3',
+              padding: '2px 10px', borderRadius: 999, fontSize: 12,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}>
+              {f.label}
+              <button
+                onClick={f.clear}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, fontSize: 14, lineHeight: 1 }}
+                title="Remove filter"
+              >✕</button>
+            </span>
+          ))}
+          <button className="btn btn-link btn-sm" onClick={clearAllFilters}>Clear all</button>
+        </div>
+      )}
+
+      {showColumnsModal && (
+        <ColumnVisibilityModal
+          title="Choose columns — Clients list"
+          columns={CLIENT_COLUMNS}
+          visibleIds={visibleColumns}
+          onChange={saveColumns}
+          onReset={resetColumns}
+          onClose={() => setShowColumnsModal(false)}
+        />
+      )}
 
       {clients.length === 0 ? (
         <div className="empty-state"><p>No clients yet.</p></div>
@@ -347,31 +525,29 @@ export default function ClientManager() {
           <table className="export-table sortable-table">
             <thead>
               <tr>
-                <th className="sortable" onClick={() => onSort('client_code')}>Code{sortIndicator('client_code')}</th>
-                <th className="sortable" onClick={() => onSort('name')}>Name{sortIndicator('name')}</th>
-                <th>Type</th>
-                <th className="sortable" onClick={() => onSort('tax_number')}>TIC{sortIndicator('tax_number')}</th>
-                <th>VAT</th>
-                <th>Contact</th>
-                <th>Phone</th>
-                <th className="sortable" onClick={() => onSort('invoice_count')}>Invoices{sortIndicator('invoice_count')}</th>
+                {visibleColumnDefs.map(col => {
+                  const sortable = ['client_code', 'name', 'tax_number', 'invoices_count'].includes(col.id);
+                  const sortKeyForCol = col.id === 'invoices_count' ? 'invoice_count' : col.id as SortKey;
+                  return (
+                    <th
+                      key={col.id}
+                      className={sortable ? 'sortable' : ''}
+                      onClick={sortable ? () => onSort(sortKeyForCol as SortKey) : undefined}
+                    >
+                      {col.label}
+                      {sortable ? sortIndicator(sortKeyForCol as SortKey) : ''}
+                    </th>
+                  );
+                })}
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {sortedFiltered.map((c: any) => (
                 <tr key={c.id}>
-                  <td><strong>{c.client_code || '-'}</strong></td>
-                  <td>
-                    <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.name}</Link>
-                    {c.trading_name && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.trading_name}</div>}
-                  </td>
-                  <td>{c.business_type || '-'}</td>
-                  <td>{c.tax_number || '-'}</td>
-                  <td>{c.vat_number || '-'}</td>
-                  <td>{c.email || c.contact_person || '-'}</td>
-                  <td>{c.phone || c.mobile || '-'}</td>
-                  <td>{getInvoiceCount(c.id)}</td>
+                  {visibleColumnDefs.map(col => (
+                    <td key={col.id}>{renderCell(col.id, c)}</td>
+                  ))}
                   <td>
                     <Link to={`/clients/${c.id}`} className="btn btn-secondary btn-sm">Open</Link>
                     <button className="btn btn-danger btn-sm" style={{ marginLeft: 4 }} onClick={() => handleDelete(c.id)}>X</button>

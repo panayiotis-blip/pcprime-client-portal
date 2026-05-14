@@ -1952,6 +1952,37 @@ export const api = {
     return data.signedUrl;
   },
 
+  // --------- Column visibility preferences (per-user, per-page) ---------
+  // Stored in profiles.column_preferences jsonb (added in migration 036).
+  // Shape: { clients: ["client_code", "name", ...], invoices: [...] }
+  async getColumnPreferences(): Promise<Record<string, string[]>> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return {};
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('column_preferences')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (error || !data) return {};
+    return (data.column_preferences as Record<string, string[]>) || {};
+  },
+
+  async setColumnPreferences(page: string, columnIds: string[]) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const { data: row } = await supabase
+      .from('profiles')
+      .select('column_preferences')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    const next = { ...((row?.column_preferences as any) || {}), [page]: columnIds };
+    const { error } = await supabase
+      .from('profiles')
+      .update({ column_preferences: next })
+      .eq('id', session.user.id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Dashboard layout preferences ---------
   async getMyDashboardLayout(): Promise<{ widgets: any[] } | null> {
     const { data: { session } } = await supabase.auth.getSession();
