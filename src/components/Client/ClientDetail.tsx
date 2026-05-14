@@ -84,6 +84,8 @@ export default function ClientDetail() {
   const [client, setClient] = useState<any>(null);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
   const [tab, setTab] = useState<TabKey>('info');
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -104,10 +106,22 @@ export default function ClientDetail() {
 
   const loadClient = async () => {
     try {
+      setLoadError(null);
       const data = await api.getClient(clientId);
       setClient(data);
-      setForm(data);
-    } catch {}
+      setForm(data || {});
+    } catch (err: any) {
+      // Distinguish "not found" from other errors so the UI doesn't hang
+      const msg = String(err?.message || err);
+      if (msg.includes('no rows') || msg.includes('PGRST116') || msg.includes('Results contain 0 rows')) {
+        setLoadError('not_found');
+      } else {
+        setLoadError(msg);
+      }
+      setClient(null);
+    } finally {
+      setLoadedOnce(true);
+    }
   };
 
   useEffect(() => { loadClient(); /* eslint-disable-next-line */ }, [id]);
@@ -246,7 +260,32 @@ export default function ClientDetail() {
     }
   };
 
-  if (!client) return <div className="loading-screen">Loading...</div>;
+  if (!loadedOnce) return <div className="loading-screen">Loading...</div>;
+
+  if (!client) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>Client #{clientId}</h2>
+          <button className="btn btn-secondary" onClick={() => navigate('/clients')}>← Back to Clients</button>
+        </div>
+        <div className="empty-state" style={{ marginTop: 16 }}>
+          {loadError === 'not_found' ? (
+            <>
+              <p>This client record doesn't exist (or has been hard-deleted).</p>
+              <p style={{ fontSize: 13, color: '#64748b' }}>
+                If it was soft-deleted you'll find it under <strong>Clients → Deleted</strong>. Otherwise the record is permanently gone — any tax filings, credentials, or other data pointing here are orphans.
+              </p>
+            </>
+          ) : loadError ? (
+            <p style={{ color: '#b91c1c' }}>Failed to load: {loadError}</p>
+          ) : (
+            <p>Client not available.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const ctxValue = { editing: editable, form, client, onChange: handleChange };
 

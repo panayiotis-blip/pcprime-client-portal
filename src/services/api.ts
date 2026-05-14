@@ -1802,12 +1802,28 @@ export const api = {
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     return (data || [])
-      .filter((r: any) => !r.client?.deleted_at)
+      // Hide orphans (missing client) + soft-deleted clients
+      .filter((r: any) => r.client && !r.client.deleted_at)
       .map((r: any) => ({
         ...r,
         client_name: r.client?.name || null,
         client_code: r.client?.client_code || null,
       }));
+  },
+
+  async countOrphanTaxFilings(): Promise<number> {
+    // Filings whose client doesn't exist OR is soft-deleted
+    const { data, error } = await supabase
+      .from('client_tax_filings')
+      .select('id, client:clients(deleted_at)');
+    if (error) throw new Error(error.message);
+    return (data || []).filter((r: any) => !r.client || r.client.deleted_at).length;
+  },
+
+  async cleanupOrphanTaxFilings(): Promise<number> {
+    const { data, error } = await supabase.rpc('cleanup_orphan_tax_filings');
+    if (error) throw new Error(error.message);
+    return (data as any)?.deleted ?? 0;
   },
 
   async createTaxFiling(row: any) {
