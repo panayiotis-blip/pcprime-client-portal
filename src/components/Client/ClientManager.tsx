@@ -96,6 +96,88 @@ export default function ClientManager() {
     api.setColumnPreferences('clients', ids).catch(() => {});
   };
   const resetColumns = () => saveColumns(DEFAULT_VISIBLE_COLS);
+
+  // ----- Advanced find (E4) -----
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [adv, setAdv] = useState({
+    codeFrom: '', codeTo: '',
+    nameFrom: '', nameTo: '',
+    ticContains: '', vatContains: '',
+    heContains: '', cityContains: '',
+  });
+  const clearAdvanced = () => setAdv({
+    codeFrom: '', codeTo: '',
+    nameFrom: '', nameTo: '',
+    ticContains: '', vatContains: '',
+    heContains: '', cityContains: '',
+  });
+  const advActive = Object.values(adv).some(v => v && String(v).trim() !== '');
+
+  // ----- Saved views (E3) -----
+  const [showViews, setShowViews] = useState(false);
+  const [savedViews, setSavedViews] = useState<any[]>([]);
+  const [newViewName, setNewViewName] = useState('');
+
+  const DEFAULT_VIEWS: { name: string; filter: any }[] = [
+    { name: 'All Active Companies',     filter: { category: 'company',     status: 'active' } },
+    { name: 'All Active Individuals',   filter: { category: 'individual',  status: 'active' } },
+    { name: 'All Active Partnerships',  filter: { category: 'partnership', status: 'active' } },
+    { name: 'Liquidated / Dormant',     filter: { status: 'liquidated_dormant' } },
+    { name: 'Deceased',                 filter: { status: 'deceased' } },
+    { name: 'Clients with VAT',         filter: { hasVat: 'yes' } },
+    { name: 'Old Clients',              filter: { status: 'old_client' } },
+  ];
+
+  useEffect(() => {
+    api.getSavedFilters('clients').then(setSavedViews).catch(() => {});
+  }, []);
+
+  // Apply a saved/default view's filter shape onto the live filter state.
+  const applyView = (f: any) => {
+    setSearchTerm(f.search ?? '');
+    setFilterCategory(f.category ?? '');
+    setFilterStatus(f.status ?? '');
+    setFilterCity(f.city ?? '');
+    setFilterHasVat(f.hasVat ?? 'all');
+    setAdv({
+      codeFrom: f.codeFrom ?? '', codeTo: f.codeTo ?? '',
+      nameFrom: f.nameFrom ?? '', nameTo: f.nameTo ?? '',
+      ticContains: f.ticContains ?? '', vatContains: f.vatContains ?? '',
+      heContains: f.heContains ?? '', cityContains: f.cityContains ?? '',
+    });
+    setShowViews(false);
+  };
+
+  const handleSaveView = async () => {
+    const name = newViewName.trim();
+    if (!name) { alert('Name your view first.'); return; }
+    const cfg = {
+      search: searchTerm,
+      category: filterCategory,
+      status: filterStatus,
+      city: filterCity,
+      hasVat: filterHasVat,
+      ...adv,
+    };
+    try {
+      await api.createSavedFilter({ name, scope: 'clients', filter_config: cfg });
+      setNewViewName('');
+      const updated = await api.getSavedFilters('clients');
+      setSavedViews(updated);
+    } catch (err: any) {
+      alert('Save failed: ' + err.message);
+    }
+  };
+
+  const handleDeleteView = async (id: number, name: string) => {
+    if (!confirm(`Delete saved view "${name}"?`)) return;
+    try {
+      await api.deleteSavedFilter(id);
+      setSavedViews(prev => prev.filter(v => v.id !== id));
+    } catch (err: any) {
+      alert('Delete failed: ' + err.message);
+    }
+  };
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
@@ -204,6 +286,17 @@ export default function ClientManager() {
     if (filterCity     && c.city            !== filterCity)     return false;
     if (filterHasVat === 'yes' && !c.vat_number) return false;
     if (filterHasVat === 'no'  &&  c.vat_number) return false;
+
+    // Advanced find (E4)
+    if (adv.codeFrom && (c.client_code || '') < adv.codeFrom) return false;
+    if (adv.codeTo   && (c.client_code || '') > adv.codeTo)   return false;
+    if (adv.nameFrom && (c.name || '').toLowerCase() < adv.nameFrom.toLowerCase()) return false;
+    if (adv.nameTo   && (c.name || '').toLowerCase() > adv.nameTo.toLowerCase())   return false;
+    if (adv.ticContains && !(c.tax_number || '').toLowerCase().includes(adv.ticContains.toLowerCase())) return false;
+    if (adv.vatContains && !(c.vat_number || '').toLowerCase().includes(adv.vatContains.toLowerCase())) return false;
+    if (adv.heContains  && !(c.registration_number || '').toLowerCase().includes(adv.heContains.toLowerCase())) return false;
+    if (adv.cityContains && !(c.city || '').toLowerCase().includes(adv.cityContains.toLowerCase())) return false;
+
     return true;
   });
 
@@ -442,6 +535,72 @@ export default function ClientManager() {
           <option value="yes">Has VAT</option>
           <option value="no">No VAT</option>
         </select>
+        <button
+          className={`btn btn-sm ${advActive ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setShowAdvanced(s => !s)}
+          title="Advanced search (ranges + contains)"
+        >
+          🔍 Find {advActive ? '●' : (showAdvanced ? '▲' : '▼')}
+        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowViews(v => !v)}
+            title="Saved views"
+          >
+            ⭐ Views {showViews ? '▲' : '▼'}
+          </button>
+          {showViews && (
+            <div style={{
+              position: 'absolute', top: '100%', right: 0, marginTop: 4,
+              background: 'white', border: '1px solid var(--border)', borderRadius: 6,
+              boxShadow: '0 6px 16px rgba(0,0,0,0.1)', padding: 8,
+              minWidth: 280, maxHeight: 420, overflowY: 'auto', zIndex: 30,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', padding: '4px 6px' }}>Defaults</div>
+              {DEFAULT_VIEWS.map(v => (
+                <button
+                  key={v.name}
+                  className="btn btn-link btn-sm"
+                  onClick={() => applyView(v.filter)}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 4 }}
+                >
+                  {v.name}
+                </button>
+              ))}
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', padding: '8px 6px 4px' }}>Your saved views</div>
+              {savedViews.length === 0 ? (
+                <p style={{ fontSize: 12, color: '#94a3b8', padding: '4px 8px', margin: 0 }}>None yet.</p>
+              ) : savedViews.map((v: any) => (
+                <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button
+                    className="btn btn-link btn-sm"
+                    onClick={() => applyView(v.filter_config || {})}
+                    style={{ flex: 1, textAlign: 'left', padding: '6px 8px', borderRadius: 4 }}
+                  >
+                    {v.name}
+                  </button>
+                  <button
+                    onClick={() => handleDeleteView(v.id, v.name)}
+                    title="Delete view"
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px 8px' }}
+                  >✕</button>
+                </div>
+              ))}
+              <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 8, paddingTop: 8, display: 'flex', gap: 4 }}>
+                <input
+                  type="text"
+                  className="form-input form-input-sm"
+                  value={newViewName}
+                  onChange={e => setNewViewName(e.target.value)}
+                  placeholder="Save current as..."
+                  style={{ flex: 1 }}
+                />
+                <button className="btn btn-primary btn-sm" onClick={handleSaveView}>Save</button>
+              </div>
+            </div>
+          )}
+        </div>
         {viewMode === 'list' && (
           <button className="btn btn-secondary btn-sm" onClick={() => setShowColumnsModal(true)} title="Show/hide columns in the list view">
             ☰ Columns
@@ -449,6 +608,29 @@ export default function ClientManager() {
         )}
         <ViewToggle value={viewMode} onChange={(m) => setMode('clients', m)} />
       </div>
+
+      {showAdvanced && (
+        <div style={{
+          padding: 12, background: '#f8fafc',
+          border: '1px solid var(--border)', borderRadius: 6,
+          margin: '0 0 12px 0',
+        }}>
+          <div className="form-grid">
+            <div className="form-group"><label>Code from</label><input className="form-input" value={adv.codeFrom} onChange={e => setAdv(a => ({ ...a, codeFrom: e.target.value }))} placeholder="e.g. PC-CO-001" /></div>
+            <div className="form-group"><label>Code to</label>  <input className="form-input" value={adv.codeTo}   onChange={e => setAdv(a => ({ ...a, codeTo:   e.target.value }))} placeholder="e.g. PC-CO-050" /></div>
+            <div className="form-group"><label>Name from</label><input className="form-input" value={adv.nameFrom} onChange={e => setAdv(a => ({ ...a, nameFrom: e.target.value }))} placeholder="alphabetical from..." /></div>
+            <div className="form-group"><label>Name to</label>  <input className="form-input" value={adv.nameTo}   onChange={e => setAdv(a => ({ ...a, nameTo:   e.target.value }))} placeholder="...to" /></div>
+            <div className="form-group"><label>TIC contains</label><input className="form-input" value={adv.ticContains} onChange={e => setAdv(a => ({ ...a, ticContains: e.target.value }))} /></div>
+            <div className="form-group"><label>VAT contains</label><input className="form-input" value={adv.vatContains} onChange={e => setAdv(a => ({ ...a, vatContains: e.target.value }))} /></div>
+            <div className="form-group"><label>HE Number contains</label><input className="form-input" value={adv.heContains} onChange={e => setAdv(a => ({ ...a, heContains: e.target.value }))} /></div>
+            <div className="form-group"><label>City contains</label><input className="form-input" value={adv.cityContains} onChange={e => setAdv(a => ({ ...a, cityContains: e.target.value }))} /></div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-link btn-sm" onClick={clearAdvanced} disabled={!advActive}>Clear advanced</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAdvanced(false)}>Hide</button>
+          </div>
+        </div>
+      )}
 
       {activeFilters.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0 0 12px 0' }}>
