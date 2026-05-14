@@ -190,6 +190,205 @@ body {
   text-align: center;
 }
 
+/* ===== Sidebar groups (UI polish part 1) ===== */
+.sidebar-nav-list {
+  list-style: none;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+.sidebar-nav-list > li { list-style: none; }
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  color: rgba(255,255,255,0.78);
+  text-decoration: none;
+  transition: all 0.15s;
+  font-size: 15px;
+  border-left: 3px solid transparent;
+}
+.sidebar-link:hover,
+.sidebar-link.active {
+  background: rgba(255,255,255,0.08);
+  color: white;
+}
+.sidebar-link.active { border-left-color: var(--gold, #b8963e); }
+
+.sidebar-sub-link {
+  padding: 8px 20px 8px 36px;
+  font-size: 14px;
+}
+
+.sidebar-group { margin: 2px 0; }
+.sidebar-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 20px;
+  background: none;
+  border: 0;
+  color: rgba(255,255,255,0.55);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  text-align: left;
+}
+.sidebar-group-header:hover {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.85);
+}
+.sidebar-group-header.expanded { color: rgba(255,255,255,0.9); }
+.sidebar-group-header .nav-icon { font-size: 14px; width: 18px; }
+.sidebar-group-label { flex: 1; }
+.sidebar-group-chevron { font-size: 11px; opacity: 0.6; }
+
+.sidebar-group-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: rgba(0,0,0,0.15);
+}
+
+/* Star pin button on hover */
+.sidebar-pin {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  color: rgba(255,255,255,0.25);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.sidebar-link:hover .sidebar-pin { opacity: 1; }
+.sidebar-pin.pinned { color: var(--gold, #b8963e); opacity: 1; }
+.sidebar-pin:hover { color: #fff; }
+
+.sidebar-group-favourites .sidebar-group-header {
+  color: rgba(255,255,255,0.9);
+}
+
+/* ===== Quick Actions FAB (UI polish part 2) ===== */
+.fab-container {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+.fab-container > * { pointer-events: auto; }
+
+.fab-trigger {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--text, #1a2e4a);
+  color: var(--gold, #b8963e);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.fab-trigger:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.45);
+}
+.fab-container.open .fab-trigger {
+  transform: rotate(45deg);
+  background: #b91c1c;
+  color: white;
+}
+
+.fab-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fab-menu li button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--text, #1a2e4a);
+  color: white;
+  border: 0;
+  padding: 10px 16px;
+  border-radius: 28px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.3);
+  transition: background 0.15s, transform 0.15s;
+  white-space: nowrap;
+}
+.fab-menu li button:hover {
+  background: #243960;
+  transform: translateX(-2px);
+}
+.fab-menu .fab-icon {
+  font-size: 16px;
+  color: var(--gold, #b8963e);
+  width: 18px;
+  text-align: center;
+}
+
+.fab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+}
+
+@media (max-width: 768px) {
+  .fab-container { right: 16px; bottom: 16px; }
+  .fab-trigger { width: 48px; height: 48px; font-size: 24px; }
+}
+@media print {
+  .fab-container, .fab-backdrop { display: none !important; }
+}
+
+/* Pin-to-favourites star button on client list rows */
+.pin-star {
+  background: none;
+  border: 0;
+  color: #cbd5e1;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.pin-star:hover { color: var(--gold, #b8963e); background: #f1f5f9; }
+.pin-star.pinned { color: var(--gold, #b8963e); }
+
+/* Keep legacy .sidebar ul styling working for the client-role flat nav */
+.sidebar ul:not(.sidebar-nav-list) {
+  list-style: none;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
 .sidebar-overlay {
   display: none;
   position: fixed;
@@ -2577,6 +2776,22 @@ body {
 .pc-trading-name { font-size: 10pt; color: #64748b; width: 100%; margin-top: 1pt; }
 
 /* Sections */
+/* Two-column body (UI polish part 4) */
+.pc-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm;
+  margin-bottom: 5mm;
+}
+@media print {
+  .pc-two-col { grid-template-columns: 1fr 1fr; }
+}
+/* On smaller render contexts (preview), keep two columns but allow stack
+   below 700px */
+@media (max-width: 700px) {
+  .pc-two-col { grid-template-columns: 1fr; }
+}
+
 .pc-section { margin-bottom: 5mm; break-inside: avoid; page-break-inside: avoid; }
 .pc-section-title {
   font-size: 11pt; font-weight: 700;
@@ -2589,12 +2804,14 @@ body {
 }
 .pc-section-body { font-size: 10.5pt; }
 
-/* Field grid (two-column) */
+/* Field grid (two-column) — collapses to single column inside two-column layout */
 .pc-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2pt 16pt;
 }
+.pc-two-col .pc-grid { grid-template-columns: 1fr; gap: 2pt 0; }
+.pc-two-col .pc-field-label { min-width: 90pt; }
 .pc-field { display: flex; gap: 6pt; padding: 1.5pt 0; }
 .pc-field-full { grid-column: 1 / -1; }
 .pc-field-label {

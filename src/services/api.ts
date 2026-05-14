@@ -52,6 +52,21 @@ async function adminFn(pathSuffix: string, method: string, body?: any): Promise<
 // ---------- Types returned to app code ----------
 export type UserRole = 'owner' | 'supervisor' | 'admin' | 'staff' | 'client';
 
+export interface ClientAddress {
+  id: number;
+  client_id: number;
+  address_type: 'registered' | 'trading' | 'postal' | 'home';
+  line1: string | null;
+  line2: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string | null;
+  notes: string | null;
+  is_linked_to_registered: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AuthUser {
   id: string;                 // auth.users.id (uuid)
   username: string;
@@ -2367,6 +2382,114 @@ export const api = {
         { user_id: session.user.id, layout },
         { onConflict: 'user_id' }
       );
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Sidebar collapse/expand state (UI polish part 1) ---------
+  async getMySidebarState(): Promise<{ groups?: Record<string, 'expanded' | 'collapsed'> } | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return null;
+    const { data, error } = await supabase
+      .from('user_dashboard_preferences')
+      .select('sidebar_state')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return (data.sidebar_state as any) || null;
+  },
+
+  async setMySidebarState(state: { groups?: Record<string, 'expanded' | 'collapsed'> }): Promise<void> {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return;
+    const { error } = await supabase
+      .from('user_dashboard_preferences')
+      .upsert(
+        { user_id: session.user.id, sidebar_state: state },
+        { onConflict: 'user_id' }
+      );
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Favourites (UI polish part 3) ---------
+  async getMyFavourites() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return [];
+    const { data, error } = await supabase
+      .from('user_favourites')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('favourite_type', { ascending: true })
+      .order('sort_order', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async pinFavourite(favouriteType: 'menu_item' | 'client', targetId: string, label?: string) {
+    const { data, error } = await supabase.rpc('pin_favourite', {
+      p_favourite_type: favouriteType,
+      p_target_id:      targetId,
+      p_label:          label || null,
+    });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+
+  async unpinFavourite(id: number) {
+    const { error } = await supabase.from('user_favourites').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async reorderFavourite(id: number, newSortOrder: number) {
+    const { error } = await supabase.from('user_favourites')
+      .update({ sort_order: newSortOrder }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Client addresses (UI polish part 5) ---------
+  async getClientAddresses(clientId: number) {
+    const { data, error } = await supabase.from('client_addresses')
+      .select('*').eq('client_id', clientId);
+    if (error) throw new Error(error.message);
+    return (data || []) as ClientAddress[];
+  },
+
+  async upsertClientAddress(addr: {
+    id?: number;
+    client_id: number;
+    address_type: 'registered' | 'trading' | 'postal' | 'home';
+    line1?: string | null;
+    line2?: string | null;
+    city?: string | null;
+    postal_code?: string | null;
+    country?: string | null;
+    notes?: string | null;
+    is_linked_to_registered?: boolean;
+  }) {
+    const payload = {
+      client_id:    addr.client_id,
+      address_type: addr.address_type,
+      line1:        addr.line1 || null,
+      line2:        addr.line2 || null,
+      city:         addr.city || null,
+      postal_code:  addr.postal_code || null,
+      country:      addr.country || 'Cyprus',
+      notes:        addr.notes || null,
+      is_linked_to_registered: !!addr.is_linked_to_registered,
+    };
+    if (addr.id) {
+      const { error } = await supabase.from('client_addresses').update(payload).eq('id', addr.id);
+      if (error) throw new Error(error.message);
+      return addr.id;
+    }
+    const { data, error } = await supabase.from('client_addresses')
+      .upsert(payload, { onConflict: 'client_id,address_type' })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return (data as any).id as number;
+  },
+
+  async deleteClientAddress(id: number) {
+    const { error } = await supabase.from('client_addresses').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 

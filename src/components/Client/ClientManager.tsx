@@ -73,6 +73,47 @@ export default function ClientManager() {
     api.countUnlinkedDirectors().then(setUnlinkedCount).catch(() => {});
   }, [clients.length]);
 
+  // Pinned-clients map (UI polish part 3) — quick lookup for the star icon
+  // on each row and for toggling pin state. Lives locally; the sidebar's
+  // Favourites group has its own copy that refreshes on next reload.
+  const [pinnedClientIds, setPinnedClientIds] = useState<Set<string>>(new Set());
+  const [pinFavRowIds, setPinFavRowIds]       = useState<Record<string, number>>({});
+  useEffect(() => {
+    api.getMyFavourites()
+      .then(rows => {
+        const ids = new Set<string>();
+        const map: Record<string, number> = {};
+        for (const r of (rows as any[])) {
+          if (r.favourite_type === 'client') {
+            ids.add(String(r.target_id));
+            map[String(r.target_id)] = r.id;
+          }
+        }
+        setPinnedClientIds(ids);
+        setPinFavRowIds(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  const togglePinClient = async (c: any) => {
+    const key = String(c.id);
+    if (pinnedClientIds.has(key)) {
+      const rowId = pinFavRowIds[key];
+      if (!rowId) return;
+      try {
+        await api.unpinFavourite(rowId);
+        setPinnedClientIds(prev => { const n = new Set(prev); n.delete(key); return n; });
+        setPinFavRowIds(prev => { const n = { ...prev }; delete n[key]; return n; });
+      } catch (err: any) { alert(err.message); }
+    } else {
+      try {
+        const newId = await api.pinFavourite('client', key, c.name || `#${c.id}`);
+        setPinnedClientIds(prev => { const n = new Set(prev); n.add(key); return n; });
+        setPinFavRowIds(prev => ({ ...prev, [key]: newId }));
+      } catch (err: any) { alert(err.message); }
+    }
+  };
+
   // Filter state (Phase 6 / clients-v3 Part E2)
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus,   setFilterStatus]   = useState('');
@@ -341,7 +382,17 @@ export default function ClientManager() {
       case 'client_code':          return <strong>{c.client_code || '-'}</strong>;
       case 'name':                 return (
         <>
-          <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.name}</Link>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              className={`pin-star ${pinnedClientIds.has(String(c.id)) ? 'pinned' : ''}`}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); togglePinClient(c); }}
+              title={pinnedClientIds.has(String(c.id)) ? 'Unpin from Favourites' : 'Pin to Favourites'}
+            >
+              {pinnedClientIds.has(String(c.id)) ? '★' : '☆'}
+            </button>
+            <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.name}</Link>
+          </span>
           {c.trading_name && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.trading_name}</div>}
         </>
       );

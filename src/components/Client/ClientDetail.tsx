@@ -39,7 +39,7 @@ type TabKey =
 const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'info',        label: 'Client Info' },
   { key: 'contacts',    label: 'Contacts' },
-  { key: 'tax',         label: 'Tax & Reg' },
+  { key: 'tax',         label: 'Registrations' },
   { key: 'kyc',         label: 'KYC' },
   { key: 'directors',   label: 'Directors' },
   { key: 'credentials', label: 'Credentials' },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -65,6 +65,7 @@ const dueClass = (t: Task) => {
 export default function StaffTasks() {
   const { user } = useAuth();
   const { clients } = useApp();
+  const location = useLocation();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,8 +82,8 @@ export default function StaffTasks() {
   const [fTo, setFTo]             = useState<string>('');
   const [search, setSearch]       = useState<string>('');
 
-  // New task form (inline)
-  const [showForm, setShowForm] = useState(false);
+  // New task form (inline) — auto-opens when navigated to with ?new=1 (FAB)
+  const [showForm, setShowForm] = useState(() => new URLSearchParams(location.search).get('new') === '1');
   const [creating, setCreating] = useState(false);
   const blankForm = () => ({
     title: '',

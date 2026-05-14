@@ -81,13 +81,12 @@ export default function ClientInfoTab() {
       </div>
 
       <div className="form-section">
-        <h3>Dates &amp; Period</h3>
+        <h3>Engagement</h3>
+        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+          Incorporation date, year-end, VAT period and personal dates live in the <strong>Registrations</strong> tab.
+        </p>
         <div className="form-grid">
-          <Field label="Incorporation Date" field="incorporation_date" type="date" />
-          <Field label="Date of Birth" field="date_of_birth" type="date" />
-          <Field label="Year End Date (DD/MM)" field="year_end_date" placeholder="31/12" />
           <Field label="Financial Year End" field="financial_year_end" placeholder="(legacy free-text)" />
-          <Field label="VAT Period" field="vat_period" placeholder="1/4/7/10" />
           <Field label="Services" field="services" />
           <Field label="Monthly Fee" field="monthly_fee" type="number" />
         </div>

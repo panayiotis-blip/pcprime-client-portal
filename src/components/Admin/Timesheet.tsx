@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -129,6 +130,7 @@ const parseDuration = (s: string): number | null => {
 export default function Timesheet() {
   const { user } = useAuth();
   const { clients } = useApp();
+  const location = useLocation();
   const canApprove = isSupervisorOrHigher(user);
 
   // 'entries' = standard timesheet view  ·  'review' = approval queue (supervisor only)
@@ -149,8 +151,8 @@ export default function Timesheet() {
   const [fFrom, setFFrom]       = useState<string>(startOfWeek());
   const [fTo, setFTo]           = useState<string>(todayIso());
 
-  // Quick-log form
-  const [logOpen, setLogOpen] = useState(false);
+  // Auto-open the quick-log form when navigated to with ?new=1 (FAB shortcut)
+  const [logOpen, setLogOpen] = useState(() => new URLSearchParams(location.search).get('new') === '1');
   const [logForm, setLogForm] = useState({
     entry_date: todayIso(),
     client_id: '',
