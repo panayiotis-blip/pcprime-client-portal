@@ -10,18 +10,25 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as strin
 // Forms and display code work with a "; "-joined string; the DB stores text[].
 // These two helpers translate at the API boundary so callers don't have to care.
 function normaliseClientForRead(c: any): any {
-  if (c && Array.isArray(c.email)) {
-    return { ...c, email: c.email.join('; ') };
-  }
-  return c;
+  if (!c) return c;
+  const out: any = { ...c };
+  if (Array.isArray(c.email)) out.email = c.email.join('; ');
+  // tags: keep as array — UI components handle chip rendering directly.
+  return out;
 }
 function normaliseClientForWrite(data: any): any {
   if (!data || typeof data !== 'object') return data;
-  if (typeof data.email === 'string') {
-    const parts = data.email.split(/[;,]+/).map((p: string) => p.trim()).filter(Boolean);
-    return { ...data, email: parts.length === 0 ? null : parts };
+  const out: any = { ...data };
+  if (typeof out.email === 'string') {
+    const parts = out.email.split(/[;,]+/).map((p: string) => p.trim()).filter(Boolean);
+    out.email = parts.length === 0 ? null : parts;
   }
-  return data;
+  // Tags coming in as a comma-separated string from a text input
+  if (typeof out.tags === 'string') {
+    const parts = out.tags.split(/[,;]+/).map((p: string) => p.trim()).filter(Boolean);
+    out.tags = parts;  // empty array is fine — preserves the "no tags" state
+  }
+  return out;
 }
 
 // Call a Supabase Edge Function with the current user's JWT.
@@ -1461,6 +1468,24 @@ export const api = {
       .update({ view_preferences: next })
       .eq('id', session.user.id);
     if (error) throw new Error(error.message);
+  },
+
+  // --------- Bulk operations on clients (Phase 6 E5) ---------
+  async bulkUpdateClientStatus(ids: number[], clientStatus: string) {
+    if (ids.length === 0) return 0;
+    const isActive = clientStatus === 'active';
+    const { error, count } = await supabase
+      .from('clients')
+      .update({ client_status: clientStatus, is_active: isActive, status: isActive ? 'active' : 'inactive' }, { count: 'exact' })
+      .in('id', ids);
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
+
+  async bulkAddTagToClients(ids: number[], tag: string): Promise<number> {
+    const { data, error } = await supabase.rpc('bulk_add_tag_to_clients', { p_ids: ids, p_tag: tag });
+    if (error) throw new Error(error.message);
+    return (data as number) || 0;
   },
 
   // --------- Bulk wipe / code-gen v2 (Phase 1-3 of clients v2) ---------

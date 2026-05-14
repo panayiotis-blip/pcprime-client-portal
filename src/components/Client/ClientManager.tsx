@@ -10,6 +10,7 @@ import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
 import BulkWipeModal from '../Admin/BulkWipeModal';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
+import * as XLSX from 'xlsx';
 
 type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
 type SortDir = 'asc' | 'desc';
@@ -32,6 +33,7 @@ const CLIENT_COLUMNS: ColumnDef[] = [
   { id: 'contact_person',      label: 'Contact Person',                  defaultVisible: false },
   { id: 'invoices_count',      label: 'Invoices',                        defaultVisible: false },
   { id: 'created_at',          label: 'Created',                         defaultVisible: false },
+  { id: 'tags',                label: 'Tags',                            defaultVisible: false },
 ];
 
 const DEFAULT_VISIBLE_COLS = CLIENT_COLUMNS.filter(c => c.defaultVisible).map(c => c.id);
@@ -76,6 +78,15 @@ export default function ClientManager() {
   const [filterStatus,   setFilterStatus]   = useState('');
   const [filterCity,     setFilterCity]     = useState('');
   const [filterHasVat,   setFilterHasVat]   = useState<'all' | 'yes' | 'no'>('all');
+  const [filterTag,      setFilterTag]      = useState('');
+
+  // Bulk selection (E5)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkInactive, setShowBulkInactive] = useState(false);
+  const [bulkInactiveStatus, setBulkInactiveStatus] = useState('old_client');
+  const [showBulkTag, setShowBulkTag] = useState(false);
+  const [bulkTagInput, setBulkTagInput] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   // Column visibility (Phase 6 / clients-v3 Part E1)
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLS);
@@ -286,6 +297,7 @@ export default function ClientManager() {
     if (filterCity     && c.city            !== filterCity)     return false;
     if (filterHasVat === 'yes' && !c.vat_number) return false;
     if (filterHasVat === 'no'  &&  c.vat_number) return false;
+    if (filterTag && !(Array.isArray(c.tags) && c.tags.includes(filterTag))) return false;
 
     // Advanced find (E4)
     if (adv.codeFrom && (c.client_code || '') < adv.codeFrom) return false;
@@ -307,13 +319,21 @@ export default function ClientManager() {
     return Array.from(s).sort();
   }, [clients]);
 
+  // Distinct tags present in the data — drives the Tag dropdown
+  const allTags = useMemo(() => {
+    const s = new Set<string>();
+    for (const c of clients as any[]) if (Array.isArray(c.tags)) for (const t of c.tags) if (t) s.add(t);
+    return Array.from(s).sort();
+  }, [clients]);
+
   // Active filter chips
   const activeFilters: { key: string; label: string; clear: () => void }[] = [];
   if (filterCategory)         activeFilters.push({ key: 'cat',  label: 'Category: ' + (CATEGORY_OPTIONS.find(o => o.value === filterCategory)?.label || filterCategory), clear: () => setFilterCategory('') });
   if (filterStatus)           activeFilters.push({ key: 'stat', label: 'Status: '   + (STATUS_OPTIONS.find(o => o.value === filterStatus)?.label || filterStatus),     clear: () => setFilterStatus('') });
   if (filterCity)             activeFilters.push({ key: 'city', label: 'City: ' + filterCity,                                             clear: () => setFilterCity('') });
   if (filterHasVat !== 'all') activeFilters.push({ key: 'vat',  label: 'VAT: '  + filterHasVat,                                           clear: () => setFilterHasVat('all') });
-  const clearAllFilters = () => { setFilterCategory(''); setFilterStatus(''); setFilterCity(''); setFilterHasVat('all'); };
+  if (filterTag)              activeFilters.push({ key: 'tag',  label: 'Tag: '  + filterTag,                                              clear: () => setFilterTag('') });
+  const clearAllFilters = () => { setFilterCategory(''); setFilterStatus(''); setFilterCity(''); setFilterHasVat('all'); setFilterTag(''); };
 
   // Helper: render any column's cell content for a given client row
   const renderCell = (col: string, c: any) => {
@@ -339,10 +359,139 @@ export default function ClientManager() {
       case 'invoices_count':       return getInvoiceCount(c.id);
       case 'created_at':           return c.created_at ? new Date(c.created_at).toLocaleDateString() : '-';
       case 'updated_at':           return c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '-';
+      case 'tags': {
+        const arr: string[] = Array.isArray(c.tags) ? c.tags : [];
+        if (arr.length === 0) return '-';
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {arr.map(t => (
+              <span key={t} style={{
+                background: '#eef2ff', color: '#3730a3',
+                padding: '1px 8px', borderRadius: 999, fontSize: 11,
+              }}>{t}</span>
+            ))}
+          </div>
+        );
+      }
       default:                     return '-';
     }
   };
   const visibleColumnDefs = CLIENT_COLUMNS.filter(c => visibleColumns.includes(c.id));
+
+  // ----- Bulk action helpers (E5) -----
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+  const allOnPageSelected = filtered.length > 0
+    && filtered.every((c: any) => selectedIds.has(c.id));
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => {
+      if (allOnPageSelected) return new Set();
+      const n = new Set(prev);
+      for (const c of filtered as any[]) n.add(c.id);
+      return n;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkMarkActive = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Mark ${selectedIds.size} client${selectedIds.size === 1 ? '' : 's'} as Active?`)) return;
+    setBulkBusy(true);
+    try {
+      await runWith(() => api.bulkUpdateClientStatus(Array.from(selectedIds), 'active'));
+      clearSelection();
+      await refreshClients();
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert('Failed: ' + err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkMarkInactive = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      await runWith(() => api.bulkUpdateClientStatus(Array.from(selectedIds), bulkInactiveStatus));
+      setShowBulkInactive(false);
+      clearSelection();
+      await refreshClients();
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert('Failed: ' + err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkAddTag = async () => {
+    const tag = bulkTagInput.trim();
+    if (!tag) { alert('Enter a tag.'); return; }
+    setBulkBusy(true);
+    try {
+      const n = await runWith(() => api.bulkAddTagToClients(Array.from(selectedIds), tag));
+      setShowBulkTag(false);
+      setBulkTagInput('');
+      clearSelection();
+      await refreshClients();
+      alert(`Tag "${tag}" added to ${n} client${n === 1 ? '' : 's'}.`);
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert('Failed: ' + err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const buildExportRows = () => {
+    return (clients as any[])
+      .filter(c => selectedIds.has(c.id))
+      .map(c => ({
+        'Code':         c.client_code || '',
+        'Name':         c.name || '',
+        'Category':     c.client_category || '',
+        'Status':       c.client_status || '',
+        'Active':       c.is_active === false ? 'No' : 'Yes',
+        'TIC':          c.tax_number || '',
+        'VAT':          c.vat_number || '',
+        'HE Number':    c.registration_number || '',
+        'Email':        Array.isArray(c.email) ? c.email.join('; ') : (c.email || ''),
+        'Phone':        c.phone || '',
+        'Mobile':       c.mobile || '',
+        'City':         c.city || '',
+        'Country':      c.country || '',
+        'Tags':         Array.isArray(c.tags) ? c.tags.join(', ') : '',
+        'Last Updated': c.updated_at ? new Date(c.updated_at).toISOString().slice(0,10) : '',
+      }));
+  };
+
+  const handleBulkExportExcel = () => {
+    const rows = buildExportRows();
+    if (rows.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clients');
+    XLSX.writeFile(wb, `clients-${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const handleBulkExportCsv = () => {
+    const rows = buildExportRows();
+    if (rows.length === 0) return;
+    const cols = Object.keys(rows[0]);
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc((r as any)[c])).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `clients-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  };
 
   // Sort the filtered list — applied to the List view, also to Compact for stability.
   const sortedFiltered = [...filtered].sort((a: any, b: any) => {
@@ -535,6 +684,12 @@ export default function ClientManager() {
           <option value="yes">Has VAT</option>
           <option value="no">No VAT</option>
         </select>
+        {allTags.length > 0 && (
+          <select className="form-input" value={filterTag} onChange={e => setFilterTag(e.target.value)} style={{ maxWidth: 150 }} title="Filter by tag">
+            <option value="">All tags</option>
+            {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        )}
         <button
           className={`btn btn-sm ${advActive ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setShowAdvanced(s => !s)}
@@ -663,6 +818,79 @@ export default function ClientManager() {
         />
       )}
 
+      {/* Bulk action bar (E5) — visible only when rows are selected */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+          padding: '8px 12px', background: '#fef3c7', border: '1px solid #f59e0b',
+          borderRadius: 6, marginBottom: 12,
+        }}>
+          <strong>{selectedIds.size} selected</strong>
+          <button className="btn btn-primary btn-sm" onClick={handleBulkMarkActive} disabled={bulkBusy}>Mark Active</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkInactive(true)} disabled={bulkBusy}>Mark Inactive…</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkTag(true)} disabled={bulkBusy}>Add Tag…</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleBulkExportExcel} disabled={bulkBusy}>⬇ Excel</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleBulkExportCsv} disabled={bulkBusy}>⬇ CSV</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled
+            title="Available after email integration is live"
+          >Email Statements (soon)</button>
+          <button className="btn btn-link btn-sm" onClick={clearSelection}>Clear selection</button>
+        </div>
+      )}
+
+      {/* Bulk Mark Inactive modal — pick which status */}
+      {showBulkInactive && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+        }}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 420 }}>
+            <h3 style={{ marginTop: 0 }}>Mark {selectedIds.size} client{selectedIds.size === 1 ? '' : 's'} as inactive</h3>
+            <p style={{ fontSize: 13, color: '#475569' }}>Pick which inactive sub-status to apply:</p>
+            <select className="form-input" value={bulkInactiveStatus} onChange={e => setBulkInactiveStatus(e.target.value)}>
+              {STATUS_OPTIONS.filter(s => s.value !== 'active').map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="btn btn-secondary" onClick={() => setShowBulkInactive(false)} disabled={bulkBusy}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleBulkMarkInactive} disabled={bulkBusy}>{bulkBusy ? 'Updating…' : 'Apply'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Add Tag modal */}
+      {showBulkTag && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
+        }}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 420 }}>
+            <h3 style={{ marginTop: 0 }}>Add a tag to {selectedIds.size} client{selectedIds.size === 1 ? '' : 's'}</h3>
+            <input
+              type="text"
+              className="form-input"
+              value={bulkTagInput}
+              onChange={e => setBulkTagInput(e.target.value)}
+              placeholder="e.g. VIP / Q1 Onboarding"
+              list="all-tags-suggestions"
+              autoFocus
+            />
+            <datalist id="all-tags-suggestions">
+              {allTags.map(t => <option key={t} value={t} />)}
+            </datalist>
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
+              Tags are deduplicated — adding an existing tag to a client is a no-op.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="btn btn-secondary" onClick={() => setShowBulkTag(false)} disabled={bulkBusy}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleBulkAddTag} disabled={bulkBusy}>{bulkBusy ? 'Adding…' : 'Add tag'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {clients.length === 0 ? (
         <div className="empty-state"><p>No clients yet.</p></div>
       ) : filtered.length === 0 ? (
@@ -707,6 +935,9 @@ export default function ClientManager() {
           <table className="export-table sortable-table">
             <thead>
               <tr>
+                <th style={{ width: 30 }}>
+                  <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} title="Select all on this page" />
+                </th>
                 {visibleColumnDefs.map(col => {
                   const sortable = ['client_code', 'name', 'tax_number', 'invoices_count'].includes(col.id);
                   const sortKeyForCol = col.id === 'invoices_count' ? 'invoice_count' : col.id as SortKey;
@@ -726,7 +957,15 @@ export default function ClientManager() {
             </thead>
             <tbody>
               {sortedFiltered.map((c: any) => (
-                <tr key={c.id}>
+                <tr key={c.id} style={selectedIds.has(c.id) ? { background: '#eff6ff' } : undefined}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelect(c.id)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </td>
                   {visibleColumnDefs.map(col => (
                     <td key={col.id}>{renderCell(col.id, c)}</td>
                   ))}

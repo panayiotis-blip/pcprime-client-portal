@@ -203,7 +203,10 @@ body {
   margin-left: var(--sidebar-width);
   flex: 1;
   padding: 32px;
-  max-width: 1200px;
+  /* Use the full available width — 1200px max was too cramped for the
+     Clients / Tax Filings / Credentials list pages. */
+  max-width: none;
+  min-width: 0;
 }
 
 /* ===== Responsive ===== */
@@ -1249,6 +1252,17 @@ body {
   transition: background 0.1s;
 }
 .sortable-table th.sortable:hover { background: rgba(0, 0, 0, 0.04); }
+
+/* Better default cell sizing for the Clients list: don't wrap code/name onto
+   two lines unless the cell really has too much content. */
+.export-table-wrapper { overflow-x: auto; }
+.export-table th, .export-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.export-table td .client-code-inline { white-space: nowrap; }
 
 /* Generic compact-row list (used by InvoiceList and other screens) */
 .compact-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
