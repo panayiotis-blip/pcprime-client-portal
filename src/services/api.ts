@@ -505,7 +505,9 @@ export const api = {
       const ids = await getClientIdsForUser(p.id);
       out.push({
         id: p.id, username: p.username, display_name: p.full_name || p.username,
-        role: p.role, active: p.active, created_at: p.created_at, client_ids: ids,
+        role: p.role, active: p.active, created_at: p.created_at,
+        hourly_rate: p.hourly_rate ?? null,
+        client_ids: ids,
       });
     }
     return out;
@@ -1243,6 +1245,129 @@ export const api = {
 
   async deleteAppointment(id: number) {
     const { error } = await supabase.from('appointments').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Timesheet ---------
+  async getTimeEntries(params?: {
+    user_id?: string;
+    client_id?: number;
+    service?: string;
+    from?: string;   // YYYY-MM-DD inclusive
+    to?: string;     // YYYY-MM-DD inclusive
+  }) {
+    let q = supabase.from('time_entries')
+      .select('*, client:clients(name, client_code)')
+      .order('entry_date', { ascending: false })
+      .order('id',         { ascending: false });
+    if (params?.user_id)   q = q.eq('user_id',   params.user_id);
+    if (params?.client_id) q = q.eq('client_id', params.client_id);
+    if (params?.service)   q = q.eq('service',   params.service);
+    if (params?.from)      q = q.gte('entry_date', params.from);
+    if (params?.to)        q = q.lte('entry_date', params.to);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({
+      ...r,
+      client_name: r.client?.name || null,
+      client_code: r.client?.client_code || null,
+    }));
+  },
+
+  async createTimeEntry(data: {
+    client_id?: number | null;
+    entry_date: string;
+    minutes: number;
+    service: string;
+    description?: string | null;
+    billable?: boolean;
+    appointment_id?: number | null;
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) throw new Error('Not authenticated');
+    const { data: row, error } = await supabase.from('time_entries').insert({
+      user_id:        session.user.id,
+      client_id:      data.client_id || null,
+      entry_date:     data.entry_date,
+      minutes:        data.minutes,
+      service:        data.service,
+      description:    data.description || null,
+      billable:       data.billable !== false,
+      appointment_id: data.appointment_id || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id };
+  },
+
+  async updateTimeEntry(id: number, patch: {
+    client_id?: number | null;
+    entry_date?: string;
+    minutes?: number;
+    service?: string;
+    description?: string | null;
+    billable?: boolean;
+    appointment_id?: number | null;
+  }) {
+    const { error } = await supabase.from('time_entries').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteTimeEntry(id: number) {
+    const { error } = await supabase.from('time_entries').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async getActiveTimer() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user?.id) return null;
+    const { data, error } = await supabase.from('active_timers')
+      .select('*, client:clients(name, client_code)')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return {
+      ...data,
+      client_name: data.client?.name || null,
+      client_code: data.client?.client_code || null,
+    };
+  },
+
+  async startTimer(data: {
+    client_id?: number | null;
+    service?: string | null;
+    description?: string | null;
+    appointment_id?: number | null;
+    billable?: boolean;
+  }) {
+    const { error } = await supabase.rpc('start_timer', {
+      p_client_id:      data.client_id || null,
+      p_service:        data.service || null,
+      p_description:    data.description || null,
+      p_appointment_id: data.appointment_id || null,
+      p_billable:       data.billable !== false,
+    });
+    if (error) throw new Error(error.message);
+  },
+
+  async stopTimer(data?: { description?: string | null; service?: string | null }) {
+    const { data: id, error } = await supabase.rpc('stop_timer', {
+      p_description: data?.description || null,
+      p_service:     data?.service || null,
+    });
+    if (error) throw new Error(error.message);
+    return id as number | null;
+  },
+
+  async cancelTimer() {
+    const { error } = await supabase.rpc('cancel_timer');
+    if (error) throw new Error(error.message);
+  },
+
+  async updateUserHourlyRate(userId: string, rate: number | null) {
+    const { error } = await supabase.from('profiles')
+      .update({ hourly_rate: rate })
+      .eq('id', userId);
     if (error) throw new Error(error.message);
   },
 

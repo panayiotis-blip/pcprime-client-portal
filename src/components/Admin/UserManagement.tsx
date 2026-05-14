@@ -58,12 +58,27 @@ export default function UserManagement() {
 
   const handleEdit = (u: any) => {
     setEditingId(u.id);
-    setEditForm({ display_name: u.display_name, active: u.active, client_ids: u.client_ids || [] });
+    setEditForm({
+      display_name: u.display_name,
+      active: u.active,
+      client_ids: u.client_ids || [],
+      hourly_rate: u.hourly_rate ?? '',
+    });
   };
 
   const handleSaveEdit = async (id: string) => {
     try {
       await api.updateUser(id, editForm);
+      // hourly_rate is on profiles directly; persist via the timesheet helper.
+      // Empty string clears the rate (null).
+      const rateRaw = editForm.hourly_rate;
+      const rate =
+        rateRaw === '' || rateRaw === null || rateRaw === undefined
+          ? null
+          : Number(rateRaw);
+      if (rate === null || !isNaN(rate)) {
+        await api.updateUserHourlyRate(id, rate);
+      }
       setEditingId(null);
       await load();
     } catch (err: any) { alert(err.message); }
@@ -181,7 +196,7 @@ export default function UserManagement() {
       <div className="export-table-wrapper">
         <table className="export-table">
           <thead>
-            <tr><th>Name</th><th>Username</th><th>Role</th><th>Clients</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>Name</th><th>Username</th><th>Role</th><th>Clients</th><th>Hourly Rate</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {users.map((u: any) => {
@@ -213,6 +228,26 @@ export default function UserManagement() {
                       </div>
                     ) : (
                       <span style={{ fontSize: 13 }}>{clientNamesFor(u.client_ids)}</span>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {u.role === 'client' ? (
+                      <span style={{ color: '#94a3b8' }}>—</span>
+                    ) : isEditing ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="form-input"
+                        style={{ width: 90 }}
+                        value={editForm.hourly_rate ?? ''}
+                        onChange={(e) => setEditForm((f: any) => ({ ...f, hourly_rate: e.target.value }))}
+                        placeholder="€/h"
+                      />
+                    ) : (
+                      u.hourly_rate != null
+                        ? <span>€{Number(u.hourly_rate).toFixed(2)}/h</span>
+                        : <span style={{ color: '#94a3b8' }}>—</span>
                     )}
                   </td>
                   <td>

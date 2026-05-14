@@ -7,6 +7,11 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 
+const TIMESHEET_SERVICES = [
+  'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
+  'Company Admin', 'Meetings', 'Other',
+] as const;
+
 // Pre-defined palette for owner colour-coding (cycled by index in staff list).
 const OWNER_COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
@@ -98,6 +103,11 @@ export default function Calendar() {
   // doesn't overwrite a deliberately-chosen duration.
   const [endManuallyEdited, setEndManuallyEdited] = useState(false);
 
+  // "Log time for this appointment" sub-form (only visible when editing an existing appointment)
+  const [logTimeOpen, setLogTimeOpen] = useState(false);
+  const [logTimeForm, setLogTimeForm] = useState({ service: 'Meetings', description: '', billable: true });
+  const [logTimeSaving, setLogTimeSaving] = useState(false);
+
   // Build owner_id → color map
   const colorByOwner = useMemo(() => {
     const m = new Map<string, string>();
@@ -185,7 +195,36 @@ export default function Calendar() {
     // Existing appointment — treat end as deliberately set so changing start
     // doesn't clobber it.
     setEndManuallyEdited(true);
+    setLogTimeOpen(false);
+    setLogTimeForm({ service: 'Meetings', description: a.title || '', billable: true });
     setShowModal(true);
+  };
+
+  // Create a time-sheet entry from the current appointment values. Duration is
+  // derived from starts_at → ends_at.
+  const handleLogTimeFromAppointment = async () => {
+    if (!form.id) { alert('Save the appointment first'); return; }
+    if (!form.client_id) { alert('Pick a client on the appointment before logging time'); return; }
+    if (!form.starts_at || !form.ends_at) { alert('Start and end required to compute duration'); return; }
+    const minutes = Math.max(1, Math.round((new Date(form.ends_at).getTime() - new Date(form.starts_at).getTime()) / 60000));
+    setLogTimeSaving(true);
+    try {
+      await api.createTimeEntry({
+        client_id:      Number(form.client_id),
+        entry_date:     form.starts_at.slice(0, 10),
+        minutes,
+        service:        logTimeForm.service,
+        description:    logTimeForm.description.trim() || form.title || null,
+        billable:       logTimeForm.billable,
+        appointment_id: form.id,
+      });
+      alert(`Logged ${minutes} minutes against this appointment.`);
+      setLogTimeOpen(false);
+    } catch (err: any) {
+      alert('Log failed: ' + err.message);
+    } finally {
+      setLogTimeSaving(false);
+    }
   };
 
   // When start changes, auto-fill end as start + 1 hour, unless the user
@@ -397,6 +436,47 @@ export default function Calendar() {
               <label>Description / notes</label>
               <textarea className="form-input" rows={3} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
             </div>
+
+            {/* Log time for this appointment (only available once saved) */}
+            {form.id && (
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
+                {!logTimeOpen ? (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setLogTimeOpen(true)}>
+                    ⏱ Log time for this appointment
+                  </button>
+                ) : (
+                  <div>
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Service</label>
+                        <select className="form-input" value={logTimeForm.service} onChange={e => setLogTimeForm({ ...logTimeForm, service: e.target.value })}>
+                          {TIMESHEET_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 22 }}>
+                          <input type="checkbox" checked={logTimeForm.billable} onChange={e => setLogTimeForm({ ...logTimeForm, billable: e.target.checked })} />
+                          Billable
+                        </label>
+                      </div>
+                      <div className="form-group full-width">
+                        <label>Description (defaults to appointment title)</label>
+                        <input type="text" className="form-input" value={logTimeForm.description} onChange={e => setLogTimeForm({ ...logTimeForm, description: e.target.value })} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button className="btn btn-primary btn-sm" onClick={handleLogTimeFromAppointment} disabled={logTimeSaving}>
+                        {logTimeSaving ? 'Saving…' : 'Log time'}
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setLogTimeOpen(false)}>Cancel</button>
+                    </div>
+                    <p style={{ fontSize: 11, color: '#64748b', margin: '6px 0 0' }}>
+                      Duration is taken from the appointment's start and end times.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 16 }}>
               <div>

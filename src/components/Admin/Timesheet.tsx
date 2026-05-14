@@ -1,0 +1,633 @@
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../../services/api';
+import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+
+// Fixed picklist of services. Mirrors the CHECK constraint in migration 045 —
+// keep these in sync.
+const SERVICES = [
+  'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
+  'Company Admin', 'Meetings', 'Other',
+] as const;
+type Service = typeof SERVICES[number];
+
+type TimeEntry = {
+  id: number;
+  user_id: string;
+  client_id: number | null;
+  client_name: string | null;
+  client_code: string | null;
+  entry_date: string;
+  minutes: number;
+  service: Service;
+  description: string | null;
+  billable: boolean;
+  rate_snapshot: number | null;
+  appointment_id: number | null;
+  start_at: string | null;
+  end_at: string | null;
+  created_at: string;
+};
+
+type ActiveTimer = {
+  user_id: string;
+  client_id: number | null;
+  client_name: string | null;
+  client_code: string | null;
+  service: Service | null;
+  description: string | null;
+  appointment_id: number | null;
+  billable: boolean;
+  started_at: string;
+};
+
+// "YYYY-MM-DD" for the local-time date (avoids the UTC off-by-one near midnight)
+const localDateIso = (d: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const todayIso = () => localDateIso(new Date());
+
+const startOfWeek = () => {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  // Monday as first day (matches the calendar)
+  const dow = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dow);
+  return localDateIso(d);
+};
+
+const formatMinutes = (m: number) => {
+  if (m == null) return '—';
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (h === 0) return `${r}m`;
+  if (r === 0) return `${h}h`;
+  return `${h}h ${r}m`;
+};
+
+const formatHHMMSS = (totalSeconds: number) => {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(h)}:${p(m)}:${p(sec)}`;
+};
+
+// Parse "1h 30m" / "1:30" / "90" into minutes
+const parseDuration = (s: string): number | null => {
+  if (!s) return null;
+  const t = s.trim().toLowerCase();
+  // hh:mm
+  const m1 = t.match(/^(\d+):(\d{1,2})$/);
+  if (m1) return Number(m1[1]) * 60 + Number(m1[2]);
+  // Xh Ym  or  Xh  or  Ym
+  const m2 = t.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+)\s*m)?$/);
+  if (m2 && (m2[1] || m2[2])) {
+    const h = m2[1] ? parseFloat(m2[1]) : 0;
+    const m = m2[2] ? parseInt(m2[2], 10) : 0;
+    return Math.round(h * 60 + m);
+  }
+  // plain number → minutes
+  const n = parseFloat(t);
+  if (!isNaN(n) && n > 0) return Math.round(n);
+  return null;
+};
+
+export default function Timesheet() {
+  const { user } = useAuth();
+  const { clients } = useApp();
+
+  const [entries, setEntries]         = useState<TimeEntry[]>([]);
+  const [staffUsers, setStaffUsers]   = useState<any[]>([]);
+  const [timer, setTimer]             = useState<ActiveTimer | null>(null);
+  const [timerNow, setTimerNow]       = useState<number>(Date.now());
+  const [loading, setLoading]         = useState(true);
+
+  // Filters — default to "me" + this week
+  const [fStaff, setFStaff]   = useState<string>(user?.id || '');
+  const [fClient, setFClient] = useState<string>('');
+  const [fService, setFService] = useState<string>('');
+  const [fFrom, setFFrom]     = useState<string>(startOfWeek());
+  const [fTo, setFTo]         = useState<string>(todayIso());
+
+  // Quick-log form
+  const [logOpen, setLogOpen] = useState(false);
+  const [logForm, setLogForm] = useState({
+    entry_date: todayIso(),
+    client_id: '',
+    service: 'Bookkeeping' as Service,
+    duration: '1h',
+    description: '',
+    billable: true,
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Timer-start form
+  const [timerOpen, setTimerOpen] = useState(false);
+  const [timerForm, setTimerForm] = useState({
+    client_id: '',
+    service: 'Bookkeeping' as Service,
+    description: '',
+    billable: true,
+  });
+
+  // Edit row
+  const [editId, setEditId]     = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+
+  const loadEntries = async () => {
+    try {
+      const params: any = {};
+      if (fStaff)   params.user_id   = fStaff;
+      if (fClient)  params.client_id = Number(fClient);
+      if (fService) params.service   = fService;
+      if (fFrom)    params.from = fFrom;
+      if (fTo)      params.to   = fTo;
+      const data = await api.getTimeEntries(params);
+      setEntries(data as TimeEntry[]);
+    } catch (err: any) {
+      alert('Failed to load time entries: ' + err.message);
+    }
+  };
+
+  const loadTimer = async () => {
+    try {
+      const t = await api.getActiveTimer();
+      setTimer(t as ActiveTimer | null);
+    } catch {
+      // silent — timer is non-critical
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [users] = await Promise.all([
+          api.getUsers(),
+          loadTimer(),
+        ]);
+        if (cancelled) return;
+        setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+        await loadEntries();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reload entries when filters change
+  useEffect(() => { loadEntries(); /* eslint-disable-next-line */ }, [fStaff, fClient, fService, fFrom, fTo]);
+
+  // Tick the live timer banner every second
+  useEffect(() => {
+    if (!timer) return;
+    const id = setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timer]);
+
+  const handleStartTimer = async () => {
+    try {
+      await api.startTimer({
+        client_id:   timerForm.client_id ? Number(timerForm.client_id) : null,
+        service:     timerForm.service,
+        description: timerForm.description.trim() || null,
+        billable:    timerForm.billable,
+      });
+      await loadTimer();
+      setTimerOpen(false);
+      setTimerForm({ client_id: '', service: 'Bookkeeping', description: '', billable: true });
+    } catch (err: any) {
+      alert('Failed to start timer: ' + err.message);
+    }
+  };
+
+  const handleStopTimer = async () => {
+    try {
+      await api.stopTimer();
+      await loadTimer();
+      await loadEntries();
+    } catch (err: any) {
+      alert('Failed to stop timer: ' + err.message);
+    }
+  };
+
+  const handleCancelTimer = async () => {
+    if (!confirm('Discard the running timer without saving?')) return;
+    try {
+      await api.cancelTimer();
+      await loadTimer();
+    } catch (err: any) {
+      alert('Failed to cancel timer: ' + err.message);
+    }
+  };
+
+  const handleSaveLog = async () => {
+    const minutes = parseDuration(logForm.duration);
+    if (!minutes || minutes <= 0) {
+      alert('Enter a valid duration, e.g. 1h, 30m, 1h 30m, 1:30, or 90.');
+      return;
+    }
+    if (!logForm.service) { alert('Pick a service'); return; }
+    setSaving(true);
+    try {
+      await api.createTimeEntry({
+        entry_date:  logForm.entry_date,
+        minutes,
+        service:     logForm.service,
+        description: logForm.description.trim() || null,
+        client_id:   logForm.client_id ? Number(logForm.client_id) : null,
+        billable:    logForm.billable,
+      });
+      setLogForm({
+        entry_date: todayIso(),
+        client_id: '',
+        service: 'Bookkeeping',
+        duration: '1h',
+        description: '',
+        billable: true,
+      });
+      await loadEntries();
+    } catch (err: any) {
+      alert('Failed to save: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this time entry?')) return;
+    try {
+      await api.deleteTimeEntry(id);
+      await loadEntries();
+    } catch (err: any) {
+      alert('Delete failed: ' + err.message);
+    }
+  };
+
+  const startEdit = (e: TimeEntry) => {
+    setEditId(e.id);
+    setEditForm({
+      entry_date: e.entry_date,
+      minutes: e.minutes,
+      service: e.service,
+      description: e.description || '',
+      client_id: e.client_id ? String(e.client_id) : '',
+      billable: e.billable,
+    });
+  };
+
+  const saveEdit = async (id: number) => {
+    try {
+      await api.updateTimeEntry(id, {
+        entry_date:  editForm.entry_date,
+        minutes:     Number(editForm.minutes),
+        service:     editForm.service,
+        description: editForm.description?.trim() || null,
+        client_id:   editForm.client_id ? Number(editForm.client_id) : null,
+        billable:    editForm.billable,
+      });
+      setEditId(null);
+      await loadEntries();
+    } catch (err: any) {
+      alert('Save failed: ' + err.message);
+    }
+  };
+
+  // Look up name by user_id for display in the staff column
+  const staffName = (uid: string) => staffUsers.find(u => u.id === uid)?.display_name || '—';
+
+  // Totals across visible entries
+  const totals = useMemo(() => {
+    const totalMin    = entries.reduce((s, e) => s + e.minutes, 0);
+    const billableMin = entries.filter(e => e.billable).reduce((s, e) => s + e.minutes, 0);
+    const value       = entries
+      .filter(e => e.billable && e.rate_snapshot != null)
+      .reduce((s, e) => s + (e.minutes / 60) * Number(e.rate_snapshot), 0);
+    const byService = SERVICES.map(svc => ({
+      service: svc,
+      minutes: entries.filter(e => e.service === svc).reduce((s, e) => s + e.minutes, 0),
+    })).filter(b => b.minutes > 0);
+    return { totalMin, billableMin, value, byService };
+  }, [entries]);
+
+  // Timer banner display
+  const timerSeconds = timer ? Math.max(0, (timerNow - new Date(timer.started_at).getTime()) / 1000) : 0;
+
+  return (
+    <div className="dashboard">
+      <div className="dashboard-header">
+        <h2>Timesheet</h2>
+        <div className="dashboard-actions" style={{ display: 'flex', gap: 8 }}>
+          {!timer && (
+            <button className="btn btn-secondary" onClick={() => setTimerOpen(o => !o)}>
+              ⏱ {timerOpen ? 'Cancel' : 'Start timer'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setLogOpen(o => !o)}>
+            + Log time
+          </button>
+        </div>
+      </div>
+
+      {/* Active timer banner */}
+      {timer && (
+        <div style={{
+          background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 8,
+          padding: '12px 16px', marginBottom: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 20 }}>⏱</span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 18, fontFamily: 'monospace' }}>
+                {formatHHMMSS(timerSeconds)}
+              </div>
+              <div style={{ fontSize: 13, color: '#475569' }}>
+                {timer.client_name ? `${timer.client_code ? timer.client_code + ' — ' : ''}${timer.client_name}` : 'No client'}
+                {' · '}{timer.service || 'No service'}
+                {timer.description ? ` · ${timer.description}` : ''}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary btn-sm" onClick={handleStopTimer}>Stop &amp; save</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleCancelTimer}>Discard</button>
+          </div>
+        </div>
+      )}
+
+      {/* Start-timer form */}
+      {!timer && timerOpen && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Client</label>
+              <select className="form-input" value={timerForm.client_id} onChange={e => setTimerForm({ ...timerForm, client_id: e.target.value })}>
+                <option value="">— None —</option>
+                {clients.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Service</label>
+              <select className="form-input" value={timerForm.service} onChange={e => setTimerForm({ ...timerForm, service: e.target.value as Service })}>
+                {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="form-group full-width">
+              <label>Description (optional)</label>
+              <input type="text" className="form-input" value={timerForm.description} onChange={e => setTimerForm({ ...timerForm, description: e.target.value })} placeholder="What are you working on?" />
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 22 }}>
+                <input type="checkbox" checked={timerForm.billable} onChange={e => setTimerForm({ ...timerForm, billable: e.target.checked })} />
+                Billable
+              </label>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-primary btn-sm" onClick={handleStartTimer}>Start</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setTimerOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Quick-log form */}
+      {logOpen && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Date</label>
+              <input type="date" className="form-input" value={logForm.entry_date} onChange={e => setLogForm({ ...logForm, entry_date: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Client</label>
+              <select className="form-input" value={logForm.client_id} onChange={e => setLogForm({ ...logForm, client_id: e.target.value })}>
+                <option value="">— None —</option>
+                {clients.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Service</label>
+              <select className="form-input" value={logForm.service} onChange={e => setLogForm({ ...logForm, service: e.target.value as Service })}>
+                {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Duration</label>
+              <input type="text" className="form-input" value={logForm.duration} onChange={e => setLogForm({ ...logForm, duration: e.target.value })} placeholder="1h 30m" />
+              <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                {['15m', '30m', '1h', '2h'].map(d => (
+                  <button key={d} type="button" className="btn btn-secondary btn-sm" onClick={() => setLogForm({ ...logForm, duration: d })}>{d}</button>
+                ))}
+              </div>
+            </div>
+            <div className="form-group full-width">
+              <label>Description</label>
+              <input type="text" className="form-input" value={logForm.description} onChange={e => setLogForm({ ...logForm, description: e.target.value })} placeholder="What did you do?" />
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 22 }}>
+                <input type="checkbox" checked={logForm.billable} onChange={e => setLogForm({ ...logForm, billable: e.target.checked })} />
+                Billable
+              </label>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-primary btn-sm" onClick={handleSaveLog} disabled={saving}>
+              {saving ? 'Saving…' : 'Save entry'}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setLogOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>From</label>
+            <input type="date" className="form-input" value={fFrom} onChange={e => setFFrom(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>To</label>
+            <input type="date" className="form-input" value={fTo} onChange={e => setFTo(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Staff</label>
+            <select className="form-input" value={fStaff} onChange={e => setFStaff(e.target.value)}>
+              <option value="">All staff</option>
+              {staffUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.display_name || u.username}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Client</label>
+            <select className="form-input" value={fClient} onChange={e => setFClient(e.target.value)}>
+              <option value="">All clients</option>
+              {clients.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Service</label>
+            <select className="form-input" value={fService} onChange={e => setFService(e.target.value)}>
+              <option value="">All services</option>
+              {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>&nbsp;</label>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => { setFFrom(startOfWeek()); setFTo(todayIso()); }}>This week</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => {
+                const d = new Date(); d.setDate(1);
+                setFFrom(localDateIso(d)); setFTo(todayIso());
+              }}>This month</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Totals bar */}
+      <div className="stats-grid stats-grid-compact" style={{ marginBottom: 12 }}>
+        <div className="stat-card stat-card-sm">
+          <div className="stat-number">{formatMinutes(totals.totalMin)}</div>
+          <div className="stat-label">Total time</div>
+        </div>
+        <div className="stat-card stat-card-sm">
+          <div className="stat-number">{formatMinutes(totals.billableMin)}</div>
+          <div className="stat-label">Billable</div>
+        </div>
+        <div className="stat-card stat-card-sm">
+          <div className="stat-number">€{totals.value.toFixed(2)}</div>
+          <div className="stat-label">Billable value</div>
+        </div>
+        <div className="stat-card stat-card-sm">
+          <div className="stat-number">{entries.length}</div>
+          <div className="stat-label">Entries</div>
+        </div>
+      </div>
+
+      {/* Per-service breakdown */}
+      {totals.byService.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, fontSize: 13 }}>
+          {totals.byService.map(b => (
+            <span key={b.service} style={{
+              background: '#f1f5f9', padding: '4px 10px', borderRadius: 999,
+            }}>
+              {b.service}: <strong>{formatMinutes(b.minutes)}</strong>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Entries table */}
+      {loading ? (
+        <div className="loading-screen">Loading…</div>
+      ) : entries.length === 0 ? (
+        <div className="empty-state">
+          <p>No time entries match the current filters.</p>
+        </div>
+      ) : (
+        <div className="export-table-wrapper">
+          <table className="export-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Staff</th>
+                <th>Client</th>
+                <th>Service</th>
+                <th>Duration</th>
+                <th>Description</th>
+                <th>Billable</th>
+                <th>Value</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map(e => {
+                const isEditing = editId === e.id;
+                const value = (e.billable && e.rate_snapshot != null)
+                  ? `€${((e.minutes / 60) * Number(e.rate_snapshot)).toFixed(2)}`
+                  : '—';
+                return (
+                  <tr key={e.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {isEditing ? (
+                        <input type="date" className="form-input" value={editForm.entry_date} onChange={ev => setEditForm({ ...editForm, entry_date: ev.target.value })} />
+                      ) : e.entry_date}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{staffName(e.user_id)}</td>
+                    <td>
+                      {isEditing ? (
+                        <select className="form-input" value={editForm.client_id} onChange={ev => setEditForm({ ...editForm, client_id: ev.target.value })}>
+                          <option value="">— None —</option>
+                          {clients.map((c: any) => <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>)}
+                        </select>
+                      ) : (
+                        e.client_name
+                          ? <span>{e.client_code ? <span style={{ color: '#64748b' }}>{e.client_code} — </span> : null}{e.client_name}</span>
+                          : <span style={{ color: '#94a3b8' }}>—</span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <select className="form-input" value={editForm.service} onChange={ev => setEditForm({ ...editForm, service: ev.target.value })}>
+                          {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      ) : e.service}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {isEditing ? (
+                        <input type="text" className="form-input" style={{ width: 80 }}
+                          value={editForm.minutes}
+                          onChange={ev => setEditForm({ ...editForm, minutes: ev.target.value })}
+                          placeholder="minutes"
+                        />
+                      ) : formatMinutes(e.minutes)}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input type="text" className="form-input" value={editForm.description} onChange={ev => setEditForm({ ...editForm, description: ev.target.value })} />
+                      ) : (e.description || <span style={{ color: '#94a3b8' }}>—</span>)}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <input type="checkbox" checked={editForm.billable} onChange={ev => setEditForm({ ...editForm, billable: ev.target.checked })} />
+                      ) : (e.billable ? '✓' : '—')}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{value}</td>
+                    <td>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-primary btn-sm" onClick={() => saveEdit(e.id)}>Save</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => setEditId(null)}>Cancel</button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => startEdit(e)}>Edit</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDelete(e.id)}>×</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
