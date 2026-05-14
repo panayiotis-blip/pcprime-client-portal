@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
-const SERVICES = [
+const BILLABLE_SERVICES = [
   'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
   'Company Admin', 'Meetings', 'Other',
 ] as const;
-type Service = typeof SERVICES[number];
+const INTERNAL_SERVICES = [
+  'Internal Admin', 'Training', 'Annual Leave',
+  'Sick Leave', 'Public Holiday', 'Other Internal',
+] as const;
+const ALL_SERVICES = [...BILLABLE_SERVICES, ...INTERNAL_SERVICES] as const;
+type Service = typeof ALL_SERVICES[number];
+const isBillableService = (s: string) => (BILLABLE_SERVICES as readonly string[]).includes(s);
 
 type TimeEntry = {
   id: number;
@@ -16,6 +23,12 @@ type TimeEntry = {
   description: string | null;
   billable: boolean;
   rate_snapshot: number | null;
+  approval_status: 'draft' | 'approved';
+  approved_by: string | null;
+  approved_at: string | null;
+  billing_status: 'unbilled' | 'written_off' | 'deferred' | 'invoiced';
+  write_off_reason: string | null;
+  invoice_id: number | null;
 };
 
 const formatMinutes = (m: number) => {
@@ -36,10 +49,22 @@ const monthLabel = (key: string) => {
 };
 
 export default function TimeTab({ clientId, clientName }: { clientId: number; clientName?: string }) {
+  const { user } = useAuth();
   const [entries, setEntries]       = useState<TimeEntry[]>([]);
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
+
+  // Billing-status filter (defaults to "All")
+  const [fBilling, setFBilling] = useState<string>('');
+
+  // Bulk-selection state used by the "Mark as…" actions
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const toggleSelected = (id: number) => setSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   // Quick log
   const [logOpen, setLogOpen] = useState(false);
@@ -50,15 +75,24 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
     description: '',
     billable: true,
   });
+  const setService = (s: Service) => setForm(prev => ({
+    ...prev, service: s, billable: isBillableService(s) ? prev.billable : false,
+  }));
 
   const load = async () => {
     try {
       const [data, users] = await Promise.all([
-        api.getTimeEntries({ client_id: clientId }),
+        api.getTimeEntries({
+          client_id: clientId,
+          billing_status: (fBilling || undefined) as any,
+        }),
         api.getUsers(),
       ]);
       setEntries(data as TimeEntry[]);
       setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+      // Drop selection of rows that aren't in the latest result
+      const visibleIds = new Set((data as TimeEntry[]).map(e => e.id));
+      setSelected(prev => new Set(Array.from(prev).filter(id => visibleIds.has(id))));
     } catch (err: any) {
       alert('Failed to load time entries: ' + err.message);
     }
@@ -73,7 +107,7 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId]);
+  }, [clientId, fBilling]);
 
   const handleSave = async () => {
     if (!form.minutes || form.minutes <= 0) { alert('Enter a duration > 0 minutes'); return; }
@@ -113,6 +147,27 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
     }
   };
 
+  const handleBulkStatus = async (status: 'unbilled' | 'written_off' | 'deferred') => {
+    if (selected.size === 0) { alert('No entries selected'); return; }
+    let reason: string | undefined;
+    if (status === 'written_off') {
+      const r = prompt(`Reason for writing off ${selected.size} entr${selected.size === 1 ? 'y' : 'ies'}? (optional)`);
+      if (r === null) return;   // user pressed Cancel
+      reason = r.trim() || undefined;
+    } else {
+      const labels = { deferred: 'defer to a later invoice', unbilled: 'mark back to unbilled' };
+      if (!confirm(`${labels[status][0].toUpperCase() + labels[status].slice(1)} for ${selected.size} entr${selected.size === 1 ? 'y' : 'ies'}?`)) return;
+    }
+    try {
+      const n = await api.setTimeEntriesBillingStatus(Array.from(selected), status, reason);
+      alert(`Updated ${n} entries.`);
+      setSelected(new Set());
+      await load();
+    } catch (err: any) {
+      alert('Update failed: ' + err.message);
+    }
+  };
+
   const staffName = (uid: string) => staffUsers.find(u => u.id === uid)?.display_name || '—';
 
   // Group by month, then compute per-service totals
@@ -129,8 +184,8 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
       const value       = rows
         .filter(e => e.billable && e.rate_snapshot != null)
         .reduce((s, e) => s + (e.minutes / 60) * Number(e.rate_snapshot), 0);
-      const byService = SERVICES.map(svc => ({
-        service: svc,
+      const byService = ALL_SERVICES.map(svc => ({
+        service: svc as string,
         minutes: rows.filter(e => e.service === svc).reduce((s, e) => s + e.minutes, 0),
       })).filter(b => b.minutes > 0);
       return { key, rows, totalMin, billableMin, value, byService };
@@ -186,8 +241,13 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
             </div>
             <div className="form-group">
               <label>Service</label>
-              <select className="form-input" value={form.service} onChange={e => setForm({ ...form, service: e.target.value as Service })}>
-                {SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+              <select className="form-input" value={form.service} onChange={e => setService(e.target.value as Service)}>
+                <optgroup label="Billable (charged to client)">
+                  {BILLABLE_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                </optgroup>
+                <optgroup label="Internal (not charged)">
+                  {INTERNAL_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                </optgroup>
               </select>
             </div>
             <div className="form-group">
@@ -201,8 +261,16 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
             </div>
             <div className="form-group">
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 22 }}>
-                <input type="checkbox" checked={form.billable} onChange={e => setForm({ ...form, billable: e.target.checked })} />
+                <input
+                  type="checkbox"
+                  checked={form.billable}
+                  disabled={!isBillableService(form.service)}
+                  onChange={e => setForm({ ...form, billable: e.target.checked })}
+                />
                 Billable
+                {!isBillableService(form.service) && (
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>(internal service)</span>
+                )}
               </label>
             </div>
             <div className="form-group full-width">
@@ -219,11 +287,34 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
         </div>
       )}
 
+      {/* Status filter + bulk action bar */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: 13, color: '#475569' }}>Filter:</label>
+          <select className="form-input" style={{ width: 160 }} value={fBilling} onChange={e => setFBilling(e.target.value)}>
+            <option value="">All entries</option>
+            <option value="unbilled">Unbilled</option>
+            <option value="written_off">Written off</option>
+            <option value="deferred">Deferred</option>
+            <option value="invoiced">Invoiced</option>
+          </select>
+        </div>
+        {selected.size > 0 && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>
+            <span style={{ fontSize: 13, color: '#475569' }}>{selected.size} selected:</span>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleBulkStatus('written_off')}>Write off</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleBulkStatus('deferred')}>Defer</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => handleBulkStatus('unbilled')}>Mark unbilled</button>
+            <button className="btn btn-link btn-sm" onClick={() => setSelected(new Set())}>Clear</button>
+          </div>
+        )}
+      </div>
+
       {loading ? (
         <div className="loading-screen">Loading…</div>
       ) : entries.length === 0 ? (
         <div className="empty-state">
-          <p>No time logged for this client yet.</p>
+          <p>No time logged for this client {fBilling ? `with status "${fBilling}"` : 'yet'}.</p>
         </div>
       ) : (
         <div>
@@ -252,6 +343,7 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
                 <table className="export-table">
                   <thead>
                     <tr>
+                      <th style={{ width: 30 }}></th>
                       <th>Date</th>
                       <th>Staff</th>
                       <th>Service</th>
@@ -259,6 +351,7 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
                       <th>Description</th>
                       <th>Billable</th>
                       <th>Value</th>
+                      <th>Status</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -267,8 +360,25 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
                       const v = (e.billable && e.rate_snapshot != null)
                         ? `€${((e.minutes / 60) * Number(e.rate_snapshot)).toFixed(2)}`
                         : '—';
+                      const isLocked =
+                        e.approval_status === 'approved' &&
+                        e.approved_by !== user?.id &&
+                        user?.role !== 'owner';
+                      const isInvoiced = e.billing_status === 'invoiced' || e.invoice_id != null;
+                      // Selectable when billable, not invoiced — these are the
+                      // candidates the write-off / defer actions apply to.
+                      const isSelectable = e.billable && !isInvoiced;
                       return (
-                        <tr key={e.id}>
+                        <tr key={e.id} style={isLocked ? { background: '#f8fafc' } : undefined}>
+                          <td>
+                            {isSelectable && (
+                              <input
+                                type="checkbox"
+                                checked={selected.has(e.id)}
+                                onChange={() => toggleSelected(e.id)}
+                              />
+                            )}
+                          </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{e.entry_date}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>{staffName(e.user_id)}</td>
                           <td>{e.service}</td>
@@ -276,8 +386,26 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
                           <td>{e.description || <span style={{ color: '#94a3b8' }}>—</span>}</td>
                           <td>{e.billable ? '✓' : '—'}</td>
                           <td style={{ whiteSpace: 'nowrap' }}>{v}</td>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
+                            {e.approval_status === 'approved' && (
+                              <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 4, marginRight: 4 }}>🔒</span>
+                            )}
+                            {e.billing_status === 'written_off' && (
+                              <span style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 4 }}>Written off</span>
+                            )}
+                            {e.billing_status === 'deferred' && (
+                              <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 6px', borderRadius: 4 }}>Deferred</span>
+                            )}
+                            {e.billing_status === 'invoiced' && (
+                              <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 6px', borderRadius: 4 }}>Invoiced</span>
+                            )}
+                          </td>
                           <td>
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(e.id)}>×</button>
+                            {isLocked || isInvoiced ? (
+                              <span style={{ color: '#94a3b8', fontSize: 12 }}>Locked</span>
+                            ) : (
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDelete(e.id)}>×</button>
+                            )}
                           </td>
                         </tr>
                       );

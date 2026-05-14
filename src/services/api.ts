@@ -1253,18 +1253,22 @@ export const api = {
     user_id?: string;
     client_id?: number;
     service?: string;
-    from?: string;   // YYYY-MM-DD inclusive
-    to?: string;     // YYYY-MM-DD inclusive
+    from?: string;            // YYYY-MM-DD inclusive
+    to?: string;              // YYYY-MM-DD inclusive
+    approval_status?: 'draft' | 'approved';
+    billing_status?: 'unbilled' | 'written_off' | 'deferred' | 'invoiced';
   }) {
     let q = supabase.from('time_entries')
       .select('*, client:clients(name, client_code)')
       .order('entry_date', { ascending: false })
       .order('id',         { ascending: false });
-    if (params?.user_id)   q = q.eq('user_id',   params.user_id);
-    if (params?.client_id) q = q.eq('client_id', params.client_id);
-    if (params?.service)   q = q.eq('service',   params.service);
-    if (params?.from)      q = q.gte('entry_date', params.from);
-    if (params?.to)        q = q.lte('entry_date', params.to);
+    if (params?.user_id)         q = q.eq('user_id',         params.user_id);
+    if (params?.client_id)       q = q.eq('client_id',       params.client_id);
+    if (params?.service)         q = q.eq('service',         params.service);
+    if (params?.approval_status) q = q.eq('approval_status', params.approval_status);
+    if (params?.billing_status)  q = q.eq('billing_status',  params.billing_status);
+    if (params?.from)            q = q.gte('entry_date',     params.from);
+    if (params?.to)              q = q.lte('entry_date',     params.to);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     return (data || []).map((r: any) => ({
@@ -1272,6 +1276,29 @@ export const api = {
       client_name: r.client?.name || null,
       client_code: r.client?.client_code || null,
     }));
+  },
+
+  async approveTimeEntries(ids: number[]) {
+    if (!ids.length) return 0;
+    const { data, error } = await supabase.rpc('approve_time_entries', { p_ids: ids });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+
+  async unlockTimeEntries(ids: number[]) {
+    if (!ids.length) return 0;
+    const { data, error } = await supabase.rpc('unlock_time_entries', { p_ids: ids });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+
+  async setTimeEntriesBillingStatus(ids: number[], status: 'unbilled' | 'written_off' | 'deferred', reason?: string) {
+    if (!ids.length) return 0;
+    const { data, error } = await supabase.rpc('set_time_entries_billing_status', {
+      p_ids: ids, p_status: status, p_reason: reason || null,
+    });
+    if (error) throw new Error(error.message);
+    return data as number;
   },
 
   async createTimeEntry(data: {
