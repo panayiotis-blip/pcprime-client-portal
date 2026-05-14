@@ -173,7 +173,7 @@ export default function InvoiceEditor() {
 
   // ---------- save ----------
 
-  const handleSave = async () => {
+  const handleSave = async (options?: { silent?: boolean }) => {
     if (!invoice) return;
     setSaving(true);
     try {
@@ -224,7 +224,7 @@ export default function InvoiceEditor() {
         }
       }
       await load();
-      alert('Saved.');
+      if (!options?.silent) alert('Saved.');
     } catch (err: any) {
       alert('Save failed: ' + err.message);
     } finally {
@@ -236,7 +236,7 @@ export default function InvoiceEditor() {
     if (!invoice) return;
     if (!confirm('Issue this invoice? An invoice number will be assigned and edits will be locked except for leadership.')) return;
     try {
-      await handleSave();   // ensure latest state is persisted
+      await handleSave({ silent: true });   // ensure latest state is persisted
       const num = await api.issueClientInvoice(invoice.id);
       alert(`Issued as ${num}.`);
       await load();
@@ -331,7 +331,7 @@ export default function InvoiceEditor() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {isEditable && (
-            <button className="btn btn-secondary" onClick={handleSave} disabled={saving}>
+            <button className="btn btn-secondary" onClick={() => handleSave()} disabled={saving}>
               {saving ? 'Saving…' : 'Save draft'}
             </button>
           )}
@@ -345,11 +345,20 @@ export default function InvoiceEditor() {
               ✓ Mark paid
             </button>
           )}
-          {invoice.invoice_number && (
-            <button className="btn btn-secondary" onClick={() => window.open(`/billing/${invoice.id}/print`, '_blank')}>
-              🖨 Print
-            </button>
-          )}
+          <button
+            className="btn btn-secondary"
+            onClick={async () => {
+              // Save first so the preview shows the on-screen state, not whatever
+              // was last persisted. For non-draft invoices the save is a no-op
+              // since the editor disables the inputs anyway.
+              if (isEditable) {
+                try { await handleSave({ silent: true }); } catch { /* handleSave already alerted */ }
+              }
+              window.open(`/billing/${invoice.id}/print`, '_blank');
+            }}
+          >
+            🖨 {isDraft ? 'Preview' : 'Print'}
+          </button>
           {isDraft && (
             <button className="btn btn-danger" onClick={handleDelete}>Delete draft</button>
           )}
