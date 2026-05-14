@@ -26,30 +26,11 @@ begin;
 
 -- ---------- 1. Expand the service picklist ----------
 -- The CHECK constraints on time_entries.service and active_timers.service
--- were declared inline so Postgres named them automatically. We look the
--- names up dynamically before dropping.
-do $$
-declare
-  v_name text;
-begin
-  for v_name in
-    select conname from pg_constraint
-    where conrelid = 'public.time_entries'::regclass
-      and contype = 'c'
-      and pg_get_constraintdef(oid) ilike '%service%in%bookkeeping%'
-  loop
-    execute 'alter table public.time_entries drop constraint ' || quote_ident(v_name);
-  end loop;
-
-  for v_name in
-    select conname from pg_constraint
-    where conrelid = 'public.active_timers'::regclass
-      and contype = 'c'
-      and pg_get_constraintdef(oid) ilike '%service%in%bookkeeping%'
-  loop
-    execute 'alter table public.active_timers drop constraint ' || quote_ident(v_name);
-  end loop;
-end $$;
+-- were declared inline in migration 045, so Postgres named them with the
+-- standard <table>_<column>_check convention. Drop them by name (idempotent)
+-- before re-adding the broader list.
+alter table public.time_entries drop constraint if exists time_entries_service_check;
+alter table public.active_timers drop constraint if exists active_timers_service_check;
 
 alter table public.time_entries
   add constraint time_entries_service_check check (service in (
