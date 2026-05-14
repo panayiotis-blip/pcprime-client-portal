@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import UserPermissionsEditor from './UserPermissionsEditor';
+import StaffServiceRatesEditor from './StaffServiceRatesEditor';
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
@@ -30,6 +31,7 @@ export default function UserManagement() {
   const [editForm, setEditForm] = useState<any>({});
   const [changePasswordId, setChangePasswordId] = useState<string | null>(null);
   const [permsForUser, setPermsForUser] = useState<{ id: string; name: string } | null>(null);
+  const [ratesForUser, setRatesForUser] = useState<{ id: string; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const canEditRoles = hasPermission(currentUser, 'roles.write');
   const [myPassword, setMyPassword] = useState('');
@@ -41,6 +43,9 @@ export default function UserManagement() {
 
   const handleAdd = async () => {
     if (!form.email || !form.password || !form.display_name) { alert('Email, password and display name are required'); return; }
+    const wasStaff = form.role !== 'client';
+    const newDisplayName = form.display_name;
+    const newEmail = form.email;
     try {
       await runWith(() => api.createUser({
         email: form.email, password: form.password,
@@ -51,6 +56,17 @@ export default function UserManagement() {
       setForm({ email: '', username: '', password: '', display_name: '', role: 'client', client_ids: [] });
       setShowAdd(false);
       await load();
+      // Step 2 — auto-open the service-rates editor for newly-added staff so the
+      // user can set their charge-out rates immediately. Skip for clients.
+      if (wasStaff) {
+        // Resolve the new user's id by display_name match (createUser doesn't
+        // return the row directly — it's an edge-function call).
+        const fresh = await api.getUsers();
+        const newRow = (fresh as any[]).find(
+          u => u.display_name === newDisplayName || u.username === newEmail.split('@')[0],
+        );
+        if (newRow) setRatesForUser({ id: newRow.id, name: newRow.display_name || newRow.username });
+      }
     } catch (err: any) {
       if (err.message !== MFA_CANCELLED) alert(err.message);
     }
@@ -192,6 +208,14 @@ export default function UserManagement() {
         />
       )}
 
+      {ratesForUser && (
+        <StaffServiceRatesEditor
+          userId={ratesForUser.id}
+          userName={ratesForUser.name}
+          onClose={() => { setRatesForUser(null); load(); }}
+        />
+      )}
+
       {/* User list */}
       <div className="export-table-wrapper">
         <table className="export-table">
@@ -276,6 +300,9 @@ export default function UserManagement() {
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(u)}>Edit</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => setChangePasswordId(u.id)}>🔑</button>
+                        {u.role !== 'client' && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => setRatesForUser({ id: u.id, name: u.display_name || u.username })}>Rates</button>
+                        )}
                         {canEditRoles && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setPermsForUser({ id: u.id, name: u.display_name || u.username })}>Perms</button>
                         )}

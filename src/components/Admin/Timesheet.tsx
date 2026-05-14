@@ -328,6 +328,15 @@ export default function Timesheet() {
               ⏱ {timerOpen ? 'Cancel' : 'Start timer'}
             </button>
           )}
+          <button className="btn btn-secondary" onClick={() => {
+            const q = new URLSearchParams();
+            if (fStaff)   q.set('staff',   fStaff);
+            if (fClient)  q.set('client',  fClient);
+            if (fService) q.set('service', fService);
+            if (fFrom)    q.set('from',    fFrom);
+            if (fTo)      q.set('to',      fTo);
+            window.open('/timesheet/print?' + q.toString(), '_blank');
+          }}>🖨 Print</button>
           <button className="btn btn-primary" onClick={() => setLogOpen(o => !o)}>
             + Log time
           </button>

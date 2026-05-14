@@ -147,9 +147,14 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
     <div className="client-tab-content">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <h3 style={{ margin: 0 }}>Time logged on {clientName || 'this client'}</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => setLogOpen(o => !o)}>
-          {logOpen ? 'Cancel' : '+ Log time'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => {
+            window.open(`/timesheet/print?client=${clientId}`, '_blank');
+          }}>🖨 Print</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setLogOpen(o => !o)}>
+            {logOpen ? 'Cancel' : '+ Log time'}
+          </button>
+        </div>
       </div>
 
       {/* Grand totals */}

@@ -24,6 +24,7 @@ const adminNav: NavItem[] = [
   { path: '/documents', label: 'Documents', icon: '⊟' },
   { path: '/export', label: 'Export', icon: '↓' },
   { path: '/users', label: 'Users', icon: '⊙', requires: (u) => hasPermission(u, 'users.read') },
+  { path: '/settings/company', label: 'Company Settings', icon: '⚙', requires: (u) => u?.role === 'owner' || u?.role === 'supervisor' },
   { path: '/audit', label: 'Audit Log', icon: '⌚', requires: (u) => hasPermission(u, 'audit.read') },
 ];
 

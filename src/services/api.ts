@@ -1371,6 +1371,66 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Company Settings ---------
+  async getCompanySettings() {
+    const { data, error } = await supabase.from('company_settings')
+      .select('*').eq('id', 1).maybeSingle();
+    if (error) throw new Error(error.message);
+    // Migration 046 seeds the row, but be defensive in case of older DBs
+    return data || {
+      id: 1, name: null, legal_name: null, registration_number: null,
+      tax_id: null, vat_number: null,
+      address_line1: null, address_line2: null, city: null, postal_code: null, country: null,
+      phone: null, email: null, website: null,
+      iban: null, bank_name: null,
+      logo_url: null, tagline: null, report_footer: null,
+      default_service_rates: {},
+    };
+  },
+
+  async updateCompanySettings(patch: Record<string, any>) {
+    const { error } = await supabase.from('company_settings')
+      .update(patch).eq('id', 1);
+    if (error) throw new Error(error.message);
+  },
+
+  // Upload a logo file to the public 'company-assets' bucket and return its
+  // public URL. Caller is responsible for persisting the URL via
+  // updateCompanySettings({ logo_url }).
+  async uploadCompanyLogo(file: File): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'svg', 'webp'].includes(ext) ? ext : 'png';
+    // Bust browser/CDN caches by using a fresh timestamped key each upload.
+    const key = `logo-${Date.now()}.${safeExt}`;
+    const { error } = await supabase.storage
+      .from('company-assets')
+      .upload(key, file, { upsert: true, contentType: file.type || 'image/png' });
+    if (error) throw new Error(error.message);
+    const { data: pub } = supabase.storage.from('company-assets').getPublicUrl(key);
+    return pub.publicUrl;
+  },
+
+  // --------- Per-staff service rates ---------
+  async getStaffServiceRates(userId: string) {
+    const { data, error } = await supabase.from('staff_service_rates')
+      .select('*').eq('user_id', userId);
+    if (error) throw new Error(error.message);
+    return (data || []) as { user_id: string; service: string; rate: number }[];
+  },
+
+  // Upsert one service's rate for a user. Pass rate = null to clear (delete).
+  async setStaffServiceRate(userId: string, service: string, rate: number | null) {
+    if (rate === null) {
+      const { error } = await supabase.from('staff_service_rates')
+        .delete().eq('user_id', userId).eq('service', service);
+      if (error) throw new Error(error.message);
+      return;
+    }
+    const { error } = await supabase.from('staff_service_rates')
+      .upsert({ user_id: userId, service, rate }, { onConflict: 'user_id,service' });
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Task Templates ---------
   async getTaskTemplates() {
     const { data, error } = await supabase.from('task_templates').select('*').order('name');

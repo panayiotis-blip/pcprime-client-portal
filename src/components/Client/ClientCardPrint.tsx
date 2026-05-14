@@ -61,6 +61,7 @@ export default function ClientCardPrint() {
   const clientId = parseInt(id || '0');
   const [client, setClient] = useState<any>(null);
   const [compliance, setCompliance] = useState<ComplianceTask[]>([]);
+  const [company, setCompany] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,13 +69,15 @@ export default function ClientCardPrint() {
     let cancelled = false;
     (async () => {
       try {
-        const [c, tasks] = await Promise.all([
+        const [c, tasks, co] = await Promise.all([
           api.getClient(clientId),
           api.getComplianceTasks({ client_id: clientId }).catch(() => []),
+          api.getCompanySettings().catch(() => null),
         ]);
         if (cancelled) return;
         setClient(c);
         setCompliance(tasks as ComplianceTask[]);
+        setCompany(co);
         // Audit-log the print action (intentional, async, errors swallowed)
         api.logAction('clients.print_card', 'clients', clientId, { name: c?.name });
       } catch (err: any) {
@@ -141,20 +144,38 @@ export default function ClientCardPrint() {
 
       <article className="print-card">
         {/* ---- Letterhead ---- */}
-        <header className="pc-header">
-          <div className="pc-header-brand">
-            <img src="/logo.png" alt="PC Prime & Calculate Consultants Ltd" className="pc-logo" />
-          </div>
-          <div className="pc-header-details">
-            <div className="pc-firm-name">PC Prime &amp; Calculate Consultants Ltd</div>
-            <div className="pc-tagline">Strategic Calculations for Business Growth</div>
-            <div className="pc-firm-contact">
-              <div>Kiti, Larnaca, Cyprus</div>
-              <div>panayiotis@primeandcalculate.com · +357 96 332 274</div>
-              <div>primeandcalculate.com</div>
-            </div>
-          </div>
-        </header>
+        {(() => {
+          // Fall back to the legacy hardcoded values so existing prints look
+          // the same until Company Settings has been filled in.
+          const co = company || {};
+          const firmName = co.name || co.legal_name || 'PC Prime & Calculate Consultants Ltd';
+          const tagline  = co.tagline || 'Strategic Calculations for Business Growth';
+          const logoSrc  = co.logo_url || '/logo.png';
+          const addressLine = [
+            co.address_line1, co.address_line2,
+            [co.postal_code, co.city].filter(Boolean).join(' '),
+            co.country,
+          ].filter(Boolean).join(', ') || 'Kiti, Larnaca, Cyprus';
+          const contactLine = [co.email || 'panayiotis@primeandcalculate.com', co.phone || '+357 96 332 274']
+            .filter(Boolean).join(' · ');
+          const website = co.website || 'primeandcalculate.com';
+          return (
+            <header className="pc-header">
+              <div className="pc-header-brand">
+                <img src={logoSrc} alt={firmName} className="pc-logo" />
+              </div>
+              <div className="pc-header-details">
+                <div className="pc-firm-name">{firmName}</div>
+                {tagline && <div className="pc-tagline">{tagline}</div>}
+                <div className="pc-firm-contact">
+                  <div>{addressLine}</div>
+                  <div>{contactLine}</div>
+                  {website && <div>{website}</div>}
+                </div>
+              </div>
+            </header>
+          );
+        })()}
         <div className="pc-header-rule" />
 
         {/* ---- Title bar ---- */}
@@ -270,13 +291,22 @@ export default function ClientCardPrint() {
         {/* ---- Footer ---- */}
         <footer className="pc-footer">
           <div className="pc-footer-rule" />
-          <div className="pc-footer-content">
-            <span className="pc-confidential">
-              This document contains confidential information. For internal use of PC Prime &amp; Calculate Consultants Ltd only.
-            </span>
-            <span className="pc-page-number">Page 1 of 1</span>
-          </div>
-          <div className="pc-footer-firm">PC Prime &amp; Calculate Consultants Ltd · primeandcalculate.com</div>
+          {(() => {
+            const co = company || {};
+            const firmName = co.name || co.legal_name || 'PC Prime & Calculate Consultants Ltd';
+            const website  = co.website || 'primeandcalculate.com';
+            const footerText = co.report_footer
+              || `This document contains confidential information. For internal use of ${firmName} only.`;
+            return (
+              <>
+                <div className="pc-footer-content">
+                  <span className="pc-confidential">{footerText}</span>
+                  <span className="pc-page-number">Page 1 of 1</span>
+                </div>
+                <div className="pc-footer-firm">{firmName}{website ? ` · ${website}` : ''}</div>
+              </>
+            );
+          })()}
         </footer>
       </article>
     </div>

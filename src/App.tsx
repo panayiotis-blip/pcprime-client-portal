@@ -29,6 +29,8 @@ import TaskTemplates from './components/Admin/TaskTemplates';
 import Reports from './components/Admin/Reports';
 import Calendar from './components/Admin/Calendar';
 import Timesheet from './components/Admin/Timesheet';
+import TimesheetPrint from './components/Admin/TimesheetPrint';
+import CompanySettings from './components/Admin/CompanySettings';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -78,6 +80,8 @@ function AuthedApp() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/timesheet" element={<Timesheet />} />
+            <Route path="/timesheet/print" element={<TimesheetPrint />} />
+            <Route path="/settings/company" element={<CompanySettings />} />
             <Route path="/phone-log" element={<PhoneLog />} />
             <Route path="/security" element={<Security />} />
             <Route path="/merge" element={<MergeClients />} />
