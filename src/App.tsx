@@ -31,6 +31,9 @@ import Calendar from './components/Admin/Calendar';
 import Timesheet from './components/Admin/Timesheet';
 import TimesheetPrint from './components/Admin/TimesheetPrint';
 import CompanySettings from './components/Admin/CompanySettings';
+import InvoicesList from './components/Billing/InvoicesList';
+import BillingInvoiceEditor from './components/Billing/InvoiceEditor';
+import InvoicePrint from './components/Billing/InvoicePrint';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -81,6 +84,9 @@ function AuthedApp() {
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/timesheet" element={<Timesheet />} />
             <Route path="/timesheet/print" element={<TimesheetPrint />} />
+            <Route path="/billing" element={<InvoicesList />} />
+            <Route path="/billing/:id" element={<BillingInvoiceEditor />} />
+            <Route path="/billing/:id/print" element={<InvoicePrint />} />
             <Route path="/settings/company" element={<CompanySettings />} />
             <Route path="/phone-log" element={<PhoneLog />} />
             <Route path="/security" element={<Security />} />

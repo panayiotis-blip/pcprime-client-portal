@@ -17,6 +17,7 @@ const adminNav: NavItem[] = [
   { path: '/credentials', label: 'Credentials', icon: '🔑', requires: (u) => hasPermission(u, 'credentials.read') },
   { path: '/calendar', label: 'Calendar', icon: '◷' },
   { path: '/timesheet', label: 'Timesheet', icon: '⏱' },
+  { path: '/billing', label: 'Billing', icon: '€' },
   { path: '/phone-log', label: 'Phone Log', icon: '☎' },
   { path: '/tasks', label: 'Tasks', icon: '☑' },
   { path: '/task-templates', label: 'Templates', icon: '⊕' },

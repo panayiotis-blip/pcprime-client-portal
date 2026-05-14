@@ -1301,6 +1301,131 @@ export const api = {
     return data as number;
   },
 
+  // --------- Client invoicing (sales invoices) ---------
+  async getClientInvoices(params?: {
+    client_id?: number;
+    status?: 'draft' | 'issued' | 'paid' | 'cancelled';
+    from?: string;
+    to?: string;
+  }) {
+    let q = supabase.from('client_invoices')
+      .select('*, client:clients(name, client_code)')
+      .order('issue_date', { ascending: false, nullsFirst: true })
+      .order('id',         { ascending: false });
+    if (params?.client_id) q = q.eq('client_id', params.client_id);
+    if (params?.status)    q = q.eq('status',    params.status);
+    if (params?.from)      q = q.gte('issue_date', params.from);
+    if (params?.to)        q = q.lte('issue_date', params.to);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({
+      ...r,
+      client_name: r.client?.name || null,
+      client_code: r.client?.client_code || null,
+    }));
+  },
+
+  async getClientInvoice(id: number) {
+    const [{ data: inv, error: e1 }, { data: lines, error: e2 }] = await Promise.all([
+      supabase.from('client_invoices').select('*, client:clients(name, client_code, address, city, postal_code, country, vat_number)').eq('id', id).maybeSingle(),
+      supabase.from('client_invoice_lines').select('*').eq('invoice_id', id).order('line_no', { ascending: true }).order('id', { ascending: true }),
+    ]);
+    if (e1) throw new Error(e1.message);
+    if (e2) throw new Error(e2.message);
+    if (!inv) throw new Error('Invoice not found');
+    return { ...inv, lines: lines || [] };
+  },
+
+  async createClientInvoice(data: {
+    client_id: number;
+    issue_date?: string | null;
+    due_date?: string | null;
+    vat_rate?: number;
+    discount_type?: 'percent' | 'amount' | null;
+    discount_value?: number | null;
+    notes?: string | null;
+    billing_address?: string | null;
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('client_invoices').insert({
+      client_id:       data.client_id,
+      issue_date:      data.issue_date || null,
+      due_date:        data.due_date || null,
+      vat_rate:        data.vat_rate ?? 19.00,
+      discount_type:   data.discount_type || null,
+      discount_value:  data.discount_value ?? null,
+      notes:           data.notes || null,
+      billing_address: data.billing_address || null,
+      created_by:      session?.user?.id || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id as number };
+  },
+
+  async updateClientInvoice(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('client_invoices').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteClientInvoice(id: number) {
+    const { error } = await supabase.from('client_invoices').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async issueClientInvoice(id: number) {
+    const { data, error } = await supabase.rpc('issue_client_invoice', { p_id: id });
+    if (error) throw new Error(error.message);
+    return data as string;   // invoice_number
+  },
+
+  async cancelClientInvoice(id: number) {
+    const { error } = await supabase.rpc('cancel_client_invoice', { p_id: id });
+    if (error) throw new Error(error.message);
+  },
+
+  async markClientInvoicePaid(id: number, paidDate?: string) {
+    const { error } = await supabase.rpc('mark_client_invoice_paid', {
+      p_id: id, p_paid_date: paidDate || null,
+    });
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Invoice lines ---------
+  async addInvoiceLine(invoiceId: number, line: {
+    line_no?: number;
+    line_type: 'time' | 'fixed' | 'expense';
+    description: string;
+    quantity: number;
+    unit_price: number;
+    amount: number;
+    vatable: boolean;
+    time_entry_id?: number | null;
+  }) {
+    const { data, error } = await supabase.from('client_invoice_lines').insert({
+      invoice_id:     invoiceId,
+      line_no:        line.line_no ?? 1,
+      line_type:      line.line_type,
+      description:    line.description,
+      quantity:       line.quantity,
+      unit_price:     line.unit_price,
+      amount:         line.amount,
+      vatable:        line.vatable,
+      time_entry_id:  line.time_entry_id || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async updateInvoiceLine(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('client_invoice_lines').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteInvoiceLine(id: number) {
+    const { error } = await supabase.from('client_invoice_lines').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   async createTimeEntry(data: {
     client_id?: number | null;
     entry_date: string;

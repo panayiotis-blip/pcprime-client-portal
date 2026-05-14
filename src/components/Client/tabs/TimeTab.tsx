@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
@@ -50,6 +51,7 @@ const monthLabel = (key: string) => {
 
 export default function TimeTab({ clientId, clientName }: { clientId: number; clientName?: string }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [entries, setEntries]       = useState<TimeEntry[]>([]);
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -144,6 +146,44 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
       await load();
     } catch (err: any) {
       alert('Delete failed: ' + err.message);
+    }
+  };
+
+  // Create a draft invoice for this client and pre-populate it with the
+  // selected time entries as line items. Only approved+unbilled+billable
+  // entries are eligible (the selection logic already enforces that).
+  const handleCreateInvoiceFromSelected = async () => {
+    if (selected.size === 0) { alert('No entries selected'); return; }
+    const selectedRows = entries.filter(e => selected.has(e.id));
+    const ineligible = selectedRows.filter(e =>
+      e.approval_status !== 'approved' || e.billing_status !== 'unbilled' || !e.billable
+    );
+    if (ineligible.length > 0) {
+      alert(`${ineligible.length} selected entr${ineligible.length === 1 ? 'y' : 'ies'} can't be invoiced (must be approved + unbilled + billable).`);
+      return;
+    }
+    if (!confirm(`Create a draft invoice for ${selectedRows.length} time entr${selectedRows.length === 1 ? 'y' : 'ies'}?`)) return;
+    try {
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const { id: invoiceId } = await api.createClientInvoice({ client_id: clientId });
+      let lineNo = 1;
+      for (const e of selectedRows) {
+        const hours = Number(e.minutes) / 60;
+        const rate  = Number(e.rate_snapshot || 0);
+        await api.addInvoiceLine(invoiceId, {
+          line_no:       lineNo++,
+          line_type:     'time',
+          description:   `${e.entry_date} · ${e.service}${e.description ? ' · ' + e.description : ''}`,
+          quantity:      round2(hours),
+          unit_price:    round2(rate),
+          amount:        round2(hours * rate),
+          vatable:       true,
+          time_entry_id: e.id,
+        });
+      }
+      navigate(`/billing/${invoiceId}`);
+    } catch (err: any) {
+      alert('Create invoice failed: ' + err.message);
     }
   };
 
@@ -302,6 +342,7 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
         {selected.size > 0 && (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', borderLeft: '1px solid var(--border)', paddingLeft: 12 }}>
             <span style={{ fontSize: 13, color: '#475569' }}>{selected.size} selected:</span>
+            <button className="btn btn-primary btn-sm" onClick={handleCreateInvoiceFromSelected}>📄 Create invoice</button>
             <button className="btn btn-secondary btn-sm" onClick={() => handleBulkStatus('written_off')}>Write off</button>
             <button className="btn btn-secondary btn-sm" onClick={() => handleBulkStatus('deferred')}>Defer</button>
             <button className="btn btn-secondary btn-sm" onClick={() => handleBulkStatus('unbilled')}>Mark unbilled</button>
