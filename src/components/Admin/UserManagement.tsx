@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import UserPermissionsEditor from './UserPermissionsEditor';
 import StaffServiceRatesEditor from './StaffServiceRatesEditor';
+import SearchableSelect from '../common/SearchableSelect';
 
 export default function UserManagement() {
   const { user: currentUser } = useAuth();
@@ -26,7 +27,16 @@ export default function UserManagement() {
   const { runWith } = useMFAStepUp();
   const [users, setUsers] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState<any>({ email: '', username: '', password: '', display_name: '', role: 'client', client_ids: [] as number[] });
+  // copy_from_user_id: when set, the new user inherits the source user's role,
+  // linked clients, hourly rate, per-service rates, and permission overrides.
+  // copy_perms / copy_rates / copy_clients: opt-out toggles in case the user
+  // wants to copy some but not all carry-over data.
+  const [form, setForm] = useState<any>({
+    email: '', username: '', password: '', display_name: '',
+    role: 'client', client_ids: [] as number[],
+    hourly_rate: '',
+    copy_from_user_id: '',
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [changePasswordId, setChangePasswordId] = useState<string | null>(null);
@@ -41,11 +51,27 @@ export default function UserManagement() {
   const load = async () => { try { setUsers(await api.getUsers()); } catch {} };
   useEffect(() => { load(); }, []);
 
+  // Pre-fill the Add User form from an existing user. Only carries fields that
+  // are safe to copy — not email/username/password/display_name.
+  const applyCopyFromUser = (sourceId: string) => {
+    setForm((p: any) => ({ ...p, copy_from_user_id: sourceId }));
+    if (!sourceId) return;
+    const src = users.find(u => u.id === sourceId);
+    if (!src) return;
+    setForm((p: any) => ({
+      ...p,
+      role: src.role || p.role,
+      client_ids: Array.isArray(src.client_ids) ? [...src.client_ids] : [],
+      hourly_rate: src.hourly_rate != null ? String(src.hourly_rate) : '',
+    }));
+  };
+
   const handleAdd = async () => {
     if (!form.email || !form.password || !form.display_name) { alert('Email, password and display name are required'); return; }
     const wasStaff = form.role !== 'client';
     const newDisplayName = form.display_name;
     const newEmail = form.email;
+    const sourceId = form.copy_from_user_id || '';
     try {
       await runWith(() => api.createUser({
         email: form.email, password: form.password,
@@ -53,19 +79,57 @@ export default function UserManagement() {
         display_name: form.display_name,
         role: form.role, client_ids: form.role === 'client' ? form.client_ids : [],
       }));
-      setForm({ email: '', username: '', password: '', display_name: '', role: 'client', client_ids: [] });
+      // Reset form
+      setForm({
+        email: '', username: '', password: '', display_name: '',
+        role: 'client', client_ids: [],
+        hourly_rate: '',
+        copy_from_user_id: '',
+      });
       setShowAdd(false);
-      await load();
-      // Step 2 — auto-open the service-rates editor for newly-added staff so the
-      // user can set their charge-out rates immediately. Skip for clients.
-      if (wasStaff) {
-        // Resolve the new user's id by display_name match (createUser doesn't
-        // return the row directly — it's an edge-function call).
-        const fresh = await api.getUsers();
-        const newRow = (fresh as any[]).find(
-          u => u.display_name === newDisplayName || u.username === newEmail.split('@')[0],
-        );
-        if (newRow) setRatesForUser({ id: newRow.id, name: newRow.display_name || newRow.username });
+
+      // Resolve the new user's id by display_name / username match — the create
+      // call goes through an edge function and doesn't return the row directly.
+      const fresh = await api.getUsers();
+      setUsers(fresh);
+      const newRow = (fresh as any[]).find(
+        u => u.display_name === newDisplayName || u.username === newEmail.split('@')[0],
+      );
+
+      // Persist the hourly_rate the user entered (also carries over if copied)
+      if (newRow && wasStaff && form.hourly_rate !== '' && !isNaN(Number(form.hourly_rate))) {
+        try { await api.updateUserHourlyRate(newRow.id, Number(form.hourly_rate)); } catch {}
+      }
+
+      // Copy permission overrides + per-service rates from the source user
+      if (newRow && sourceId) {
+        try {
+          const perms = await api.getUserPermissions(sourceId);
+          for (const p of perms) {
+            if (p.override !== null && p.override !== undefined) {
+              await api.setUserPermission(newRow.id, p.permission, p.override);
+            }
+          }
+        } catch (err: any) {
+          alert('User created, but copying permissions failed: ' + err.message);
+        }
+        if (wasStaff) {
+          try {
+            const rates = await api.getStaffServiceRates(sourceId);
+            for (const r of rates) {
+              await api.setStaffServiceRate(newRow.id, r.service, r.rate);
+            }
+          } catch (err: any) {
+            alert('User created, but copying service rates failed: ' + err.message);
+          }
+        }
+        await load();
+      }
+
+      // Step 2 — auto-open the service-rates editor for newly-added staff so
+      // the user can review/adjust charge-out rates immediately. Skip clients.
+      if (newRow && wasStaff) {
+        setRatesForUser({ id: newRow.id, name: newRow.display_name || newRow.username });
       }
     } catch (err: any) {
       if (err.message !== MFA_CANCELLED) alert(err.message);
@@ -134,8 +198,6 @@ export default function UserManagement() {
   const clientOptions = clients.map((c: any) => ({ value: c.id, label: c.name, sublabel: c.client_code || c.tax_number || '' }));
   const clientNamesFor = (ids: number[] | undefined) => (ids || []).map(id => clients.find((c: any) => c.id === id)?.name).filter(Boolean).join(', ') || '-';
 
-  const toggleClientId = (arr: number[], id: number) => arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id];
-
   return (
     <div className="user-management">
       <h2>User Management</h2>
@@ -166,6 +228,27 @@ export default function UserManagement() {
 
       {showAdd && (
         <div className="card" style={{ marginBottom: 16 }}>
+          {/* Copy-from-user dropdown (optional) */}
+          <div className="form-group full-width" style={{ marginBottom: 12 }}>
+            <label>Copy settings from existing user (optional)</label>
+            <SearchableSelect
+              value={form.copy_from_user_id || ''}
+              options={users.map((u: any) => ({
+                value: u.id,
+                label: u.display_name || u.username,
+                sublabel: `${roleLabel(u.role)}${u.role === 'client' ? '' : (u.hourly_rate != null ? ` · €${Number(u.hourly_rate).toFixed(2)}/h` : '')}`,
+              }))}
+              onChange={(v) => applyCopyFromUser(String(v))}
+              placeholder="-- Don't copy --"
+              allowClear
+            />
+            {form.copy_from_user_id && (
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                Role, linked clients, hourly rate, per-service rates and permission overrides will be copied. You still need to enter a new email, password and display name.
+              </p>
+            )}
+          </div>
+
           <div className="form-grid">
             <div className="form-group"><label>Display Name *</label><input type="text" value={form.display_name} onChange={(e) => setForm((p: any) => ({ ...p, display_name: e.target.value }))} className="form-input" /></div>
             <div className="form-group"><label>Email *</label><input type="email" value={form.email} onChange={(e) => setForm((p: any) => ({ ...p, email: e.target.value }))} className="form-input" placeholder="user@example.com" /></div>
@@ -178,21 +261,54 @@ export default function UserManagement() {
                 <option value="client">Client</option>
               </select>
             </div>
+            {form.role !== 'client' && (
+              <div className="form-group">
+                <label>Hourly Rate (€/h)</label>
+                <input
+                  type="number" step="0.01" min="0"
+                  className="form-input"
+                  value={form.hourly_rate || ''}
+                  onChange={(e) => setForm((p: any) => ({ ...p, hourly_rate: e.target.value }))}
+                  placeholder="Default fallback (use Rates for per-service)"
+                />
+              </div>
+            )}
             {form.role === 'client' && (
               <div className="form-group full-width">
-                <label>Link to Client(s)</label>
-                <div className="client-chips">
-                  {clients.map((c: any) => (
-                    <span
-                      key={c.id}
-                      className={`client-chip ${form.client_ids.includes(c.id) ? 'active' : ''}`}
-                      onClick={() => setForm((p: any) => ({ ...p, client_ids: toggleClientId(p.client_ids, c.id) }))}
-                    >
-                      {c.name}
-                    </span>
-                  ))}
+                <label>Linked clients</label>
+                {/* Selected chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 28 }}>
+                  {form.client_ids.length === 0 ? (
+                    <span style={{ color: '#94a3b8', fontSize: 13, lineHeight: '28px' }}>No clients linked yet.</span>
+                  ) : (
+                    form.client_ids.map((id: number) => {
+                      const c = clients.find((x: any) => x.id === id);
+                      if (!c) return null;
+                      return (
+                        <span key={id} className="client-chip active" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {c.client_code && <span style={{ color: '#cbd5e1' }}>{c.client_code}</span>} {c.name}
+                          <button
+                            type="button"
+                            onClick={() => setForm((p: any) => ({ ...p, client_ids: p.client_ids.filter((x: number) => x !== id) }))}
+                            style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 14, lineHeight: 1 }}
+                            aria-label="Remove"
+                          >×</button>
+                        </span>
+                      );
+                    })
+                  )}
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Click to toggle. You can assign multiple clients to one user.</p>
+                {/* Search dropdown — only shows clients not already linked */}
+                <SearchableSelect
+                  value=""
+                  options={clientOptions.filter(o => !form.client_ids.includes(Number(o.value)))}
+                  onChange={(v) => {
+                    const n = Number(v);
+                    if (!n) return;
+                    setForm((p: any) => p.client_ids.includes(n) ? p : ({ ...p, client_ids: [...p.client_ids, n] }));
+                  }}
+                  placeholder="Search and add a client..."
+                />
               </div>
             )}
           </div>
@@ -238,17 +354,37 @@ export default function UserManagement() {
                   <td><span className={`status-badge ${u.role === 'client' ? 'status-reviewed' : 'status-exported'}`}>{roleLabel(u.role)}</span></td>
                   <td>
                     {isEditing && u.role === 'client' ? (
-                      <div className="client-chips" style={{ maxWidth: 400 }}>
-                        {clients.map((c: any) => (
-                          <span
-                            key={c.id}
-                            className={`client-chip ${editForm.client_ids?.includes(c.id) ? 'active' : ''}`}
-                            onClick={() => setEditForm((f: any) => ({ ...f, client_ids: toggleClientId(f.client_ids || [], c.id) }))}
-                            style={{ fontSize: 12, padding: '4px 10px' }}
-                          >
-                            {c.name}
-                          </span>
-                        ))}
+                      <div style={{ maxWidth: 400 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6, minHeight: 24 }}>
+                          {(editForm.client_ids || []).length === 0 ? (
+                            <span style={{ color: '#94a3b8', fontSize: 12 }}>None linked</span>
+                          ) : (
+                            (editForm.client_ids || []).map((id: number) => {
+                              const c = clients.find((x: any) => x.id === id);
+                              if (!c) return null;
+                              return (
+                                <span key={id} className="client-chip active" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, padding: '2px 8px' }}>
+                                  {c.name}
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditForm((f: any) => ({ ...f, client_ids: (f.client_ids || []).filter((x: number) => x !== id) }))}
+                                    style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                                  >×</button>
+                                </span>
+                              );
+                            })
+                          )}
+                        </div>
+                        <SearchableSelect
+                          value=""
+                          options={clientOptions.filter(o => !(editForm.client_ids || []).includes(Number(o.value)))}
+                          onChange={(v) => {
+                            const n = Number(v);
+                            if (!n) return;
+                            setEditForm((f: any) => (f.client_ids || []).includes(n) ? f : ({ ...f, client_ids: [...(f.client_ids || []), n] }));
+                          }}
+                          placeholder="Search and add a client..."
+                        />
                       </div>
                     ) : (
                       <span style={{ fontSize: 13 }}>{clientNamesFor(u.client_ids)}</span>
