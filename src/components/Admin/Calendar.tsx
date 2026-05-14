@@ -65,6 +65,20 @@ const fromLocalInput = (local: string) => {
   return new Date(local).toISOString();
 };
 
+// Snap a Date to the nearest N-minute boundary (default 15)
+const roundToMinutes = (d: Date, mins = 15) => {
+  const ms = mins * 60 * 1000;
+  return new Date(Math.round(d.getTime() / ms) * ms);
+};
+
+// Given a "YYYY-MM-DDTHH:mm" local string, add minutes and return the same format
+const addMinutesLocal = (local: string, mins: number) => {
+  if (!local) return '';
+  const d = new Date(local);
+  d.setMinutes(d.getMinutes() + mins);
+  return toLocalInput(d.toISOString());
+};
+
 export default function Calendar() {
   const { user } = useAuth();
   const { clients } = useApp();
@@ -80,6 +94,9 @@ export default function Calendar() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormState>(() => blankForm(user?.id || ''));
   const [saving, setSaving] = useState(false);
+  // Track whether the user has manually edited the end time so changing start
+  // doesn't overwrite a deliberately-chosen duration.
+  const [endManuallyEdited, setEndManuallyEdited] = useState(false);
 
   // Build owner_id → color map
   const colorByOwner = useMemo(() => {
@@ -133,18 +150,21 @@ export default function Calendar() {
 
   const openNew = (start?: Date, end?: Date, allDay = false) => {
     const f = blankForm(user?.id || '');
-    if (start) f.starts_at = toLocalInput(start.toISOString());
-    if (end)   f.ends_at   = toLocalInput(end.toISOString());
-    if (!start) {
-      // No date passed — default to "now" rounded to the next hour, ends an hour later
-      const now = new Date();
-      now.setMinutes(0, 0, 0);
-      now.setHours(now.getHours() + 1);
+    if (start) {
+      const snapStart = roundToMinutes(start);
+      f.starts_at = toLocalInput(snapStart.toISOString());
+      // Default end to start + 1 hour (overridable by user)
+      const endDefault = end ? roundToMinutes(end) : new Date(snapStart.getTime() + 60 * 60 * 1000);
+      f.ends_at = toLocalInput(endDefault.toISOString());
+    } else {
+      // No date passed — default to "now" rounded to the next 15 min, ends an hour later
+      const now = roundToMinutes(new Date(Date.now() + 15 * 60 * 1000));
       f.starts_at = toLocalInput(now.toISOString());
-      const later = new Date(now); later.setHours(later.getHours() + 1);
+      const later = new Date(now.getTime() + 60 * 60 * 1000);
       f.ends_at = toLocalInput(later.toISOString());
     }
     f.all_day = allDay;
+    setEndManuallyEdited(false);
     setForm(f);
     setShowModal(true);
   };
@@ -162,7 +182,27 @@ export default function Calendar() {
       status:      a.status,
       client_id:   a.client_id ? String(a.client_id) : '',
     });
+    // Existing appointment — treat end as deliberately set so changing start
+    // doesn't clobber it.
+    setEndManuallyEdited(true);
     setShowModal(true);
+  };
+
+  // When start changes, auto-fill end as start + 1 hour, unless the user
+  // already changed the end themselves.
+  const handleStartChange = (newStart: string) => {
+    setForm(prev => {
+      const next = { ...prev, starts_at: newStart };
+      if (!endManuallyEdited && newStart) {
+        next.ends_at = addMinutesLocal(newStart, 60);
+      }
+      return next;
+    });
+  };
+
+  const handleEndChange = (newEnd: string) => {
+    setEndManuallyEdited(true);
+    setForm(prev => ({ ...prev, ends_at: newEnd }));
   };
 
   const handleSave = async () => {
@@ -272,6 +312,9 @@ export default function Calendar() {
               height="auto"
               firstDay={1} // Monday
               nowIndicator
+              slotDuration="00:15:00"
+              snapDuration="00:15:00"
+              defaultTimedEventDuration="01:00:00"
               editable
               selectable
               selectMirror
@@ -306,11 +349,23 @@ export default function Calendar() {
             <div className="form-grid">
               <div className="form-group">
                 <label>Starts *</label>
-                <input type="datetime-local" className="form-input" value={form.starts_at} onChange={e => setForm({ ...form, starts_at: e.target.value })} />
+                <input
+                  type="datetime-local"
+                  className="form-input"
+                  step={900}
+                  value={form.starts_at}
+                  onChange={e => handleStartChange(e.target.value)}
+                />
               </div>
               <div className="form-group">
                 <label>Ends *</label>
-                <input type="datetime-local" className="form-input" value={form.ends_at} onChange={e => setForm({ ...form, ends_at: e.target.value })} />
+                <input
+                  type="datetime-local"
+                  className="form-input"
+                  step={900}
+                  value={form.ends_at}
+                  onChange={e => handleEndChange(e.target.value)}
+                />
               </div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 14 }}>
