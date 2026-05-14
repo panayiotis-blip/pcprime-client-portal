@@ -952,7 +952,6 @@ export default function ClientManager() {
                     </th>
                   );
                 })}
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -969,10 +968,6 @@ export default function ClientManager() {
                   {visibleColumnDefs.map(col => (
                     <td key={col.id}>{renderCell(col.id, c)}</td>
                   ))}
-                  <td>
-                    <Link to={`/clients/${c.id}`} className="btn btn-secondary btn-sm">Open</Link>
-                    <button className="btn btn-danger btn-sm" style={{ marginLeft: 4 }} onClick={() => handleDelete(c.id)}>X</button>
-                  </td>
                 </tr>
               ))}
             </tbody>
