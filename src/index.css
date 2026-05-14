@@ -1228,6 +1228,15 @@ body {
 .view-btn.active { background: var(--primary); color: white; }
 .view-btn svg { display: block; }
 
+/* Compact stat cards (used by Tasks page) — half the visual weight */
+.stats-grid-compact { gap: 8px; max-width: 800px; }
+.stat-card-sm {
+  padding: 8px 12px;
+  min-height: auto;
+}
+.stat-card-sm .stat-number { font-size: 18px; line-height: 1.1; }
+.stat-card-sm .stat-label  { font-size: 11px; }
+
 /* ===== Compact card variants (used by Grid/Compact/List view toggle) ===== */
 /* Compact = same grid container as Grid, but cards are about half-density:
    smaller min-column, tighter padding, fewer fields shown. */

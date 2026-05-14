@@ -68,10 +68,7 @@ export default function StaffTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [staffUsers, setStaffUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'table' | 'list'>(
-    () => (localStorage.getItem('staff_tasks_view') as 'table' | 'list') || 'table'
-  );
-  const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('staff_tasks_view', m); };
+  const [showSearch, setShowSearch] = useState(false);
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showLogMessage,    setShowLogMessage]    = useState(false);
 
@@ -241,11 +238,11 @@ export default function StaffTasks() {
         </div>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-number">{stats.open}</div><div className="stat-label">Open</div></div>
-        <div className="stat-card stat-draft"><div className="stat-number">{stats.overdue}</div><div className="stat-label">Overdue</div></div>
-        <div className="stat-card stat-reviewed"><div className="stat-number">{stats.due7}</div><div className="stat-label">Due ≤ 7d</div></div>
-        <div className="stat-card stat-exported"><div className="stat-number">{stats.doneWeek}</div><div className="stat-label">Done this week</div></div>
+      <div className="stats-grid stats-grid-compact">
+        <div className="stat-card stat-card-sm"><div className="stat-number">{stats.open}</div><div className="stat-label">Open</div></div>
+        <div className="stat-card stat-card-sm stat-draft"><div className="stat-number">{stats.overdue}</div><div className="stat-label">Overdue</div></div>
+        <div className="stat-card stat-card-sm stat-reviewed"><div className="stat-number">{stats.due7}</div><div className="stat-label">Due ≤ 7d</div></div>
+        <div className="stat-card stat-card-sm stat-exported"><div className="stat-number">{stats.doneWeek}</div><div className="stat-label">Done this week</div></div>
       </div>
 
       {/* ===== Return Calls section — always visible, even when empty ===== */}
@@ -414,16 +411,36 @@ export default function StaffTasks() {
           <label>Due to</label>
           <input type="date" className="form-input" value={fTo} onChange={e => setFTo(e.target.value)} />
         </div>
-        <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
-          <label>Search</label>
-          <input type="text" className="form-input" placeholder="title, description, client..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <div className="form-group">
-          <label>View</label>
-          <div className="view-toggle">
-            <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
-            <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
-          </div>
+        <div className="form-group" style={{ position: 'relative', minWidth: search || showSearch ? 220 : 40 }}>
+          <label>&nbsp;</label>
+          {showSearch || search ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="title, description, client..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                autoFocus
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn-link btn-sm"
+                onClick={() => { setSearch(''); setShowSearch(false); }}
+                title="Clear search"
+                style={{ padding: '4px 8px' }}
+              >✕</button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowSearch(true)}
+              title="Search tasks"
+              style={{ padding: '8px 12px' }}
+            >🔍</button>
+          )}
         </div>
       </div>
 
@@ -434,7 +451,8 @@ export default function StaffTasks() {
           <p>No tasks match the current filters.</p>
           <p>Click <strong>+ New Task</strong> to create one.</p>
         </div>
-      ) : viewMode === 'list' ? (
+      ) : false ? (
+        // Removed compact-list branch — table view only per user direction
         <div className="compact-list">
           {visibleTasks.map(t => {
             const overdue = t.due_date && t.due_date < todayIso();
