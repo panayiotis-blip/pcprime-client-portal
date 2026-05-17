@@ -14,8 +14,6 @@ import InvoiceEditor from './components/Invoice/InvoiceEditor';
 import ClientManager from './components/Client/ClientManager';
 import ClientDetail from './components/Client/ClientDetail';
 import ClientCardPrint from './components/Client/ClientCardPrint';
-import BulkImport from './components/Admin/BulkImport';
-import BulkImportV3 from './components/Admin/BulkImportV3';
 import SmartImport from './components/Admin/SmartImport';
 import TaxFilingsPage from './components/Admin/TaxFilingsPage';
 import UnlinkedDirectors from './components/Admin/UnlinkedDirectors';
@@ -68,8 +66,6 @@ function AuthedApp() {
             <Route path="/invoices/:id" element={<InvoiceEditor />} />
             <Route path="/clients" element={<ClientManager />} />
             <Route path="/clients/deleted" element={<DeletedClients />} />
-            <Route path="/clients/bulk-import" element={<BulkImport />} />
-            <Route path="/clients/bulk-import-v3" element={<BulkImportV3 />} />
             <Route path="/clients/smart-import" element={<SmartImport />} />
             <Route path="/clients/unlinked-directors" element={<UnlinkedDirectors />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />

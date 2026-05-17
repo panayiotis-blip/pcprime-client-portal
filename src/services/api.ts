@@ -656,8 +656,14 @@ export const api = {
     return data as { deleted: number; skipped: any[] };
   },
 
-  async mergeClient(_targetId: number, _sourceId: number, _fields?: Record<string, string>) {
-    throw new Error('Merge clients: deferred — will port from Express soon.');
+  async mergeClient(targetId: number, sourceId: number, fields?: Record<string, string>) {
+    const { data, error } = await supabase.rpc('merge_clients', {
+      p_target:    targetId,
+      p_source:    sourceId,
+      p_overrides: fields ?? {},
+    });
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async getNextClientCode(name: string) {
@@ -1997,58 +2003,6 @@ export const api = {
     return data as string;
   },
 
-  async bulkImportClients(rows: any[]): Promise<{
-    batch_id: string;
-    inserted: number;
-    errors: number;
-    codes_to_ids: Record<string, number>;
-    error_details: Array<{ row: number; client_code?: string; error: string }>;
-  }> {
-    const { data, error } = await supabase.rpc('bulk_import_clients', { p_rows: rows });
-    if (error) throw new Error(error.message);
-    return data as any;
-  },
-
-  async rollbackBulkImport(batchId: string): Promise<{ batch_id: string; rolled_back: number }> {
-    const { data, error } = await supabase.rpc('rollback_bulk_import', { p_batch_id: batchId });
-    if (error) throw new Error(error.message);
-    return data as any;
-  },
-
-  async listRecentBulkImports(): Promise<Array<{
-    batch_id: string;
-    imported_at: string;
-    client_count: number;
-    active_count: number;
-    age_hours: number;
-    can_rollback: boolean;
-  }>> {
-    const { data, error } = await supabase.rpc('list_recent_bulk_imports');
-    if (error) throw new Error(error.message);
-    return (data || []) as any;
-  },
-
-  async bulkImportV3(payload: {
-    clients:     any[];
-    contacts:    any[];
-    directors:   any[];
-    credentials: any[];
-    tax_filings: any[];
-  }): Promise<{
-    batch_id: string;
-    clients: number;
-    contacts: number;
-    directors: number;
-    credentials: number;
-    tax_filings: number;
-    errors: number;
-    error_details: any[];
-  }> {
-    const { data, error } = await supabase.rpc('bulk_import_v3', { p_payload: payload });
-    if (error) throw new Error(error.message);
-    return data as any;
-  },
-
   // Standalone Passwords/Credentials page — all credentials across all clients
   // plus firm-owned (client_id IS NULL) ones with an owner_label.
   async getAllCredentials() {
@@ -2662,15 +2616,6 @@ export const api = {
       // server-side function also swallows errors as a safety net.
     }
   },
-
-  // --------- Bulk import ---------
-  async importExcel(_file: File) {
-    throw new Error('Excel import: deferred — can port to client-side with SheetJS.');
-  },
-  async importStructured(_file: File) {
-    throw new Error('Structured import: deferred — can port to client-side with SheetJS.');
-  },
-  getImportTemplateUrl() { return ''; },
 
   // --------- Vendor patterns ---------
   async matchVendorPattern(clientId: number, vendorName: string) {

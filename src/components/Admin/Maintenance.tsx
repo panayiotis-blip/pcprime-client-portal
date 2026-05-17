@@ -70,19 +70,6 @@ export default function Maintenance() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <strong>Bulk Import (legacy formats)</strong>
-          <div style={{ fontSize: 13, color: 'var(--pc-text-2)' }}>
-            The older fixed-template importers. For new imports, use Smart Import above.
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link to="/clients/bulk-import-v3" className="btn btn-secondary">Multi-sheet (V3)</Link>
-          <Link to="/clients/bulk-import" className="btn btn-secondary">Single-sheet</Link>
-        </div>
-      </div>
-
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <strong>Orphan tax filings</strong>

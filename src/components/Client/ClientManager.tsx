@@ -1,13 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
-import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import { api, hasPermission } from '../../services/api';
 import { vatCategoryLabel } from '../../services/vatCategories';
-import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
 import * as XLSX from 'xlsx';
@@ -66,7 +64,6 @@ export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const { runWith } = useMFAStepUp();
-  const { getMode, setMode } = useViewPreferences();
   const canSeeDeleted = hasPermission(user, 'clients.restore');
   const [unlinkedCount, setUnlinkedCount] = useState(0);
 
@@ -235,14 +232,8 @@ export default function ClientManager() {
   const [form, setForm] = useState<any>({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
   const [createUser, setCreateUser] = useState(false);
   const [userForm, setUserForm] = useState({ username: '', password: '', display_name: '' });
-  const viewMode = getMode('clients', 'grid');
   const [searchTerm, setSearchTerm] = useState('');
-  const [showImport, setShowImport] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
-  const [importMode, setImportMode] = useState<'template' | 'legacy'>('template');
-  const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // Column sort state for List view
   const [sortKey, setSortKey] = useState<SortKey>('name');
@@ -300,23 +291,6 @@ export default function ClientManager() {
       await refreshClients();
     } catch (err: any) {
       if (err.message !== MFA_CANCELLED) alert('Delete failed: ' + err.message);
-    }
-  };
-
-  const handleImport = async () => {
-    const file = fileRef.current?.files?.[0];
-    if (!file) { alert('Select an Excel file'); return; }
-    setImporting(true);
-    setImportResult(null);
-    try {
-      const result = importMode === 'template' ? await api.importStructured(file) : await api.importExcel(file);
-      setImportResult(result);
-      await refreshClients();
-      if (fileRef.current) fileRef.current.value = '';
-    } catch (err: any) {
-      alert('Import failed: ' + err.message);
-    } finally {
-      setImporting(false);
     }
   };
 
@@ -596,9 +570,6 @@ export default function ClientManager() {
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
           </button>
-          <button className="btn btn-secondary" onClick={() => setShowImport(!showImport)}>
-            {showImport ? 'Cancel' : '📥 Import'}
-          </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Add Client'}
           </button>
@@ -609,71 +580,6 @@ export default function ClientManager() {
       {showMerge && (
         <div className="card" style={{ marginBottom: 16 }}>
           <MergeClients onDone={() => setShowMerge(false)} />
-        </div>
-      )}
-
-      {/* Import UI */}
-      {showImport && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="import-mode-selector">
-            <button className={`folder-tab ${importMode === 'template' ? 'active' : ''}`} onClick={() => setImportMode('template')}>
-              📄 Template Import (Recommended)
-            </button>
-            <button className={`folder-tab ${importMode === 'legacy' ? 'active' : ''}`} onClick={() => setImportMode('legacy')}>
-              🗂 Legacy Multi-tab Import
-            </button>
-          </div>
-
-          {importMode === 'template' ? (
-            <>
-              <h3 style={{ marginBottom: 8 }}>Template-based Import</h3>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                Download the template, fill it in, and upload it back. Credentials link to clients via <code>client_code</code>.
-              </p>
-              <a href={api.getImportTemplateUrl()} download className="btn btn-secondary" style={{ marginBottom: 12, display: 'inline-block' }}>
-                📥 Download Template
-              </a>
-              <div style={{ marginTop: 12 }}>
-                <input ref={fileRef} type="file" accept=".xlsx,.xls" className="form-input" />
-                <button className="btn btn-primary" onClick={handleImport} disabled={importing} style={{ marginTop: 12 }}>
-                  {importing ? 'Importing...' : 'Upload & Import'}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h3 style={{ marginBottom: 8 }}>Legacy Multi-tab Import</h3>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>
-                Upload your existing multi-tab Excel (PC TAX CLIENTS, CY LOGIN CODES, UBO's, etc.). This is a best-effort import.
-              </p>
-              <input ref={fileRef} type="file" accept=".xlsx,.xls" className="form-input" />
-              <button className="btn btn-primary" onClick={handleImport} disabled={importing} style={{ marginTop: 12 }}>
-                {importing ? 'Importing...' : 'Start Import'}
-              </button>
-            </>
-          )}
-
-          {importResult && (
-            <div className="import-result" style={{ marginTop: 16, padding: 12, background: '#dcfce7', borderRadius: 6 }}>
-              <h4 style={{ margin: 0, color: '#166534' }}>Import complete!</h4>
-              <ul style={{ marginTop: 8, marginLeft: 20 }}>
-                {importResult.clientsCreated !== undefined && <li><strong>{importResult.clientsCreated}</strong> clients created</li>}
-                {importResult.clientsUpdated !== undefined && <li><strong>{importResult.clientsUpdated}</strong> clients updated</li>}
-                {importResult.credentialsAdded !== undefined && <li><strong>{importResult.credentialsAdded}</strong> credentials added</li>}
-                {importResult.credentialsUpdated !== undefined && <li><strong>{importResult.credentialsUpdated}</strong> credentials updated</li>}
-                {importResult.tabsProcessed && <li>Tabs: {importResult.tabsProcessed.join(', ')}</li>}
-              </ul>
-              {(importResult.errors?.length > 0 || importResult.warnings?.length > 0) && (
-                <details style={{ marginTop: 8 }}>
-                  <summary>Messages ({(importResult.errors?.length || 0) + (importResult.warnings?.length || 0)})</summary>
-                  <ul style={{ marginLeft: 20, fontSize: 12 }}>
-                    {importResult.errors?.map((e: string, i: number) => <li key={'e'+i}>{e}</li>)}
-                    {importResult.warnings?.map((w: string, i: number) => <li key={'w'+i}>⚠ {w}</li>)}
-                  </ul>
-                </details>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -807,12 +713,9 @@ export default function ClientManager() {
             </div>
           )}
         </div>
-        {viewMode === 'list' && (
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowColumnsModal(true)} title="Show/hide columns in the list view">
-            ☰ Columns
-          </button>
-        )}
-        <ViewToggle value={viewMode} onChange={(m) => setMode('clients', m)} />
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowColumnsModal(true)} title="Show/hide columns in the list view">
+          ☰ Columns
+        </button>
       </div>
 
       {showAdvanced && (
@@ -945,41 +848,6 @@ export default function ClientManager() {
         <div className="empty-state"><p>No clients yet.</p></div>
       ) : filtered.length === 0 ? (
         <div className="empty-state"><p>No clients match your search.</p></div>
-      ) : viewMode === 'grid' ? (
-        <div className="client-cards">
-          {filtered.map((client: any) => (
-            <Link to={`/clients/${client.id}`} key={client.id} className="dashboard-client-card">
-              <div className="dc-card-header">
-                {client.client_code && <span className="client-code-badge">{client.client_code}</span>}
-                <h3>{client.name}</h3>
-                {client.trading_name && <p className="dc-trading">{client.trading_name}</p>}
-              </div>
-              <div className="dc-card-info">
-                {client.tax_number && <p>TIC: {client.tax_number}</p>}
-                {client.vat_number && <p>VAT: {client.vat_number}</p>}
-                {client.email && <p>✉ {client.email}</p>}
-                {client.phone && <p>☎ {client.phone}</p>}
-                <p>{getInvoiceCount(client.id)} invoices</p>
-              </div>
-              <div className="dc-card-footer"><span>View Details →</span></div>
-            </Link>
-          ))}
-        </div>
-      ) : viewMode === 'compact' ? (
-        <div className="client-cards client-cards-compact">
-          {filtered.map((client: any) => (
-            <Link to={`/clients/${client.id}`} key={client.id} className="dashboard-client-card dashboard-client-card-compact">
-              <div className="dc-card-header">
-                {client.client_code && <span className="client-code-badge">{client.client_code}</span>}
-                <h3>{client.name}</h3>
-              </div>
-              <div className="dc-card-info">
-                {client.tax_number && <p>TIC: {client.tax_number}</p>}
-                <p>{getInvoiceCount(client.id)} invoices</p>
-              </div>
-            </Link>
-          ))}
-        </div>
       ) : (
         <div className="export-table-wrapper">
           <table className="export-table sortable-table">

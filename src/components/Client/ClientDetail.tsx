@@ -198,8 +198,11 @@ export default function ClientDetail() {
     if (!confirm(msg)) return;
     try {
       await runWith(() => api.deleteClient(clientId));
+      // Stay in the browsing flow — advance to the next client (or the
+      // previous), only falling back to the list if this was the last one.
+      const goTo = nextClientId ?? prevClientId;
       await refreshClients();
-      navigate('/clients');
+      navigate(goTo ? `/clients/${goTo}` : '/clients');
     } catch (err: any) {
       if (err.message !== MFA_CANCELLED) alert('Delete failed: ' + err.message);
     }

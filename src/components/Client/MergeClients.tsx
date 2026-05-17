@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 
 const COMPARE_FIELDS = [
   { key: 'client_code', label: 'Client Code' },
@@ -31,6 +32,7 @@ const COMPARE_FIELDS = [
 
 export default function MergeClients({ onDone }: { onDone?: () => void }) {
   const { clients, refreshClients, invoices } = useApp();
+  const { runWith } = useMFAStepUp();
   const [keepId, setKeepId] = useState<number>(0);
   const [mergeId, setMergeId] = useState<number>(0);
   const [selections, setSelections] = useState<Record<string, 'keep' | 'merge'>>({});
@@ -76,13 +78,13 @@ export default function MergeClients({ onDone }: { onDone?: () => void }) {
 
     setMerging(true);
     try {
-      await api.mergeClient(keepId, mergeId, fieldOverrides);
+      await runWith(() => api.mergeClient(keepId, mergeId, fieldOverrides));
       await refreshClients();
       alert('Merge complete!');
       setKeepId(0); setMergeId(0); setSelections({});
       if (onDone) onDone();
     } catch (err: any) {
-      alert('Merge failed: ' + err.message);
+      if (err.message !== MFA_CANCELLED) alert('Merge failed: ' + err.message);
     } finally {
       setMerging(false);
     }
