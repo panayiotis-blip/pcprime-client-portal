@@ -881,6 +881,21 @@ body {
   flex-wrap: wrap;
 }
 
+/* Sticky action bar at the top of the invoice editor (Part 5E) */
+.editor-actions-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 10px 0;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
 /* ===== Line Items Table ===== */
 .line-items-table {
   width: 100%;

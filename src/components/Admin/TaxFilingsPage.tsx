@@ -38,8 +38,6 @@ export default function TaxFilingsPage() {
   const [rows, setRows] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [orphanCount, setOrphanCount] = useState(0);
-  const [cleaningOrphans, setCleaningOrphans] = useState(false);
 
   // Filter state
   const initialFilter = useMemo(() => {
@@ -65,27 +63,7 @@ export default function TaxFilingsPage() {
     }
   };
 
-  const loadOrphanCount = async () => {
-    try { setOrphanCount(await api.countOrphanTaxFilings()); } catch {}
-  };
-
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [JSON.stringify(filter)]);
-  useEffect(() => { loadOrphanCount(); }, []);
-
-  const handleCleanupOrphans = async () => {
-    if (!confirm(`Delete ${orphanCount} orphan tax filing${orphanCount === 1 ? '' : 's'}? These point to clients that no longer exist (or were soft-deleted) and can't be opened. This is permanent.`)) return;
-    setCleaningOrphans(true);
-    try {
-      const n = await runWith(() => api.cleanupOrphanTaxFilings());
-      alert(`Deleted ${n} orphan filings.`);
-      await loadOrphanCount();
-      await load();
-    } catch (err: any) {
-      if (err.message !== MFA_CANCELLED) alert('Cleanup failed: ' + err.message);
-    } finally {
-      setCleaningOrphans(false);
-    }
-  };
 
   const allOnPageSelected = rows.length > 0 && rows.every(r => selected.has(r.id));
   const toggleSelectAll = () => {
@@ -158,16 +136,6 @@ export default function TaxFilingsPage() {
       <div className="dashboard-header">
         <h2>Tax Filings</h2>
         <div style={{ display: 'flex', gap: 6 }}>
-          {orphanCount > 0 && (
-            <button
-              className="btn btn-danger btn-sm"
-              onClick={handleCleanupOrphans}
-              disabled={cleaningOrphans}
-              title="Delete tax filing rows whose client no longer exists"
-            >
-              🗑 Clean up {orphanCount} orphan{orphanCount === 1 ? '' : 's'}
-            </button>
-          )}
           <button className="btn btn-secondary btn-sm" onClick={exportExcel} disabled={rows.length === 0}>⬇ Export Excel</button>
         </div>
       </div>

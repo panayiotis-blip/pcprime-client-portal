@@ -28,6 +28,7 @@ export default function InvoiceEditor() {
   const [newClientName, setNewClientName] = useState('');
   const [showNewClient, setShowNewClient] = useState(false);
   const [journalTypes, setJournalTypes] = useState<any[]>([]);
+  const [docCategories, setDocCategories] = useState<any[]>([]);
   const [batchIndex, setBatchIndex] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewMime, setPreviewMime] = useState<string>('');
@@ -35,9 +36,15 @@ export default function InvoiceEditor() {
   const [vendorSuggestion, setVendorSuggestion] = useState<any>(null);
   const [patternApplied, setPatternApplied] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
+  const [clientOverride, setClientOverride] = useState(false);
 
   const isBatch = location.state?.batch && scannedInvoices.current.length > 0;
   const totalInBatch = isBatch ? scannedInvoices.current.length : 0;
+
+  // 5A — lock the client selector behind a read-only header when the client
+  // is already known from context (existing invoice / batch scan / passed in).
+  const clientFromContext = (!!id && id !== 'new') || isBatch || !!location.state?.clientId;
+  const showClientSelector = !clientFromContext || clientOverride;
 
   // Prev/Next navigation among invoices
   const { invoices } = useApp();
@@ -50,6 +57,7 @@ export default function InvoiceEditor() {
   const invoicePosition = currentIdx >= 0 ? `${currentIdx + 1} of ${clientInvoices.length}` : '';
 
   useEffect(() => { api.getJournalTypes().then(setJournalTypes).catch(() => {}); }, []);
+  useEffect(() => { api.getDocumentCategories().then(setDocCategories).catch(() => {}); }, []);
 
   useEffect(() => {
     if (form.client_id) {
@@ -225,6 +233,12 @@ export default function InvoiceEditor() {
 
   const accountOptions = accounts.map((acc: any) => ({ value: acc.code, label: acc.code, sublabel: acc.description }));
 
+  // 5B — Due Date visibility is driven by the matching document category.
+  const dueDateCat = docCategories.find((c: any) => c.journal_code && c.journal_code === form.journal);
+  const showDueDate = dueDateCat ? !!dueDateCat.show_due_date : true;
+  // 5A — the client shown in the read-only header.
+  const ctxClient = clients.find((c: any) => c.id === form.client_id);
+
   return (
     <div className="editor-layout">
       {previewUrl && (
@@ -247,6 +261,14 @@ export default function InvoiceEditor() {
         <div className="editor-header">
           <h2>{id && id !== 'new' ? 'Edit Invoice' : 'New Invoice'}</h2>
           {isBatch && <span className="batch-indicator">Invoice {batchIndex + 1} of {totalInBatch}</span>}
+        </div>
+
+        {/* Sticky action bar (Part 5E) — always in view while scrolling */}
+        <div className="editor-actions-bar no-print">
+          {isBatch && <button className="btn btn-secondary" onClick={handleSkip}>Skip {batchIndex < totalInBatch - 1 ? 'to Next' : '& Finish'}</button>}
+          <button className="btn btn-secondary" onClick={() => navigate('/invoices')}>Cancel</button>
+          <button className="btn btn-primary" onClick={() => handleSave('draft')} disabled={saving}>{saving ? 'Saving...' : isBatch && batchIndex < totalInBatch - 1 ? 'Save & Next' : 'Save as Draft'}</button>
+          <button className="btn btn-success" onClick={() => handleSave('reviewed')} disabled={saving}>{isBatch && batchIndex < totalInBatch - 1 ? 'Review & Next' : 'Mark as Reviewed'}</button>
         </div>
 
         {/* Prev / Next navigation */}
@@ -275,21 +297,35 @@ export default function InvoiceEditor() {
 
         <div className="form-section">
           <h3>Client</h3>
-          <div className="form-row">
-            <div style={{ flex: 1 }}>
-              <SearchableSelect
-                value={form.client_id}
-                onChange={(v) => handleChange('client_id', parseInt(String(v)) || 0)}
-                options={clients.map((c: any) => ({ value: c.id, label: c.name, sublabel: c.client_code || c.tax_number || '' }))}
-                placeholder="-- Select Client --"
-              />
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowNewClient(!showNewClient)}>+ New Client</button>
-          </div>
-          {showNewClient && (
-            <div className="form-row" style={{ marginTop: 8 }}>
-              <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Client name" className="form-input" />
-              <button className="btn btn-primary btn-sm" onClick={handleAddClient}>Add</button>
+          {showClientSelector ? (
+            <>
+              <div className="form-row">
+                <div style={{ flex: 1 }}>
+                  <SearchableSelect
+                    value={form.client_id}
+                    onChange={(v) => handleChange('client_id', parseInt(String(v)) || 0)}
+                    options={clients.map((c: any) => ({ value: c.id, label: c.name, sublabel: c.client_code || c.tax_number || '' }))}
+                    placeholder="-- Select Client --"
+                  />
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowNewClient(!showNewClient)}>+ New Client</button>
+              </div>
+              {showNewClient && (
+                <div className="form-row" style={{ marginTop: 8 }}>
+                  <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Client name" className="form-input" />
+                  <button className="btn btn-primary btn-sm" onClick={handleAddClient}>Add</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 15 }}>
+                <strong>{ctxClient?.name || `Client #${form.client_id}`}</strong>
+                {ctxClient?.client_code && (
+                  <span style={{ color: 'var(--pc-text-2)', marginLeft: 8 }}>{ctxClient.client_code}</span>
+                )}
+              </span>
+              <button className="btn btn-link btn-sm" onClick={() => setClientOverride(true)}>Change client</button>
             </div>
           )}
         </div>
@@ -316,11 +352,12 @@ export default function InvoiceEditor() {
                 {journalTypes.map((jt: any) => <option key={jt.id} value={jt.code}>{jt.code} - {jt.label}</option>)}
               </select>
             </div>
-            <div className="form-group"><label>Reference</label><input type="text" value={form.reference} onChange={(e) => handleChange('reference', e.target.value)} className="form-input" /></div>
-            <div className="form-group"><label>Invoice Number</label><input type="text" value={form.invoice_number} onChange={(e) => handleChange('invoice_number', e.target.value)} className="form-input" /></div>
+            <div className="form-group"><label>Invoice Number / Reference</label><input type="text" value={form.invoice_number} onChange={(e) => handleChange('invoice_number', e.target.value)} className="form-input" /></div>
             <div className="form-group"><label>Vendor Name</label><input type="text" value={form.vendor_name} onChange={(e) => handleChange('vendor_name', e.target.value)} className="form-input" /></div>
             <div className="form-group"><label>Date (DD/MM/YYYY)</label><input type="text" value={form.invoice_date} onChange={(e) => handleChange('invoice_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" /></div>
-            <div className="form-group"><label>Due Date</label><input type="text" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" /></div>
+            {showDueDate && (
+              <div className="form-group"><label>Due Date</label><input type="text" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" /></div>
+            )}
             <div className="form-group"><label>Total Amount</label><input type="number" step="0.01" value={form.total_amount} onChange={(e) => handleChange('total_amount', parseFloat(e.target.value) || 0)} className="form-input" /></div>
             <div className="form-group"><label>Currency</label><input type="text" value={form.currency} onChange={(e) => handleChange('currency', e.target.value)} className="form-input" /></div>
             <div className="form-group"><label>Currency Rate</label><input type="text" value={form.currency_rate} onChange={(e) => handleChange('currency_rate', e.target.value)} className="form-input" /></div>
@@ -461,13 +498,6 @@ export default function InvoiceEditor() {
         </div>
 
         {form.raw_ocr_text && <div className="form-section"><h3>Extracted Text</h3><pre className="ocr-text">{form.raw_ocr_text}</pre></div>}
-
-        <div className="form-actions">
-          {isBatch && <button className="btn btn-secondary" onClick={handleSkip}>Skip {batchIndex < totalInBatch - 1 ? 'to Next' : '& Finish'}</button>}
-          <button className="btn btn-secondary" onClick={() => navigate('/invoices')}>Cancel</button>
-          <button className="btn btn-primary" onClick={() => handleSave('draft')} disabled={saving}>{saving ? 'Saving...' : isBatch && batchIndex < totalInBatch - 1 ? 'Save & Next' : 'Save as Draft'}</button>
-          <button className="btn btn-success" onClick={() => handleSave('reviewed')} disabled={saving}>{isBatch && batchIndex < totalInBatch - 1 ? 'Review & Next' : 'Mark as Reviewed'}</button>
-        </div>
       </div>
     </div>
   );
