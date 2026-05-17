@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { Modal, Button, Input } from '../ui';
 import BulkWipeModal from './BulkWipeModal';
+import { downloadImportTemplate } from '../../services/smartImport/template';
 
 // Company Settings → Maintenance (UI Polish v2, Part 5F).
 // Occasional admin clean-up tools. Currently the orphan tax-filing remover,
@@ -59,10 +60,14 @@ export default function Maintenance() {
         <div style={{ flex: 1, minWidth: 240 }}>
           <strong>Smart Import</strong>
           <div style={{ fontSize: 13, color: 'var(--pc-text-2)' }}>
-            Load client data from any Excel file — map its columns to client fields, then import.
+            Load client data from any Excel file. Download the blank template for staff
+            to fill in, then import it — columns map automatically.
           </div>
         </div>
-        <Link to="/clients/smart-import" className="btn btn-primary">Open Smart Import</Link>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button variant="secondary" onClick={downloadImportTemplate}>Download template</Button>
+          <Link to="/clients/smart-import" className="btn btn-primary">Open Smart Import</Link>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>

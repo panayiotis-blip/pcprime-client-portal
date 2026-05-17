@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import { api, hasPermission } from '../../services/api';
+import { vatCategoryLabel } from '../../services/vatCategories';
 import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
@@ -26,6 +27,7 @@ const CLIENT_COLUMNS: ColumnDef[] = [
   { id: 'city',                label: 'City',                            defaultVisible: true  },
   { id: 'updated_at',          label: 'Last Updated',                    defaultVisible: true  },
   { id: 'vat_number',          label: 'VAT',                             defaultVisible: false },
+  { id: 'vat_category',        label: 'VAT Cat',                         defaultVisible: false },
   { id: 'business_type',       label: 'Business Type',                   defaultVisible: false },
   { id: 'phone',               label: 'Phone',                           defaultVisible: false },
   { id: 'mobile',              label: 'Mobile',                          defaultVisible: false },
@@ -404,6 +406,9 @@ export default function ClientManager() {
       case 'registration_number':  return c.registration_number || '-';
       case 'city':                 return c.city || '-';
       case 'vat_number':           return c.vat_number || '-';
+      case 'vat_category':         return c.vat_category
+        ? <span title={vatCategoryLabel(c.vat_category) || undefined}>{c.vat_category}</span>
+        : '-';
       case 'business_type':        return c.business_type || '-';
       case 'phone':                return c.phone || '-';
       case 'mobile':                return c.mobile || '-';

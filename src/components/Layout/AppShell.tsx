@@ -21,45 +21,44 @@ type NavItem = {
 type NavGroup = {
   key: string;
   label: string;
-  icon: string;
   items: NavItem[];
   requires?: (u: any) => boolean;
 };
 
 const STAFF_GROUPS: NavGroup[] = [
   {
-    key: 'operations', label: 'Daily Operations', icon: '📊',
+    key: 'operations', label: 'Daily Operations',
     items: [
       { path: '/scan',      label: 'Scan Document', icon: '⊞' },
-      { path: '/invoices',  label: 'Invoices',     icon: '☰' },
+      { path: '/tasks',     label: 'Tasks',         icon: '☑' },
       { path: '/phone-log', label: 'Phone Log',    icon: '☎' },
       { path: '/timesheet', label: 'Timesheet',    icon: '⏱' },
       { path: '/calendar',  label: 'Calendar',     icon: '◷' },
     ],
   },
   {
-    key: 'clients', label: 'Clients', icon: '👥',
+    key: 'clients', label: 'Clients',
     items: [
       { path: '/clients',     label: 'Clients',     icon: '⊡' },
+      { path: '/invoices',    label: 'Invoices',    icon: '☰' },
       { path: '/credentials', label: 'Credentials', icon: '🔑', requires: (u) => hasPermission(u, 'credentials.read') },
-      { path: '/tasks',       label: 'Tasks',       icon: '☑' },
     ],
   },
   {
-    key: 'compliance', label: 'Compliance & Tax', icon: '✓',
+    key: 'compliance', label: 'Compliance & Tax',
     items: [
       { path: '/compliance',  label: 'Compliance',  icon: '✓' },
       { path: '/tax-filings', label: 'Tax Filings', icon: '⎙' },
     ],
   },
   {
-    key: 'billing', label: 'Billing', icon: '€',
+    key: 'billing', label: 'Accounting',
     items: [
       { path: '/billing',     label: 'Client Invoices', icon: '€' },
     ],
   },
   {
-    key: 'documents', label: 'Documents & Templates', icon: '📁',
+    key: 'documents', label: 'Documents & Templates',
     items: [
       { path: '/documents',      label: 'Documents', icon: '⊟' },
       { path: '/task-templates', label: 'Templates', icon: '⊕' },
@@ -67,7 +66,7 @@ const STAFF_GROUPS: NavGroup[] = [
     ],
   },
   {
-    key: 'administration', label: 'Administration', icon: '⚙',
+    key: 'administration', label: 'Administration',
     requires: (u) => isSupervisorOrHigher(u),
     items: [
       { path: '/users',                   label: 'Users',           icon: '⊙', requires: (u) => hasPermission(u, 'users.read') },
@@ -101,6 +100,42 @@ function findNavItem(path: string): NavItem | undefined {
     if (found) return found;
   }
   return undefined;
+}
+
+// Bottom-of-sidebar identity block: the user name + role, with a chevron
+// that reveals Security / Privacy / Sign Out — keeps the footer compact
+// instead of three permanently-stacked links.
+function SidebarUserMenu({ user, onLogout, onNavigate }: {
+  user: any;
+  onLogout: () => void;
+  onNavigate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="sidebar-footer">
+      {open && (
+        <div className="sidebar-user-menu">
+          <Link to="/security" className="sidebar-user-menu-item"
+            onClick={() => { setOpen(false); onNavigate(); }}>Security</Link>
+          <Link to="/privacy" className="sidebar-user-menu-item"
+            onClick={() => { setOpen(false); onNavigate(); }}>Privacy</Link>
+          <button type="button" className="sidebar-user-menu-item" onClick={onLogout}>Sign Out</button>
+        </div>
+      )}
+      <button
+        type="button"
+        className="sidebar-user-toggle"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <div className="user-info">
+          <span className="user-name">{user?.display_name}</span>
+          <span className="user-role">{roleLabel(user?.role)}</span>
+        </div>
+        <span className="sidebar-user-chevron">{open ? '▾' : '▴'}</span>
+      </button>
+    </div>
+  );
 }
 
 type Favourite = {
@@ -248,15 +283,7 @@ export default function AppShell() {
               </li>
             ))}
           </ul>
-          <div className="sidebar-footer">
-            <div className="user-info">
-              <span className="user-name">{user?.display_name}</span>
-              <span className="user-role">{roleLabel(user?.role)}</span>
-            </div>
-            <Link to="/security" className="btn btn-link sidebar-logout" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>Security</Link>
-            <Link to="/privacy" className="btn btn-link sidebar-logout" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>Privacy</Link>
-            <button className="btn btn-link sidebar-logout" onClick={logout}>Sign Out</button>
-          </div>
+          <SidebarUserMenu user={user} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
         </nav>
 
         {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
@@ -295,6 +322,72 @@ export default function AppShell() {
             </Link>
           </li>
 
+          {/* Favourites — pinned at the top of the sidebar */}
+          {favsLoaded && favourites.length > 0 && (() => {
+            const favKey = 'favourites';
+            const expanded = groupStates[favKey]
+              ? groupStates[favKey] === 'expanded'
+              : true;   // default: open if any favourites exist
+            return (
+              <li className="sidebar-group sidebar-group-favourites">
+                <button
+                  type="button"
+                  className={`sidebar-group-header ${expanded ? 'expanded' : ''}`}
+                  onClick={() => toggleGroup(favKey, expanded)}
+                >
+                  <span className="sidebar-group-label">Favourites</span>
+                  <span className="sidebar-group-chevron">{expanded ? '▾' : '▸'}</span>
+                </button>
+                {expanded && (
+                  <ul className="sidebar-group-items">
+                    {favourites
+                      .sort((a, b) => {
+                        // Menu items first, then clients
+                        if (a.favourite_type !== b.favourite_type) {
+                          return a.favourite_type === 'menu_item' ? -1 : 1;
+                        }
+                        return a.sort_order - b.sort_order;
+                      })
+                      .map(f => {
+                        const isMenu = f.favourite_type === 'menu_item';
+                        const navItem = isMenu ? findNavItem(f.target_id) : null;
+                        const to = isMenu ? f.target_id : `/clients/${f.target_id}`;
+                        const label = f.label || navItem?.label || f.target_id;
+                        const icon  = isMenu ? (navItem?.icon || '⊕') : '👤';
+                        return (
+                          <li key={f.id}>
+                            <Link
+                              to={to}
+                              className={`sidebar-link sidebar-sub-link ${location.pathname === to ? 'active' : ''}`}
+                              onClick={() => setSidebarOpen(false)}
+                            >
+                              <span className="nav-icon">{icon}</span>
+                              <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                              <button
+                                type="button"
+                                className="sidebar-pin pinned"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  unpinFavourite(f.id);
+                                }}
+                                title="Unpin"
+                              >×</button>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                )}
+              </li>
+            );
+          })()}
+
+          {/* Divider — separates Favourites from the main grouped nav */}
+          {favsLoaded && favourites.length > 0 && (
+            <li className="sidebar-divider" aria-hidden="true" />
+          )}
+
           {/* Grouped items */}
           {groupStateLoaded && visibleGroups.map(g => {
             const expanded   = isGroupExpanded(g);
@@ -308,7 +401,6 @@ export default function AppShell() {
                   onClick={() => toggleGroup(g.key, expanded)}
                   title={expanded ? 'Collapse' : 'Expand'}
                 >
-                  <span className="nav-icon">{g.icon}</span>
                   <span className="sidebar-group-label">{g.label}</span>
                   {/* Surface badge on collapsed group header so notifications aren't hidden */}
                   {!expanded && groupBadge > 0 && (
@@ -362,79 +454,9 @@ export default function AppShell() {
               </li>
             );
           })}
-
-          {/* Favourites group — pinned menu items + clients */}
-          {favsLoaded && favourites.length > 0 && (() => {
-            const favKey = 'favourites';
-            const expanded = groupStates[favKey]
-              ? groupStates[favKey] === 'expanded'
-              : true;   // default: open if any favourites exist
-            return (
-              <li className="sidebar-group sidebar-group-favourites">
-                <button
-                  type="button"
-                  className={`sidebar-group-header ${expanded ? 'expanded' : ''}`}
-                  onClick={() => toggleGroup(favKey, expanded)}
-                >
-                  <span className="nav-icon">⭐</span>
-                  <span className="sidebar-group-label">Favourites</span>
-                  <span className="sidebar-group-chevron">{expanded ? '▾' : '▸'}</span>
-                </button>
-                {expanded && (
-                  <ul className="sidebar-group-items">
-                    {favourites
-                      .sort((a, b) => {
-                        // Menu items first, then clients
-                        if (a.favourite_type !== b.favourite_type) {
-                          return a.favourite_type === 'menu_item' ? -1 : 1;
-                        }
-                        return a.sort_order - b.sort_order;
-                      })
-                      .map(f => {
-                        const isMenu = f.favourite_type === 'menu_item';
-                        const navItem = isMenu ? findNavItem(f.target_id) : null;
-                        const to = isMenu ? f.target_id : `/clients/${f.target_id}`;
-                        const label = f.label || navItem?.label || f.target_id;
-                        const icon  = isMenu ? (navItem?.icon || '⊕') : '👤';
-                        return (
-                          <li key={f.id}>
-                            <Link
-                              to={to}
-                              className={`sidebar-link sidebar-sub-link ${location.pathname === to ? 'active' : ''}`}
-                              onClick={() => setSidebarOpen(false)}
-                            >
-                              <span className="nav-icon">{icon}</span>
-                              <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-                              <button
-                                type="button"
-                                className="sidebar-pin pinned"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  unpinFavourite(f.id);
-                                }}
-                                title="Unpin"
-                              >×</button>
-                            </Link>
-                          </li>
-                        );
-                      })}
-                  </ul>
-                )}
-              </li>
-            );
-          })()}
         </ul>
 
-        <div className="sidebar-footer">
-          <div className="user-info">
-            <span className="user-name">{user?.display_name}</span>
-            <span className="user-role">{roleLabel(user?.role)}</span>
-          </div>
-          <Link to="/security" className="btn btn-link sidebar-logout" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>Security</Link>
-          <Link to="/privacy" className="btn btn-link sidebar-logout" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>Privacy</Link>
-          <button className="btn btn-link sidebar-logout" onClick={logout}>Sign Out</button>
-        </div>
+        <SidebarUserMenu user={user} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
       </nav>
 
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}

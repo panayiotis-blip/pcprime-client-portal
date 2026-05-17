@@ -1,4 +1,5 @@
 import { Field, useFieldCtx } from '../fieldContext';
+import { VAT_CATEGORIES } from '../../../services/vatCategories';
 
 // Renamed from "Tax & Reg" to "Registrations" (UI polish part 6).
 // Four panels with show/hide based on client_category. A panel that's normally
@@ -37,7 +38,8 @@ export default function TaxRegistrationTab() {
           <Field label="Tax Number (TIC)" field="tax_number" />
           <Field label="VAT Number"       field="vat_number" />
           <Field label="VAT Status"       field="vat_status" options={VAT_STATUSES} />
-          <Field label="VAT Period"       field="vat_period" placeholder="1/4/7/10" />
+          <Field label="VAT Category"     field="vat_category" options={VAT_CATEGORIES} />
+          <Field label="OSS VAT Category" field="oss_vat_category" options={VAT_CATEGORIES} />
           <Field label="VAT Registration Date" field="vat_registration_date" type="date" />
         </div>
       </div>

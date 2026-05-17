@@ -15,7 +15,7 @@
   --border: #e5e7eb;
   --text: #0f172a;
   --text-secondary: #64748b;
-  --sidebar-width: 240px;
+  --sidebar-width: 260px;
   --header-height: 56px;
   --radius: 8px;
 }
@@ -153,6 +153,46 @@ body {
 .user-name { font-size: 14px; font-weight: 600; color: var(--pc-text); }
 .user-role { font-size: 12px; color: var(--pc-text-2); }
 .btn-link.sidebar-logout { color: var(--pc-text-2); font-size: 13px; padding: 4px 0; }
+
+/* Compact user footer — name + role row with a chevron-revealed menu */
+.sidebar-user-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--pc-text);
+}
+.sidebar-user-toggle:hover { background: rgba(13,27,46,0.05); }
+.sidebar-user-toggle .user-info { margin-bottom: 0; flex: 1; min-width: 0; }
+.sidebar-user-chevron { font-size: 11px; opacity: 0.6; flex-shrink: 0; }
+.sidebar-user-menu {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 6px;
+  border: 1px solid var(--pc-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sidebar-user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--pc-text);
+  text-decoration: none;
+  cursor: pointer;
+}
+.sidebar-user-menu-item:hover { background: rgba(13,27,46,0.05); }
 .btn-link.sidebar-logout:hover { color: var(--pc-navy); opacity: 1; }
 
 .sidebar ul {
@@ -291,6 +331,14 @@ body {
 
 .sidebar-group-favourites .sidebar-group-header {
   color: var(--pc-text);
+}
+
+/* Divider between the pinned Favourites block and the main grouped nav */
+.sidebar-divider {
+  list-style: none;
+  height: 0;
+  margin: 8px 14px;
+  border-top: 1px solid var(--pc-border);
 }
 
 /* ===== Quick Actions FAB (UI polish part 2) ===== */

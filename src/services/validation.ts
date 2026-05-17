@@ -106,6 +106,14 @@ export function validateVatPeriod(raw: any): ValResult {
     : { level: 'warning', message: 'VAT period is usually 1, 4, 7 or 10' };
 }
 
+export function validateVatCategory(raw: any): ValResult {
+  const v = String(raw ?? '').trim().toUpperCase();
+  if (!v) return ok();
+  return ['A', 'B', 'C', 'D', 'E', 'F', 'G'].includes(v)
+    ? ok()
+    : { level: 'warning', message: `VAT category should be a letter A-G — got "${raw}"` };
+}
+
 export function validateCategory(raw: any): ValResult {
   const v = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, '_');
   if (!v) return ok();
@@ -140,6 +148,8 @@ export function validateField(fieldKey: string, value: any): ValResult {
     case 'annual_fee_agreed':
     case 'monthly_fee':            return validateAmount(value);
     case 'vat_period':             return validateVatPeriod(value);
+    case 'vat_category':
+    case 'oss_vat_category':       return validateVatCategory(value);
     case 'client_category':        return validateCategory(value);
     default:                       return ok();
   }

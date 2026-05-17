@@ -9,6 +9,7 @@ import {
   CONFIDENT_THRESHOLD, type AutoMatch,
 } from '../../services/smartImport/fields';
 import { validateField, parseDateLoose } from '../../services/validation';
+import { downloadImportTemplate } from '../../services/smartImport/template';
 
 // Smart Import — Excel field-mapping import for client data.
 // Phases 2-3 cover Steps 1-3: upload, sheet pick, auto-match, and the
@@ -350,17 +351,6 @@ export default function SmartImport() {
     a.click();
   };
 
-  // An .xlsx with every importable field as a column header — fill it in and
-  // re-upload, and the columns auto-map at 100% (headers match the labels).
-  const downloadTemplate = () => {
-    const headers = IMPORT_FIELDS
-      .filter((f) => !f.key.startsWith('director_'))
-      .map((f) => f.label);
-    const ws = XLSX.utils.aoa_to_sheet([headers]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Clients');
-    XLSX.writeFile(wb, 'smart-import-template.xlsx');
-  };
 
   // ---- Step 3 validation ----
   const mappedKeys = Object.values(mapping).filter(Boolean);
@@ -1097,7 +1087,7 @@ export default function SmartImport() {
             type="button"
             className="btn btn-link btn-sm"
             style={{ padding: 0 }}
-            onClick={downloadTemplate}
+            onClick={downloadImportTemplate}
           >
             Download an import template
           </button>

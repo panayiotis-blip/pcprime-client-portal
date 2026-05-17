@@ -21,7 +21,8 @@ interface FieldProps {
   label: string;
   field: string;
   type?: string;
-  options?: string[];
+  // Plain strings (value === label) or { value, label } pairs.
+  options?: Array<string | { value: string; label: string }>;
   placeholder?: string;
   fullWidth?: boolean;
 }
@@ -29,19 +30,22 @@ interface FieldProps {
 export function Field({ label, field, type = 'text', options, placeholder, fullWidth }: FieldProps) {
   const { editing, form, client, onChange } = useFieldCtx();
   const value = form[field];
+  const opts = options
+    ? options.map(o => (typeof o === 'string' ? { value: o, label: o } : o))
+    : null;
 
   return (
     <div className={`form-group${fullWidth ? ' full-width' : ''}`}>
       <label>{label}</label>
       {editing ? (
-        options ? (
+        opts ? (
           <select
             value={value || ''}
             onChange={(e) => onChange(field, e.target.value)}
             className="form-input"
           >
             <option value="">—</option>
-            {options.map(o => <option key={o} value={o}>{o}</option>)}
+            {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         ) : type === 'textarea' ? (
           <textarea
@@ -61,7 +65,11 @@ export function Field({ label, field, type = 'text', options, placeholder, fullW
           />
         )
       ) : (
-        <p className="field-value">{client[field] || '—'}</p>
+        <p className="field-value">
+          {opts
+            ? (opts.find(o => o.value === client[field])?.label || client[field] || '—')
+            : (client[field] || '—')}
+        </p>
       )}
     </div>
   );
