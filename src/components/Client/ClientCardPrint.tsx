@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { EmailLinks } from '../shared/MultiEmail';
@@ -136,8 +136,16 @@ export default function ClientCardPrint() {
   const hasAddresses = !!(effectivePrimary || tradingAddr || postalAddr);
   const businessTypeLabel = client.business_type || client.client_category || 'Client';
 
+  // Brand colours from company_settings — applied to the printed card only.
+  const brandVars = {
+    '--brand-primary': company?.brand_primary_colour,
+    '--brand-secondary': company?.brand_secondary_colour,
+    '--letterhead-bg': company?.letterhead_background_colour,
+    '--letterhead-text': company?.letterhead_text_colour,
+  } as unknown as CSSProperties;
+
   return (
-    <div className="print-card-page">
+    <div className="print-card-page" style={brandVars}>
       <div className="print-card-toolbar no-print">
         <Link to={`/clients/${clientId}`} className="btn btn-link">← Back to client</Link>
         <button className="btn btn-primary" onClick={() => window.print()}>🖨 Print</button>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 
@@ -110,6 +110,13 @@ export default function TimesheetPrint() {
   if (loading) return <div className="loading-screen">Loading…</div>;
 
   const co = company || {};
+  // Brand colours from company_settings — applied to the printed timesheet only.
+  const brandVars = {
+    '--brand-primary': co.brand_primary_colour,
+    '--brand-secondary': co.brand_secondary_colour,
+    '--letterhead-bg': co.letterhead_background_colour,
+    '--letterhead-text': co.letterhead_text_colour,
+  } as unknown as CSSProperties;
   const addressLines = [
     co.address_line1, co.address_line2,
     [co.postal_code, co.city].filter(Boolean).join(' '),
@@ -117,7 +124,7 @@ export default function TimesheetPrint() {
   ].filter(Boolean);
 
   return (
-    <div className="print-page">
+    <div className="print-page" style={brandVars}>
       <style>{`
         @media print {
           body { background: white; }
@@ -127,20 +134,20 @@ export default function TimesheetPrint() {
           .app-shell .main-content { margin: 0; padding: 0; }
           .print-page { padding: 0 !important; }
         }
-        .print-page { padding: 24px; max-width: 900px; margin: 0 auto; background: white; color: #0f172a; }
-        .ts-header { display: flex; gap: 16px; align-items: flex-start; border-bottom: 2px solid #1a2e4a; padding-bottom: 12px; margin-bottom: 16px; }
+        .print-page { padding: 24px; max-width: 900px; margin: 0 auto; background: var(--letterhead-bg, white); color: var(--letterhead-text, #0f172a); }
+        .ts-header { display: flex; gap: 16px; align-items: flex-start; border-bottom: 2px solid var(--brand-primary, #1a2e4a); padding-bottom: 12px; margin-bottom: 16px; }
         .ts-header img { max-width: 140px; max-height: 80px; }
-        .ts-firm-name { font-weight: 700; font-size: 18px; color: #1a2e4a; }
+        .ts-firm-name { font-weight: 700; font-size: 18px; color: var(--brand-primary, #1a2e4a); }
         .ts-firm-tag  { font-size: 12px; color: #475569; }
         .ts-firm-meta { font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.5; }
-        .ts-doc-title { font-size: 22px; font-weight: 700; margin: 8px 0 4px; color: #1a2e4a; }
+        .ts-doc-title { font-size: 22px; font-weight: 700; margin: 8px 0 4px; color: var(--brand-primary, #1a2e4a); }
         .ts-meta-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 13px; margin-bottom: 12px; }
         table.ts-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         table.ts-table th, table.ts-table td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; vertical-align: top; }
-        table.ts-table thead th { background: #f1f5f9; font-weight: 600; color: #1a2e4a; }
+        table.ts-table thead th { background: #f1f5f9; font-weight: 600; color: var(--brand-primary, #1a2e4a); }
         .ts-totals { margin-top: 16px; display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px; }
         .ts-totals .label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .ts-totals .value { font-weight: 700; font-size: 18px; color: #1a2e4a; }
+        .ts-totals .value { font-weight: 700; font-size: 18px; color: var(--brand-primary, #1a2e4a); }
         .ts-breakdown { margin-top: 12px; font-size: 12px; }
         .ts-breakdown table { width: auto; }
         .ts-signature { margin-top: 40px; display: flex; gap: 60px; flex-wrap: wrap; font-size: 12px; }

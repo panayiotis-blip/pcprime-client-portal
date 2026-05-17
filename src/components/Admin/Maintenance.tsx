@@ -4,6 +4,7 @@ import { api, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { Modal, Button, Input } from '../ui';
+import BulkWipeModal from './BulkWipeModal';
 
 // Company Settings → Maintenance (UI Polish v2, Part 5F).
 // Occasional admin clean-up tools. Currently the orphan tax-filing remover,
@@ -18,6 +19,8 @@ export default function Maintenance() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showWipe, setShowWipe] = useState(false);
+  const isOwner = user?.role === 'owner';
 
   const loadCount = async () => {
     try { setOrphanCount(await api.countOrphanTaxFilings()); }
@@ -62,6 +65,19 @@ export default function Maintenance() {
         <Link to="/clients/smart-import" className="btn btn-primary">Open Smart Import</Link>
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <strong>Bulk Import (legacy formats)</strong>
+          <div style={{ fontSize: 13, color: 'var(--pc-text-2)' }}>
+            The older fixed-template importers. For new imports, use Smart Import above.
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link to="/clients/bulk-import-v3" className="btn btn-secondary">Multi-sheet (V3)</Link>
+          <Link to="/clients/bulk-import" className="btn btn-secondary">Single-sheet</Link>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <strong>Orphan tax filings</strong>
@@ -81,6 +97,28 @@ export default function Maintenance() {
         >
           Remove {n} orphan filing{n === 1 ? '' : 's'}
         </Button>
+      </div>
+
+      {isOwner && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 16 }}>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <strong>Bulk Wipe all clients</strong>
+            <div style={{ fontSize: 13, color: 'var(--pc-text-2)' }}>
+              Permanently removes client data — for clearing test data before go-live. Irreversible.
+            </div>
+          </div>
+          <Button variant="destructive" onClick={() => setShowWipe(true)}>Bulk Wipe…</Button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 16 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <strong>Deleted clients</strong>
+          <div style={{ fontSize: 13, color: 'var(--pc-text-2)' }}>
+            Restore soft-deleted clients, or permanently remove them.
+          </div>
+        </div>
+        <Link to="/clients/deleted" className="btn btn-secondary">Manage deleted clients</Link>
       </div>
 
       <Modal
@@ -114,6 +152,10 @@ export default function Maintenance() {
           autoFocus
         />
       </Modal>
+
+      {showWipe && (
+        <BulkWipeModal onClose={() => setShowWipe(false)} onWiped={() => setShowWipe(false)} />
+      )}
     </div>
   );
 }

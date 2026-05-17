@@ -649,6 +649,13 @@ export const api = {
     return (data as any[]) || [];
   },
 
+  // Permanently delete soft-deleted clients (owner-only + MFA, see migration 057).
+  async hardDeleteClients(ids: number[]) {
+    const { data, error } = await supabase.rpc('hard_delete_clients', { p_ids: ids });
+    if (error) throw new Error(error.message);
+    return data as { deleted: number; skipped: any[] };
+  },
+
   async mergeClient(_targetId: number, _sourceId: number, _fields?: Record<string, string>) {
     throw new Error('Merge clients: deferred — will port from Express soon.');
   },

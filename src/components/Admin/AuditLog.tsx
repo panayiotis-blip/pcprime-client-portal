@@ -17,6 +17,19 @@ type AuditEntry = {
 
 const PAGE_SIZE = 200;
 
+const daysAgoIso = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+};
+// Quick date-range presets for the audit log.
+const PRESETS: { key: string; label: string; days: number | null }[] = [
+  { key: 'last7',  label: '7 days',  days: 7 },
+  { key: 'last30', label: '30 days', days: 30 },
+  { key: 'last90', label: '90 days', days: 90 },
+  { key: 'all',    label: 'All',     days: null },
+];
+
 const formatTime = (iso: string) => {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -69,9 +82,22 @@ export default function AuditLog() {
   const [fActor, setFActor]   = useState<string>('');
   const [fAction, setFAction] = useState<string>('');
   const [fTarget, setFTarget] = useState<string>('');
-  const [fFrom, setFFrom]     = useState<string>('');
+  // Date range — defaults to the last 30 days; the chosen preset persists per-user.
+  const [datePreset, setDatePreset] = useState<string>(() => localStorage.getItem('audit_date_preset') || 'last30');
+  const [fFrom, setFFrom]     = useState<string>(() => {
+    const p = PRESETS.find(x => x.key === (localStorage.getItem('audit_date_preset') || 'last30'));
+    return p && p.days ? daysAgoIso(p.days) : '';
+  });
   const [fTo, setFTo]         = useState<string>('');
   const [search, setSearch]   = useState<string>('');
+
+  const applyPreset = (key: string) => {
+    setDatePreset(key);
+    localStorage.setItem('audit_date_preset', key);
+    const p = PRESETS.find(x => x.key === key);
+    setFFrom(p && p.days ? daysAgoIso(p.days) : '');
+    setFTo('');
+  };
 
   const reload = async (append: boolean) => {
     setLoading(true);
@@ -154,12 +180,26 @@ export default function AuditLog() {
           </select>
         </div>
         <div className="form-group">
+          <label>Period</label>
+          <div className="view-toggle">
+            {PRESETS.map(p => (
+              <button
+                key={p.key}
+                className={`view-btn ${datePreset === p.key ? 'active' : ''}`}
+                onClick={() => applyPreset(p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="form-group">
           <label>From</label>
-          <input type="date" className="form-input" value={fFrom} onChange={e => setFFrom(e.target.value)} />
+          <input type="date" className="form-input" value={fFrom} onChange={e => { setFFrom(e.target.value); setDatePreset('custom'); }} />
         </div>
         <div className="form-group">
           <label>To</label>
-          <input type="date" className="form-input" value={fTo} onChange={e => setFTo(e.target.value)} />
+          <input type="date" className="form-input" value={fTo} onChange={e => { setFTo(e.target.value); setDatePreset('custom'); }} />
         </div>
         <div className="form-group" style={{ flex: 1, minWidth: 180 }}>
           <label>Search</label>
@@ -172,6 +212,11 @@ export default function AuditLog() {
             <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
           </div>
         </div>
+      </div>
+
+      <div style={{ fontSize: 13, color: 'var(--pc-text-2)', margin: '0 0 10px' }}>
+        Showing <strong>{visible.length}</strong> of <strong>{entries.length}</strong> entr{entries.length === 1 ? 'y' : 'ies'}
+        {hasMore ? ' — older entries available below' : ''}
       </div>
 
       {loading && entries.length === 0 ? (

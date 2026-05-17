@@ -194,7 +194,7 @@ export default function TaxFilingsPage() {
           {activeFilterChips.map(c => (
             <span key={c.key} style={{
               background: 'var(--pc-gold-tint)', color: 'var(--pc-navy)',
-              border: '1px solid var(--pc-gold)',
+              border: '1px solid var(--pc-navy)',
               padding: '2px 10px', borderRadius: 999, fontSize: 12,
               display: 'inline-flex', alignItems: 'center', gap: 4,
             }}>

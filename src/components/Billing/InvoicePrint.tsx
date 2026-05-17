@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 
@@ -46,6 +46,14 @@ export default function InvoicePrint() {
   const co = company || {};
   const c  = invoice.client || {};
 
+  // Brand colours from company_settings — applied to the printed invoice only.
+  const brandVars = {
+    '--brand-primary': co.brand_primary_colour,
+    '--brand-secondary': co.brand_secondary_colour,
+    '--letterhead-bg': co.letterhead_background_colour,
+    '--letterhead-text': co.letterhead_text_colour,
+  } as unknown as CSSProperties;
+
   const firmAddressLines = [
     co.address_line1, co.address_line2,
     [co.postal_code, co.city].filter(Boolean).join(' '),
@@ -59,7 +67,7 @@ export default function InvoicePrint() {
   ].filter(Boolean).join('\n');
 
   return (
-    <div className="print-page">
+    <div className="print-page" style={brandVars}>
       <style>{`
         @media print {
           body { background: white; }
@@ -69,24 +77,24 @@ export default function InvoicePrint() {
           .app-shell .main-content { margin: 0; padding: 0; }
           .print-page { padding: 0 !important; }
         }
-        .print-page { padding: 24px; max-width: 900px; margin: 0 auto; background: white; color: #0f172a; }
-        .inv-header { display: flex; gap: 16px; align-items: flex-start; padding-bottom: 12px; border-bottom: 2px solid #1a2e4a; }
+        .print-page { padding: 24px; max-width: 900px; margin: 0 auto; background: var(--letterhead-bg, white); color: var(--letterhead-text, #0f172a); }
+        .inv-header { display: flex; gap: 16px; align-items: flex-start; padding-bottom: 12px; border-bottom: 2px solid var(--brand-primary, #1a2e4a); }
         .inv-header img { max-width: 140px; max-height: 80px; }
-        .inv-firm-name { font-weight: 700; font-size: 18px; color: #1a2e4a; }
+        .inv-firm-name { font-weight: 700; font-size: 18px; color: var(--brand-primary, #1a2e4a); }
         .inv-firm-meta { font-size: 11px; color: #475569; margin-top: 4px; line-height: 1.5; }
-        .inv-title { font-size: 28px; font-weight: 700; color: #1a2e4a; margin: 16px 0 4px; }
+        .inv-title { font-size: 28px; font-weight: 700; color: var(--brand-primary, #1a2e4a); margin: 16px 0 4px; }
         .inv-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; font-size: 13px; }
         .inv-meta .panel { background: #f8fafc; padding: 10px 12px; border-radius: 6px; }
         .inv-meta .panel h4 { margin: 0 0 6px; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
         .inv-meta .panel .body { font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
         table.inv-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
         table.inv-table th, table.inv-table td { border-bottom: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; vertical-align: top; }
-        table.inv-table thead th { background: #f1f5f9; font-weight: 600; color: #1a2e4a; }
+        table.inv-table thead th { background: #f1f5f9; font-weight: 600; color: var(--brand-primary, #1a2e4a); }
         table.inv-table td.num { text-align: right; white-space: nowrap; }
         .inv-totals { margin-top: 16px; margin-left: auto; width: 320px; font-size: 13px; }
         .inv-totals tr td { padding: 4px 8px; }
-        .inv-totals tr.total td { border-top: 2px solid #1a2e4a; padding-top: 8px; font-weight: 700; font-size: 16px; }
-        .inv-payment { margin-top: 24px; padding: 12px; background: #f8fafc; border-left: 4px solid #b8963e; font-size: 12px; }
+        .inv-totals tr.total td { border-top: 2px solid var(--brand-primary, #1a2e4a); padding-top: 8px; font-weight: 700; font-size: 16px; }
+        .inv-payment { margin-top: 24px; padding: 12px; background: #f8fafc; border-left: 4px solid var(--brand-secondary, #b8963e); font-size: 12px; }
         .inv-payment h4 { margin: 0 0 6px; }
         .inv-footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #64748b; text-align: center; }
         .print-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }

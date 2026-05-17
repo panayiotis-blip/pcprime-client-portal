@@ -11,6 +11,14 @@ const SERVICES = [
   'Company Admin', 'Meetings', 'Other',
 ] as const;
 
+// Brand colours — printed templates only. (UI Refinements Part B)
+const BRAND_COLOURS = [
+  { field: 'brand_primary_colour',         label: 'Primary brand colour',   def: '#0d1b2e' },
+  { field: 'brand_secondary_colour',       label: 'Secondary brand colour', def: '#b8963e' },
+  { field: 'letterhead_background_colour', label: 'Letterhead background',  def: '#ffffff' },
+  { field: 'letterhead_text_colour',       label: 'Letterhead text',        def: '#0d1b2e' },
+] as const;
+
 export default function CompanySettings() {
   const { user } = useAuth();
   const canEdit = isSupervisorOrHigher(user);
@@ -77,6 +85,10 @@ export default function CompanySettings() {
         bank_name: form.bank_name || null,
         tagline: form.tagline || null,
         report_footer: form.report_footer || null,
+        brand_primary_colour:         form.brand_primary_colour || '#0d1b2e',
+        brand_secondary_colour:       form.brand_secondary_colour || '#b8963e',
+        letterhead_background_colour: form.letterhead_background_colour || '#ffffff',
+        letterhead_text_colour:       form.letterhead_text_colour || '#0d1b2e',
         default_service_rates: rates,
       });
       await load();
@@ -86,6 +98,16 @@ export default function CompanySettings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const resetBrandColours = () => {
+    setForm((prev: any) => ({
+      ...prev,
+      brand_primary_colour: '#0d1b2e',
+      brand_secondary_colour: '#b8963e',
+      letterhead_background_colour: '#ffffff',
+      letterhead_text_colour: '#0d1b2e',
+    }));
   };
 
   const handleLogoUpload = async (file: File) => {
@@ -305,6 +327,63 @@ export default function CompanySettings() {
           disabled={!canEdit}
           placeholder="This document contains confidential information. For internal use only."
         />
+      </div>
+
+      {/* Brand & print colours */}
+      <div className="form-section">
+        <h3>Brand &amp; Print Colours</h3>
+        <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
+          These colours apply to <strong>printed templates only</strong> (client card, invoices,
+          timesheet) — they do not affect the app's screen UI. Saved as part of company settings.
+        </p>
+        <div className="form-grid">
+          {BRAND_COLOURS.map(bc => (
+            <div className="form-group" key={bc.field}>
+              <label>{bc.label}</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="color"
+                  value={form[bc.field] || bc.def}
+                  onChange={e => handleChange(bc.field, e.target.value)}
+                  disabled={!canEdit}
+                  style={{ width: 44, height: 32, padding: 0, border: '1px solid var(--pc-border)', borderRadius: 6 }}
+                />
+                <input
+                  type="text"
+                  className="form-input"
+                  value={form[bc.field] || bc.def}
+                  onChange={e => handleChange(bc.field, e.target.value)}
+                  disabled={!canEdit}
+                  style={{ width: 110, fontFamily: 'monospace' }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={resetBrandColours}>
+            Reset to defaults
+          </button>
+        )}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Letterhead preview
+          </div>
+          <div style={{
+            border: '1px solid var(--pc-border)', borderRadius: 8, padding: 16, maxWidth: 440,
+            background: form.letterhead_background_colour || '#ffffff',
+            color: form.letterhead_text_colour || '#0d1b2e',
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: form.brand_primary_colour || '#0d1b2e' }}>
+              {form.name || form.legal_name || 'Your Firm Name'}
+            </div>
+            <div style={{ fontSize: 11, fontStyle: 'italic', color: form.brand_secondary_colour || '#b8963e' }}>
+              {form.tagline || 'Firm tagline'}
+            </div>
+            <div style={{ borderTop: `2px solid ${form.brand_secondary_colour || '#b8963e'}`, margin: '10px 0' }} />
+            <div style={{ fontSize: 12 }}>Sample letterhead body text — printed documents use these colours.</div>
+          </div>
+        </div>
       </div>
 
       {canEdit && (

@@ -8,7 +8,6 @@ import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import { api, hasPermission } from '../../services/api';
 import ViewToggle from '../shared/ViewToggle';
 import MergeClients from './MergeClients';
-import BulkWipeModal from '../Admin/BulkWipeModal';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
 import * as XLSX from 'xlsx';
 import { Modal, Button } from '../ui';
@@ -67,8 +66,6 @@ export default function ClientManager() {
   const { runWith } = useMFAStepUp();
   const { getMode, setMode } = useViewPreferences();
   const canSeeDeleted = hasPermission(user, 'clients.restore');
-  const isOwner = user?.role === 'owner';
-  const [showWipe, setShowWipe] = useState(false);
   const [unlinkedCount, setUnlinkedCount] = useState(0);
 
   useEffect(() => {
@@ -586,25 +583,10 @@ export default function ClientManager() {
             #️⃣ Gen Codes
           </button>
           {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
-          {(user?.role === 'owner' || user?.role === 'supervisor') && (
-            <>
-              <Link to="/clients/bulk-import-v3" className="btn btn-primary">📥 Bulk Import V3</Link>
-              <Link to="/clients/bulk-import" className="btn btn-secondary" title="Legacy single-sheet import">📥 Bulk Import (legacy)</Link>
-            </>
-          )}
           {unlinkedCount > 0 && (
             <Link to="/clients/unlinked-directors" className="btn btn-secondary" style={{ borderColor: '#f59e0b' }} title="Director rows without a linked client">
               ⚠ Unlinked Directors ({unlinkedCount})
             </Link>
-          )}
-          {isOwner && (
-            <button
-              className="btn btn-danger"
-              onClick={() => setShowWipe(true)}
-              title="Pre-go-live: wipe all test data"
-            >
-              ⚠️ Bulk Wipe
-            </button>
           )}
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
@@ -617,13 +599,6 @@ export default function ClientManager() {
           </button>
         </div>
       </div>
-
-      {showWipe && (
-        <BulkWipeModal
-          onClose={() => setShowWipe(false)}
-          onWiped={() => refreshClients()}
-        />
-      )}
 
       {/* Merge UI */}
       {showMerge && (
@@ -863,7 +838,7 @@ export default function ClientManager() {
           {activeFilters.map(f => (
             <span key={f.key} style={{
               background: 'var(--pc-gold-tint)', color: 'var(--pc-navy)',
-              border: '1px solid var(--pc-gold)',
+              border: '1px solid var(--pc-navy)',
               padding: '2px 10px', borderRadius: 999, fontSize: 12,
               display: 'inline-flex', alignItems: 'center', gap: 4,
             }}>
