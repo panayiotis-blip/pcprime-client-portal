@@ -37,7 +37,7 @@ export const WIDGET_REGISTRY: WidgetSpec[] = [
   { id: 'kpi-overdue',  label: 'Overdue Tasks',     category: 'kpi', defaultSize: 'small',  defaultVisible: true  },
   { id: 'kpi-alerts',          label: 'Compliance Alerts',     category: 'kpi', defaultSize: 'small',  defaultVisible: true,  Component: undefined },
   { id: 'kpi-filings-month',   label: 'Filings Due This Month', category: 'kpi', defaultSize: 'small',  defaultVisible: true,  Component: FilingsDueThisMonth },
-  { id: 'kpi-filings-overdue', label: 'Overdue Filings',        category: 'kpi', defaultSize: 'small',  defaultVisible: true,  Component: OverdueFilings },
+  { id: 'kpi-filings-overdue', label: 'Overdue Filings',        category: 'kpi', defaultSize: 'small',  defaultVisible: false, Component: OverdueFilings },
 
   // ---- Content widgets ----
   { id: 'tasks',           label: 'My Tasks',                category: 'content', defaultSize: 'medium', defaultVisible: true,  Component: MyTasks },

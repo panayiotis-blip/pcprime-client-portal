@@ -4,7 +4,7 @@ import LogCallModal from '../Admin/LogCallModal';
 
 // Floating "+" button shown on every authed staff route (except print views).
 // Click → expands a vertical stack of four shortcuts:
-//   Scan Invoice  / New Task  / New Phone Log  / New Timesheet Entry
+//   Scan Document  / New Task  / New Phone Log  / New Timesheet Entry
 //
 // Pages that have an inline "new" form check for `?new=1` on mount and pop
 // the form open automatically, so we don't need duplicate modals.
@@ -36,7 +36,7 @@ export default function QuickActionsFab() {
             <li>
               <button onClick={() => go('/scan')}>
                 <span className="fab-icon">⊞</span>
-                <span>Scan Invoice</span>
+                <span>Scan Document</span>
               </button>
             </li>
             <li>

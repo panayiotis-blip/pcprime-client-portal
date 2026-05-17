@@ -22,12 +22,10 @@ export default function FilingsDueThisMonth() {
   }, []);
 
   return (
-    <Link to="/tax-filings?due_this_month=1" className="kpi-tile" style={{ background: '#dbeafe' }}>
-      <div className="kpi-tile-value" style={{ color: '#1e40af' }}>
-        {count == null ? '…' : count}
-      </div>
-      <div className="kpi-tile-label">Filings due this month</div>
-      <div className="kpi-tile-hint">pending / in progress / overdue</div>
+    <Link to="/tax-filings?due_this_month=1" className="kpi-tile">
+      <div className="kpi-tile-label">Filings Due This Month</div>
+      <div className="kpi-tile-value">{count == null ? '…' : count}</div>
+      <div className="kpi-tile-hint">pending / in progress</div>
     </Link>
   );
 }

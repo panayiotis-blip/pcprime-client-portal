@@ -2397,7 +2397,7 @@ body {
   gap: 14px;
 }
 .widget-slot { grid-column: span 6; min-width: 0; position: relative; }
-.widget-small  { grid-column: span 3; }
+.widget-small  { grid-column: span 2; }
 .widget-medium { grid-column: span 6; }
 .widget-large  { grid-column: span 12; }
 
@@ -2522,22 +2522,27 @@ body {
   background: white;
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 14px 16px;
-  min-height: 96px;
+  padding: 12px 14px;
+  min-height: 80px;
   text-decoration: none;
   color: inherit;
   display: flex;
   flex-direction: column;
+  gap: 3px;
   justify-content: center;
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
 }
 .kpi-tile:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--pc-shadow-sm);
+  border-color: var(--pc-gold);
   transform: translateY(-1px);
 }
-.kpi-tile-value { font-size: 30px; font-weight: 700; line-height: 1.05; color: #0f172a; }
-.kpi-tile-label { font-size: 13px; color: #64748b; margin-top: 4px; }
-.kpi-tile-hint  { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.kpi-tile-label {
+  font-size: 12px; font-weight: 600; color: var(--pc-text-2);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.kpi-tile-value { font-size: 24px; font-weight: 700; line-height: 1.1; color: var(--pc-text); }
+.kpi-tile-hint  { font-size: 12px; color: var(--pc-text-3); }
 .kpi-tile-warning .kpi-tile-value { color: #b45309; }
 .kpi-tile-danger  .kpi-tile-value { color: #b91c1c; }
 .kpi-tile-success .kpi-tile-value { color: #047857; }

@@ -5,43 +5,52 @@ import CameraCapture from './CameraCapture';
 import { recognizeImage } from '../../services/ocr/ocrService';
 import { extractPdfText, renderPdfToImages, getPdfPageCount, renderPdfPageToJpegBlob } from '../../services/ocr/pdfRenderer';
 import { parseInvoiceText } from '../../services/ocr/invoiceParser';
-import { type ScannedInvoice } from '../../context/ScanContext';
+import { useScan, type ScannedInvoice } from '../../context/ScanContext';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import SearchableSelect from '../common/SearchableSelect';
 
+// One row of the document_categories master list (migration 050).
+type DocCategory = {
+  id: number;
+  name: string;
+  code: string | null;
+  target_folder: string;
+  ocr_enabled: boolean;
+  journal_code: string | null;
+};
+
 export default function ScannerPage() {
   const navigate = useNavigate();
-  const { clients, refreshClients, refreshInvoices } = useApp();
+  const { clients, refreshClients } = useApp();
+  const { scannedInvoices } = useScan();
   const [showCamera, setShowCamera] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  // Per-file metadata: page count for PDFs + whether the user wants to split
-  // a multi-page PDF into one invoice per page. Map keyed by File identity
-  // (which is stable for the lifetime of a picked file).
+  // Per-file metadata: page count for PDFs + whether to split a multi-page PDF
+  // into one invoice per page. Keyed by File identity (stable per picked file).
   const [fileMeta, setFileMeta] = useState<Map<File, { pageCount: number | null; splitMode: boolean }>>(new Map());
-  const [journalCode, setJournalCode] = useState('INP');
+  const [categories, setCategories] = useState<DocCategory[]>([]);
+  const [categoryId, setCategoryId] = useState<number>(0);
   const [clientId, setClientId] = useState<number>(0);
-  const [journalTypes, setJournalTypes] = useState<any[]>([]);
-  const [showAddType, setShowAddType] = useState(false);
-  const [newCode, setNewCode] = useState('');
-  const [newLabel, setNewLabel] = useState('');
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState('');
+  const [notes, setNotes] = useState('');
+  // Branch B confirmation state — set once documents have been filed.
+  const [done, setDone] = useState<{ count: number; folder: string; client: string } | null>(null);
 
   useEffect(() => {
-    api.getJournalTypes().then(setJournalTypes).catch(() => {});
+    api.getDocumentCategories()
+      .then((rows) => {
+        setCategories(rows as DocCategory[]);
+        if (rows.length > 0) setCategoryId((rows[0] as DocCategory).id);
+      })
+      .catch(() => {});
   }, []);
 
-  const handleAddJournalType = async () => {
-    if (!newCode.trim() || !newLabel.trim()) return;
-    await api.createJournalType({ code: newCode.trim().toUpperCase(), label: newLabel.trim(), client_id: 0 });
-    setJournalTypes(await api.getJournalTypes());
-    setNewCode('');
-    setNewLabel('');
-    setShowAddType(false);
-  };
+  const category = categories.find((c) => c.id === categoryId) || null;
+  const isOcr = !!category?.ocr_enabled;
 
   const handleAddClient = async () => {
     if (!newClientName.trim()) return;
@@ -54,13 +63,11 @@ export default function ScannerPage() {
 
   const handleFilesSelect = (files: File[]) => {
     setSelectedFiles((prev) => [...prev, ...files]);
-    // Add placeholder meta immediately so the UI can show "checking pages..."
     setFileMeta((prev) => {
       const next = new Map(prev);
       for (const f of files) if (!next.has(f)) next.set(f, { pageCount: null, splitMode: true });
       return next;
     });
-    // Async: compute page counts for PDFs (other types are 1 page).
     files.forEach(async (file) => {
       let pages = 1;
       if (file.type === 'application/pdf') {
@@ -129,16 +136,16 @@ export default function ScannerPage() {
     }
   };
 
-  const handleScanAll = async () => {
-    if (selectedFiles.length === 0) return;
-    if (!clientId) {
-      alert('Please select a client before scanning.');
-      return;
-    }
-    setScanning(true);
+  const resetAfterDone = () => {
+    setSelectedFiles([]);
+    setFileMeta(new Map());
+    setNotes('');
+    setDone(null);
+  };
 
-    // First, expand any multi-page PDFs that the user wants split into per-page jobs.
-    // Each job becomes one invoice.
+  // Branch A — OCR every file, then hand off to the Edit Invoice screen in
+  // batch-review mode so the user checks each extraction before saving.
+  const runOcrBranch = async (cat: DocCategory) => {
     type Job = { file: File; displayName: string };
     const jobs: Job[] = [];
     for (const file of selectedFiles) {
@@ -146,8 +153,8 @@ export default function ScannerPage() {
       const shouldSplit = file.type === 'application/pdf' && meta?.pageCount && meta.pageCount > 1 && meta.splitMode;
       if (shouldSplit) {
         const baseName = file.name.replace(/\.pdf$/i, '');
-        for (let pageNum = 1; pageNum <= (meta.pageCount as number); pageNum++) {
-          setStatusText(`Splitting ${file.name}: page ${pageNum} of ${meta.pageCount}…`);
+        for (let pageNum = 1; pageNum <= (meta!.pageCount as number); pageNum++) {
+          setStatusText(`Splitting ${file.name}: page ${pageNum} of ${meta!.pageCount}…`);
           try {
             const blob = await renderPdfPageToJpegBlob(file, pageNum);
             const pageFile = new File([blob], `${baseName}-page-${pageNum}.jpg`, { type: 'image/jpeg' });
@@ -160,7 +167,9 @@ export default function ScannerPage() {
         jobs.push({ file, displayName: file.name });
       }
     }
+    if (jobs.length === 0) { alert('Nothing to scan.'); return; }
 
+    const journalCode = cat.journal_code || 'JV';
     const results: ScannedInvoice[] = [];
     for (let i = 0; i < jobs.length; i++) {
       const { file, displayName } = jobs[i];
@@ -168,10 +177,7 @@ export default function ScannerPage() {
       try {
         const { text, confidence } = await scanSingleFile(file);
         const parsed = parseInvoiceText(text);
-        results.push({
-          fileBlob: file, fileName: file.name, mimeType: file.type,
-          parsed, rawOcrText: text, confidence, journalCode, clientId,
-        });
+        results.push({ fileBlob: file, fileName: file.name, mimeType: file.type, parsed, rawOcrText: text, confidence, journalCode, clientId });
       } catch (err) {
         console.error(`Failed to scan ${file.name}:`, err);
         results.push({
@@ -182,61 +188,72 @@ export default function ScannerPage() {
       }
     }
 
-    // Auto-save all scanned invoices as drafts
-    setStatusText('Saving invoices...');
-    let savedCount = 0;
-    const failures: { name: string; reason: string }[] = [];
-    for (const scan of results) {
-      try {
-        const details = scan.parsed.vendorName
-          ? `${scan.parsed.vendorName}${scan.parsed.invoiceNumber ? ' - ' + scan.parsed.invoiceNumber : ''}`
-          : scan.parsed.invoiceNumber || '';
-        const data = {
-          client_id: scan.clientId,
-          invoice_number: scan.parsed.invoiceNumber || '',
-          vendor_name: scan.parsed.vendorName || '',
-          invoice_date: scan.parsed.invoiceDate || '',
-          due_date: scan.parsed.dueDate || '',
-          total_amount: scan.parsed.totalAmount || 0,
-          currency: scan.parsed.currency || '',
-          currency_rate: '',
-          raw_ocr_text: scan.rawOcrText || '',
-          status: 'draft',
-          journal: scan.journalCode,
-          reference: '',
-          journal_lines: [{
-            debit_account: '', credit_account: '', amount: scan.parsed.totalAmount || 0,
-            vat_code: '', vat_amount: scan.parsed.taxAmount || 0, details,
-            t_analysis_1: '', t_analysis_2: '', t_analysis_3: '', t_analysis_4: '', t_analysis_5: '',
-          }],
-        };
-        const file = scan.fileBlob instanceof File
-          ? scan.fileBlob
-          : new File([scan.fileBlob], scan.fileName, { type: scan.mimeType });
-        await api.createInvoice(data, file);
-        savedCount++;
-      } catch (err: any) {
-        console.error('Failed to save invoice:', err);
-        failures.push({ name: scan.fileName, reason: err?.message || String(err) });
-      }
-    }
-
-    setScanning(false);
-    setStatusText('');
-    setSelectedFiles([]);
-    await refreshInvoices();
-    let msg = `${savedCount} invoice(s) scanned and saved as drafts. You can now edit and correct them.`;
-    if (failures.length) {
-      msg += `\n\n${failures.length} file(s) failed:\n` +
-             failures.map(f => `  • ${f.name}: ${f.reason}`).join('\n');
-    }
-    alert(msg);
-    if (savedCount > 0) navigate('/invoices');
+    // Hand off to the Edit Invoice screen — its batch mode steps through each
+    // result with "Save & Next" so nothing is saved without review.
+    scannedInvoices.current = results;
+    navigate('/invoices/new', { state: { batch: true } });
   };
+
+  // Branch B — no OCR; file the documents straight into the category's folder.
+  const runUploadBranch = async (cat: DocCategory) => {
+    setStatusText(`Uploading ${selectedFiles.length} document(s)…`);
+    const folderId = await api.getFolderIdByCategoryKey(clientId, cat.target_folder);
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const { inserted } = await api.uploadDocumentsToFolder({
+      clientId,
+      folderId,
+      docType: cat.name,
+      category: cat.target_folder,
+      month: ym,
+      files: selectedFiles,
+      notes,
+    });
+    const clientName = clients.find((c: any) => c.id === clientId)?.name || 'client';
+    setSelectedFiles([]);
+    setFileMeta(new Map());
+    setDone({ count: inserted, folder: cat.name, client: clientName });
+  };
+
+  const handleProcess = async () => {
+    if (selectedFiles.length === 0) return;
+    if (!clientId) { alert('Please select a client before continuing.'); return; }
+    if (!category) { alert('Please choose a document category first.'); return; }
+    setScanning(true);
+    try {
+      if (isOcr) await runOcrBranch(category);
+      else await runUploadBranch(category);
+    } catch (err: any) {
+      alert('Failed: ' + (err?.message || String(err)));
+    } finally {
+      setScanning(false);
+      setStatusText('');
+    }
+  };
+
+  // ---- Branch B confirmation screen ----
+  if (done) {
+    return (
+      <div className="scanner-page">
+        <h2>Scan Document</h2>
+        <div className="form-section" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 40, color: 'var(--pc-green)' }}>✓</div>
+          <h3 style={{ marginTop: 4 }}>{done.count} document{done.count === 1 ? '' : 's'} uploaded</h3>
+          <p style={{ color: 'var(--pc-text-2)' }}>
+            Filed under <strong>{done.folder}</strong> for <strong>{done.client}</strong>.
+          </p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+            <button className="btn btn-secondary" onClick={resetAfterDone}>Scan another</button>
+            <button className="btn btn-primary" onClick={() => navigate(`/clients/${clientId}`)}>Open client</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="scanner-page">
-      <h2>Scan Invoices</h2>
+      <h2>Scan Document</h2>
 
       {/* Step 1: Select Client */}
       <div className="form-section">
@@ -262,33 +279,32 @@ export default function ScannerPage() {
         )}
       </div>
 
-      {/* Step 2: Transaction Type */}
+      {/* Step 2: Document Category */}
       <div className="form-section">
-        <h3>2. Transaction Type</h3>
-        <div className="journal-type-grid">
-          {journalTypes.map((jt) => (
-            <button key={jt.code} className={`journal-type-btn ${journalCode === jt.code ? 'active' : ''}`} onClick={() => setJournalCode(jt.code)}>
-              <span className="jt-code">{jt.code}</span>
-              <span className="jt-label">{jt.label}</span>
-            </button>
+        <h3>2. Document Category</h3>
+        <select
+          className="form-input"
+          value={categoryId}
+          onChange={(e) => setCategoryId(Number(e.target.value))}
+          style={{ maxWidth: 360 }}
+        >
+          {categories.length === 0 && <option value={0}>Loading categories…</option>}
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.code ? `${c.code} — ${c.name}` : c.name}</option>
           ))}
-          <button className="journal-type-btn add-type-btn" onClick={() => setShowAddType(!showAddType)}>
-            <span className="jt-code">+</span>
-            <span className="jt-label">Add Type</span>
-          </button>
-        </div>
-        {showAddType && (
-          <div className="add-type-form">
-            <input type="text" value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="Code (e.g. REC)" className="form-input" maxLength={5} />
-            <input type="text" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Label (e.g. Receipt)" className="form-input" />
-            <button className="btn btn-primary btn-sm" onClick={handleAddJournalType}>Add</button>
-          </div>
+        </select>
+        {category && (
+          <p style={{ fontSize: 13, color: 'var(--pc-text-2)', marginTop: 8 }}>
+            {isOcr
+              ? 'Runs OCR and opens the invoice editor so you can review each extraction before saving.'
+              : 'Files the documents straight into the client’s folders — no OCR, no invoice record.'}
+          </p>
         )}
       </div>
 
-      {/* Step 3: Upload Files */}
+      {/* Step 3: Upload */}
       <div className="form-section">
-        <h3>3. Upload Invoices</h3>
+        <h3>3. Upload Documents</h3>
         {showCamera ? (
           <CameraCapture onCapture={handleCameraCapture} onClose={() => setShowCamera(false)} />
         ) : (
@@ -315,13 +331,9 @@ export default function ScannerPage() {
                 {file.type === 'application/pdf' && pages === null && (
                   <span style={{ fontSize: 12, color: '#94a3b8' }}>checking pages…</span>
                 )}
-                {isMultiPagePdf && (
+                {isMultiPagePdf && isOcr && (
                   <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569', marginLeft: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={!!meta?.splitMode}
-                      onChange={() => toggleSplitMode(file)}
-                    />
+                    <input type="checkbox" checked={!!meta?.splitMode} onChange={() => toggleSplitMode(file)} />
                     Split {pages} pages → {pages} invoices
                   </label>
                 )}
@@ -332,9 +344,28 @@ export default function ScannerPage() {
         </div>
       )}
 
+      {/* Notes — Branch B only */}
+      {selectedFiles.length > 0 && !isOcr && (
+        <div className="form-section">
+          <label style={{ fontSize: 13, fontWeight: 500 }}>Notes (optional)</label>
+          <textarea
+            className="form-input"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="Anything to note about these documents…"
+            style={{ width: '100%', marginTop: 4 }}
+          />
+        </div>
+      )}
+
       {selectedFiles.length > 0 && !showCamera && (
-        <button className="btn btn-primary btn-scan" onClick={handleScanAll} disabled={scanning}>
-          {scanning ? statusText || 'Scanning...' : `Scan ${selectedFiles.length} Invoice(s)`}
+        <button className="btn btn-primary btn-scan" onClick={handleProcess} disabled={scanning}>
+          {scanning
+            ? statusText || 'Working…'
+            : isOcr
+              ? `Scan ${selectedFiles.length} Document(s)`
+              : `Upload ${selectedFiles.length} Document(s)`}
         </button>
       )}
 
@@ -345,7 +376,10 @@ export default function ScannerPage() {
       )}
 
       <div className="manual-entry">
-        <button className="btn btn-link" onClick={() => navigate('/invoices/new', { state: { journalCode, clientId } })}>
+        <button
+          className="btn btn-link"
+          onClick={() => navigate('/invoices/new', { state: { journalCode: category?.journal_code || 'JV', clientId } })}
+        >
           Or enter invoice details manually
         </button>
       </div>

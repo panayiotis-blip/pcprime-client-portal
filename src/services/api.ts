@@ -957,6 +957,24 @@ export const api = {
     return data || [];
   },
 
+  // Resolve a system-folder id from its category_key (seeds folders if needed).
+  async getFolderIdByCategoryKey(clientId: number, categoryKey: string): Promise<number | null> {
+    await seedSystemFolders(clientId);
+    const { data } = await supabase.from('folders').select('id')
+      .eq('client_id', clientId).eq('category_key', categoryKey).eq('is_system', true)
+      .order('id', { ascending: true }).limit(1);
+    return data?.[0]?.id || null;
+  },
+
+  // --------- Document categories (Scan Document master list) ---------
+  async getDocumentCategories() {
+    const { data, error } = await supabase.from('document_categories')
+      .select('*').eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   // --------- Folders ---------
   async getFolders(clientId: number) {
     await seedSystemFolders(clientId);

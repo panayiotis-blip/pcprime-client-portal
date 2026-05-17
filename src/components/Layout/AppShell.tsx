@@ -30,7 +30,7 @@ const STAFF_GROUPS: NavGroup[] = [
   {
     key: 'operations', label: 'Daily Operations', icon: '📊',
     items: [
-      { path: '/scan',      label: 'Scan Invoice', icon: '⊞' },
+      { path: '/scan',      label: 'Scan Document', icon: '⊞' },
       { path: '/invoices',  label: 'Invoices',     icon: '☰' },
       { path: '/phone-log', label: 'Phone Log',    icon: '☎' },
       { path: '/timesheet', label: 'Timesheet',    icon: '⏱' },

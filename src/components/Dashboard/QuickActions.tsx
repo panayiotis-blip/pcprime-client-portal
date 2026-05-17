@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 
 const ACTIONS: { label: string; to: string; icon: string }[] = [
-  { label: 'Scan Invoice', to: '/scan',     icon: '⊞' },
+  { label: 'Scan Document', to: '/scan',     icon: '⊞' },
   { label: 'Add Client',   to: '/clients',  icon: '⊡' },
   { label: 'New Task',     to: '/tasks',    icon: '☑' },
   { label: 'Run Report',   to: '/reports',  icon: '◈' },

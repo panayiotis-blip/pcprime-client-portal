@@ -75,6 +75,12 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
 
   const totalClients   = clients.length;
   const activeInvoices = invoices.filter((i: any) => i.status !== 'exported').length;
+  const draftInvoices  = invoices.filter((i: any) => i.status === 'draft').length;
+  // New clients created this calendar month — drives the Total Clients context line.
+  const newClientsThisMonth = (() => {
+    const ym = todayIso().slice(0, 7);
+    return (clients as any[]).filter(c => String(c.created_at || '').slice(0, 7) === ym).length;
+  })();
 
   const [pendingVat, setPendingVat]               = useState<number | null>(null);
   const [overdueTasks, setOverdueTasks]           = useState<number | null>(null);
@@ -120,11 +126,11 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
   // need the data fetched above; content widgets pull from the registry.
   const renderWidgetContent = (id: string) => {
     switch (id) {
-      case 'kpi-clients':  return <KpiTile label="Total Clients"     value={totalClients}             to="/clients" />;
-      case 'kpi-invoices': return <KpiTile label="Active Invoices"   value={activeInvoices}           to="/invoices" hint="drafts + reviewed" />;
-      case 'kpi-vat':      return <KpiTile label="Pending VAT"       value={pendingVat ?? '…'}        to="/compliance" loading={pendingVat === null} />;
-      case 'kpi-overdue':  return <KpiTile label="Overdue Tasks"     value={overdueTasks ?? '…'}      to="/tasks"      variant={overdueTasks && overdueTasks > 0 ? 'warning' : 'default'} loading={overdueTasks === null} />;
-      case 'kpi-alerts':   return <KpiTile label="Compliance Alerts" value={complianceAlerts ?? '…'} to="/compliance" variant={complianceAlerts && complianceAlerts > 0 ? 'danger' : 'default'} loading={complianceAlerts === null} />;
+      case 'kpi-clients':  return <KpiTile label="Total Clients"     value={totalClients}             to="/clients"    hint={newClientsThisMonth > 0 ? `+${newClientsThisMonth} this month` : 'no new this month'} />;
+      case 'kpi-invoices': return <KpiTile label="Active Invoices"   value={activeInvoices}           to="/invoices"   hint={`${draftInvoices} draft${draftInvoices === 1 ? '' : 's'}`} />;
+      case 'kpi-vat':      return <KpiTile label="Pending VAT"       value={pendingVat ?? '…'}        to="/compliance" hint="quarterly returns" loading={pendingVat === null} />;
+      case 'kpi-overdue':  return <KpiTile label="Overdue Tasks"     value={overdueTasks ?? '…'}      to="/tasks"      hint="past due date" variant={overdueTasks && overdueTasks > 0 ? 'warning' : 'default'} loading={overdueTasks === null} />;
+      case 'kpi-alerts':   return <KpiTile label="Compliance Alerts" value={complianceAlerts ?? '…'} to="/compliance" hint="need attention" variant={complianceAlerts && complianceAlerts > 0 ? 'danger' : 'default'} loading={complianceAlerts === null} />;
       default: {
         const spec = WIDGET_REGISTRY.find(s => s.id === id);
         if (!spec?.Component) return null;

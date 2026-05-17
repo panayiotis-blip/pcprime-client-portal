@@ -172,7 +172,7 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
       {matchedFiltered.length === 0 ? (
         <div className="empty-state">
           <p>{filtered.length === 0 ? 'No invoices yet for this client.' : 'No invoices match your search.'}</p>
-          {filtered.length === 0 && <Link to="/scan" className="btn btn-primary">Scan Invoices</Link>}
+          {filtered.length === 0 && <Link to="/scan" className="btn btn-primary">Scan Documents</Link>}
         </div>
       ) : viewMode === 'grid' ? (
         <div className="invoice-cards">

@@ -24,13 +24,10 @@ export default function OverdueFilings() {
   return (
     <Link
       to="/tax-filings?overdue=1"
-      className="kpi-tile"
-      style={isWarning ? { background: '#fee2e2' } : undefined}
+      className={`kpi-tile ${isWarning ? 'kpi-tile-danger' : ''}`}
     >
-      <div className="kpi-tile-value" style={isWarning ? { color: '#991b1b' } : undefined}>
-        {count == null ? '…' : count}
-      </div>
-      <div className="kpi-tile-label">Overdue filings</div>
+      <div className="kpi-tile-label">Overdue Filings</div>
+      <div className="kpi-tile-value">{count == null ? '…' : count}</div>
       <div className="kpi-tile-hint">past due, not yet filed</div>
     </Link>
   );
