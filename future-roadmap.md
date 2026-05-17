@@ -77,6 +77,9 @@ After migration 049, `clients.address` / `city` / `postal_code` / `country` are 
 ### Bulk Import — is_vendor column (UI Polish v2, Part 6E) ❌
 Deferred from Part 6. Add an `is_vendor` (Y/N) column to the bulk-import template and have the importer set the flag. Needs the `bulk_import_v3` RPC modified (a new migration). Low priority — vendors are added via the invoice-editor quick-create or the Clients-list "Mark as Vendor" bulk action.
 
+### Smart Import — director rows ❌
+Deferred from Smart Import Phase 6. The field registry already lets you map director columns (name, role, ID, nationality, shareholding %, appointed date), but the `smart_import` RPC does not yet write them to `client_directors`. To add: per imported row with director data, insert a `client_directors` row (`director_client_id` left null → linked later via the Unlinked Directors tool). Mapped director columns are currently skipped with an on-screen warning at the import step.
+
 ### Email Integration (CloudMailin) ⏸
 Code shipped, awaiting paid signup + DNS + secrets. See `memory/project_open_followups.md` for the step-by-step.
 

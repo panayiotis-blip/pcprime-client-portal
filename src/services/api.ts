@@ -986,6 +986,51 @@ export const api = {
     return data?.[0]?.id || null;
   },
 
+  // --------- Smart Import mappings (reusable column-mapping presets) ---------
+  async getImportMappings() {
+    const { data, error } = await supabase.from('import_mappings')
+      .select('*').order('updated_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async saveImportMapping(payload: {
+    name: string;
+    description?: string | null;
+    column_mapping: Record<string, string>;
+    options?: Record<string, any>;
+    is_shared?: boolean;
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const row = {
+      user_id:        session?.user?.id,
+      name:           payload.name,
+      description:    payload.description || null,
+      column_mapping: payload.column_mapping,
+      options:        payload.options || {},
+      is_shared:      payload.is_shared ?? false,
+    };
+    // Upsert on (user_id, name) — re-saving under the same name overwrites it.
+    const { data, error } = await supabase.from('import_mappings')
+      .upsert(row, { onConflict: 'user_id,name' }).select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as string;
+  },
+
+  async deleteImportMapping(id: string) {
+    const { error } = await supabase.from('import_mappings').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  // Apply one chunk of resolved Smart Import row operations.
+  async smartImport(rows: any[]) {
+    const { data, error } = await supabase.rpc('smart_import', { p_rows: rows });
+    if (error) throw new Error(error.message);
+    return data as {
+      batch_id: string; created: number; updated: number; failed: number; errors: any[];
+    };
+  },
+
   // --------- Document categories (Scan Document master list) ---------
   // Active categories only — used by the Scan Document dropdown.
   async getDocumentCategories() {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
@@ -48,8 +49,18 @@ export default function Maintenance() {
     <div className="form-section">
       <h3>Maintenance</h3>
       <p style={{ fontSize: 13, color: 'var(--pc-text-2)', marginTop: 0 }}>
-        Occasional admin clean-up tools. These actions are permanent.
+        Admin tools for loading and tidying client data.
       </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <strong>Smart Import</strong>
+          <div style={{ fontSize: 13, color: 'var(--pc-text-2)' }}>
+            Load client data from any Excel file — map its columns to client fields, then import.
+          </div>
+        </div>
+        <Link to="/clients/smart-import" className="btn btn-primary">Open Smart Import</Link>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 240 }}>

@@ -16,6 +16,7 @@ import ClientDetail from './components/Client/ClientDetail';
 import ClientCardPrint from './components/Client/ClientCardPrint';
 import BulkImport from './components/Admin/BulkImport';
 import BulkImportV3 from './components/Admin/BulkImportV3';
+import SmartImport from './components/Admin/SmartImport';
 import TaxFilingsPage from './components/Admin/TaxFilingsPage';
 import UnlinkedDirectors from './components/Admin/UnlinkedDirectors';
 import CredentialsVault from './components/Admin/CredentialsVault';
@@ -69,6 +70,7 @@ function AuthedApp() {
             <Route path="/clients/deleted" element={<DeletedClients />} />
             <Route path="/clients/bulk-import" element={<BulkImport />} />
             <Route path="/clients/bulk-import-v3" element={<BulkImportV3 />} />
+            <Route path="/clients/smart-import" element={<SmartImport />} />
             <Route path="/clients/unlinked-directors" element={<UnlinkedDirectors />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
