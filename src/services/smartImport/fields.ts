@@ -1,13 +1,16 @@
 // =============================================================
 // Smart Import — importable client field registry + auto-matcher.
 // Shared by every phase of the Smart Import wizard.
+// Groups mirror the client detail tabs (Client Info / Contacts /
+// Registrations / Credentials) so the mapping dropdown is familiar.
 // =============================================================
 
 export interface ImportField {
   /** Canonical key. Plain client columns use the column name; address fields
-   *  use `addr_<type>_<part>`; director fields use `director_<part>`. */
+   *  use `addr_<type>_<part>`; credential fields use `cred_<part>`; director
+   *  fields use `director_<part>`. */
   key: string;
-  /** Human label shown in the mapping dropdown. */
+  /** Human label shown in the mapping dropdown and the import template. */
   label: string;
   /** Group heading for the dropdown. */
   group: string;
@@ -19,95 +22,53 @@ export interface ImportField {
 
 // The full set of fields a spreadsheet column can be mapped onto.
 export const IMPORT_FIELDS: ImportField[] = [
-  // ---- Identity ----
-  { key: 'name', label: 'Name (primary)', group: 'Identity', required: true,
+  // ---- Client Info ----
+  { key: 'name', label: 'Name (primary)', group: 'Client Info', required: true,
     aliases: ['name', 'client name', 'company name', 'legal name', 'επωνυμία', 'όνομα εταιρείας', 'ονομασία'] },
-  { key: 'name_tax_office', label: 'Name (Greek / tax office)', group: 'Identity',
+  { key: 'name_tax_office', label: 'Name (Greek / tax office)', group: 'Client Info',
     aliases: ['greek name', 'tax office name', 'name as per tax office', 'name as per tax office return', 'ελληνική ονομασία', 'όνομα φορολογικού'] },
-  { key: 'client_code', label: 'Client Code', group: 'Identity',
+  { key: 'client_code', label: 'Client Code', group: 'Client Info',
     aliases: ['code', 'client code', 'client no', 'client number', 'κωδικός', 'κωδικός πελάτη'] },
-  { key: 'trading_name', label: 'Trading Name', group: 'Identity',
+  { key: 'trading_name', label: 'Trading Name', group: 'Client Info',
     aliases: ['trading name', 'dba', 'διακριτικός τίτλος'] },
-
-  // ---- Classification ----
-  { key: 'client_category', label: 'Client Category', group: 'Classification',
+  { key: 'client_category', label: 'Client Category', group: 'Client Info',
     aliases: ['category', 'client category', 'client type'] },
-  { key: 'client_status', label: 'Client Status', group: 'Classification',
+  { key: 'client_status', label: 'Client Status', group: 'Client Info',
     aliases: ['status', 'client status'] },
-  { key: 'business_type', label: 'Business Type', group: 'Classification',
+  { key: 'business_type', label: 'Business Type', group: 'Client Info',
     aliases: ['business type'] },
-  { key: 'industry_sector', label: 'Industry / Sector', group: 'Classification',
+  { key: 'industry_sector', label: 'Industry / Sector', group: 'Client Info',
     aliases: ['industry', 'sector', 'industry sector'] },
-
-  // ---- Tax & Registration ----
-  { key: 'tax_number', label: 'Tax Number (TIC)', group: 'Tax & Registration',
-    aliases: ['tic', 'tax number', 'tax id', 'tax identification code', 'αφμ', 'ταυτότητα φορολογουμένου'] },
-  { key: 'vat_number', label: 'VAT Number', group: 'Tax & Registration',
-    aliases: ['vat', 'vat no', 'vat number', 'vat reg', 'vat registration', 'αρ φπα', 'αριθμός φπα'] },
-  { key: 'vat_status', label: 'VAT Status', group: 'Tax & Registration',
-    aliases: ['vat status'] },
-  { key: 'vat_period', label: 'VAT Period', group: 'Tax & Registration',
-    aliases: ['vat period'] },
-  { key: 'vat_registration_date', label: 'VAT Registration Date', group: 'Tax & Registration',
-    aliases: ['vat registration date', 'vat reg date'] },
-  { key: 'registration_number', label: 'HE / Registration Number', group: 'Tax & Registration',
-    aliases: ['he', 'he number', 'he no', 'registration number', 'company registration', 'αρ μητρώου', 'αριθμός εγγραφής'] },
-  { key: 'incorporation_date', label: 'Incorporation Date', group: 'Tax & Registration',
-    aliases: ['incorporation date', 'date of incorporation', 'ημερομηνία σύστασης'] },
-  { key: 'year_of_incorporation', label: 'Year of Incorporation', group: 'Tax & Registration',
-    aliases: ['year of incorporation', 'incorporation year'] },
-  { key: 'year_end_date', label: 'Year End', group: 'Tax & Registration',
-    aliases: ['year end', 'year end date', 'y e', 'ye', 'financial year end'] },
-  { key: 'employer_number', label: 'SI Employer Number', group: 'Tax & Registration',
-    aliases: ['employer number', 'si number', 'si employer number', 'social insurance employer'] },
-  { key: 'ergani_number', label: 'ERGANI Number', group: 'Tax & Registration',
-    aliases: ['ergani', 'ergani number'] },
-  { key: 'social_insurance_number', label: 'Social Insurance Number', group: 'Tax & Registration',
-    aliases: ['social insurance number', 'si no', 'social insurance'] },
-
-  // ---- Personal (individuals) ----
-  { key: 'id_number', label: 'ID Number', group: 'Personal',
-    aliases: ['id number', 'identity number', 'id no', 'ταυτότητα'] },
-  { key: 'passport_number', label: 'Passport Number', group: 'Personal',
-    aliases: ['passport', 'passport number', 'passport no', 'διαβατήριο'] },
-  { key: 'date_of_birth', label: 'Date of Birth', group: 'Personal',
-    aliases: ['date of birth', 'dob', 'birth date', 'ημερομηνία γέννησης'] },
-  { key: 'nationality', label: 'Nationality', group: 'Personal',
-    aliases: ['nationality', 'υπηκοότητα'] },
-
-  // ---- Contact ----
-  { key: 'phone', label: 'Phone', group: 'Contact',
-    aliases: ['phone', 'tel', 'telephone', 'phone number', 'τηλέφωνο'] },
-  { key: 'mobile', label: 'Mobile', group: 'Contact',
-    aliases: ['mobile', 'cell', 'mobile number', 'κινητό'] },
-  { key: 'email', label: 'Email', group: 'Contact',
-    aliases: ['email', 'e mail', 'email address', 'ηλεκτρονικό ταχυδρομείο'] },
-  { key: 'website', label: 'Website', group: 'Contact',
-    aliases: ['website', 'web', 'url', 'ιστοσελίδα'] },
-  { key: 'fax', label: 'Fax', group: 'Contact',
-    aliases: ['fax'] },
-  { key: 'contact_person', label: 'Contact Person', group: 'Contact',
-    aliases: ['contact person', 'contact', 'αρμόδιος', 'υπεύθυνος'] },
-
-  // ---- Banking ----
-  { key: 'bank_iban', label: 'Bank IBAN', group: 'Banking',
+  { key: 'bank_iban', label: 'Bank IBAN', group: 'Client Info',
     aliases: ['iban', 'bank iban', 'bank account', 'αριθμός λογαριασμού'] },
-
-  // ---- Engagement ----
-  { key: 'engagement_letter_date', label: 'Engagement Letter Date', group: 'Engagement',
-    aliases: ['engagement letter date', 'engagement date'] },
-  { key: 'annual_fee_agreed', label: 'Annual Fee Agreed', group: 'Engagement',
-    aliases: ['annual fee', 'annual fee agreed', 'fee agreed'] },
-  { key: 'monthly_fee', label: 'Monthly Fee', group: 'Engagement',
-    aliases: ['monthly fee'] },
-  { key: 'auditor_name', label: 'Auditor Name', group: 'Engagement',
-    aliases: ['auditor', 'auditor name', 'ελεγκτής'] },
-  { key: 'services', label: 'Services', group: 'Engagement',
+  { key: 'services', label: 'Services', group: 'Client Info',
     aliases: ['services', 'υπηρεσίες'] },
-  { key: 'notes', label: 'Notes', group: 'Engagement',
+  { key: 'monthly_fee', label: 'Monthly Fee', group: 'Client Info',
+    aliases: ['monthly fee'] },
+  { key: 'annual_fee_agreed', label: 'Annual Fee Agreed', group: 'Client Info',
+    aliases: ['annual fee', 'annual fee agreed', 'fee agreed'] },
+  { key: 'engagement_letter_date', label: 'Engagement Letter Date', group: 'Client Info',
+    aliases: ['engagement letter date', 'engagement date'] },
+  { key: 'auditor_name', label: 'Auditor Name', group: 'Client Info',
+    aliases: ['auditor', 'auditor name', 'ελεγκτής'] },
+  { key: 'notes', label: 'Notes', group: 'Client Info',
     aliases: ['notes', 'comments', 'remarks', 'σημειώσεις'] },
 
-  // ---- Registered Address (generic address aliases land here) ----
+  // ---- Contacts ----
+  { key: 'phone', label: 'Phone', group: 'Contacts',
+    aliases: ['phone', 'tel', 'telephone', 'phone number', 'τηλέφωνο'] },
+  { key: 'mobile', label: 'Mobile', group: 'Contacts',
+    aliases: ['mobile', 'cell', 'mobile number', 'κινητό'] },
+  { key: 'email', label: 'Email', group: 'Contacts',
+    aliases: ['email', 'e mail', 'email address', 'ηλεκτρονικό ταχυδρομείο'] },
+  { key: 'website', label: 'Website', group: 'Contacts',
+    aliases: ['website', 'web', 'url', 'ιστοσελίδα'] },
+  { key: 'fax', label: 'Fax', group: 'Contacts',
+    aliases: ['fax'] },
+  { key: 'contact_person', label: 'Contact Person', group: 'Contacts',
+    aliases: ['contact person', 'contact', 'αρμόδιος', 'υπεύθυνος'] },
+
+  // ---- Registered Address ----
   { key: 'addr_registered_line1', label: 'Registered — Line 1', group: 'Registered Address',
     aliases: ['address', 'address line 1', 'registered address', 'registered office', 'street', 'διεύθυνση'] },
   { key: 'addr_registered_line2', label: 'Registered — Line 2', group: 'Registered Address',
@@ -143,18 +104,62 @@ export const IMPORT_FIELDS: ImportField[] = [
   { key: 'addr_postal_country', label: 'Postal — Country', group: 'Postal Address',
     aliases: ['postal country', 'mailing country'] },
 
-  // ---- Director (when director rows share the sheet) ----
-  { key: 'director_name', label: 'Director — Name', group: 'Director',
+  // ---- Registrations ----
+  { key: 'tax_number', label: 'Tax Number (TIC)', group: 'Registrations',
+    aliases: ['tic', 'tax number', 'tax id', 'tax identification code', 'αφμ', 'ταυτότητα φορολογουμένου'] },
+  { key: 'vat_number', label: 'VAT Number', group: 'Registrations',
+    aliases: ['vat', 'vat no', 'vat number', 'vat reg', 'vat registration', 'αρ φπα', 'αριθμός φπα'] },
+  { key: 'vat_status', label: 'VAT Status', group: 'Registrations',
+    aliases: ['vat status'] },
+  { key: 'vat_period', label: 'VAT Period', group: 'Registrations',
+    aliases: ['vat period'] },
+  { key: 'vat_registration_date', label: 'VAT Registration Date', group: 'Registrations',
+    aliases: ['vat registration date', 'vat reg date'] },
+  { key: 'registration_number', label: 'HE / Registration Number', group: 'Registrations',
+    aliases: ['he', 'he number', 'he no', 'registration number', 'company registration', 'αρ μητρώου', 'αριθμός εγγραφής'] },
+  { key: 'incorporation_date', label: 'Incorporation Date', group: 'Registrations',
+    aliases: ['incorporation date', 'date of incorporation', 'ημερομηνία σύστασης'] },
+  { key: 'year_of_incorporation', label: 'Year of Incorporation', group: 'Registrations',
+    aliases: ['year of incorporation', 'incorporation year'] },
+  { key: 'year_end_date', label: 'Year End', group: 'Registrations',
+    aliases: ['year end', 'year end date', 'y e', 'ye', 'financial year end'] },
+  { key: 'employer_number', label: 'SI Employer Number', group: 'Registrations',
+    aliases: ['employer number', 'si number', 'si employer number', 'social insurance employer'] },
+  { key: 'ergani_number', label: 'ERGANI Number', group: 'Registrations',
+    aliases: ['ergani', 'ergani number'] },
+  { key: 'social_insurance_number', label: 'Social Insurance Number', group: 'Registrations',
+    aliases: ['social insurance number', 'si no', 'social insurance'] },
+  { key: 'id_number', label: 'ID Number', group: 'Registrations',
+    aliases: ['id number', 'identity number', 'id no', 'ταυτότητα'] },
+  { key: 'passport_number', label: 'Passport Number', group: 'Registrations',
+    aliases: ['passport', 'passport number', 'passport no', 'διαβατήριο'] },
+  { key: 'date_of_birth', label: 'Date of Birth', group: 'Registrations',
+    aliases: ['date of birth', 'dob', 'birth date', 'ημερομηνία γέννησης'] },
+  { key: 'nationality', label: 'Nationality', group: 'Registrations',
+    aliases: ['nationality', 'υπηκοότητα'] },
+
+  // ---- Credentials (one platform login per row) ----
+  { key: 'cred_platform', label: 'Credential — Platform', group: 'Credentials',
+    aliases: ['platform', 'system', 'login system', 'credential platform', 'portal', 'taxisnet'] },
+  { key: 'cred_username', label: 'Credential — Username', group: 'Credentials',
+    aliases: ['username', 'user name', 'login username', 'login id', 'user id', 'login'] },
+  { key: 'cred_password', label: 'Credential — Password', group: 'Credentials',
+    aliases: ['password', 'login password', 'credential password', 'pin', 'κωδικός πρόσβασης'] },
+  { key: 'cred_notes', label: 'Credential — Notes', group: 'Credentials',
+    aliases: ['credential notes', 'login notes'] },
+
+  // ---- Directors (when director rows share the sheet) ----
+  { key: 'director_name', label: 'Director — Name', group: 'Directors',
     aliases: ['director', 'director name', 'officer name', 'διευθυντής'] },
-  { key: 'director_role', label: 'Director — Role', group: 'Director',
-    aliases: ['director role', 'role', 'officer role'] },
-  { key: 'director_id_number', label: 'Director — ID Number', group: 'Director',
+  { key: 'director_role', label: 'Director — Role', group: 'Directors',
+    aliases: ['director role', 'officer role'] },
+  { key: 'director_id_number', label: 'Director — ID Number', group: 'Directors',
     aliases: ['director id', 'director id number'] },
-  { key: 'director_nationality', label: 'Director — Nationality', group: 'Director',
+  { key: 'director_nationality', label: 'Director — Nationality', group: 'Directors',
     aliases: ['director nationality'] },
-  { key: 'director_shareholding', label: 'Director — Shareholding %', group: 'Director',
+  { key: 'director_shareholding', label: 'Director — Shareholding %', group: 'Directors',
     aliases: ['shareholding', 'shareholding percent', 'shareholding %', 'shares', 'ποσοστό'] },
-  { key: 'director_appointed_date', label: 'Director — Appointed Date', group: 'Director',
+  { key: 'director_appointed_date', label: 'Director — Appointed Date', group: 'Directors',
     aliases: ['appointed date', 'appointment date', 'director appointed'] },
 ];
 
@@ -183,14 +188,16 @@ export interface AutoMatch {
   confidence: number;
 }
 
-/** Best-guess field for a spreadsheet header. */
+/** Best-guess field for a spreadsheet header. Matches against each field's
+ *  aliases, its label and its key — so the exported template (headers = labels)
+ *  re-imports at 100% confidence. */
 export function autoMatch(header: string): AutoMatch {
   const n = normaliseHeader(header);
   if (!n) return { fieldKey: null, confidence: 0 };
   let best: AutoMatch = { fieldKey: null, confidence: 0 };
   for (const f of IMPORT_FIELDS) {
-    for (const alias of f.aliases) {
-      const a = normaliseHeader(alias);
+    for (const candidate of [f.label, f.key, ...f.aliases]) {
+      const a = normaliseHeader(candidate);
       let score = 0;
       if (n === a) score = 100;
       else if (n.replace(/\s/g, '') === a.replace(/\s/g, '')) score = 95;

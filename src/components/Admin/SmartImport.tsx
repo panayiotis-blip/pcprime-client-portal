@@ -107,7 +107,7 @@ const CATEGORY_ALIASES: Record<string, string> = {
 function prepareFields(raw: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (key.startsWith('addr_') || key.startsWith('director_')) continue;
+    if (key.startsWith('addr_') || key.startsWith('director_') || key.startsWith('cred_')) continue;
     if (value == null || String(value).trim() === '') continue;
     if (DATE_FIELDS.has(key)) {
       const d = parseDateLoose(value);
@@ -145,20 +145,30 @@ function buildAddresses(raw: Record<string, any>): Record<string, any> | undefin
   return Object.keys(result).length ? result : undefined;
 }
 
+// Group cred_<part> keys into a credential object.
+function buildCredential(raw: Record<string, any>): Record<string, string> | undefined {
+  const cred: Record<string, string> = {};
+  for (const part of ['platform', 'username', 'password', 'notes']) {
+    const v = raw[`cred_${part}`];
+    if (v != null && String(v).trim() !== '') cred[part] = String(v).trim();
+  }
+  return (cred.platform || cred.username) ? cred : undefined;
+}
+
 // Resolve one review row into the smart_import payload shape.
 function buildRowPayload(r: ReviewRow): any {
   const addresses = buildAddresses(r.record);
+  const credential = buildCredential(r.record);
+  const extra = {
+    ...(addresses ? { addresses } : {}),
+    ...(credential ? { credential } : {}),
+  };
   if (r.action === 'create') {
-    return { action: 'create', fields: prepareFields(r.record), ...(addresses ? { addresses } : {}) };
+    return { action: 'create', fields: prepareFields(r.record), ...extra };
   }
   const changed: Record<string, any> = {};
   for (const d of r.diffs) if (d.willChange) changed[d.field] = r.record[d.field];
-  return {
-    action: 'update',
-    client_id: r.matched?.id,
-    fields: prepareFields(changed),
-    ...(addresses ? { addresses } : {}),
-  };
+  return { action: 'update', client_id: r.matched?.id, fields: prepareFields(changed), ...extra };
 }
 
 export default function SmartImport() {
@@ -185,7 +195,9 @@ export default function SmartImport() {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [result, setResult] = useState<{ created: number; updated: number; failed: number; errors: any[] } | null>(null);
+  const [result, setResult] = useState<
+    { created: number; updated: number; credentials: number; failed: number; errors: any[] } | null
+  >(null);
 
   useEffect(() => {
     api.getImportMappings().then(setSavedMappings).catch(() => {});
@@ -301,13 +313,14 @@ export default function SmartImport() {
     if (payloads.length === 0) return;
     setRunning(true);
     setProgress({ done: 0, total: payloads.length });
-    const acc = { created: 0, updated: 0, failed: 0, errors: [] as any[] };
+    const acc = { created: 0, updated: 0, credentials: 0, failed: 0, errors: [] as any[] };
     try {
       const CHUNK = 100;
       for (let i = 0; i < payloads.length; i += CHUNK) {
         const res = await api.smartImport(payloads.slice(i, i + CHUNK));
         acc.created += res.created;
         acc.updated += res.updated;
+        acc.credentials += res.credentials;
         acc.failed += res.failed;
         if (res.errors?.length) acc.errors.push(...res.errors);
         setProgress({ done: Math.min(i + CHUNK, payloads.length), total: payloads.length });
@@ -335,6 +348,18 @@ export default function SmartImport() {
     a.href = URL.createObjectURL(blob);
     a.download = `smart-import-log-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+  };
+
+  // An .xlsx with every importable field as a column header — fill it in and
+  // re-upload, and the columns auto-map at 100% (headers match the labels).
+  const downloadTemplate = () => {
+    const headers = IMPORT_FIELDS
+      .filter((f) => !f.key.startsWith('director_'))
+      .map((f) => f.label);
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clients');
+    XLSX.writeFile(wb, 'smart-import-template.xlsx');
   };
 
   // ---- Step 3 validation ----
@@ -395,7 +420,7 @@ export default function SmartImport() {
       }
       const diffs: FieldDiff[] = [];
       for (const [key, raw] of Object.entries(rr.record)) {
-        if (key.startsWith('addr_') || key.startsWith('director_')) continue;
+        if (key.startsWith('addr_') || key.startsWith('director_') || key.startsWith('cred_')) continue;
         const incoming = displayVal(raw);
         if (!incoming.trim()) continue;
         const current = displayVal(matched[key]);
@@ -430,6 +455,7 @@ export default function SmartImport() {
           <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', margin: '14px 0' }}>
             <Stat label="Created" value={result.created} color="#047857" />
             <Stat label="Updated" value={result.updated} color="var(--pc-navy)" />
+            <Stat label="Credentials" value={result.credentials} color="var(--pc-navy-2)" />
             <Stat label="Skipped" value={skipped} color="var(--pc-text-2)" />
             <Stat label="Failed" value={result.failed} color="var(--pc-red)" />
           </div>
@@ -832,6 +858,7 @@ export default function SmartImport() {
                 </select>
               )}
               <Button variant="secondary" size="sm" onClick={() => setShowSave(true)}>Save mapping</Button>
+              <Button variant="ghost" size="sm" onClick={() => setMapping({})}>Clear all</Button>
             </div>
           </div>
           <p style={{ fontSize: 13, color: 'var(--pc-text-2)', margin: '6px 0 12px' }}>
@@ -1064,6 +1091,18 @@ export default function SmartImport() {
         {error && (
           <p style={{ color: 'var(--pc-red)', fontSize: 13, marginTop: 12 }}>{error}</p>
         )}
+        <p style={{ fontSize: 13, color: 'var(--pc-text-2)', marginTop: 12 }}>
+          No file ready?{' '}
+          <button
+            type="button"
+            className="btn btn-link btn-sm"
+            style={{ padding: 0 }}
+            onClick={downloadTemplate}
+          >
+            Download an import template
+          </button>
+          {' '}— an Excel file with every field as a column, ready to fill in.
+        </p>
       </div>
 
       {workbook && (

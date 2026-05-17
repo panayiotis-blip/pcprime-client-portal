@@ -1027,7 +1027,8 @@ export const api = {
     const { data, error } = await supabase.rpc('smart_import', { p_rows: rows });
     if (error) throw new Error(error.message);
     return data as {
-      batch_id: string; created: number; updated: number; failed: number; errors: any[];
+      batch_id: string; created: number; updated: number;
+      credentials: number; failed: number; errors: any[];
     };
   },
 
