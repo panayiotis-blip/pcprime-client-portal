@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { EmailLinks } from '../shared/MultiEmail';
-import { vatCategoryLabel } from '../../services/vatCategories';
+import { vatCategoryLabel, vatPeriods } from '../../services/vatCategories';
 
 type ComplianceTask = {
   id: number;
@@ -221,7 +221,9 @@ export default function ClientCardPrint() {
                 <FieldRow label="Date of Birth"     value={fmtDate(client.date_of_birth)} />
                 <FieldRow label="Year End"          value={client.year_end_date || client.financial_year_end} />
                 <FieldRow label="VAT Category"      value={vatCategoryLabel(client.vat_category) || client.vat_period} />
+                <FieldRow label="VAT Periods"       value={vatPeriods(client.vat_category, client.vat_start_month).join(', ')} />
                 <FieldRow label="OSS VAT Category"  value={vatCategoryLabel(client.oss_vat_category)} />
+                <FieldRow label="OSS VAT Periods"   value={vatPeriods(client.oss_vat_category, client.oss_vat_start_month).join(', ')} />
               </div>
             </Section>
 

@@ -1,5 +1,5 @@
 import { Field, useFieldCtx } from '../fieldContext';
-import { VAT_CATEGORIES } from '../../../services/vatCategories';
+import { VAT_CATEGORIES, MONTHS, vatPeriods } from '../../../services/vatCategories';
 
 // Renamed from "Tax & Reg" to "Registrations" (UI polish part 6).
 // Four panels with show/hide based on client_category. A panel that's normally
@@ -12,6 +12,38 @@ const isCompanyLike = (cat: string) =>
 const isIndividualLike = (cat: string) =>
   cat === 'individual' || cat === 'self_employed' || cat === 'deceased' ||
   cat === 'dormant'    || cat === 'prospective'   || cat === 'other';
+
+// Read-only line showing the filing periods computed from a category +
+// starting-month pair. Updates live while editing.
+function VatPeriodsLine({ categoryField, monthField, label }: {
+  categoryField: string;
+  monthField: string;
+  label: string;
+}) {
+  const { client, form, editing } = useFieldCtx();
+  const data = editing ? { ...client, ...form } : client;
+  const periods = vatPeriods(data?.[categoryField], data?.[monthField]);
+
+  if (periods.length === 0) {
+    if (editing && data?.[categoryField]) {
+      return (
+        <div className="form-group full-width">
+          <label>{label}</label>
+          <p className="field-value" style={{ color: 'var(--pc-text-2)' }}>
+            Select a starting month to see the periods.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
+  return (
+    <div className="form-group full-width">
+      <label>{label}</label>
+      <p className="field-value">{periods.join('   ·   ')}</p>
+    </div>
+  );
+}
 
 export default function TaxRegistrationTab() {
   const { client, form, editing } = useFieldCtx();
@@ -35,12 +67,16 @@ export default function TaxRegistrationTab() {
       <div className="form-section">
         <h3>Tax Registration</h3>
         <div className="form-grid">
-          <Field label="Tax Number (TIC)" field="tax_number" />
-          <Field label="VAT Number"       field="vat_number" />
-          <Field label="VAT Status"       field="vat_status" options={VAT_STATUSES} />
-          <Field label="VAT Category"     field="vat_category" options={VAT_CATEGORIES} />
-          <Field label="OSS VAT Category" field="oss_vat_category" options={VAT_CATEGORIES} />
+          <Field label="Tax Number (TIC)"      field="tax_number" />
+          <Field label="VAT Number"            field="vat_number" />
+          <Field label="VAT Status"            field="vat_status" options={VAT_STATUSES} />
           <Field label="VAT Registration Date" field="vat_registration_date" type="date" />
+          <Field label="VAT Category"          field="vat_category" options={VAT_CATEGORIES} />
+          <Field label="VAT Starting Month"    field="vat_start_month" options={MONTHS} />
+          <VatPeriodsLine categoryField="vat_category" monthField="vat_start_month" label="VAT Periods" />
+          <Field label="OSS VAT Category"      field="oss_vat_category" options={VAT_CATEGORIES} />
+          <Field label="OSS Starting Month"    field="oss_vat_start_month" options={MONTHS} />
+          <VatPeriodsLine categoryField="oss_vat_category" monthField="oss_vat_start_month" label="OSS VAT Periods" />
         </div>
       </div>
 

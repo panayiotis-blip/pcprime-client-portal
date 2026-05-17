@@ -114,6 +114,15 @@ export function validateVatCategory(raw: any): ValResult {
     : { level: 'warning', message: `VAT category should be a letter A-G — got "${raw}"` };
 }
 
+export function validateMonth(raw: any): ValResult {
+  const v = String(raw ?? '').trim();
+  if (!v) return ok();
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 12
+    ? ok()
+    : { level: 'warning', message: 'Starting month should be a number 1-12' };
+}
+
 export function validateCategory(raw: any): ValResult {
   const v = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, '_');
   if (!v) return ok();
@@ -150,6 +159,8 @@ export function validateField(fieldKey: string, value: any): ValResult {
     case 'vat_period':             return validateVatPeriod(value);
     case 'vat_category':
     case 'oss_vat_category':       return validateVatCategory(value);
+    case 'vat_start_month':
+    case 'oss_vat_start_month':    return validateMonth(value);
     case 'client_category':        return validateCategory(value);
     default:                       return ok();
   }
