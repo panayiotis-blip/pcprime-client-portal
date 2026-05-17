@@ -3,6 +3,7 @@ import { Field, useFieldCtx } from '../fieldContext';
 const CLIENT_CATEGORIES = [
   'company', 'partnership', 'individual', 'sole_trader',
   'self_employed', 'deceased', 'dormant', 'prospective', 'other',
+  'vendor_only',
 ];
 
 const BUSINESS_TYPES = [
@@ -55,6 +56,29 @@ function TagsField() {
   );
 }
 
+// Part 6B — "this client is also a vendor / supplier" toggle.
+function VendorToggle() {
+  const { editing, form, client, onChange } = useFieldCtx();
+  const isVendor = (editing ? form.is_vendor : client.is_vendor) === true;
+  return (
+    <div className="form-group full-width">
+      <label>Vendor / Supplier</label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: editing ? 'pointer' : 'default' }}>
+        <input
+          type="checkbox"
+          checked={isVendor}
+          disabled={!editing}
+          onChange={(e) => onChange('is_vendor', e.target.checked)}
+        />
+        This client is also a vendor / supplier
+      </label>
+      <p style={{ fontSize: 11, color: 'var(--pc-text-2)', margin: '4px 0 0' }}>
+        When ticked, the client appears in the vendor dropdown on Purchase Invoices.
+      </p>
+    </div>
+  );
+}
+
 // Tab 1: Client Info — name, tax-office name, classification, status,
 // dates. Splits out of the legacy monolithic Info tab.
 export default function ClientInfoTab() {
@@ -77,6 +101,7 @@ export default function ClientInfoTab() {
           <Field label="Business Type" field="business_type" options={BUSINESS_TYPES} />
           <Field label="Tax Return Type" field="tax_return_type" placeholder="e.g. Employee (04), Self-employed (21)" />
           <Field label="Status" field="status" options={STATUSES} />
+          <VendorToggle />
         </div>
       </div>
 

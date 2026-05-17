@@ -49,6 +49,7 @@ const CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: 'dormant',        label: 'Dormant' },
   { value: 'prospective',    label: 'Prospective' },
   { value: 'other',          label: 'Other' },
+  { value: 'vendor_only',    label: 'Vendor (supplier)' },
 ];
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -333,6 +334,9 @@ export default function ClientManager() {
         || (c.city || '').toLowerCase().includes(t);
       if (!matches) return false;
     }
+    // Vendor-only clients are hidden from the main list unless the category
+    // filter is explicitly set to them (Part 6).
+    if (c.client_category === 'vendor_only' && filterCategory !== 'vendor_only') return false;
     // Structured filters
     if (filterCategory && c.client_category !== filterCategory) return false;
     if (filterStatus   && c.client_status   !== filterStatus)   return false;
@@ -498,6 +502,21 @@ export default function ClientManager() {
     }
   };
 
+  const handleBulkMarkVendor = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Mark ${selectedIds.size} client${selectedIds.size === 1 ? '' : 's'} as a vendor / supplier?`)) return;
+    setBulkBusy(true);
+    try {
+      await api.bulkSetVendor(Array.from(selectedIds), true);
+      clearSelection();
+      await refreshClients();
+    } catch (err: any) {
+      alert('Failed: ' + err.message);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const buildExportRows = () => {
     return (clients as any[])
       .filter(c => selectedIds.has(c.id))
@@ -561,7 +580,7 @@ export default function ClientManager() {
   return (
     <div className="client-manager">
       <div className="list-header">
-        <h2>Clients ({clients.length})</h2>
+        <h2>Clients ({clients.filter((c: any) => c.client_category !== 'vendor_only').length})</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={handleGenerateMissing} title="Auto-generate codes for clients without one">
             #️⃣ Gen Codes
@@ -882,6 +901,7 @@ export default function ClientManager() {
           <button className="btn btn-primary btn-sm" onClick={handleBulkMarkActive} disabled={bulkBusy}>Mark Active</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkInactive(true)} disabled={bulkBusy}>Mark Inactive…</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkTag(true)} disabled={bulkBusy}>Add Tag…</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleBulkMarkVendor} disabled={bulkBusy}>Mark as Vendor</button>
           <button className="btn btn-secondary btn-sm" onClick={handleBulkExportExcel} disabled={bulkBusy}>⬇ Excel</button>
           <button className="btn btn-secondary btn-sm" onClick={handleBulkExportCsv} disabled={bulkBusy}>⬇ CSV</button>
           <button

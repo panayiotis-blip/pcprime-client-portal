@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useScan, type ScannedInvoice } from '../../context/ScanContext';
 import SearchableSelect from '../common/SearchableSelect';
+import { Modal, Button, FormField, Input } from '../ui';
 
 const emptyLine: JournalLine = {
   debitAccount: '', creditAccount: '', amount: 0,
@@ -37,6 +38,9 @@ export default function InvoiceEditor() {
   const [patternApplied, setPatternApplied] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
   const [clientOverride, setClientOverride] = useState(false);
+  const [showNewVendor, setShowNewVendor] = useState(false);
+  const [vendorForm, setVendorForm] = useState({ name: '', tax_number: '', email: '', phone: '' });
+  const [vendorBusy, setVendorBusy] = useState(false);
 
   const isBatch = location.state?.batch && scannedInvoices.current.length > 0;
   const totalInBatch = isBatch ? scannedInvoices.current.length : 0;
@@ -199,6 +203,22 @@ export default function InvoiceEditor() {
     setShowNewClient(false);
   };
 
+  // 6C — quick-create a vendor from the invoice editor and select it.
+  const handleQuickCreateVendor = async () => {
+    if (!vendorForm.name.trim()) { alert('Vendor name is required.'); return; }
+    setVendorBusy(true);
+    try {
+      const row = await api.quickCreateVendor(vendorForm);
+      await refreshClients();
+      handleChange('vendor_name', row.name);
+      setShowNewVendor(false);
+    } catch (err: any) {
+      alert('Could not create vendor: ' + err.message);
+    } finally {
+      setVendorBusy(false);
+    }
+  };
+
   const handleSave = async (status: string) => {
     setSaving(true);
     try {
@@ -238,6 +258,18 @@ export default function InvoiceEditor() {
   const showDueDate = dueDateCat ? !!dueDateCat.show_due_date : true;
   // 5A — the client shown in the read-only header.
   const ctxClient = clients.find((c: any) => c.id === form.client_id);
+  // 5D — vendor / customer dropdown. Purchase invoices list vendor-flagged
+  // clients; everything else lists active clients. The current value is kept
+  // selectable even if it isn't a saved client (legacy free-text invoices).
+  const isPurchase = form.journal === 'INP';
+  const vendorPool = isPurchase
+    ? clients.filter((c: any) => c.is_vendor)
+    : clients.filter((c: any) => c.is_active !== false);
+  const vendorOptions: { value: any; label: string; sublabel?: string }[] =
+    vendorPool.map((c: any) => ({ value: c.name, label: c.name, sublabel: c.client_code || '' }));
+  if (form.vendor_name && !vendorOptions.some((o) => o.value === form.vendor_name)) {
+    vendorOptions.unshift({ value: form.vendor_name, label: form.vendor_name, sublabel: '(not a saved client)' });
+  }
 
   return (
     <div className="editor-layout">
@@ -353,7 +385,29 @@ export default function InvoiceEditor() {
               </select>
             </div>
             <div className="form-group"><label>Invoice Number / Reference</label><input type="text" value={form.invoice_number} onChange={(e) => handleChange('invoice_number', e.target.value)} className="form-input" /></div>
-            <div className="form-group"><label>Vendor Name</label><input type="text" value={form.vendor_name} onChange={(e) => handleChange('vendor_name', e.target.value)} className="form-input" /></div>
+            <div className="form-group">
+              <label>{isPurchase ? 'Vendor' : 'Vendor / Customer'}</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ flex: 1 }}>
+                  <SearchableSelect
+                    value={form.vendor_name}
+                    onChange={(v) => handleChange('vendor_name', String(v || ''))}
+                    options={vendorOptions}
+                    placeholder={isPurchase ? 'Select vendor…' : 'Select client…'}
+                    allowClear
+                  />
+                </div>
+                {isPurchase && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setVendorForm({ name: '', tax_number: '', email: '', phone: '' }); setShowNewVendor(true); }}
+                  >
+                    + New
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="form-group"><label>Date (DD/MM/YYYY)</label><input type="text" value={form.invoice_date} onChange={(e) => handleChange('invoice_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" /></div>
             {showDueDate && (
               <div className="form-group"><label>Due Date</label><input type="text" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" /></div>
@@ -498,6 +552,44 @@ export default function InvoiceEditor() {
         </div>
 
         {form.raw_ocr_text && <div className="form-section"><h3>Extracted Text</h3><pre className="ocr-text">{form.raw_ocr_text}</pre></div>}
+
+        {/* 6C — quick-create vendor */}
+        <Modal
+          open={showNewVendor}
+          onClose={() => setShowNewVendor(false)}
+          title="Add new vendor"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowNewVendor(false)} disabled={vendorBusy}>Cancel</Button>
+              <Button variant="primary" onClick={handleQuickCreateVendor} disabled={vendorBusy}>
+                {vendorBusy ? 'Creating…' : 'Create vendor'}
+              </Button>
+            </>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <FormField label="Name" required>
+              <Input
+                value={vendorForm.name}
+                onChange={(e) => setVendorForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Vendor / supplier name"
+                autoFocus
+              />
+            </FormField>
+            <FormField label="VAT / TIC">
+              <Input value={vendorForm.tax_number} onChange={(e) => setVendorForm((f) => ({ ...f, tax_number: e.target.value }))} />
+            </FormField>
+            <FormField label="Email">
+              <Input type="email" value={vendorForm.email} onChange={(e) => setVendorForm((f) => ({ ...f, email: e.target.value }))} />
+            </FormField>
+            <FormField label="Phone">
+              <Input value={vendorForm.phone} onChange={(e) => setVendorForm((f) => ({ ...f, phone: e.target.value }))} />
+            </FormField>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--pc-text-2)', margin: '12px 0 0' }}>
+            Creates a vendor-only client. More detail can be added later from the Clients page.
+          </p>
+        </Modal>
       </div>
     </div>
   );

@@ -593,6 +593,26 @@ export const api = {
     return { id: row.id };
   },
 
+  // Part 6C — quick-create a pure vendor from the invoice editor.
+  async quickCreateVendor(payload: { name: string; tax_number?: string; email?: string; phone?: string }) {
+    const { code } = await api.getNextClientCode(payload.name);
+    const email = (payload.email || '').trim();
+    const { data: row, error } = await supabase.from('clients').insert({
+      client_code:     code,
+      name:            payload.name.trim(),
+      tax_number:      (payload.tax_number || '').trim() || null,
+      phone:           (payload.phone || '').trim() || null,
+      email:           email ? [email] : null,   // clients.email is text[]
+      client_category: 'vendor_only',
+      client_status:   'active',
+      is_active:       true,
+      status:          'active',
+      is_vendor:       true,
+    }).select('id, name, client_code').single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+
   async updateClient(id: number, data: any) {
     const patch = normaliseClientForWrite(data);
     const { error } = await supabase.from('clients').update(patch).eq('id', id);
@@ -1883,6 +1903,17 @@ export const api = {
     const { error, count } = await supabase
       .from('clients')
       .update({ client_status: clientStatus, is_active: isActive, status: isActive ? 'active' : 'inactive' }, { count: 'exact' })
+      .in('id', ids);
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
+
+  // Part 6D — bulk set/clear the vendor flag.
+  async bulkSetVendor(ids: number[], isVendor: boolean): Promise<number> {
+    if (ids.length === 0) return 0;
+    const { error, count } = await supabase
+      .from('clients')
+      .update({ is_vendor: isVendor }, { count: 'exact' })
       .in('id', ids);
     if (error) throw new Error(error.message);
     return count || 0;

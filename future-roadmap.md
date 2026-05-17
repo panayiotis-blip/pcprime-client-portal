@@ -74,6 +74,9 @@ All amounts hardcoded €. Add currency field on clients + invoices + time entri
 ### Drop Legacy Address Columns ❌
 After migration 049, `clients.address` / `city` / `postal_code` / `country` are deprecated. Once all readers (BulkImportV3, Billing fallback, etc.) use `client_addresses` cleanly, drop them in a follow-up migration.
 
+### Bulk Import — is_vendor column (UI Polish v2, Part 6E) ❌
+Deferred from Part 6. Add an `is_vendor` (Y/N) column to the bulk-import template and have the importer set the flag. Needs the `bulk_import_v3` RPC modified (a new migration). Low priority — vendors are added via the invoice-editor quick-create or the Clients-list "Mark as Vendor" bulk action.
+
 ### Email Integration (CloudMailin) ⏸
 Code shipped, awaiting paid signup + DNS + secrets. See `memory/project_open_followups.md` for the step-by-step.
 

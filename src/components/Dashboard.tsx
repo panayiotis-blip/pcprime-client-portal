@@ -73,7 +73,8 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
   const [customising, setCustomising] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
 
-  const totalClients   = clients.length;
+  // Pure vendors (vendor_only) are excluded from the engagement-client count.
+  const totalClients   = clients.filter((c: any) => c.client_category !== 'vendor_only').length;
   const activeInvoices = invoices.filter((i: any) => i.status !== 'exported').length;
   const draftInvoices  = invoices.filter((i: any) => i.status === 'draft').length;
   // New clients created this calendar month — drives the Total Clients context line.
