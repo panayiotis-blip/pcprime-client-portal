@@ -90,10 +90,6 @@ export default function ComplianceDashboard() {
   const [fTo, setFTo]           = useState<string>('');
   const [search, setSearch]     = useState<string>('');
   const [genMonth, setGenMonth] = useState<string>(currentYyyyMm());
-  const [viewMode, setViewMode] = useState<'table' | 'list'>(
-    () => (localStorage.getItem('compliance_view') as 'table' | 'list') || 'table'
-  );
-  const setView = (m: 'table' | 'list') => { setViewMode(m); localStorage.setItem('compliance_view', m); };
 
   const reload = async () => {
     setLoading(true);
@@ -225,11 +221,11 @@ export default function ComplianceDashboard() {
         </div>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-number">{stats.total}</div><div className="stat-label">Tasks</div></div>
-        <div className="stat-card stat-draft"><div className="stat-number">{stats.overdue}</div><div className="stat-label">Overdue</div></div>
-        <div className="stat-card stat-reviewed"><div className="stat-number">{stats.due30}</div><div className="stat-label">Due ≤ 30d</div></div>
-        <div className="stat-card stat-exported"><div className="stat-number">{stats.done}</div><div className="stat-label">Closed</div></div>
+      <div className="stats-grid stats-grid-compact">
+        <div className="stat-card stat-card-sm"><div className="stat-number">{stats.total}</div><div className="stat-label">Tasks</div></div>
+        <div className="stat-card stat-card-sm stat-draft"><div className="stat-number">{stats.overdue}</div><div className="stat-label">Overdue</div></div>
+        <div className="stat-card stat-card-sm stat-reviewed"><div className="stat-number">{stats.due30}</div><div className="stat-label">Due ≤ 30d</div></div>
+        <div className="stat-card stat-card-sm stat-exported"><div className="stat-number">{stats.done}</div><div className="stat-label">Closed</div></div>
       </div>
 
       <div className="filters-bar no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', margin: '14px 0 16px 0' }}>
@@ -268,13 +264,6 @@ export default function ComplianceDashboard() {
           <label>Search</label>
           <input type="text" className="form-input" placeholder="client, code, period..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <div className="form-group">
-          <label>View</label>
-          <div className="view-toggle">
-            <button className={`view-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setView('table')} title="Table view">☰ Table</button>
-            <button className={`view-btn ${viewMode === 'list'  ? 'active' : ''}`} onClick={() => setView('list')}  title="Compact list">≡ List</button>
-          </div>
-        </div>
       </div>
 
       {loading ? (
@@ -287,18 +276,6 @@ export default function ComplianceDashboard() {
             For Social Insurance & IR7: clients need an <code>employer_number</code> set.<br/>
             Then click <strong>+ Generate All</strong> above.
           </p>
-        </div>
-      ) : viewMode === 'list' ? (
-        <div className="compact-list">
-          {visibleTasks.map(t => (
-            <Link key={t.id} to={`/clients/${t.client_id}`} className="compact-row">
-              <span className="cl-badge">{KIND_LABEL[t.kind] || t.kind}</span>
-              <span className="cl-strong">{t.client_code ? `${t.client_code} — ` : ''}{t.client_name}</span>
-              <span className="cl-muted">{t.period_label || `${t.period_start} → ${t.period_end}`}</span>
-              <span className={`status-badge ${dueClass(t)}`} style={{ whiteSpace: 'nowrap' }}>{t.due_date}</span>
-              <span className="status-badge" style={{ whiteSpace: 'nowrap' }}>{STATUS_LABEL[t.status]}</span>
-            </Link>
-          ))}
         </div>
       ) : (
         <div className="compliance-table-wrapper">
@@ -372,10 +349,10 @@ export default function ComplianceDashboard() {
                     ) : (
                       <>
                         <button className="btn btn-secondary btn-sm" onClick={() => markFiled(t)}>File</button>
-                        <button className="btn btn-primary btn-sm" style={{ marginLeft: 6 }} onClick={() => markCompleted(t)}>Complete</button>
+                        <button className="btn btn-primary btn-sm" style={{ marginLeft: 6 }} onClick={() => markCompleted(t)} title="Mark completed">✓</button>
                       </>
                     )}
-                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} style={{ marginLeft: 6 }}>Delete</button>
+                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} style={{ marginLeft: 6 }} title="Delete task">🗑</button>
                   </td>
                 </tr>
               ))}

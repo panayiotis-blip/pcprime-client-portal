@@ -301,6 +301,7 @@ export default function ClientManager() {
     if (searchTerm) {
       const t = searchTerm.toLowerCase();
       const matches = (c.name || '').toLowerCase().includes(t)
+        || (c.client_name || '').toLowerCase().includes(t)
         || (c.client_code || '').toLowerCase().includes(t)
         || (c.tax_number || '').toLowerCase().includes(t)
         || (c.trading_name || '').toLowerCase().includes(t)
@@ -369,8 +370,11 @@ export default function ClientManager() {
             >
               {pinnedClientIds.has(String(c.id)) ? '★' : '☆'}
             </button>
-            <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.name}</Link>
+            <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.client_name || c.name}</Link>
           </span>
+          {c.client_name && c.name && c.client_name !== c.name && (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.name}</div>
+          )}
           {c.trading_name && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.trading_name}</div>}
         </>
       );

@@ -89,6 +89,7 @@ export default function ClientInfoTab() {
         <div className="form-grid">
           <Field label="Client Code" field="client_code" />
           <Field label="Legal Name" field="name" />
+          <Field label="Client Name" field="client_name" placeholder="Latin characters — shown in the client list" />
           <Field label="Name as per Tax Office" field="name_tax_office" placeholder="Greek name as on tax returns" />
           <Field label="Trading Name" field="trading_name" />
         </div>

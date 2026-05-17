@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 
 export type ViewMode = 'grid' | 'compact' | 'list';
-export type ListPage = 'clients' | 'invoices' | 'documents';
+export type ListPage = 'clients' | 'invoices' | 'client_invoices' | 'documents';
 
 interface ViewPreferencesAPI {
   getMode: (page: ListPage, fallback?: ViewMode) => ViewMode;
@@ -18,9 +18,10 @@ const ViewPreferencesContext = createContext<ViewPreferencesAPI | null>(null);
 // 'cards' / 'table' / 'list'. Map them onto the new vocabulary so people
 // don't lose their preferences when this ships.
 const LEGACY_KEY: Record<ListPage, string> = {
-  clients:   'clients_view',
-  invoices:  'invoices_view',
-  documents: 'documents_view',
+  clients:         'clients_view',
+  invoices:        'invoices_view',
+  client_invoices: 'client_invoices_view',
+  documents:       'documents_view',
 };
 const LEGACY_VALUE_MAP: Record<string, ViewMode> = {
   cards:   'grid',

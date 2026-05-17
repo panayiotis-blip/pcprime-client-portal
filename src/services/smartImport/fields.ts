@@ -23,8 +23,10 @@ export interface ImportField {
 // The full set of fields a spreadsheet column can be mapped onto.
 export const IMPORT_FIELDS: ImportField[] = [
   // ---- Client Info ----
-  { key: 'name', label: 'Name (primary)', group: 'Client Info', required: true,
-    aliases: ['name', 'client name', 'company name', 'legal name', 'επωνυμία', 'όνομα εταιρείας', 'ονομασία'] },
+  { key: 'name', label: 'Legal Name', group: 'Client Info', required: true,
+    aliases: ['name', 'legal name', 'company name', 'επωνυμία', 'όνομα εταιρείας', 'ονομασία'] },
+  { key: 'client_name', label: 'Client Name (Latin)', group: 'Client Info',
+    aliases: ['client name', 'latin name', 'english name', 'display name'] },
   { key: 'name_tax_office', label: 'Name (Greek / tax office)', group: 'Client Info',
     aliases: ['greek name', 'tax office name', 'name as per tax office', 'name as per tax office return', 'ελληνική ονομασία', 'όνομα φορολογικού'] },
   { key: 'client_code', label: 'Client Code', group: 'Client Info',

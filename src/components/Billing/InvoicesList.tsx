@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { useViewPreferences } from '../../context/ViewPreferencesContext';
+import ViewToggle from '../shared/ViewToggle';
 
 type Status = 'draft' | 'issued' | 'paid' | 'cancelled';
 
@@ -33,6 +35,8 @@ const statusBadge = (s: Status) => {
 export default function InvoicesList() {
   const navigate = useNavigate();
   const { clients } = useApp();
+  const { getMode, setMode } = useViewPreferences();
+  const viewMode = getMode('client_invoices', 'list');
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -97,7 +101,8 @@ export default function InvoicesList() {
     <div className="dashboard">
       <div className="dashboard-header">
         <h2>Client Invoices</h2>
-        <div className="dashboard-actions" style={{ display: 'flex', gap: 8 }}>
+        <div className="dashboard-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <ViewToggle value={viewMode} onChange={(m) => setMode('client_invoices', m)} />
           <button className="btn btn-primary" onClick={handleCreateBlank}>+ New Invoice</button>
         </div>
       </div>
@@ -156,6 +161,49 @@ export default function InvoicesList() {
       ) : filtered.length === 0 ? (
         <div className="empty-state">
           <p>No invoices match the current filters.</p>
+        </div>
+      ) : viewMode === 'grid' ? (
+        <div className="invoice-cards">
+          {filtered.map(i => {
+            const b = statusBadge(i.status);
+            const subtotal = Number(i.subtotal_vatable || 0) + Number(i.subtotal_nonvatable || 0);
+            return (
+              <div key={i.id} className="invoice-card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/billing/${i.id}`)}>
+                <div className="card-header">
+                  <span style={{ fontFamily: 'monospace' }}>{i.invoice_number || '(draft)'}</span>
+                  <span style={{ background: b.bg, color: b.fg, padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 500 }}>{b.label}</span>
+                </div>
+                <div className="card-body">
+                  <div style={{ fontWeight: 500 }}>
+                    {i.client_code && <span style={{ color: '#64748b' }}>{i.client_code} — </span>}{i.client_name}
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+                    Issued: {i.issue_date || '—'}  ·  Due: {i.due_date || '—'}
+                  </div>
+                  <div style={{ fontSize: 13 }}>Subtotal €{subtotal.toFixed(2)}  ·  VAT €{Number(i.vat_amount || 0).toFixed(2)}</div>
+                  <div style={{ fontWeight: 600, fontSize: 18 }}>€{Number(i.total_amount || 0).toFixed(2)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : viewMode === 'compact' ? (
+        <div className="invoice-cards invoice-cards-compact">
+          {filtered.map(i => {
+            const b = statusBadge(i.status);
+            return (
+              <div key={i.id} className="invoice-card invoice-card-compact" style={{ cursor: 'pointer' }} onClick={() => navigate(`/billing/${i.id}`)}>
+                <div className="card-header">
+                  <span style={{ fontFamily: 'monospace' }}>{i.invoice_number || '(draft)'}</span>
+                  <span style={{ background: b.bg, color: b.fg, padding: '1px 6px', borderRadius: 4, fontSize: 11, fontWeight: 500 }}>{b.label}</span>
+                </div>
+                <div className="card-body">
+                  <div>{i.client_name}</div>
+                  <div style={{ fontWeight: 600 }}>€{Number(i.total_amount || 0).toFixed(2)}</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="export-table-wrapper">
