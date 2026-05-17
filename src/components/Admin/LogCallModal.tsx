@@ -164,10 +164,10 @@ export default function LogCallModal({
             {/* The big new field — message recipient — only relevant for inbound calls */}
             {isInbound && !editingId && (
               <div className="form-group" style={{
-                marginTop: 8, padding: 12, background: '#eef2ff',
-                border: '1px solid #c7d2fe', borderRadius: 6,
+                marginTop: 8, padding: 12, background: '#eef1f5',
+                border: '1px solid var(--pc-border-strong)', borderRadius: 6,
               }}>
-                <label style={{ fontWeight: 600, color: '#3730a3' }}>📨 Message for *</label>
+                <label style={{ fontWeight: 600, color: 'var(--pc-navy-2)' }}>📨 Message for *</label>
                 <select
                   className="form-input"
                   value={form.recipient_id}

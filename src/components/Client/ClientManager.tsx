@@ -11,6 +11,7 @@ import MergeClients from './MergeClients';
 import BulkWipeModal from '../Admin/BulkWipeModal';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
 import * as XLSX from 'xlsx';
+import { Modal, Button } from '../ui';
 
 type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
 type SortDir = 'asc' | 'desc';
@@ -417,7 +418,7 @@ export default function ClientManager() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {arr.map(t => (
               <span key={t} style={{
-                background: '#eef2ff', color: '#3730a3',
+                background: '#eef1f5', color: 'var(--pc-navy-2)',
                 padding: '1px 8px', borderRadius: 999, fontSize: 11,
               }}>{t}</span>
             ))}
@@ -842,7 +843,8 @@ export default function ClientManager() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '0 0 12px 0' }}>
           {activeFilters.map(f => (
             <span key={f.key} style={{
-              background: '#eef2ff', color: '#3730a3',
+              background: 'var(--pc-gold-tint)', color: 'var(--pc-navy)',
+              border: '1px solid var(--pc-gold)',
               padding: '2px 10px', borderRadius: 999, fontSize: 12,
               display: 'inline-flex', alignItems: 'center', gap: 4,
             }}>
@@ -892,55 +894,52 @@ export default function ClientManager() {
       )}
 
       {/* Bulk Mark Inactive modal — pick which status */}
-      {showBulkInactive && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 420 }}>
-            <h3 style={{ marginTop: 0 }}>Mark {selectedIds.size} client{selectedIds.size === 1 ? '' : 's'} as inactive</h3>
-            <p style={{ fontSize: 13, color: '#475569' }}>Pick which inactive sub-status to apply:</p>
-            <select className="form-input" value={bulkInactiveStatus} onChange={e => setBulkInactiveStatus(e.target.value)}>
-              {STATUS_OPTIONS.filter(s => s.value !== 'active').map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setShowBulkInactive(false)} disabled={bulkBusy}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleBulkMarkInactive} disabled={bulkBusy}>{bulkBusy ? 'Updating…' : 'Apply'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={showBulkInactive}
+        onClose={() => setShowBulkInactive(false)}
+        title={`Mark ${selectedIds.size} client${selectedIds.size === 1 ? '' : 's'} as inactive`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowBulkInactive(false)} disabled={bulkBusy}>Cancel</Button>
+            <Button variant="primary" onClick={handleBulkMarkInactive} disabled={bulkBusy}>{bulkBusy ? 'Updating…' : 'Apply'}</Button>
+          </>
+        }
+      >
+        <p style={{ marginTop: 0, fontSize: 13, color: 'var(--pc-text-2)' }}>Pick which inactive sub-status to apply:</p>
+        <select className="form-input" value={bulkInactiveStatus} onChange={e => setBulkInactiveStatus(e.target.value)} style={{ width: '100%' }}>
+          {STATUS_OPTIONS.filter(s => s.value !== 'active').map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+      </Modal>
 
       {/* Bulk Add Tag modal */}
-      {showBulkTag && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 420 }}>
-            <h3 style={{ marginTop: 0 }}>Add a tag to {selectedIds.size} client{selectedIds.size === 1 ? '' : 's'}</h3>
-            <input
-              type="text"
-              className="form-input"
-              value={bulkTagInput}
-              onChange={e => setBulkTagInput(e.target.value)}
-              placeholder="e.g. VIP / Q1 Onboarding"
-              list="all-tags-suggestions"
-              autoFocus
-            />
-            <datalist id="all-tags-suggestions">
-              {allTags.map(t => <option key={t} value={t} />)}
-            </datalist>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
-              Tags are deduplicated — adding an existing tag to a client is a no-op.
-            </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setShowBulkTag(false)} disabled={bulkBusy}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleBulkAddTag} disabled={bulkBusy}>{bulkBusy ? 'Adding…' : 'Add tag'}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={showBulkTag}
+        onClose={() => setShowBulkTag(false)}
+        title={`Add a tag to ${selectedIds.size} client${selectedIds.size === 1 ? '' : 's'}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowBulkTag(false)} disabled={bulkBusy}>Cancel</Button>
+            <Button variant="primary" onClick={handleBulkAddTag} disabled={bulkBusy}>{bulkBusy ? 'Adding…' : 'Add tag'}</Button>
+          </>
+        }
+      >
+        <input
+          type="text"
+          className="form-input"
+          value={bulkTagInput}
+          onChange={e => setBulkTagInput(e.target.value)}
+          placeholder="e.g. VIP / Q1 Onboarding"
+          list="all-tags-suggestions"
+          autoFocus
+          style={{ width: '100%' }}
+        />
+        <datalist id="all-tags-suggestions">
+          {allTags.map(t => <option key={t} value={t} />)}
+        </datalist>
+        <p style={{ fontSize: 12, color: 'var(--pc-text-2)', marginTop: 8 }}>
+          Tags are deduplicated — adding an existing tag to a client is a no-op.
+        </p>
+      </Modal>
 
       {clients.length === 0 ? (
         <div className="empty-state"><p>No clients yet.</p></div>
@@ -1007,7 +1006,7 @@ export default function ClientManager() {
             </thead>
             <tbody>
               {sortedFiltered.map((c: any) => (
-                <tr key={c.id} style={selectedIds.has(c.id) ? { background: '#eff6ff' } : undefined}>
+                <tr key={c.id} style={selectedIds.has(c.id) ? { background: 'var(--pc-gold-tint)' } : undefined}>
                   <td>
                     <input
                       type="checkbox"

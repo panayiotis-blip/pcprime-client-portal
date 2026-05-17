@@ -69,8 +69,8 @@ export default function PendingComplianceWeek() {
               display: 'grid', gridTemplateColumns: '60px 1fr 48px', alignItems: 'center', gap: 8, fontSize: 13,
             }}>
               <span style={{
-                fontSize: 11, fontWeight: 600, color: '#3730a3',
-                background: '#e0e7ff', padding: '2px 6px', borderRadius: 4, textAlign: 'center',
+                fontSize: 11, fontWeight: 600, color: 'var(--pc-navy-2)',
+                background: '#eef1f5', padding: '2px 6px', borderRadius: 4, textAlign: 'center',
               }}>{KIND_LABEL[t.kind] || t.kind}</span>
               <Link to={`/clients/${t.client_id}`} style={{ color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.client_code ? `${t.client_code} — ` : ''}{t.client_name}

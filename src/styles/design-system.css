@@ -1,0 +1,465 @@
+/* =============================================================
+   PC Prime Design System v2  —  Part 1a foundation
+   -------------------------------------------------------------
+   Self-contained token system + shared-component styling.
+   Everything here is namespaced:
+     - CSS variables:  --pc-*
+     - component classes: .pc-*
+   Nothing in this file overrides the existing index.css. Pages
+   only pick up this styling when migrated to the shared
+   components (Parts 1b / 1c).
+   ============================================================= */
+
+/* =============================================================
+   1. Design tokens
+   ============================================================= */
+:root {
+  /* --- Colour: brand --- */
+  --pc-navy:        #0d1b2e;   /* header / sidebar / primary actions */
+  --pc-navy-2:      #1a2e4a;   /* hover / secondary actions */
+  --pc-gold:        #b8963e;   /* highlights, active states, focus ring */
+  --pc-gold-light:  #d4a843;   /* hover gold */
+
+  /* --- Colour: surfaces --- */
+  --pc-white:       #ffffff;   /* cards, panels */
+  --pc-tint:        #f8f9fb;   /* page background, table header */
+
+  /* --- Colour: borders --- */
+  --pc-border:        #e5e7eb; /* subtle — cards, dividers */
+  --pc-border-strong: #d1d5db; /* default — inputs, table dividers */
+
+  /* --- Colour: text --- */
+  --pc-text:    #0f172a;       /* primary */
+  --pc-text-2:  #64748b;       /* secondary */
+  --pc-text-3:  #94a3b8;       /* tertiary */
+
+  /* --- Colour: status --- */
+  --pc-green: #10b981;
+  --pc-amber: #f59e0b;
+  --pc-red:   #ef4444;
+  --pc-blue:  #3b82f6;
+
+  /* --- Typography --- */
+  --pc-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --pc-fs-12: 12px;
+  --pc-fs-13: 13px;
+  --pc-fs-14: 14px;
+  --pc-fs-16: 16px;
+  --pc-fs-18: 18px;
+  --pc-fs-20: 20px;
+  --pc-fs-24: 24px;
+  --pc-fs-32: 32px;
+  --pc-lh-body: 1.5;
+  --pc-lh-head: 1.3;
+  --pc-fw-regular:  400;
+  --pc-fw-medium:   500;
+  --pc-fw-semibold: 600;
+  --pc-fw-bold:     700;
+
+  /* --- Spacing (8px grid) --- */
+  --pc-sp-4:  4px;
+  --pc-sp-8:  8px;
+  --pc-sp-12: 12px;
+  --pc-sp-16: 16px;
+  --pc-sp-20: 20px;
+  --pc-sp-24: 24px;
+  --pc-sp-32: 32px;
+  --pc-sp-48: 48px;
+  --pc-sp-64: 64px;
+
+  /* --- Radius --- */
+  --pc-radius-sm: 6px;   /* buttons, inputs */
+  --pc-radius-md: 8px;   /* cards */
+  --pc-radius-lg: 12px;  /* modals */
+
+  /* --- Elevation --- */
+  --pc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --pc-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.08);
+
+  /* --- Focus ring (gold) --- */
+  --pc-focus-ring: 0 0 0 3px rgba(184, 150, 62, 0.45);
+  /* --- Gold tints (subtle "punctuation" backgrounds) --- */
+  --pc-gold-tint:        rgba(184, 150, 62, 0.12);
+  --pc-gold-tint-strong: rgba(184, 150, 62, 0.22);
+}
+
+/* Shared box-sizing for design-system elements only */
+.pc-btn, .pc-input, .pc-select, .pc-textarea, .pc-card, .pc-modal,
+.pc-field, .pc-toolbar, .pc-chip, .pc-table-wrap, .pc-empty {
+  box-sizing: border-box;
+}
+
+/* =============================================================
+   2. Buttons
+   ============================================================= */
+.pc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pc-sp-8);
+  height: 36px;
+  padding: 0 var(--pc-sp-12);
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-14);
+  font-weight: var(--pc-fw-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: var(--pc-radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.pc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.pc-btn:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); }
+.pc-btn__icon { display: inline-flex; }
+
+/* Sizes */
+.pc-btn--sm { height: 28px; padding: 0 10px; font-size: var(--pc-fs-13); }
+.pc-btn--lg { height: 44px; padding: 0 var(--pc-sp-20); font-size: var(--pc-fs-16); }
+
+/* Icon-only */
+.pc-btn--icon            { width: 36px; height: 36px; padding: 0; }
+.pc-btn--icon.pc-btn--sm { width: 28px; height: 28px; }
+.pc-btn--icon.pc-btn--lg { width: 44px; height: 44px; }
+
+/* Variants */
+.pc-btn--primary {
+  background: var(--pc-navy); color: var(--pc-white); border-color: var(--pc-navy);
+}
+/* Hover: lift to secondary navy + a subtle gold underline accent. */
+.pc-btn--primary:hover:not(:disabled) {
+  background: var(--pc-navy-2);
+  border-color: var(--pc-navy-2);
+  box-shadow: inset 0 -2px 0 var(--pc-gold);
+}
+
+.pc-btn--secondary {
+  background: var(--pc-white); color: var(--pc-navy); border-color: var(--pc-border-strong);
+}
+.pc-btn--secondary:hover:not(:disabled) { background: var(--pc-tint); }
+
+.pc-btn--destructive {
+  background: var(--pc-red); color: var(--pc-white); border-color: var(--pc-red);
+}
+.pc-btn--destructive:hover:not(:disabled) { background: #dc2626; border-color: #dc2626; }
+
+.pc-btn--ghost {
+  background: transparent; color: var(--pc-navy); border-color: transparent;
+}
+.pc-btn--ghost:hover:not(:disabled) { background: #eef0f3; }
+
+.pc-btn--icon.pc-btn--primary,
+.pc-btn--icon.pc-btn--secondary,
+.pc-btn--icon.pc-btn--destructive,
+.pc-btn--icon.pc-btn--ghost { /* variant colours already applied above */ }
+
+/* =============================================================
+   3. Inputs / selects / textareas
+   ============================================================= */
+.pc-input, .pc-select, .pc-textarea {
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-14);
+  color: var(--pc-text);
+  background: var(--pc-white);
+  border: 1px solid var(--pc-border-strong);
+  border-radius: var(--pc-radius-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.pc-textarea {
+  height: auto;
+  min-height: 80px;
+  padding: 8px 10px;
+  line-height: var(--pc-lh-body);
+  resize: vertical;
+}
+.pc-input::placeholder, .pc-textarea::placeholder { color: var(--pc-text-3); }
+.pc-input:focus, .pc-select:focus, .pc-textarea:focus {
+  outline: none;
+  border-color: var(--pc-gold);
+  box-shadow: var(--pc-focus-ring);
+}
+.pc-input:disabled, .pc-select:disabled, .pc-textarea:disabled {
+  background: var(--pc-tint); color: var(--pc-text-2); cursor: not-allowed;
+}
+.pc-input--error { border-color: var(--pc-red); }
+.pc-input--error:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25); }
+.pc-select { cursor: pointer; }
+
+/* =============================================================
+   4. Form field (label + control + helper/error)
+   ============================================================= */
+.pc-field { display: flex; flex-direction: column; }
+.pc-field__label {
+  margin: 0 0 var(--pc-sp-8);
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-13);
+  font-weight: var(--pc-fw-medium);
+  color: var(--pc-text);
+}
+.pc-field__req { color: var(--pc-red); }
+.pc-field__helper {
+  margin: var(--pc-sp-8) 0 0;
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-12);
+  color: var(--pc-text-3);
+}
+.pc-field__helper--error { color: var(--pc-red); }
+
+/* =============================================================
+   5. Card
+   ============================================================= */
+.pc-card {
+  background: var(--pc-white);
+  border: 1px solid var(--pc-border);
+  border-radius: var(--pc-radius-md);
+  box-shadow: var(--pc-shadow-sm);
+}
+.pc-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pc-sp-12);
+  padding: var(--pc-sp-12) var(--pc-sp-20);
+  border-bottom: 1px solid var(--pc-border);
+}
+.pc-card__title {
+  margin: 0;
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-16);
+  font-weight: var(--pc-fw-semibold);
+  color: var(--pc-text);
+}
+.pc-card__actions { display: flex; align-items: center; gap: var(--pc-sp-8); }
+.pc-card__body { padding: var(--pc-sp-20); }
+.pc-card__body--flush { padding: 0; }
+.pc-card--clickable { cursor: pointer; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+.pc-card--clickable:hover { box-shadow: var(--pc-shadow-md); transform: translateY(-1px); }
+
+/* =============================================================
+   6. Modal
+   ============================================================= */
+.pc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pc-sp-24);
+  background: rgba(13, 27, 46, 0.45);
+  overflow-y: auto;
+}
+.pc-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 600px;
+  max-height: calc(100vh - var(--pc-sp-48));
+  background: var(--pc-white);
+  border-radius: var(--pc-radius-lg);
+  box-shadow: var(--pc-shadow-md);
+  overflow: hidden;
+  font-family: var(--pc-font);
+}
+.pc-modal--lg { max-width: 800px; }
+.pc-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pc-sp-12);
+  padding: var(--pc-sp-16) var(--pc-sp-20);
+  border-bottom: 1px solid var(--pc-border);
+}
+.pc-modal__title {
+  margin: 0;
+  font-size: var(--pc-fs-18);
+  font-weight: var(--pc-fw-semibold);
+  color: var(--pc-text);
+}
+.pc-modal__body {
+  flex: 1;
+  padding: var(--pc-sp-20);
+  overflow-y: auto;
+}
+.pc-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--pc-sp-8);
+  padding: var(--pc-sp-12) var(--pc-sp-20);
+  border-top: 1px solid var(--pc-border);
+}
+
+/* =============================================================
+   7. DataTable
+   ============================================================= */
+.pc-table-wrap {
+  background: var(--pc-white);
+  border: 1px solid var(--pc-border);
+  border-radius: var(--pc-radius-md);
+  overflow: hidden;
+}
+.pc-table-scroll { overflow: auto; }
+.pc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--pc-font);
+}
+.pc-table thead th {
+  padding: 10px var(--pc-sp-16);
+  font-size: var(--pc-fs-13);
+  font-weight: var(--pc-fw-semibold);
+  color: var(--pc-text-2);
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--pc-tint);
+  border-bottom: 1px solid var(--pc-border-strong);
+}
+.pc-table--sticky thead th { position: sticky; top: 0; z-index: 1; }
+.pc-table tbody td {
+  height: 44px;
+  padding: 0 var(--pc-sp-16);
+  font-size: var(--pc-fs-14);
+  color: var(--pc-text);
+  border-bottom: 1px solid var(--pc-border);
+}
+.pc-table tbody tr:last-child td { border-bottom: none; }
+.pc-table tbody tr:hover { background: var(--pc-tint); }
+.pc-table--striped tbody tr:nth-child(even) { background: #fcfcfd; }
+.pc-table__row--clickable { cursor: pointer; }
+/* Selected: subtle gold tint + a gold left-edge accent. */
+.pc-table__row--selected,
+.pc-table__row--selected:hover { background: var(--pc-gold-tint); }
+.pc-table__row--selected td:first-child { box-shadow: inset 3px 0 0 var(--pc-gold); }
+.pc-table__empty-cell { padding: 0; }
+
+/* =============================================================
+   8. Record counter + pagination
+   ============================================================= */
+.pc-record-counter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--pc-sp-12);
+  padding: 10px var(--pc-sp-16);
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-13);
+  color: var(--pc-text-2);
+  border-top: 1px solid var(--pc-border);
+}
+.pc-record-counter__count strong { color: var(--pc-text); font-weight: var(--pc-fw-semibold); }
+.pc-pagination { display: flex; align-items: center; gap: var(--pc-sp-4); }
+.pc-pagination__label { padding: 0 var(--pc-sp-8); white-space: nowrap; }
+.pc-pagination__size {
+  display: flex; align-items: center; gap: var(--pc-sp-8);
+}
+.pc-pagination__size .pc-select { width: auto; height: 28px; font-size: var(--pc-fs-13); }
+
+/* =============================================================
+   9. Toolbar (page header pattern)
+   ============================================================= */
+.pc-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pc-sp-12);
+  margin-bottom: var(--pc-sp-20);
+  font-family: var(--pc-font);
+}
+.pc-toolbar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pc-sp-12);
+  flex-wrap: wrap;
+}
+.pc-toolbar__title {
+  margin: 0;
+  font-size: var(--pc-fs-24);
+  font-weight: var(--pc-fw-bold);
+  color: var(--pc-text);
+  line-height: var(--pc-lh-head);
+}
+.pc-toolbar__actions { display: flex; align-items: center; gap: var(--pc-sp-8); flex-wrap: wrap; }
+
+/* =============================================================
+   10. FilterBar + chips
+   ============================================================= */
+.pc-filterbar {
+  display: flex;
+  align-items: center;
+  gap: var(--pc-sp-8);
+  flex-wrap: wrap;
+  font-family: var(--pc-font);
+}
+.pc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pc-sp-8);
+  height: 28px;
+  padding: 0 10px;
+  font-family: var(--pc-font);
+  font-size: var(--pc-fs-13);
+  font-weight: var(--pc-fw-medium);
+  color: var(--pc-text-2);
+  background: var(--pc-white);
+  border: 1px solid var(--pc-border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.pc-chip:hover { background: var(--pc-tint); }
+/* Active: gold border + gold tint, dark text — gold "punctuation" not navy fill. */
+.pc-chip--active {
+  background: var(--pc-gold-tint);
+  color: var(--pc-navy);
+  border-color: var(--pc-gold);
+  font-weight: var(--pc-fw-semibold);
+}
+.pc-chip--active:hover { background: var(--pc-gold-tint-strong); }
+.pc-chip__remove { display: inline-flex; opacity: 0.75; }
+.pc-chip__remove:hover { opacity: 1; }
+
+/* =============================================================
+   11. Empty state
+   ============================================================= */
+.pc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--pc-sp-12);
+  padding: var(--pc-sp-48) var(--pc-sp-24);
+  font-family: var(--pc-font);
+}
+.pc-empty__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--pc-tint);
+  color: var(--pc-text-3);
+}
+.pc-empty__title {
+  margin: 0;
+  font-size: var(--pc-fs-16);
+  font-weight: var(--pc-fw-semibold);
+  color: var(--pc-text);
+}
+.pc-empty__msg {
+  margin: 0;
+  max-width: 360px;
+  font-size: var(--pc-fs-14);
+  color: var(--pc-text-2);
+  line-height: var(--pc-lh-body);
+}
+
+/* =============================================================
+   End of design-system.css
+   ============================================================= */

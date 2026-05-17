@@ -256,7 +256,7 @@ export default function BulkImportV3() {
           <p>One transaction, may take 30–60 seconds for the full 5 sheets. Please don't navigate away.</p>
           <div style={{ background: '#e2e8f0', height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 12 }}>
             <div style={{
-              width: '40%', height: '100%', background: '#6366f1',
+              width: '40%', height: '100%', background: 'var(--pc-navy-2)',
               animation: 'progress-pulse 1.5s ease-in-out infinite',
             }} />
           </div>

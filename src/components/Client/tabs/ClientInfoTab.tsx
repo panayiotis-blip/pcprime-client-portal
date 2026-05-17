@@ -45,7 +45,7 @@ function TagsField() {
             <span style={{ color: '#94a3b8' }}>—</span>
           ) : tagsArray.map(t => (
             <span key={t} style={{
-              background: '#eef2ff', color: '#3730a3',
+              background: '#eef1f5', color: 'var(--pc-navy-2)',
               padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 500,
             }}>{t}</span>
           ))}

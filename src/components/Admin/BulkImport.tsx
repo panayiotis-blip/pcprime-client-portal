@@ -490,7 +490,7 @@ export default function BulkImport() {
             <div style={{
               width: progress.total ? `${(progress.current / progress.total) * 100}%` : '0%',
               height: '100%',
-              background: '#6366f1',
+              background: 'var(--pc-navy-2)',
               transition: 'width 0.2s',
             }} />
           </div>

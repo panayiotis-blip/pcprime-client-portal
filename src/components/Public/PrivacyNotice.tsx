@@ -9,7 +9,7 @@ export default function PrivacyNotice() {
       lineHeight: 1.6, color: '#0f172a',
     }}>
       <div style={{ marginBottom: 16 }}>
-        <Link to="/" style={{ color: '#3730a3', textDecoration: 'none', fontSize: 14 }}>← Back to home</Link>
+        <Link to="/" style={{ color: 'var(--pc-navy)', textDecoration: 'none', fontSize: 14 }}>← Back to home</Link>
       </div>
 
       <h1 style={{ marginBottom: 4 }}>Privacy Notice</h1>

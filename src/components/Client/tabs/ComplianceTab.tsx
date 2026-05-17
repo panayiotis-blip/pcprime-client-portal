@@ -25,7 +25,7 @@ const KIND_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   open:       '#1e40af',
-  in_progress:'#3730a3',
+  in_progress:'#2563eb',
   blocked:    '#b45309',
   completed:  '#047857',
   filed:      '#047857',

@@ -162,8 +162,8 @@ export default function ClientEmails({ clientId }: Props) {
                 <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => openDetail(e)}>
                   <td>
                     <span className="status-badge" style={{
-                      background: e.direction === 'inbound' ? '#dbeafe' : '#e0e7ff',
-                      color:      e.direction === 'inbound' ? '#1e40af' : '#3730a3',
+                      background: e.direction === 'inbound' ? '#dbeafe' : '#eef1f5',
+                      color:      e.direction === 'inbound' ? '#1e40af' : 'var(--pc-navy-2)',
                     }}>
                       {e.direction === 'inbound' ? '← In' : '→ Out'}
                     </span>
@@ -231,7 +231,7 @@ export default function ClientEmails({ clientId }: Props) {
                       {openAttachments.map(att => (
                         <li key={att.id} style={{
                           padding: '6px 10px', marginBottom: 4,
-                          background: '#eef2ff', borderRadius: 4, fontSize: 13,
+                          background: '#eef1f5', borderRadius: 4, fontSize: 13,
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
                         }}>
                           <span>📎 {att.filename} <span style={{ color: '#64748b' }}>({fmtSize(att.size_bytes)})</span></span>

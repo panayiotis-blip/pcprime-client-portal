@@ -66,8 +66,8 @@ export default function InvoiceTrendChart() {
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
             <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-            <Tooltip cursor={{ fill: 'rgba(99,102,241,0.08)' }} contentStyle={{ borderRadius: 6, fontSize: 12 }} />
-            <Bar dataKey="invoices" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            <Tooltip cursor={{ fill: 'rgba(13,27,46,0.06)' }} contentStyle={{ borderRadius: 6, fontSize: 12 }} />
+            <Bar dataKey="invoices" fill="#1a2e4a" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

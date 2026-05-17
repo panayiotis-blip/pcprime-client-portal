@@ -205,8 +205,8 @@ export default function PhoneLog() {
                   <td>{fmtTime(l.call_at)}</td>
                   <td>
                     <span className="status-badge" style={{
-                      background: l.direction === 'inbound' ? '#dbeafe' : '#e0e7ff',
-                      color: l.direction === 'inbound' ? '#1e40af' : '#3730a3',
+                      background: l.direction === 'inbound' ? '#dbeafe' : '#eef1f5',
+                      color: l.direction === 'inbound' ? '#1e40af' : 'var(--pc-navy-2)',
                     }}>
                       {l.direction === 'inbound' ? '← In' : '→ Out'}
                     </span>

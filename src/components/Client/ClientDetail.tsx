@@ -7,6 +7,7 @@ import { api, isStaffRole, hasPermission } from '../../services/api';
 
 import { FieldCtx } from './fieldContext';
 import ClientHeader from './ClientHeader';
+import { Modal, Button } from '../ui';
 
 import ClientInfoTab from './tabs/ClientInfoTab';
 import ContactsTab from './tabs/ContactsTab';
@@ -403,46 +404,44 @@ export default function ClientDetail() {
         />
       )}
 
-      {showInvite && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-        }}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 480 }}>
-            <h3 style={{ marginTop: 0 }}>Invite {client?.name} to the portal</h3>
-            <p style={{ fontSize: 13, color: '#475569', marginBottom: 16 }}>
-              They'll get an email with a one-time link. Clicking it signs them in;
-              they then set their own password on the Security page.
-            </p>
-            <div className="form-group">
-              <label>Email *</label>
-              <input
-                type="email"
-                className="form-input"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                placeholder="client@example.com"
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label>Full name (optional)</label>
-              <input
-                type="text"
-                className="form-input"
-                value={inviteForm.full_name}
-                onChange={(e) => setInviteForm({ ...inviteForm, full_name: e.target.value })}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-              <button className="btn btn-secondary" onClick={() => setShowInvite(false)} disabled={inviting}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSendInvite} disabled={inviting}>
-                {inviting ? 'Sending…' : 'Send invite'}
-              </button>
-            </div>
-          </div>
+      <Modal
+        open={showInvite}
+        onClose={() => setShowInvite(false)}
+        title={`Invite ${client?.name || ''} to the portal`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowInvite(false)} disabled={inviting}>Cancel</Button>
+            <Button variant="primary" onClick={handleSendInvite} disabled={inviting}>
+              {inviting ? 'Sending…' : 'Send invite'}
+            </Button>
+          </>
+        }
+      >
+        <p style={{ marginTop: 0, fontSize: 13, color: 'var(--pc-text-2)', marginBottom: 16 }}>
+          They'll get an email with a one-time link. Clicking it signs them in;
+          they then set their own password on the Security page.
+        </p>
+        <div className="form-group">
+          <label>Email *</label>
+          <input
+            type="email"
+            className="form-input"
+            value={inviteForm.email}
+            onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+            placeholder="client@example.com"
+            autoFocus
+          />
         </div>
-      )}
+        <div className="form-group" style={{ marginTop: 12 }}>
+          <label>Full name (optional)</label>
+          <input
+            type="text"
+            className="form-input"
+            value={inviteForm.full_name}
+            onChange={(e) => setInviteForm({ ...inviteForm, full_name: e.target.value })}
+          />
+        </div>
+      </Modal>
     </div>
     </FieldCtx.Provider>
   );

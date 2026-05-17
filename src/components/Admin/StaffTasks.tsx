@@ -248,11 +248,11 @@ export default function StaffTasks() {
 
       {/* ===== Return Calls section — always visible, even when empty ===== */}
       <div style={{
-        marginTop: 16, padding: 16, background: '#eef2ff',
-        border: '1px solid #c7d2fe', borderRadius: 8,
+        marginTop: 16, padding: 16, background: '#eef1f5',
+        border: '1px solid var(--pc-border-strong)', borderRadius: 8,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: returnCalls.length ? 10 : 0 }}>
-          <h3 style={{ margin: 0, color: '#3730a3' }}>
+          <h3 style={{ margin: 0, color: 'var(--pc-navy-2)' }}>
             📞 Return Calls
             {returnCalls.length > 0 && (
               <span style={{
@@ -459,7 +459,7 @@ export default function StaffTasks() {
             const overdue = t.due_date && t.due_date < todayIso();
             return (
               <div key={t.id} className="compact-row">
-                <span className="cl-badge" style={{ background: priorityClass(t.priority) === 'status-draft' ? '#fee2e2' : '#e0e7ff', color: priorityClass(t.priority) === 'status-draft' ? '#b91c1c' : '#3730a3' }}>
+                <span className="cl-badge" style={{ background: priorityClass(t.priority) === 'status-draft' ? '#fee2e2' : '#eef1f5', color: priorityClass(t.priority) === 'status-draft' ? '#b91c1c' : 'var(--pc-navy-2)' }}>
                   {t.priority}
                 </span>
                 <span className="cl-strong">{t.title}</span>

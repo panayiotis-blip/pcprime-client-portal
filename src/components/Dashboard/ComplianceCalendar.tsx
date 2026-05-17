@@ -79,7 +79,7 @@ export default function ComplianceCalendar() {
                 <span style={{
                   display: 'inline-block', minWidth: 32, padding: '1px 6px',
                   fontSize: 11, fontWeight: 600, marginRight: 6,
-                  background: '#e0e7ff', color: '#3730a3', borderRadius: 4,
+                  background: '#eef1f5', color: 'var(--pc-navy-2)', borderRadius: 4,
                 }}>{KIND_LABEL[t.kind] || t.kind}</span>
                 <Link to={`/clients/${t.client_id}`} style={{ color: '#0f172a', textDecoration: 'none' }}>
                   {t.client_name}

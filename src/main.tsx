@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { initSentry, SentryErrorBoundary } from './sentry';
 import './index.css';
+import './styles/design-system.css';
 
 initSentry();
 

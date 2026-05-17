@@ -42,6 +42,7 @@ import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
 import PrivacyNotice from './components/Public/PrivacyNotice';
 import MFAChallenge from './components/Auth/MFAChallenge';
+import DesignSystemDemo from './components/_design/DesignSystemDemo';
 
 function AuthedApp() {
   const { mfa } = useAuth();
@@ -91,6 +92,8 @@ function AuthedApp() {
             <Route path="/phone-log" element={<PhoneLog />} />
             <Route path="/security" element={<Security />} />
             <Route path="/merge" element={<MergeClients />} />
+            {/* Design System v2 verification page — internal, not in sidebar */}
+            <Route path="/design-system" element={<DesignSystemDemo />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>

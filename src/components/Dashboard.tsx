@@ -24,6 +24,8 @@ import SecurityAlertsBanner from './Dashboard/SecurityAlertsBanner';
 import WidgetWrapper from './Dashboard/WidgetWrapper';
 import CustomisePanel from './Dashboard/CustomisePanel';
 import { WIDGET_REGISTRY } from './Dashboard/widgets';
+import { Settings } from 'lucide-react';
+import { Toolbar, Button } from './ui';
 
 const todayIso = () => {
   const d = new Date();
@@ -190,28 +192,34 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
         </div>
       )}
 
-      <div className="dashboard-header" style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Dashboard</h2>
-          <span style={{ fontSize: 13, color: '#94a3b8' }}>Welcome back, {userName}</span>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {customising ? (
+      <Toolbar
+        title="Dashboard"
+        actions={
+          customising ? (
             <>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowPanel(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setShowPanel(true)}>
                 Widgets…
-              </button>
-              <button className="btn btn-primary btn-sm" onClick={() => { setCustomising(false); setShowPanel(false); }}>
-                ✓ Done
-              </button>
+              </Button>
+              <Button variant="primary" size="sm" onClick={() => { setCustomising(false); setShowPanel(false); }}>
+                Done
+              </Button>
             </>
           ) : (
-            <button className="btn btn-secondary btn-sm" onClick={() => { setCustomising(true); setShowPanel(true); }}>
-              ⚙ Customise
-            </button>
-          )}
-        </div>
-      </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Settings size={15} />}
+              onClick={() => { setCustomising(true); setShowPanel(true); }}
+            >
+              Customise
+            </Button>
+          )
+        }
+      >
+        <span style={{ fontSize: 'var(--pc-fs-13)', color: 'var(--pc-text-2)' }}>
+          Welcome back, {userName}
+        </span>
+      </Toolbar>
 
       {customising ? (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
