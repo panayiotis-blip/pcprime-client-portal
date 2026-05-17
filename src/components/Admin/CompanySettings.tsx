@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import DocumentCategories from './DocumentCategories';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
 // migration 045 / Timesheet.tsx.
@@ -312,6 +313,9 @@ export default function CompanySettings() {
           </button>
         </div>
       )}
+
+      {/* Document Categories admin — self-contained, saves independently */}
+      <DocumentCategories />
     </div>
   );
 }

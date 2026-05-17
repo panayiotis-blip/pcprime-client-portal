@@ -967,12 +967,48 @@ export const api = {
   },
 
   // --------- Document categories (Scan Document master list) ---------
+  // Active categories only — used by the Scan Document dropdown.
   async getDocumentCategories() {
     const { data, error } = await supabase.from('document_categories')
       .select('*').eq('is_active', true)
       .order('display_order', { ascending: true });
     if (error) throw new Error(error.message);
     return data || [];
+  },
+
+  // Every category, active or not — used by the Company Settings admin.
+  async getAllDocumentCategories() {
+    const { data, error } = await supabase.from('document_categories')
+      .select('*').order('display_order', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async createDocumentCategory(payload: Record<string, any>) {
+    const { data, error } = await supabase.from('document_categories')
+      .insert(payload).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async updateDocumentCategory(id: number, payload: Record<string, any>) {
+    const { error } = await supabase.from('document_categories')
+      .update(payload).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteDocumentCategory(id: number) {
+    const { error } = await supabase.from('document_categories').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  // Persist a new display order — writes display_order = position for each id.
+  async reorderDocumentCategories(ids: number[]) {
+    for (let i = 0; i < ids.length; i++) {
+      const { error } = await supabase.from('document_categories')
+        .update({ display_order: i + 1 }).eq('id', ids[i]);
+      if (error) throw new Error(error.message);
+    }
   },
 
   // --------- Folders ---------
