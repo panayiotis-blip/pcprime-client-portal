@@ -249,16 +249,19 @@ export default function Calendar() {
     setForm(prev => ({ ...prev, ends_at: newEnd }));
   };
 
+  // Recipients for the appointment email — linked client's email(s) + extras.
+  const splitEmails = (s: string) => s.split(/[;,]+/).map(x => x.trim()).filter(Boolean);
+  const notifyClient = clients.find((c: any) => String(c.id) === form.client_id);
+  const notifyRecipients = Array.from(new Set([
+    ...(notifyClient?.email ? splitEmails(String(notifyClient.email)) : []),
+    ...splitEmails(notifyExtra),
+  ]));
+
   // Email the meeting details to the linked client + any extra recipients.
   const handleSendNotification = async () => {
-    const split = (s: string) => s.split(/[;,]+/).map(x => x.trim()).filter(Boolean);
-    const client = clients.find((c: any) => String(c.id) === form.client_id);
-    const recipients = new Set<string>();
-    if (client?.email) split(String(client.email)).forEach(r => recipients.add(r));
-    if (notifyExtra.trim()) split(notifyExtra).forEach(r => recipients.add(r));
-    const to = Array.from(recipients);
+    const to = notifyRecipients;
     if (to.length === 0) {
-      alert('No recipient — link a client that has an email on file, or add a recipient below.');
+      alert('No recipient — the linked client has no email on file. Add a recipient below.');
       return;
     }
     const start = form.starts_at ? new Date(form.starts_at).toLocaleString() : '';
@@ -542,6 +545,16 @@ export default function Calendar() {
                         placeholder="extra@example.com; another@example.com"
                       />
                     </div>
+                    <p style={{ fontSize: 13, margin: '8px 0 0' }}>
+                      <strong>Sending to:</strong>{' '}
+                      {notifyRecipients.length > 0 ? (
+                        notifyRecipients.join(', ')
+                      ) : (
+                        <span style={{ color: '#dc2626' }}>
+                          nobody — the linked client has no email on file; add a recipient above
+                        </span>
+                      )}
+                    </p>
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                       <button className="btn btn-primary btn-sm" onClick={handleSendNotification} disabled={notifySending}>
                         {notifySending ? 'Sending…' : 'Send notification'}
