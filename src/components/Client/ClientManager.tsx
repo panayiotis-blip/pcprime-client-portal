@@ -66,6 +66,14 @@ export default function ClientManager() {
       .catch(() => {});
   }, []);
 
+  // Cities (managed list) drive the city filter dropdown.
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
+  useEffect(() => {
+    api.getCities()
+      .then((rows) => setCityOptions((rows as any[]).map((r) => r.name)))
+      .catch(() => {});
+  }, []);
+
   // Pinned-clients map (UI polish part 3) — quick lookup for the star icon
   // on each row and for toggling pin state. Lives locally; the sidebar's
   // Favourites group has its own copy that refreshes on next reload.
@@ -309,7 +317,7 @@ export default function ClientManager() {
     // Structured filters
     if (filterCategory && c.client_category !== filterCategory) return false;
     if (filterStatus   && c.client_status   !== filterStatus)   return false;
-    if (filterCity     && c.city            !== filterCity)     return false;
+    if (filterCity     && (c.city || '').toLowerCase() !== filterCity.toLowerCase()) return false;
     if (filterHasVat === 'yes' && !c.vat_number) return false;
     if (filterHasVat === 'no'  &&  c.vat_number) return false;
     if (filterTag && !(Array.isArray(c.tags) && c.tags.includes(filterTag))) return false;
@@ -326,13 +334,6 @@ export default function ClientManager() {
 
     return true;
   });
-
-  // Distinct cities present in the data — drives the City dropdown
-  const cities = useMemo(() => {
-    const s = new Set<string>();
-    for (const c of clients as any[]) if (c.city) s.add(c.city);
-    return Array.from(s).sort();
-  }, [clients]);
 
   // Distinct tags present in the data — drives the Tag dropdown
   const allTags = useMemo(() => {
@@ -633,7 +634,7 @@ export default function ClientManager() {
         </select>
         <select className="form-input" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ maxWidth: 150 }} title="Filter by city">
           <option value="">All cities</option>
-          {cities.map(c => <option key={c} value={c}>{c}</option>)}
+          {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         {allTags.length > 0 && (
           <select className="form-input" value={filterTag} onChange={e => setFilterTag(e.target.value)} style={{ maxWidth: 150 }} title="Filter by tag">
