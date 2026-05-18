@@ -1090,6 +1090,50 @@ export const api = {
     }
   },
 
+  // --------- Client categories (editable client/company category list) ---------
+  // Active categories only — used by the client form + Clients list filter.
+  async getClientCategories() {
+    const { data, error } = await supabase.from('client_categories')
+      .select('*').eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  // Every category, active or not — used by the Company Settings admin.
+  async getAllClientCategories() {
+    const { data, error } = await supabase.from('client_categories')
+      .select('*').order('display_order', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async createClientCategory(payload: Record<string, any>) {
+    const { data, error } = await supabase.from('client_categories')
+      .insert(payload).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async updateClientCategory(id: number, payload: Record<string, any>) {
+    const { error } = await supabase.from('client_categories')
+      .update(payload).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteClientCategory(id: number) {
+    const { error } = await supabase.from('client_categories').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async reorderClientCategories(ids: number[]) {
+    for (let i = 0; i < ids.length; i++) {
+      const { error } = await supabase.from('client_categories')
+        .update({ display_order: i + 1 }).eq('id', ids[i]);
+      if (error) throw new Error(error.message);
+    }
+  },
+
   // --------- Folders ---------
   async getFolders(clientId: number) {
     await seedSystemFolders(clientId);

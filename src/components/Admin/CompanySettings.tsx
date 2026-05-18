@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import DocumentCategories from './DocumentCategories';
+import ClientCategories from './ClientCategories';
 import Maintenance from './Maintenance';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
@@ -396,6 +397,9 @@ export default function CompanySettings() {
 
       {/* Document Categories admin — self-contained, saves independently */}
       <DocumentCategories />
+
+      {/* Client Categories admin — self-contained, saves independently */}
+      <ClientCategories />
 
       {/* Maintenance tools — self-contained, leadership-only */}
       <Maintenance />

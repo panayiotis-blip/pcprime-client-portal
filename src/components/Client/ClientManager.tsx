@@ -38,19 +38,6 @@ const CLIENT_COLUMNS: ColumnDef[] = [
 
 const DEFAULT_VISIBLE_COLS = CLIENT_COLUMNS.filter(c => c.defaultVisible).map(c => c.id);
 
-const CATEGORY_OPTIONS: { value: string; label: string }[] = [
-  { value: 'company',        label: 'Company' },
-  { value: 'partnership',    label: 'Partnership' },
-  { value: 'individual',     label: 'Individual' },
-  { value: 'sole_trader',    label: 'Sole Trader' },
-  { value: 'self_employed',  label: 'Self-Employed' },
-  { value: 'deceased',       label: 'Deceased' },
-  { value: 'dormant',        label: 'Dormant' },
-  { value: 'prospective',    label: 'Prospective' },
-  { value: 'other',          label: 'Other' },
-  { value: 'vendor_only',    label: 'Vendor (supplier)' },
-];
-
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'active',             label: 'Active' },
   { value: 'liquidated_dormant', label: 'Liquidated / Dormant' },
@@ -70,6 +57,14 @@ export default function ClientManager() {
   useEffect(() => {
     api.countUnlinkedDirectors().then(setUnlinkedCount).catch(() => {});
   }, [clients.length]);
+
+  // Client categories drive the category filter dropdown (editable list).
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => {
+    api.getClientCategories()
+      .then((rows) => setCategoryOptions((rows as any[]).map((r) => ({ value: r.value, label: r.label }))))
+      .catch(() => {});
+  }, []);
 
   // Pinned-clients map (UI polish part 3) — quick lookup for the star icon
   // on each row and for toggling pin state. Lives locally; the sidebar's
@@ -348,7 +343,7 @@ export default function ClientManager() {
 
   // Active filter chips
   const activeFilters: { key: string; label: string; clear: () => void }[] = [];
-  if (filterCategory)         activeFilters.push({ key: 'cat',  label: 'Category: ' + (CATEGORY_OPTIONS.find(o => o.value === filterCategory)?.label || filterCategory), clear: () => setFilterCategory('') });
+  if (filterCategory)         activeFilters.push({ key: 'cat',  label: 'Category: ' + (categoryOptions.find(o => o.value === filterCategory)?.label || filterCategory), clear: () => setFilterCategory('') });
   if (filterStatus)           activeFilters.push({ key: 'stat', label: 'Status: '   + (STATUS_OPTIONS.find(o => o.value === filterStatus)?.label || filterStatus),     clear: () => setFilterStatus('') });
   if (filterCity)             activeFilters.push({ key: 'city', label: 'City: ' + filterCity,                                             clear: () => setFilterCity('') });
   if (filterHasVat !== 'all') activeFilters.push({ key: 'vat',  label: 'VAT: '  + filterHasVat,                                           clear: () => setFilterHasVat('all') });
@@ -630,7 +625,7 @@ export default function ClientManager() {
         <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search by name, code, TIC, city..." className="form-input client-search" />
         <select className="form-input" value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={{ maxWidth: 170 }} title="Filter by category">
           <option value="">All categories</option>
-          {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <select className="form-input" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ maxWidth: 180 }} title="Filter by status">
           <option value="">All statuses</option>
@@ -639,11 +634,6 @@ export default function ClientManager() {
         <select className="form-input" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ maxWidth: 150 }} title="Filter by city">
           <option value="">All cities</option>
           {cities.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="form-input" value={filterHasVat} onChange={e => setFilterHasVat(e.target.value as any)} style={{ maxWidth: 140 }} title="Filter by VAT registration">
-          <option value="all">VAT: any</option>
-          <option value="yes">Has VAT</option>
-          <option value="no">No VAT</option>
         </select>
         {allTags.length > 0 && (
           <select className="form-input" value={filterTag} onChange={e => setFilterTag(e.target.value)} style={{ maxWidth: 150 }} title="Filter by tag">
@@ -662,9 +652,9 @@ export default function ClientManager() {
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => setShowViews(v => !v)}
-            title="Saved views"
+            title="Quick filter presets — apply a ready-made or saved filter"
           >
-            ⭐ Views {showViews ? '▲' : '▼'}
+            ⚡ Quick Filters {showViews ? '▲' : '▼'}
           </button>
           {showViews && (
             <div style={{

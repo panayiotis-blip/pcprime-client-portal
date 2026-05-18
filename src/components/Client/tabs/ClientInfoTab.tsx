@@ -1,10 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Field, useFieldCtx } from '../fieldContext';
-
-const CLIENT_CATEGORIES = [
-  'company', 'partnership', 'individual', 'sole_trader',
-  'self_employed', 'deceased', 'dormant', 'prospective', 'other',
-  'vendor_only',
-];
+import { api } from '../../../services/api';
 
 const BUSINESS_TYPES = [
   'Limited Company', 'Sole Trader', 'Partnership', 'Self-Employed',
@@ -82,6 +78,12 @@ function VendorToggle() {
 // Tab 1: Client Info — name, tax-office name, classification, status,
 // dates. Splits out of the legacy monolithic Info tab.
 export default function ClientInfoTab() {
+  const [clientCategories, setClientCategories] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => {
+    api.getClientCategories()
+      .then((rows) => setClientCategories((rows as any[]).map((r) => ({ value: r.value, label: r.label }))))
+      .catch(() => {});
+  }, []);
   return (
     <div className="client-tab-content">
       <div className="form-section">
@@ -98,7 +100,7 @@ export default function ClientInfoTab() {
       <div className="form-section">
         <h3>Classification</h3>
         <div className="form-grid">
-          <Field label="Client Category" field="client_category" options={CLIENT_CATEGORIES} />
+          <Field label="Client Category" field="client_category" options={clientCategories} />
           <Field label="Business Type" field="business_type" options={BUSINESS_TYPES} />
           <Field label="Tax Return Type" field="tax_return_type" placeholder="e.g. Employee (04), Self-employed (21)" />
           <Field label="Status" field="status" options={STATUSES} />
