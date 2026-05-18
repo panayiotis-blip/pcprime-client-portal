@@ -3,6 +3,7 @@ import { Plus, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Button, FormField, Input, Select } from '../ui';
+import CollapsibleSection from './CollapsibleSection';
 
 // Company Settings → Document Categories admin (UI Polish v2, Part 4).
 // Manages the document_categories master list that drives the Scan Document
@@ -148,13 +149,12 @@ export default function DocumentCategories() {
   };
 
   return (
-    <div className="form-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Document Categories</h3>
-        {isOwner && (
-          <Button size="sm" leftIcon={<Plus size={15} />} onClick={openNew}>Add Category</Button>
-        )}
-      </div>
+    <CollapsibleSection
+      title="Document Categories"
+      headerRight={isOwner && (
+        <Button size="sm" leftIcon={<Plus size={15} />} onClick={openNew}>Add Category</Button>
+      )}
+    >
       <p style={{ fontSize: 13, color: 'var(--pc-text-2)', margin: '6px 0 12px' }}>
         The list shown in the Scan Document dropdown. OCR categories open the invoice
         editor for review; the rest file straight into the target folder.
@@ -279,6 +279,6 @@ export default function DocumentCategories() {
           </label>
         </div>
       </Modal>
-    </div>
+    </CollapsibleSection>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { Modal, Button, Input } from '../ui';
 import BulkWipeModal from './BulkWipeModal';
+import CollapsibleSection from './CollapsibleSection';
 import { downloadImportTemplate } from '../../services/smartImport/template';
 
 // Company Settings → Maintenance (UI Polish v2, Part 5F).
@@ -50,8 +51,7 @@ export default function Maintenance() {
   const n = orphanCount ?? 0;
 
   return (
-    <div className="form-section">
-      <h3>Maintenance</h3>
+    <CollapsibleSection title="Maintenance">
       <p style={{ fontSize: 13, color: 'var(--pc-text-2)', marginTop: 0 }}>
         Admin tools for loading and tidying client data.
       </p>
@@ -148,6 +148,6 @@ export default function Maintenance() {
       {showWipe && (
         <BulkWipeModal onClose={() => setShowWipe(false)} onWiped={() => setShowWipe(false)} />
       )}
-    </div>
+    </CollapsibleSection>
   );
 }

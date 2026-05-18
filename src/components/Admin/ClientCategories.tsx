@@ -3,6 +3,7 @@ import { Plus, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Button, FormField, Input } from '../ui';
+import CollapsibleSection from './CollapsibleSection';
 
 // Company Settings → Client Categories admin.
 // Manages the client_categories master list that drives the category
@@ -106,13 +107,12 @@ export default function ClientCategories() {
   };
 
   return (
-    <div className="form-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Client Categories</h3>
-        {isOwner && (
-          <Button size="sm" leftIcon={<Plus size={15} />} onClick={openNew}>Add Category</Button>
-        )}
-      </div>
+    <CollapsibleSection
+      title="Client Categories"
+      headerRight={isOwner && (
+        <Button size="sm" leftIcon={<Plus size={15} />} onClick={openNew}>Add Category</Button>
+      )}
+    >
       <p style={{ fontSize: 13, color: 'var(--pc-text-2)', margin: '6px 0 12px' }}>
         The categories used when classifying a client. Built-in categories can be renamed
         or hidden but not deleted — the app relies on them.
@@ -194,6 +194,6 @@ export default function ClientCategories() {
           </label>
         </div>
       </Modal>
-    </div>
+    </CollapsibleSection>
   );
 }

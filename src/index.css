@@ -1728,6 +1728,33 @@ body {
   gap: 12px;
 }
 
+/* Collapsible admin panels — Company Settings tidy-up */
+.collapsible-section > .collapsible-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.collapsible-section > .collapsible-summary::-webkit-details-marker { display: none; }
+.collapsible-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--pc-text);
+}
+.collapsible-title::before {
+  content: '\25B8';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--pc-text-2);
+}
+.collapsible-section[open] > .collapsible-summary .collapsible-title::before {
+  content: '\25BE';
+}
+.collapsible-body { margin-top: 14px; }
+
 /* Sticky page headers — the title + action buttons (Save, Edit, Add…)
    stay pinned at the top while the content below scrolls. */
 .list-header,

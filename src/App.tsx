@@ -9,7 +9,6 @@ import AppShell from './components/Layout/AppShell';
 import LoginPage from './components/Auth/LoginPage';
 import Dashboard from './components/Dashboard';
 import ScannerPage from './components/Scanner/ScannerPage';
-import InvoiceList from './components/Invoice/InvoiceList';
 import InvoiceEditor from './components/Invoice/InvoiceEditor';
 import ClientManager from './components/Client/ClientManager';
 import ClientDetail from './components/Client/ClientDetail';
@@ -61,7 +60,6 @@ function AuthedApp() {
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/scan" element={<ScannerPage />} />
-            <Route path="/invoices" element={<InvoiceList />} />
             <Route path="/invoices/new" element={<InvoiceEditor />} />
             <Route path="/invoices/:id" element={<InvoiceEditor />} />
             <Route path="/clients" element={<ClientManager />} />

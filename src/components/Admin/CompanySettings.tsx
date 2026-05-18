@@ -5,6 +5,7 @@ import DocumentCategories from './DocumentCategories';
 import ClientCategories from './ClientCategories';
 import Cities from './Cities';
 import Maintenance from './Maintenance';
+import CollapsibleSection from './CollapsibleSection';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
 // migration 045 / Timesheet.tsx.
@@ -311,8 +312,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Default service rates */}
-      <div className="form-section">
-        <h3>Default service rates (€/hour)</h3>
+      <CollapsibleSection title="Default Service Rates (€/hour)">
         <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
           These rates apply to every staff member unless overridden on the Users page.
           Leave blank to skip a service. New time entries snapshot the rate at insert
@@ -335,7 +335,7 @@ export default function CompanySettings() {
             </div>
           ))}
         </div>
-      </div>
+      </CollapsibleSection>
 
       {/* Footer text */}
       <div className="form-section">
@@ -345,7 +345,8 @@ export default function CompanySettings() {
         </p>
         <textarea
           className="form-input"
-          rows={2}
+          rows={5}
+          style={{ width: '100%', resize: 'vertical' }}
           value={form.report_footer || ''}
           onChange={e => handleChange('report_footer', e.target.value)}
           disabled={!canEdit}

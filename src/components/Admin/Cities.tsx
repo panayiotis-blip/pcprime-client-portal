@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Button, FormField, Input } from '../ui';
+import CollapsibleSection from './CollapsibleSection';
 
 // Company Settings → Cities admin.
 // Manages the cities master list that drives the city dropdown on client
@@ -72,13 +73,12 @@ export default function Cities() {
   };
 
   return (
-    <div className="form-section">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Cities</h3>
-        {isOwner && (
-          <Button size="sm" leftIcon={<Plus size={15} />} onClick={openNew}>Add City</Button>
-        )}
-      </div>
+    <CollapsibleSection
+      title="Cities"
+      headerRight={isOwner && (
+        <Button size="sm" leftIcon={<Plus size={15} />} onClick={openNew}>Add City</Button>
+      )}
+    >
       <p style={{ fontSize: 13, color: 'var(--pc-text-2)', margin: '6px 0 12px' }}>
         The cities offered in the dropdown when entering a client address.
         {!isOwner && ' Only owners can edit this list.'}
@@ -147,6 +147,6 @@ export default function Cities() {
           </label>
         </div>
       </Modal>
-    </div>
+    </CollapsibleSection>
   );
 }
