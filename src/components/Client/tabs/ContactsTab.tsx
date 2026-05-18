@@ -80,7 +80,8 @@ export default function ContactsTab() {
         const payload: any = d.is_linked_to_registered && t !== primaryType
           ? {
               ...d,
-              line1: primary.line1, line2: primary.line2,
+              line1: primary.line1, line2: primary.line2, line3: primary.line3,
+              office: primary.office,
               city: primary.city, postal_code: primary.postal_code,
               country: primary.country, notes: primary.notes,
             }
@@ -91,6 +92,8 @@ export default function ContactsTab() {
           address_type: t,
           line1: payload.line1,
           line2: payload.line2,
+          line3: payload.line3,
+          office: payload.office,
           city: payload.city,
           postal_code: payload.postal_code,
           country: payload.country,

@@ -18,7 +18,7 @@ type Props = {
 
 const fmtMultiline = (a: Partial<ClientAddress>) => {
   const lines = [
-    a.line1, a.line2,
+    a.office, a.line1, a.line2, a.line3,
     [a.postal_code, a.city].filter(Boolean).join(' '),
     a.country,
   ].filter(Boolean) as string[];
@@ -68,6 +68,24 @@ export default function AddressBlock({
               type="text" className="form-input"
               value={display.line2 || ''}
               onChange={e => onChange({ line2: e.target.value })}
+              disabled={linked}
+            />
+          </div>
+          <div className="form-group full-width">
+            <label>Address line 3</label>
+            <input
+              type="text" className="form-input"
+              value={display.line3 || ''}
+              onChange={e => onChange({ line3: e.target.value })}
+              disabled={linked}
+            />
+          </div>
+          <div className="form-group">
+            <label>Office / Building No.</label>
+            <input
+              type="text" className="form-input"
+              value={display.office || ''}
+              onChange={e => onChange({ office: e.target.value })}
               disabled={linked}
             />
           </div>

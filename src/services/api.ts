@@ -58,6 +58,8 @@ export interface ClientAddress {
   address_type: 'registered' | 'trading' | 'postal' | 'home';
   line1: string | null;
   line2: string | null;
+  line3: string | null;
+  office: string | null;
   city: string | null;
   postal_code: string | null;
   country: string | null;
@@ -2631,6 +2633,8 @@ export const api = {
     address_type: 'registered' | 'trading' | 'postal' | 'home';
     line1?: string | null;
     line2?: string | null;
+    line3?: string | null;
+    office?: string | null;
     city?: string | null;
     postal_code?: string | null;
     country?: string | null;
@@ -2642,6 +2646,8 @@ export const api = {
       address_type: addr.address_type,
       line1:        addr.line1 || null,
       line2:        addr.line2 || null,
+      line3:        addr.line3 || null,
+      office:       addr.office || null,
       city:         addr.city || null,
       postal_code:  addr.postal_code || null,
       country:      addr.country || 'Cyprus',
