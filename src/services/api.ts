@@ -1134,6 +1134,42 @@ export const api = {
     }
   },
 
+  // --------- Cities (editable city list for client addresses) ---------
+  // Active cities only — used by the address city dropdown.
+  async getCities() {
+    const { data, error } = await supabase.from('cities')
+      .select('*').eq('is_active', true)
+      .order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  // Every city, active or not — used by the Company Settings admin.
+  async getAllCities() {
+    const { data, error } = await supabase.from('cities')
+      .select('*').order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async createCity(payload: Record<string, any>) {
+    const { data, error } = await supabase.from('cities')
+      .insert(payload).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async updateCity(id: number, payload: Record<string, any>) {
+    const { error } = await supabase.from('cities')
+      .update(payload).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteCity(id: number) {
+    const { error } = await supabase.from('cities').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Folders ---------
   async getFolders(clientId: number) {
     await seedSystemFolders(clientId);

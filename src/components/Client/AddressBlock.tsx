@@ -9,6 +9,7 @@ type Props = {
   value: Partial<ClientAddress>;
   onChange: (patch: Partial<ClientAddress>) => void;
   title: string;
+  cities?: string[];
   // The primary address (registered for companies, home for individuals)
   // that this block can optionally link to. When null, the linked-checkbox is hidden.
   primaryAddress?: Partial<ClientAddress> | null;
@@ -25,7 +26,7 @@ const fmtMultiline = (a: Partial<ClientAddress>) => {
 };
 
 export default function AddressBlock({
-  editing, value, onChange, title, primaryAddress, primaryLabel,
+  editing, value, onChange, title, cities = [], primaryAddress, primaryLabel,
 }: Props) {
   const linked = !!value.is_linked_to_registered && !!primaryAddress;
 
@@ -72,12 +73,18 @@ export default function AddressBlock({
           </div>
           <div className="form-group">
             <label>City</label>
-            <input
-              type="text" className="form-input"
+            <select
+              className="form-input"
               value={display.city || ''}
               onChange={e => onChange({ city: e.target.value })}
               disabled={linked}
-            />
+            >
+              <option value="">— Select city —</option>
+              {cities.map(c => <option key={c} value={c}>{c}</option>)}
+              {display.city && !cities.includes(display.city) && (
+                <option value={display.city}>{display.city}</option>
+              )}
+            </select>
           </div>
           <div className="form-group">
             <label>Postal code</label>

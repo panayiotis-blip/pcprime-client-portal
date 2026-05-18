@@ -33,6 +33,13 @@ export default function ContactsTab() {
   const [drafts, setDrafts] = useState<Record<AddressType, Draft>>({} as any);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
+  const [cities, setCities]   = useState<string[]>([]);
+
+  useEffect(() => {
+    api.getCities()
+      .then(rows => setCities((rows as any[]).map(r => r.name)))
+      .catch(() => {});
+  }, []);
 
   const load = async () => {
     if (!client?.id) return;
@@ -159,6 +166,7 @@ export default function ContactsTab() {
                 title={titles[t]}
                 value={drafts[t] || {}}
                 onChange={p => patchAddress(t, p)}
+                cities={cities}
                 primaryAddress={isPrimary ? null : drafts[primaryType]}
                 primaryLabel={`Same as ${titles[primaryType]}`}
               />

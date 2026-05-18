@@ -3,6 +3,7 @@ import { api, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import DocumentCategories from './DocumentCategories';
 import ClientCategories from './ClientCategories';
+import Cities from './Cities';
 import Maintenance from './Maintenance';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
@@ -416,6 +417,9 @@ export default function CompanySettings() {
 
       {/* Client Categories admin — self-contained, saves independently */}
       <ClientCategories />
+
+      {/* Cities admin — self-contained, saves independently */}
+      <Cities />
 
       {/* Maintenance tools — self-contained, leadership-only */}
       <Maintenance />
