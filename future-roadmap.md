@@ -97,6 +97,47 @@ No tests anywhere. Highest single technical risk per the status report.
 
 ---
 
+## Captured 2026-05-18
+
+### Supabase CLI — native Windows install ❌
+`npx supabase` segfaults on Windows, so `functions deploy` / `functions list`
+can't be run locally. Install the native binary instead (Scoop, or a GitHub
+release download). **Effort:** 15–30 min. Unblocks local `supabase functions`
+commands.
+
+### CloudMailin — take account live ❌
+CloudMailin is currently in **Test mode**. Before relying on outbound email:
+verify the outbound billing tier, send a self-test to
+`panayiotis@primeandcalculate.com` to check rendering, and check spam-folder
+behaviour. (Follows on from "Email Integration (CloudMailin)" above.)
+
+### Email subject polish — duplicated title ❌
+Appointment notification emails use the subject `Meeting: <title>`; when the
+appointment is itself titled "Meeting" it reads "Meeting: Meeting". Cosmetic —
+drop or condition the prefix. Low priority.
+
+### CloudMailin outbound API key — rotate ❌
+The outbound API key was briefly visible during setup. Low risk (send-only,
+private chat) — rotate at convenience: delete + recreate the outbound account
+in CloudMailin, then update the `CLOUDMAILIN_OUTBOUND_*` Supabase secrets.
+
+### Branded email layouts ❌
+Outbound emails currently send as bare HTML. CloudMailin supports "Default
+Layout" templates — wrap transactional emails in a branded layout (logo,
+footer, brand colours from `company_settings`).
+
+---
+
+## Working agreement
+
+### Code-change approval cycle
+Required style for any code change: **inspect → propose plan → name the files
+that will change → wait for explicit approval**, before editing. A feature
+request is not itself approval to start. (Flagged after commit `a4d33bf` was
+edited/committed/pushed without it.)
+
+---
+
 ## Pre-go-live admin (handled outside this file)
 
 See `memory/project_go_live_checklist.md` for: PITR toggle, Supabase DPA, lawyer T&Cs, custom SMTP for invites, restore drill, separate staging Supabase project.
