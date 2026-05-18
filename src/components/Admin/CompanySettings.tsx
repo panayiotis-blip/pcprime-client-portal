@@ -32,6 +32,7 @@ export default function CompanySettings() {
   // separate state so the input fields stay strings (allows clearing/typing).
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editing, setEditing] = useState(false);
 
   const load = async () => {
     try {
@@ -93,12 +94,18 @@ export default function CompanySettings() {
         default_service_rates: rates,
       });
       await load();
+      setEditing(false);
       alert('Company settings saved.');
     } catch (err: any) {
       alert('Save failed: ' + err.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    load();   // discard any unsaved changes
   };
 
   const resetBrandColours = () => {
@@ -134,6 +141,20 @@ export default function CompanySettings() {
     <div className="dashboard">
       <div className="dashboard-header">
         <h2>Company Settings</h2>
+        {canEdit && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {editing ? (
+              <>
+                <button className="btn btn-secondary" onClick={handleCancel} disabled={saving}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <button className="btn btn-primary" onClick={() => setEditing(true)}>Edit</button>
+            )}
+          </div>
+        )}
       </div>
 
       {!canEdit && (
@@ -142,6 +163,7 @@ export default function CompanySettings() {
         </div>
       )}
 
+      <fieldset disabled={!editing} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       {/* Logo */}
       <div className="form-section">
         <h3>Logo &amp; brand</h3>
@@ -387,13 +409,7 @@ export default function CompanySettings() {
         </div>
       </div>
 
-      {canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save settings'}
-          </button>
-        </div>
-      )}
+      </fieldset>
 
       {/* Document Categories admin — self-contained, saves independently */}
       <DocumentCategories />

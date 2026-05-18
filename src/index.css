@@ -1728,6 +1728,19 @@ body {
   gap: 12px;
 }
 
+/* Sticky page headers — the title + action buttons (Save, Edit, Add…)
+   stay pinned at the top while the content below scrolls. */
+.list-header,
+.dashboard-header,
+.page-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--pc-tint);
+  padding: 14px 0;
+  margin-bottom: 14px;
+}
+
 .dashboard-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .dashboard-clients-grid {
