@@ -1172,6 +1172,14 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Outbound email (via the send-email Edge Function → CloudMailin) ---------
+  async sendEmail(msg: { to: string[]; subject: string; html?: string; text?: string }) {
+    const { data, error } = await supabase.functions.invoke('send-email', { body: msg });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'The email could not be sent.');
+    return data;
+  },
+
   // --------- Folders ---------
   async getFolders(clientId: number) {
     await seedSystemFolders(clientId);

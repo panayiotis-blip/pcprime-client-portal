@@ -108,6 +108,11 @@ export default function Calendar() {
   const [logTimeForm, setLogTimeForm] = useState({ service: 'Meetings', description: '', billable: true });
   const [logTimeSaving, setLogTimeSaving] = useState(false);
 
+  // "Send email notification" sub-form (only on a saved appointment)
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyExtra, setNotifyExtra] = useState('');
+  const [notifySending, setNotifySending] = useState(false);
+
   // Build owner_id → color map
   const colorByOwner = useMemo(() => {
     const m = new Map<string, string>();
@@ -242,6 +247,44 @@ export default function Calendar() {
   const handleEndChange = (newEnd: string) => {
     setEndManuallyEdited(true);
     setForm(prev => ({ ...prev, ends_at: newEnd }));
+  };
+
+  // Email the meeting details to the linked client + any extra recipients.
+  const handleSendNotification = async () => {
+    const split = (s: string) => s.split(/[;,]+/).map(x => x.trim()).filter(Boolean);
+    const client = clients.find((c: any) => String(c.id) === form.client_id);
+    const recipients = new Set<string>();
+    if (client?.email) split(String(client.email)).forEach(r => recipients.add(r));
+    if (notifyExtra.trim()) split(notifyExtra).forEach(r => recipients.add(r));
+    const to = Array.from(recipients);
+    if (to.length === 0) {
+      alert('No recipient — link a client that has an email on file, or add a recipient below.');
+      return;
+    }
+    const start = form.starts_at ? new Date(form.starts_at).toLocaleString() : '';
+    const end   = form.ends_at ? new Date(form.ends_at).toLocaleString() : '';
+    const subject = `Meeting: ${form.title}`;
+    const html = [
+      '<p>This is a notification for the following meeting:</p>',
+      `<p style="font-size:15px"><strong>${form.title}</strong></p>`,
+      `<p>When: ${start}${end ? ' &ndash; ' + end : ''}</p>`,
+      form.location ? `<p>Where: ${form.location}</p>` : '',
+      form.description ? `<p>${form.description}</p>` : '',
+    ].filter(Boolean).join('\n');
+    const text = `Meeting: ${form.title}\nWhen: ${start}${end ? ' - ' + end : ''}`
+      + (form.location ? `\nWhere: ${form.location}` : '')
+      + (form.description ? `\n\n${form.description}` : '');
+    setNotifySending(true);
+    try {
+      await api.sendEmail({ to, subject, html, text });
+      alert(`Notification sent to ${to.join(', ')}.`);
+      setNotifyOpen(false);
+      setNotifyExtra('');
+    } catch (err: any) {
+      alert('Send failed: ' + err.message);
+    } finally {
+      setNotifySending(false);
+    }
   };
 
   const handleSave = async () => {
@@ -473,6 +516,38 @@ export default function Calendar() {
                     <p style={{ fontSize: 11, color: '#64748b', margin: '6px 0 0' }}>
                       Duration is taken from the appointment's start and end times.
                     </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Send email notification (only on a saved appointment) */}
+            {form.id && (
+              <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 12 }}>
+                {!notifyOpen ? (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setNotifyOpen(true)}>
+                    ✉ Send email notification
+                  </button>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+                      Emails the meeting details to the linked client
+                      {form.client_id ? '' : ' (none linked — add a recipient below)'} plus any extra recipients.
+                    </p>
+                    <div className="form-group">
+                      <label>Additional recipients (optional)</label>
+                      <input
+                        type="text" className="form-input" value={notifyExtra}
+                        onChange={e => setNotifyExtra(e.target.value)}
+                        placeholder="extra@example.com; another@example.com"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button className="btn btn-primary btn-sm" onClick={handleSendNotification} disabled={notifySending}>
+                        {notifySending ? 'Sending…' : 'Send notification'}
+                      </button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setNotifyOpen(false)}>Cancel</button>
+                    </div>
                   </div>
                 )}
               </div>
