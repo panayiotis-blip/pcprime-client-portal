@@ -29,6 +29,13 @@ body {
   line-height: 1.5;
 }
 
+/* Global heading scale — keeps headings consistent across every page.
+   Component CSS may still override for special cases (landing page etc.). */
+h1 { font-size: 24px; font-weight: 700; }
+h2 { font-size: 20px; font-weight: 600; }
+h3 { font-size: 16px; font-weight: 600; }
+h4 { font-size: 14px; font-weight: 600; }
+
 /* ===== Login ===== */
 .login-page {
   min-height: 100vh;
@@ -1495,7 +1502,7 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 14px;
   color: var(--text-secondary);
   border-right: 1px solid var(--border);
   transition: all 0.2s;
