@@ -20,7 +20,7 @@ export default function CustomisePanel({ onClose }: Props) {
         </div>
 
         <p style={{ fontSize: 13, color: '#475569', margin: '0 0 12px 0' }}>
-          Choose which widgets appear. Drag to reorder them on the dashboard. Resize from each widget's S/M/L toolbar. Changes save automatically.
+          Choose which widgets appear. Drag to reorder them on the dashboard. Resize by dragging the handle at a widget's bottom-right corner. Changes save automatically.
         </p>
 
         <div style={{ marginBottom: 12 }}>

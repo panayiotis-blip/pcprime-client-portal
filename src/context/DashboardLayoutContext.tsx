@@ -6,13 +6,12 @@ import {
   buildDefaultLayout,
   mergeWithRegistry,
   type DashboardLayout,
-  type WidgetSize,
 } from '../components/Dashboard/widgets';
 
 interface DashboardLayoutAPI {
   layout: DashboardLayout;
   resetLayout: () => void;
-  setWidgetSize: (id: string, size: WidgetSize) => void;
+  setWidgetBox: (id: string, w: number, h: number) => void;
   setWidgetVisible: (id: string, visible: boolean) => void;
   reorder: (orderedIds: string[]) => void;
 }
@@ -67,9 +66,9 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
     queueSave(def);
   }, [queueSave]);
 
-  const setWidgetSize = useCallback((id: string, size: WidgetSize) => {
+  const setWidgetBox = useCallback((id: string, w: number, h: number) => {
     mutate(prev => ({
-      widgets: prev.widgets.map(w => w.id === id ? { ...w, size } : w),
+      widgets: prev.widgets.map(x => x.id === id ? { ...x, w, h } : x),
     }));
   }, [mutate]);
 
@@ -98,7 +97,7 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
   }, [mutate]);
 
   return (
-    <DashboardLayoutContext.Provider value={{ layout, resetLayout, setWidgetSize, setWidgetVisible, reorder }}>
+    <DashboardLayoutContext.Provider value={{ layout, resetLayout, setWidgetBox, setWidgetVisible, reorder }}>
       {children}
     </DashboardLayoutContext.Provider>
   );

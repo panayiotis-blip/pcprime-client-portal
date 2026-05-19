@@ -168,7 +168,7 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
   const gridBody = (
     <div className={`dashboard-grid-12 ${customising ? 'dashboard-grid-customising' : ''}`}>
       {visibleWidgets.map(w => (
-        <WidgetWrapper key={w.id} id={w.id} size={w.size} customising={customising}>
+        <WidgetWrapper key={w.id} id={w.id} w={w.w} h={w.h} customising={customising}>
           {renderWidgetContent(w.id)}
         </WidgetWrapper>
       ))}

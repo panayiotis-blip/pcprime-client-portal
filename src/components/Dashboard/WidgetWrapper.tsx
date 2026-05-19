@@ -1,27 +1,25 @@
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode, type PointerEvent } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDashboardLayout } from '../../context/DashboardLayoutContext';
-import type { WidgetSize } from './widgets';
+import { ROW_PX, MIN_W, MAX_W, MIN_H, MAX_H } from './widgets';
 
 interface Props {
   id: string;
-  size: WidgetSize;
+  w: number;
+  h: number;
   customising: boolean;
   children: ReactNode;
 }
 
-const SIZE_CLASS: Record<WidgetSize, string> = {
-  small:  'widget-small',
-  medium: 'widget-medium',
-  large:  'widget-large',
-};
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-// Wraps a single widget. In normal viewing mode it's just a position-aware
-// passthrough. In customise mode it adds a toolbar with S/M/L resize buttons,
-// a hide ✕ button, and a drag handle (⋮⋮) connected to dnd-kit.
-export default function WidgetWrapper({ id, size, customising, children }: Props) {
-  const { setWidgetSize, setWidgetVisible } = useDashboardLayout();
+// Wraps a single widget. In normal viewing mode it's a position-aware
+// passthrough. In customise mode it adds a drag handle (⋮⋮) for reordering,
+// a hide ✕, and a bottom-right handle to drag-resize the widget's width
+// (columns) and height (rows).
+export default function WidgetWrapper({ id, w, h, customising, children }: Props) {
+  const { setWidgetBox, setWidgetVisible } = useDashboardLayout();
   const {
     attributes,
     listeners,
@@ -31,17 +29,51 @@ export default function WidgetWrapper({ id, size, customising, children }: Props
     isDragging,
   } = useSortable({ id, disabled: !customising });
 
+  const slotRef = useRef<HTMLDivElement | null>(null);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    gridColumn: `span ${w}`,
+    gridRow: `span ${h}`,
+  };
+
+  // Drag the corner handle: horizontal movement changes width (columns),
+  // vertical changes height (rows). Updates live; the context debounces saving.
+  const startResize = (e: PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = slotRef.current;
+    if (!el) return;
+    const colPx = el.offsetWidth / w;       // approx pixels per grid column
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = w;
+    const startH = h;
+
+    const onMove = (ev: globalThis.PointerEvent) => {
+      const dCol = Math.round((ev.clientX - startX) / colPx);
+      const dRow = Math.round((ev.clientY - startY) / ROW_PX);
+      setWidgetBox(
+        id,
+        clamp(startW + dCol, MIN_W, MAX_W),
+        clamp(startH + dRow, MIN_H, MAX_H),
+      );
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
   };
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => { setNodeRef(el); slotRef.current = el; }}
       style={style}
-      className={`widget-slot ${SIZE_CLASS[size]} ${customising ? 'widget-slot-customising' : ''}`}
+      className={`widget-slot ${customising ? 'widget-slot-customising' : ''}`}
       {...attributes}
     >
       {customising && (
@@ -55,26 +87,6 @@ export default function WidgetWrapper({ id, size, customising, children }: Props
           >
             ⋮⋮
           </button>
-          <div className="widget-size-group" role="group" aria-label="Widget size">
-            <button
-              type="button"
-              className={`widget-size-btn ${size === 'small' ? 'active' : ''}`}
-              title="Small"
-              onClick={() => setWidgetSize(id, 'small')}
-            >S</button>
-            <button
-              type="button"
-              className={`widget-size-btn ${size === 'medium' ? 'active' : ''}`}
-              title="Medium"
-              onClick={() => setWidgetSize(id, 'medium')}
-            >M</button>
-            <button
-              type="button"
-              className={`widget-size-btn ${size === 'large' ? 'active' : ''}`}
-              title="Large"
-              onClick={() => setWidgetSize(id, 'large')}
-            >L</button>
-          </div>
           <button
             type="button"
             className="widget-hide-btn"
@@ -83,7 +95,18 @@ export default function WidgetWrapper({ id, size, customising, children }: Props
           >✕</button>
         </div>
       )}
-      {children}
+
+      <div className="widget-body">{children}</div>
+
+      {customising && (
+        <button
+          type="button"
+          className="widget-resize-handle no-print"
+          title="Drag to resize"
+          aria-label="Resize widget"
+          onPointerDown={startResize}
+        />
+      )}
     </div>
   );
 }
