@@ -4,6 +4,9 @@
 // Sends outbound email through CloudMailin's JSON API.
 // The portal calls this via supabase.functions.invoke('send-email', ...).
 //
+// Supports optional attachments — the portal sends them base64-encoded so a
+// generated invoice / receipt / statement PDF can travel with the message.
+//
 // Deploy normally (JWT verification ON) — only signed-in portal users
 // can call it.
 //
@@ -42,19 +45,33 @@ Deno.serve(async (req) => {
     if (to.length === 0) return json({ ok: false, error: 'No recipient address was provided.' });
     if (!payload.subject) return json({ ok: false, error: 'An email subject is required.' });
 
+    // Optional attachments: [{ file_name, content (base64), content_type }]
+    const attachments = Array.isArray(payload.attachments)
+      ? payload.attachments
+          .filter((a: any) => a && typeof a.content === 'string' && typeof a.file_name === 'string')
+          .map((a: any) => ({
+            file_name: a.file_name,
+            content: a.content,
+            content_type: a.content_type || 'application/octet-stream',
+          }))
+      : [];
+
+    const body: Record<string, unknown> = {
+      from,
+      to,
+      subject: payload.subject,
+      plain: payload.text || '',
+      html: payload.html || '',
+    };
+    if (attachments.length > 0) body.attachments = attachments;
+
     const res = await fetch(`https://api.cloudmailin.com/api/v0.1/${username}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from,
-        to,
-        subject: payload.subject,
-        plain: payload.text || '',
-        html: payload.html || '',
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {

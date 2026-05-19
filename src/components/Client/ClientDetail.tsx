@@ -328,6 +328,14 @@ export default function ClientDetail() {
             📋 Apply task template
           </button>
         )}
+        {isAdmin && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => window.open(`/billing/statement/${clientId}/print`, '_blank')}
+          >
+            📄 Print statement
+          </button>
+        )}
       </div>
 
       {/* Unique-email banner hidden until Email Integration (Task 5 / CloudMailin) is live.

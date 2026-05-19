@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 
 const fmtDate = (iso: string | null | undefined) => {
@@ -12,6 +12,8 @@ const fmtDate = (iso: string | null | undefined) => {
 // All styles are scoped here so the AppShell sidebar is hidden in print mode.
 export default function InvoicePrint() {
   const { id } = useParams();
+  const [sp] = useSearchParams();
+  const capturing = sp.get('capture') === '1';   // off-screen PDF render
   const [invoice, setInvoice] = useState<any>(null);
   const [company, setCompany] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -35,10 +37,10 @@ export default function InvoicePrint() {
   }, [id]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || capturing) return;
     const t = setTimeout(() => { try { window.print(); } catch {} }, 300);
     return () => clearTimeout(t);
-  }, [loading]);
+  }, [loading, capturing]);
 
   if (loading) return <div className="loading-screen">Loading…</div>;
   if (!invoice) return <div className="empty-state"><p>Invoice not found.</p></div>;
@@ -109,10 +111,12 @@ export default function InvoicePrint() {
         .status-stamp.draft    { color: rgba(100, 116, 139, 0.22); border-color: rgba(100, 116, 139, 0.22); }
       `}</style>
 
-      <div className="print-actions">
-        <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>
-        <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
-      </div>
+      {!capturing && (
+        <div className="print-actions">
+          <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>
+          <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
+        </div>
+      )}
 
       <div style={{ position: 'relative' }}>
         {invoice.status === 'paid'      && <div className="status-stamp paid">PAID</div>}
@@ -165,6 +169,12 @@ export default function InvoicePrint() {
             </div>
           </div>
         </div>
+
+        {invoice.services_description && (
+          <div style={{ margin: '4px 0 14px', fontSize: 13 }}>
+            <strong>{invoice.services_description}</strong>
+          </div>
+        )}
 
         {/* Lines */}
         <table className="inv-table">

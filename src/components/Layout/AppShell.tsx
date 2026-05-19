@@ -53,7 +53,11 @@ const STAFF_GROUPS: NavGroup[] = [
   {
     key: 'billing', label: 'Accounting',
     items: [
-      { path: '/billing',     label: 'Client Invoices', icon: '€' },
+      { path: '/billing',              label: 'Client Invoices', icon: '€' },
+      { path: '/billing/recurring',    label: 'Recurring',       icon: '↻' },
+      { path: '/billing/statement',    label: 'Statements',      icon: '▤' },
+      { path: '/billing/age-analysis', label: 'Age Analysis',    icon: '◔' },
+      { path: '/billing/service-presets', label: 'Service Presets', icon: '⊕' },
     ],
   },
   {

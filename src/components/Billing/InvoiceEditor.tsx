@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { Modal, Button } from '../ui';
+import EmailDocumentModal from './EmailDocumentModal';
 
 type LineType = 'time' | 'fixed' | 'expense';
 type Status   = 'draft' | 'issued' | 'paid' | 'cancelled';
@@ -40,6 +42,7 @@ type Invoice = {
   vat_amount: number;
   total_amount: number;
   billing_address: string | null;
+  services_description: string | null;
   notes: string | null;
   lines: Line[];
 };
@@ -187,6 +190,7 @@ export default function InvoiceEditor() {
         discount_value: invoice.discount_value,
         notes:          invoice.notes || null,
         billing_address: invoice.billing_address || null,
+        services_description: invoice.services_description ?? '',
         ...totals,
       });
 
@@ -256,15 +260,97 @@ export default function InvoiceEditor() {
     }
   };
 
-  const handleMarkPaid = async () => {
+  // Service presets — catalogue of reusable line descriptions.
+  const [servicePresets, setServicePresets] = useState<any[]>([]);
+  useEffect(() => {
+    api.getServicePresets({ activeOnly: true }).then(setServicePresets).catch(() => {});
+  }, []);
+
+  // When a line description matches a preset, pull in its price + VAT flag.
+  const onDescChange = (idx: number, value: string) => {
+    const preset = servicePresets.find(p => p.description === value);
+    const patch: Partial<Line> = { description: value };
+    if (preset) {
+      patch.vatable = preset.vatable;
+      if (preset.default_price != null && !Number(lines[idx]?.unit_price)) {
+        const q = Number(lines[idx]?.quantity || 1);
+        patch.unit_price = Number(preset.default_price);
+        patch.amount = round2(q * Number(preset.default_price));
+      }
+    }
+    updateLine(idx, patch);
+  };
+
+  // Email-document dialog config (invoice or its receipt).
+  const [emailCfg, setEmailCfg] = useState<{
+    routePath: string; fileName: string; defaultSubject: string; defaultMessage: string;
+  } | null>(null);
+
+  const handleEmailInvoice = () => {
     if (!invoice) return;
-    const d = prompt('Paid on (YYYY-MM-DD)? Leave blank for today.');
-    if (d === null) return;
+    const num  = invoice.invoice_number || `draft-${invoice.id}`;
+    const name = invoice.client?.name || 'Sir/Madam';
+    setEmailCfg({
+      routePath: `/billing/${invoice.id}/print`,
+      fileName: `Invoice-${num}.pdf`,
+      defaultSubject: `Invoice ${num}`,
+      defaultMessage: `Dear ${name},\n\nPlease find attached invoice ${num}.\n\nKind regards`,
+    });
+  };
+
+  const handleEmailReceipt = async () => {
+    if (!invoice) return;
     try {
-      await api.markClientInvoicePaid(invoice.id, d.trim() || undefined);
+      const r = await api.getReceiptForInvoice(invoice.id);
+      if (!r) { alert('No receipt found for this invoice.'); return; }
+      const name = invoice.client?.name || 'Sir/Madam';
+      setEmailCfg({
+        routePath: `/billing/receipt/${r.id}/print`,
+        fileName: `Receipt-${r.receipt_number}.pdf`,
+        defaultSubject: `Receipt ${r.receipt_number}`,
+        defaultMessage: `Dear ${name},\n\nPlease find attached receipt ${r.receipt_number}.\n\nKind regards`,
+      });
+    } catch (err: any) {
+      alert('Could not load receipt: ' + err.message);
+    }
+  };
+
+  // Mark-paid flow: a small dialog captures the payment date + method,
+  // then mark_client_invoice_paid issues a numbered receipt server-side.
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payDate, setPayDate]           = useState('');
+  const [payMethod, setPayMethod]       = useState('Bank Transfer');
+  const [paying, setPaying]             = useState(false);
+
+  const handleMarkPaid = () => {
+    if (!invoice) return;
+    setPayDate(new Date().toISOString().slice(0, 10));
+    setPayMethod('Bank Transfer');
+    setPayModalOpen(true);
+  };
+
+  const confirmMarkPaid = async () => {
+    if (!invoice) return;
+    setPaying(true);
+    try {
+      await api.markClientInvoicePaid(invoice.id, payDate || undefined, payMethod);
+      setPayModalOpen(false);
       await load();
     } catch (err: any) {
       alert('Mark paid failed: ' + err.message);
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handlePrintReceipt = async () => {
+    if (!invoice) return;
+    try {
+      const r = await api.getReceiptForInvoice(invoice.id);
+      if (!r) { alert('No receipt found for this invoice.'); return; }
+      window.open(`/billing/receipt/${r.id}/print`, '_blank');
+    } catch (err: any) {
+      alert('Could not open receipt: ' + err.message);
     }
   };
 
@@ -359,6 +445,11 @@ export default function InvoiceEditor() {
           >
             🖨 {isDraft ? 'Preview' : 'Print'}
           </button>
+          {(invoice.status === 'issued' || invoice.status === 'paid') && (
+            <button className="btn btn-secondary" onClick={handleEmailInvoice}>
+              ✉ Email invoice
+            </button>
+          )}
           {isDraft && (
             <button className="btn btn-danger" onClick={handleDelete}>Delete draft</button>
           )}
@@ -410,6 +501,16 @@ export default function InvoiceEditor() {
                   <option value={9}>9%</option>
                   <option value={19}>19% (Standard)</option>
                 </select>
+              </div>
+              <div className="form-group full-width">
+                <label>Description of services</label>
+                <input
+                  type="text" className="form-input"
+                  value={invoice.services_description || ''}
+                  onChange={e => patchInvoice({ services_description: e.target.value })}
+                  disabled={!isEditable}
+                  placeholder="Our fees based on time spent"
+                />
               </div>
               <div className="form-group full-width">
                 <label>Billing address (snapshot)</label>
@@ -530,6 +631,9 @@ export default function InvoiceEditor() {
               </div>
             ) : (
               <div className="export-table-wrapper" style={{ marginTop: 12 }}>
+                <datalist id="invoice-service-presets">
+                  {servicePresets.map((p, i) => <option key={i} value={p.description} />)}
+                </datalist>
                 <table className="export-table">
                   <thead>
                     <tr>
@@ -549,7 +653,8 @@ export default function InvoiceEditor() {
                         <td>
                           {isEditable ? (
                             <input type="text" className="form-input" value={l.description}
-                              onChange={e => updateLine(idx, { description: e.target.value })}
+                              list="invoice-service-presets"
+                              onChange={e => onDescChange(idx, e.target.value)}
                             />
                           ) : l.description}
                         </td>
@@ -674,12 +779,61 @@ export default function InvoiceEditor() {
           </div>
 
           {invoice.status === 'paid' && invoice.paid_date && (
-            <div className="card" style={{ marginTop: 12, background: '#dcfce7' }}>
-              <strong>Paid on:</strong> {invoice.paid_date}
+            <div className="card" style={{ marginTop: 12, background: '#dcfce7', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span><strong>Paid on:</strong> {invoice.paid_date}</span>
+              <button className="btn btn-secondary btn-sm" onClick={handlePrintReceipt}>🧾 Print Receipt</button>
+              <button className="btn btn-secondary btn-sm" onClick={handleEmailReceipt}>✉ Email Receipt</button>
             </div>
           )}
         </div>
       </div>
+
+      <Modal
+        open={payModalOpen}
+        onClose={() => { if (!paying) setPayModalOpen(false); }}
+        title="Mark invoice paid"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPayModalOpen(false)} disabled={paying}>Cancel</Button>
+            <Button variant="primary" onClick={confirmMarkPaid} disabled={paying}>
+              {paying ? 'Saving…' : 'Mark paid & issue receipt'}
+            </Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="form-group">
+            <label>Paid on</label>
+            <input
+              type="date" className="form-input"
+              value={payDate} onChange={e => setPayDate(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label>Payment method</label>
+            <select className="form-input" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+              <option>Bank Transfer</option>
+              <option>Cash</option>
+              <option>Cheque</option>
+              <option>Card</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
+            A numbered receipt for the full invoice total will be created automatically.
+          </p>
+        </div>
+      </Modal>
+
+      <EmailDocumentModal
+        open={!!emailCfg}
+        onClose={() => setEmailCfg(null)}
+        routePath={emailCfg?.routePath || ''}
+        fileName={emailCfg?.fileName || 'document.pdf'}
+        defaultTo={invoice.client?.email || ''}
+        defaultSubject={emailCfg?.defaultSubject || ''}
+        defaultMessage={emailCfg?.defaultMessage || ''}
+      />
     </div>
   );
 }

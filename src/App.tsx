@@ -33,6 +33,12 @@ import InvoicesList from './components/Billing/InvoicesList';
 import BillingInvoiceEditor from './components/Billing/InvoiceEditor';
 import InvoicePrint from './components/Billing/InvoicePrint';
 import RecurringInvoices from './components/Billing/RecurringInvoices';
+import ReceiptPrint from './components/Billing/ReceiptPrint';
+import AgeAnalysis from './components/Billing/AgeAnalysis';
+import ClientStatement from './components/Billing/ClientStatement';
+import StatementPrint from './components/Billing/StatementPrint';
+import StatementsBatchPrint from './components/Billing/StatementsBatchPrint';
+import ServicePresets from './components/Billing/ServicePresets';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -84,6 +90,12 @@ function AuthedApp() {
             <Route path="/timesheet/print" element={<TimesheetPrint />} />
             <Route path="/billing" element={<InvoicesList />} />
             <Route path="/billing/recurring" element={<RecurringInvoices />} />
+            <Route path="/billing/age-analysis" element={<AgeAnalysis />} />
+            <Route path="/billing/statement" element={<ClientStatement />} />
+            <Route path="/billing/statements/print" element={<StatementsBatchPrint />} />
+            <Route path="/billing/statement/:clientId/print" element={<StatementPrint />} />
+            <Route path="/billing/service-presets" element={<ServicePresets />} />
+            <Route path="/billing/receipt/:id/print" element={<ReceiptPrint />} />
             <Route path="/billing/:id" element={<BillingInvoiceEditor />} />
             <Route path="/billing/:id/print" element={<InvoicePrint />} />
             <Route path="/settings/company" element={<CompanySettings />} />

@@ -1173,7 +1173,10 @@ export const api = {
   },
 
   // --------- Outbound email (via the send-email Edge Function → CloudMailin) ---------
-  async sendEmail(msg: { to: string[]; subject: string; html?: string; text?: string }) {
+  async sendEmail(msg: {
+    to: string[]; subject: string; html?: string; text?: string;
+    attachments?: { file_name: string; content: string; content_type?: string }[];
+  }) {
     const { data, error } = await supabase.functions.invoke('send-email', { body: msg });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'The email could not be sent.');
@@ -1621,7 +1624,7 @@ export const api = {
 
   async getClientInvoice(id: number) {
     const [{ data: inv, error: e1 }, { data: lines, error: e2 }] = await Promise.all([
-      supabase.from('client_invoices').select('*, client:clients(name, client_code, address, city, postal_code, country, vat_number)').eq('id', id).maybeSingle(),
+      supabase.from('client_invoices').select('*, client:clients(name, client_code, email, address, city, postal_code, country, vat_number)').eq('id', id).maybeSingle(),
       supabase.from('client_invoice_lines').select('*').eq('invoice_id', id).order('line_no', { ascending: true }).order('id', { ascending: true }),
     ]);
     if (e1) throw new Error(e1.message);
@@ -1677,10 +1680,93 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
-  async markClientInvoicePaid(id: number, paidDate?: string) {
-    const { error } = await supabase.rpc('mark_client_invoice_paid', {
-      p_id: id, p_paid_date: paidDate || null,
+  async markClientInvoicePaid(id: number, paidDate?: string, method?: string) {
+    const { data, error } = await supabase.rpc('mark_client_invoice_paid', {
+      p_id: id, p_paid_date: paidDate || null, p_method: method || null,
     });
+    if (error) throw new Error(error.message);
+    return data as string;   // the new receipt number
+  },
+
+  async getReceiptForInvoice(invoiceId: number) {
+    const { data, error } = await supabase.from('receipts')
+      .select('id, receipt_number')
+      .eq('invoice_id', invoiceId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data as { id: number; receipt_number: string } | null;
+  },
+
+  async getReceipt(id: number) {
+    const { data, error } = await supabase.from('receipts')
+      .select('*, client:clients(name, client_code, address, city, postal_code, country, vat_number), invoice:client_invoices(invoice_number, issue_date)')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  // Bundles everything a client statement / age analysis needs:
+  // the client header, their issued+paid invoices, and their receipts.
+  async getClientStatement(clientId: number) {
+    const [client, invoices, receipts] = await Promise.all([
+      supabase.from('clients')
+        .select('id, name, client_code, address, city, postal_code, country, vat_number')
+        .eq('id', clientId).maybeSingle(),
+      supabase.from('client_invoices')
+        .select('id, invoice_number, status, issue_date, due_date, total_amount, paid_date')
+        .eq('client_id', clientId).in('status', ['issued', 'paid'])
+        .order('issue_date', { ascending: true }).order('id', { ascending: true }),
+      supabase.from('receipts')
+        .select('id, receipt_number, receipt_date, amount, payment_method, invoice_id')
+        .eq('client_id', clientId)
+        .order('receipt_date', { ascending: true }).order('id', { ascending: true }),
+    ]);
+    if (client.error)   throw new Error(client.error.message);
+    if (invoices.error) throw new Error(invoices.error.message);
+    if (receipts.error) throw new Error(receipts.error.message);
+    if (!client.data)   throw new Error('Client not found');
+    return {
+      client:   client.data,
+      invoices: invoices.data || [],
+      receipts: receipts.data || [],
+    };
+  },
+
+  // --------- Service presets (reusable invoice line descriptions) ---------
+  async getServicePresets(opts?: { activeOnly?: boolean }) {
+    let q = supabase.from('service_presets').select('*')
+      .order('sort_order', { ascending: true })
+      .order('description', { ascending: true });
+    if (opts?.activeOnly) q = q.eq('active', true);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async saveServicePreset(preset: {
+    id?: number; description: string; default_price?: number | null;
+    vatable?: boolean; sort_order?: number; active?: boolean;
+  }) {
+    const row = {
+      description:   preset.description,
+      default_price: preset.default_price ?? null,
+      vatable:       preset.vatable ?? true,
+      sort_order:    preset.sort_order ?? 0,
+      active:        preset.active ?? true,
+    };
+    if (preset.id) {
+      const { error } = await supabase.from('service_presets').update(row).eq('id', preset.id);
+      if (error) throw new Error(error.message);
+      return preset.id;
+    }
+    const { data, error } = await supabase.from('service_presets').insert(row).select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+
+  async deleteServicePreset(id: number) {
+    const { error } = await supabase.from('service_presets').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 

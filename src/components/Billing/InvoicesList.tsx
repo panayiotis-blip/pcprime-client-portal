@@ -104,6 +104,9 @@ export default function InvoicesList() {
         <div className="dashboard-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <ViewToggle value={viewMode} onChange={(m) => setMode('client_invoices', m)} />
           <Link to="/billing/recurring" className="btn btn-secondary">Recurring</Link>
+          <Link to="/billing/statement" className="btn btn-secondary">Statements</Link>
+          <Link to="/billing/age-analysis" className="btn btn-secondary">Age Analysis</Link>
+          <Link to="/billing/service-presets" className="btn btn-secondary">Service Presets</Link>
           <button className="btn btn-primary" onClick={handleCreateBlank}>+ New Invoice</button>
         </div>
       </div>
