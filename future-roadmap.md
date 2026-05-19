@@ -128,6 +128,27 @@ footer, brand colours from `company_settings`).
 
 ---
 
+## Accounting — billing module expansion
+
+Captured 2026-05-19. Extends the existing client-invoicing module. Three
+phases, planned and built one at a time.
+
+### Recurring invoices ❌
+Per-client recurring billing (monthly) for clients invoiced the same each
+month. Generates the invoices automatically each period — most likely as
+drafts to review then issue. New table + generation logic + UI.
+
+### Receipts ❌
+Issue a numbered receipt to the client when an invoice is paid — its own
+record, receipt numbering, and a printable template (like the invoice print).
+
+### Statements & age analysis ❌
+Printable per-client statement (all invoices + payments, running balance)
+and an aged-debtors report (outstanding invoices bucketed current / 30 /
+60 / 90+ days). Mostly reporting — the lightest of the three.
+
+---
+
 ## Working agreement
 
 ### Code-change approval cycle

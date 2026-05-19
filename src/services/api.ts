@@ -1180,6 +1180,62 @@ export const api = {
     return data;
   },
 
+  // --------- Recurring invoices (Accounting — billing module Phase A) ---------
+  async getRecurringInvoices() {
+    const { data, error } = await supabase.from('recurring_invoices')
+      .select('*, client:clients(name, client_code), lines:recurring_invoice_lines(*)')
+      .order('id', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async saveRecurringInvoice(
+    profile: {
+      id?: number; client_id: number; label: string | null; vat_rate: number;
+      discount_type: string | null; discount_value: number | null;
+      active: boolean; notes: string | null;
+    },
+    lines: { line_no: number; line_type: string; description: string;
+             quantity: number; unit_price: number; amount: number; vatable: boolean }[],
+  ) {
+    const payload = {
+      client_id: profile.client_id, label: profile.label, vat_rate: profile.vat_rate,
+      discount_type: profile.discount_type, discount_value: profile.discount_value,
+      active: profile.active, notes: profile.notes,
+    };
+    let id = profile.id;
+    if (id) {
+      const { error } = await supabase.from('recurring_invoices').update(payload).eq('id', id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { data, error } = await supabase.from('recurring_invoices')
+        .insert(payload).select('id').single();
+      if (error) throw new Error(error.message);
+      id = (data as any).id as number;
+    }
+    // Replace the line items.
+    const { error: delErr } = await supabase.from('recurring_invoice_lines')
+      .delete().eq('recurring_id', id);
+    if (delErr) throw new Error(delErr.message);
+    if (lines.length) {
+      const { error: insErr } = await supabase.from('recurring_invoice_lines')
+        .insert(lines.map(l => ({ ...l, recurring_id: id })));
+      if (insErr) throw new Error(insErr.message);
+    }
+    return id;
+  },
+
+  async deleteRecurringInvoice(id: number) {
+    const { error } = await supabase.from('recurring_invoices').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async generateRecurringInvoices(month: string) {
+    const { data, error } = await supabase.rpc('generate_recurring_invoices', { p_month: month });
+    if (error) throw new Error(error.message);
+    return data as { month: string; generated: number };
+  },
+
   // --------- Folders ---------
   async getFolders(clientId: number) {
     await seedSystemFolders(clientId);
