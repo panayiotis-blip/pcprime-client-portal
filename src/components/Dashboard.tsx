@@ -1,31 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  KeyboardSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  rectSortingStrategy,
-  sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable';
+import GridLayout, { WidthProvider, type Layout } from 'react-grid-layout/legacy';
+import 'react-grid-layout/css/styles.css';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useDashboardLayout } from '../context/DashboardLayoutContext';
 import { api, isStaffRole } from '../services/api';
 import KpiTile from './Dashboard/KpiTile';
 import SecurityAlertsBanner from './Dashboard/SecurityAlertsBanner';
-import WidgetWrapper from './Dashboard/WidgetWrapper';
 import CustomisePanel from './Dashboard/CustomisePanel';
-import { WIDGET_REGISTRY } from './Dashboard/widgets';
+import { WIDGET_REGISTRY, ROW_PX, MIN_W, MIN_H } from './Dashboard/widgets';
 import { Settings } from 'lucide-react';
 import { Toolbar, Button } from './ui';
+
+// react-grid-layout's WidthProvider must wrap the grid once, at module scope —
+// calling it on each render would remount the grid.
+const GridLayoutWithWidth = WidthProvider(GridLayout);
 
 const todayIso = () => {
   const d = new Date();
@@ -37,7 +27,7 @@ export default function Dashboard() {
   const { user, mfa } = useAuth();
   const showMfaNag = isStaffRole(user) && !mfa.enrolled;
 
-  // ---------- Client view (unchanged from Task 1 — no customisation) ----------
+  // ---------- Client view (unchanged — no customisation) ----------
   if (user?.role === 'client') {
     const myInvoices = invoices;
     return (
@@ -69,7 +59,7 @@ interface StaffDashboardProps {
 }
 
 function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashboardProps) {
-  const { layout, reorder } = useDashboardLayout();
+  const { layout, applyLayout, setWidgetVisible } = useDashboardLayout();
   const [customising, setCustomising] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
 
@@ -83,9 +73,9 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
     return (clients as any[]).filter(c => String(c.created_at || '').slice(0, 7) === ym).length;
   })();
 
-  const [pendingVat, setPendingVat]               = useState<number | null>(null);
-  const [overdueTasks, setOverdueTasks]           = useState<number | null>(null);
-  const [complianceAlerts, setComplianceAlerts]   = useState<number | null>(null);
+  const [pendingVat, setPendingVat]             = useState<number | null>(null);
+  const [overdueTasks, setOverdueTasks]         = useState<number | null>(null);
+  const [complianceAlerts, setComplianceAlerts] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -114,14 +104,25 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
     return () => { mounted = false; };
   }, []);
 
-  // Sort widgets by saved order, then render only visible ones
-  const visibleWidgets = useMemo(() => {
-    return [...layout.widgets]
-      .filter(w => w.visible)
-      .sort((a, b) => a.order - b.order);
-  }, [layout]);
+  const visibleWidgets = useMemo(
+    () => layout.widgets.filter(w => w.visible),
+    [layout],
+  );
 
-  const widgetIds = useMemo(() => visibleWidgets.map(w => w.id), [visibleWidgets]);
+  // react-grid-layout's layout array — one entry per visible widget.
+  const rglLayout: Layout = useMemo(
+    () => visibleWidgets.map(w => ({
+      i: w.id, x: w.x, y: w.y, w: w.w, h: w.h, minW: MIN_W, minH: MIN_H,
+    })),
+    [visibleWidgets],
+  );
+
+  // Persist drag/resize changes — only those the user makes in Customise mode
+  // (react-grid-layout also fires onLayoutChange on mount / prop changes).
+  const handleLayoutChange = (next: Layout) => {
+    if (!customising) return;
+    applyLayout(next.map(it => ({ id: it.i, x: it.x, y: it.y, w: it.w, h: it.h })));
+  };
 
   // Render the inner content for a widget. KPIs are inlined here because they
   // need the data fetched above; content widgets pull from the registry.
@@ -140,40 +141,6 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
       }
     }
   };
-
-  // ---- DnD setup (only active while in customise mode) ----
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = widgetIds.indexOf(String(active.id));
-    const newIndex = widgetIds.indexOf(String(over.id));
-    if (oldIndex === -1 || newIndex === -1) return;
-    const newOrder = [...widgetIds];
-    newOrder.splice(oldIndex, 1);
-    newOrder.splice(newIndex, 0, String(active.id));
-    // Also include hidden widgets after, preserving their relative order
-    const hiddenIds = layout.widgets
-      .filter(w => !w.visible)
-      .sort((a, b) => a.order - b.order)
-      .map(w => w.id);
-    reorder([...newOrder, ...hiddenIds]);
-  };
-
-  const gridBody = (
-    <div className={`dashboard-grid-12 ${customising ? 'dashboard-grid-customising' : ''}`}>
-      {visibleWidgets.map(w => (
-        <WidgetWrapper key={w.id} id={w.id} w={w.w} h={w.h} customising={customising}>
-          {renderWidgetContent(w.id)}
-        </WidgetWrapper>
-      ))}
-    </div>
-  );
 
   return (
     <div className="dashboard">
@@ -228,15 +195,42 @@ function StaffDashboard({ showMfaNag, userName, clients, invoices }: StaffDashbo
         </span>
       </Toolbar>
 
-      {customising ? (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={widgetIds} strategy={rectSortingStrategy}>
-            {gridBody}
-          </SortableContext>
-        </DndContext>
-      ) : (
-        gridBody
-      )}
+      <GridLayoutWithWidth
+        className={`dashboard-rgl ${customising ? 'customising' : ''}`}
+        layout={rglLayout}
+        cols={12}
+        rowHeight={ROW_PX}
+        margin={[14, 14]}
+        containerPadding={[0, 0]}
+        isDraggable={customising}
+        isResizable={customising}
+        compactType={null}
+        preventCollision
+        draggableHandle=".widget-drag-handle"
+        onLayoutChange={handleLayoutChange}
+      >
+        {visibleWidgets.map(w => (
+          <div key={w.id} className={`widget-slot ${customising ? 'widget-slot-customising' : ''}`}>
+            {customising && (
+              <div className="widget-toolbar no-print">
+                <button
+                  type="button"
+                  className="widget-handle widget-drag-handle"
+                  title="Drag to move"
+                  aria-label="Move widget"
+                >⋮⋮</button>
+                <button
+                  type="button"
+                  className="widget-hide-btn"
+                  title="Hide this widget"
+                  onClick={() => setWidgetVisible(w.id, false)}
+                >✕</button>
+              </div>
+            )}
+            <div className="widget-body">{renderWidgetContent(w.id)}</div>
+          </div>
+        ))}
+      </GridLayoutWithWidth>
 
       {showPanel && <CustomisePanel onClose={() => setShowPanel(false)} />}
     </div>

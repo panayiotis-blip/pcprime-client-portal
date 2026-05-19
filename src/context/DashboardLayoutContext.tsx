@@ -11,9 +11,8 @@ import {
 interface DashboardLayoutAPI {
   layout: DashboardLayout;
   resetLayout: () => void;
-  setWidgetBox: (id: string, w: number, h: number) => void;
+  applyLayout: (items: { id: string; x: number; y: number; w: number; h: number }[]) => void;
   setWidgetVisible: (id: string, visible: boolean) => void;
-  reorder: (orderedIds: string[]) => void;
 }
 
 const DashboardLayoutContext = createContext<DashboardLayoutAPI | null>(null);
@@ -66,9 +65,14 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
     queueSave(def);
   }, [queueSave]);
 
-  const setWidgetBox = useCallback((id: string, w: number, h: number) => {
+  // Apply react-grid-layout's onLayoutChange — sets each widget's x/y/w/h.
+  const applyLayout = useCallback((items: { id: string; x: number; y: number; w: number; h: number }[]) => {
+    const pos = new Map(items.map(it => [it.id, it]));
     mutate(prev => ({
-      widgets: prev.widgets.map(x => x.id === id ? { ...x, w, h } : x),
+      widgets: prev.widgets.map(w => {
+        const p = pos.get(w.id);
+        return p ? { ...w, x: p.x, y: p.y, w: p.w, h: p.h } : w;
+      }),
     }));
   }, [mutate]);
 
@@ -78,26 +82,8 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
     }));
   }, [mutate]);
 
-  const reorder = useCallback((orderedIds: string[]) => {
-    mutate(prev => {
-      const byId = new Map(prev.widgets.map(w => [w.id, w]));
-      const newWidgets = orderedIds
-        .map((id, i) => {
-          const w = byId.get(id);
-          return w ? { ...w, order: i } : null;
-        })
-        .filter(Boolean) as DashboardLayout['widgets'];
-      // Append any widgets not in the ordered list (shouldn't happen but
-      // protects against bugs in callers)
-      for (const w of prev.widgets) {
-        if (!orderedIds.includes(w.id)) newWidgets.push({ ...w, order: newWidgets.length });
-      }
-      return { widgets: newWidgets };
-    });
-  }, [mutate]);
-
   return (
-    <DashboardLayoutContext.Provider value={{ layout, resetLayout, setWidgetBox, setWidgetVisible, reorder }}>
+    <DashboardLayoutContext.Provider value={{ layout, resetLayout, applyLayout, setWidgetVisible }}>
       {children}
     </DashboardLayoutContext.Provider>
   );
