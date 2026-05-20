@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useViewPreferences } from '../../context/ViewPreferencesContext';
 import ViewToggle from '../shared/ViewToggle';
+import { Modal, Button } from '../ui';
 
 type Status = 'draft' | 'issued' | 'paid' | 'cancelled';
 
@@ -80,20 +81,41 @@ export default function InvoicesList() {
     };
   }, [filtered]);
 
-  const handleCreateBlank = async () => {
-    // Prompt for a client, then create a draft invoice
-    const choices = clients.map((c: any) => `${c.client_code ? c.client_code + ' — ' : ''}${c.name}`).join('\n');
-    const pick = prompt(`Pick a client to invoice (paste the exact code or name):\n\n${choices.slice(0, 1500)}${choices.length > 1500 ? '\n…' : ''}`);
-    if (!pick) return;
-    const c = clients.find((x: any) =>
-      pick.includes(x.client_code) || pick.toLowerCase().includes(x.name.toLowerCase()),
+  // Pick-a-client modal for "New Invoice" — searchable, full list.
+  const [pickerOpen, setPickerOpen]     = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [creating, setCreating]         = useState(false);
+  const pickerInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredPickerClients = useMemo(() => {
+    const q = pickerSearch.trim().toLowerCase();
+    if (!q) return clients;
+    return clients.filter((c: any) =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.client_code || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q),
     );
-    if (!c) { alert('No matching client.'); return; }
+  }, [clients, pickerSearch]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    setPickerSearch('');
+    const t = setTimeout(() => pickerInputRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [pickerOpen]);
+
+  const handleCreateBlank = () => setPickerOpen(true);
+
+  const handlePickClient = async (clientId: number) => {
+    setCreating(true);
     try {
-      const { id } = await api.createClientInvoice({ client_id: c.id });
+      const { id } = await api.createClientInvoice({ client_id: clientId });
+      setPickerOpen(false);
       navigate(`/billing/${id}`);
     } catch (err: any) {
       alert('Create failed: ' + err.message);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -262,6 +284,53 @@ export default function InvoicesList() {
           </table>
         </div>
       )}
+
+      <Modal
+        open={pickerOpen}
+        onClose={() => { if (!creating) setPickerOpen(false); }}
+        title="Pick a client to invoice"
+        footer={
+          <Button variant="secondary" onClick={() => setPickerOpen(false)} disabled={creating}>Cancel</Button>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input
+            ref={pickerInputRef}
+            type="text" className="form-input"
+            placeholder="Search by name, code, or email…"
+            value={pickerSearch}
+            onChange={e => setPickerSearch(e.target.value)}
+            disabled={creating}
+          />
+          <div style={{
+            maxHeight: 360, overflowY: 'auto',
+            border: '1px solid #e2e8f0', borderRadius: 4, background: 'white',
+          }}>
+            {filteredPickerClients.length === 0 ? (
+              <p style={{ padding: 12, color: '#64748b', margin: 0 }}>No clients match.</p>
+            ) : filteredPickerClients.map((c: any) => (
+              <button
+                key={c.id} type="button"
+                onClick={() => handlePickClient(c.id)}
+                disabled={creating}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '8px 12px', border: 'none', borderBottom: '1px solid #f1f5f9',
+                  background: 'white', cursor: creating ? 'wait' : 'pointer', fontSize: 13,
+                }}
+              >
+                {c.client_code && <span style={{ color: '#64748b' }}>{c.client_code} — </span>}
+                <strong>{c.name}</strong>
+                {c.email && <span style={{ color: '#64748b' }}> · {c.email}</span>}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
+            {filteredPickerClients.length} of {clients.length} clients shown.
+          </p>
+          {creating && <p style={{ fontSize: 12, color: '#1e40af', margin: 0 }}>Creating draft…</p>}
+        </div>
+      </Modal>
     </div>
   );
 }

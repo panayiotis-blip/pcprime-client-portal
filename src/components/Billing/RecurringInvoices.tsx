@@ -8,7 +8,7 @@ import { Modal, Button } from '../ui';
 // profile; "Generate drafts" turns the active profiles into draft
 // client_invoices for a chosen month, which are then issued as normal.
 
-type Line = { description: string; quantity: number; unit_price: number; vatable: boolean };
+type Line = { description: string; quantity: number; unit_price: number; vatable: boolean; vat_rate: number };
 
 type Profile = {
   id: number;
@@ -31,7 +31,7 @@ const currentMonth = () => {
 
 // Mirrors generate_recurring_invoices() so the form preview matches what
 // each monthly invoice will total.
-const computeTotals = (lines: Line[], vatRate: number, discType: string | null, discVal: number) => {
+const computeTotals = (lines: Line[], discType: string | null, discVal: number) => {
   let sv = 0, snv = 0;
   for (const l of lines) {
     const amt = (Number(l.quantity) || 0) * (Number(l.unit_price) || 0);
@@ -40,7 +40,15 @@ const computeTotals = (lines: Line[], vatRate: number, discType: string | null, 
   const disc = discType === 'percent' ? sv * (discVal || 0) / 100
              : discType === 'amount'  ? Math.min(discVal || 0, sv)
              : 0;
-  const vat = (sv - disc) * (vatRate || 0) / 100;
+  let vat = 0;
+  for (const l of lines) {
+    if (!l.vatable) continue;
+    const amt   = (Number(l.quantity) || 0) * (Number(l.unit_price) || 0);
+    const rate  = Number(l.vat_rate || 0);
+    const share = sv > 0 ? amt / sv : 0;
+    const net   = Math.max(0, amt - share * disc);
+    vat += net * rate / 100;
+  }
   return { sv, snv, disc, vat, total: sv - disc + snv + vat };
 };
 
@@ -72,14 +80,15 @@ export default function RecurringInvoices() {
 
   const profileTotal = (p: Profile) => {
     const lines: Line[] = (p.lines || []).map((l: any) => ({
-      description: l.description, quantity: Number(l.quantity), unit_price: Number(l.unit_price), vatable: l.vatable,
+      description: l.description, quantity: Number(l.quantity), unit_price: Number(l.unit_price),
+      vatable: l.vatable, vat_rate: Number(l.vat_rate || 0),
     }));
-    return computeTotals(lines, Number(p.vat_rate), p.discount_type, Number(p.discount_value) || 0).total;
+    return computeTotals(lines, p.discount_type, Number(p.discount_value) || 0).total;
   };
 
   const openNew = () => {
     setForm(EMPTY_FORM);
-    setFormLines([{ description: '', quantity: 1, unit_price: 0, vatable: true }]);
+    setFormLines([{ description: '', quantity: 1, unit_price: 0, vatable: true, vat_rate: 19 }]);
     setEditingId('new');
   };
   const openEdit = (p: Profile) => {
@@ -94,13 +103,14 @@ export default function RecurringInvoices() {
       .map((l: any) => ({
         description: l.description, quantity: Number(l.quantity),
         unit_price: Number(l.unit_price), vatable: l.vatable,
+        vat_rate: Number(l.vat_rate || (l.vatable ? 19 : 0)),
       })));
     setEditingId(p.id);
   };
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setFormLines(prev => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const addLine = () => setFormLines(prev => [...prev, { description: '', quantity: 1, unit_price: 0, vatable: true }]);
+  const addLine = () => setFormLines(prev => [...prev, { description: '', quantity: 1, unit_price: 0, vatable: true, vat_rate: 19 }]);
   const removeLine = (i: number) => setFormLines(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSave = async () => {
@@ -123,7 +133,8 @@ export default function RecurringInvoices() {
         cleanLines.map((l, i) => ({
           line_no: i + 1, line_type: 'fixed', description: l.description.trim(),
           quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0,
-          amount: (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), vatable: l.vatable,
+          amount: (Number(l.quantity) || 0) * (Number(l.unit_price) || 0),
+          vatable: l.vatable, vat_rate: Number(l.vat_rate || 0),
         })),
       );
       setEditingId(null);
@@ -157,8 +168,8 @@ export default function RecurringInvoices() {
   };
 
   const preview = useMemo(
-    () => computeTotals(formLines, Number(form.vat_rate) || 0, form.discount_type || null, Number(form.discount_value) || 0),
-    [formLines, form.vat_rate, form.discount_type, form.discount_value],
+    () => computeTotals(formLines, form.discount_type || null, Number(form.discount_value) || 0),
+    [formLines, form.discount_type, form.discount_value],
   );
 
   return (
@@ -250,11 +261,6 @@ export default function RecurringInvoices() {
                 placeholder="e.g. Monthly bookkeeping" />
             </div>
             <div className="form-group">
-              <label>VAT rate (%)</label>
-              <input type="number" step="0.01" className="form-input" value={form.vat_rate}
-                onChange={e => setForm({ ...form, vat_rate: e.target.value })} />
-            </div>
-            <div className="form-group">
               <label>Discount</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 <select className="form-input" value={form.discount_type}
@@ -293,7 +299,20 @@ export default function RecurringInvoices() {
                     <td><input type="number" step="0.001" className="form-input" value={l.quantity} onChange={e => setLine(i, { quantity: Number(e.target.value) })} /></td>
                     <td><input type="number" step="0.01" className="form-input" value={l.unit_price} onChange={e => setLine(i, { unit_price: Number(e.target.value) })} /></td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>€{((Number(l.quantity) || 0) * (Number(l.unit_price) || 0)).toFixed(2)}</td>
-                    <td style={{ textAlign: 'center' }}><input type="checkbox" checked={l.vatable} onChange={e => setLine(i, { vatable: e.target.checked })} /></td>
+                    <td style={{ textAlign: 'center' }}>
+                      <select className="form-input" style={{ width: 76 }}
+                        value={l.vat_rate}
+                        onChange={e => {
+                          const r = Number(e.target.value);
+                          setLine(i, { vat_rate: r, vatable: r > 0 });
+                        }}
+                      >
+                        <option value={0}>0%</option>
+                        <option value={5}>5%</option>
+                        <option value={9}>9%</option>
+                        <option value={19}>19%</option>
+                      </select>
+                    </td>
                     <td><button type="button" className="btn btn-link btn-sm" onClick={() => removeLine(i)} title="Remove line">✕</button></td>
                   </tr>
                 ))}

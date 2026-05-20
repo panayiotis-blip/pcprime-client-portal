@@ -1199,7 +1199,8 @@ export const api = {
       active: boolean; notes: string | null;
     },
     lines: { line_no: number; line_type: string; description: string;
-             quantity: number; unit_price: number; amount: number; vatable: boolean }[],
+             quantity: number; unit_price: number; amount: number;
+             vatable: boolean; vat_rate: number }[],
   ) {
     const payload = {
       client_id: profile.client_id, label: profile.label, vat_rate: profile.vat_rate,
@@ -1624,7 +1625,7 @@ export const api = {
 
   async getClientInvoice(id: number) {
     const [{ data: inv, error: e1 }, { data: lines, error: e2 }] = await Promise.all([
-      supabase.from('client_invoices').select('*, client:clients(name, client_code, email, address, city, postal_code, country, vat_number)').eq('id', id).maybeSingle(),
+      supabase.from('client_invoices').select('*, client:clients(name, client_code, email, phone, address, city, postal_code, country, vat_number)').eq('id', id).maybeSingle(),
       supabase.from('client_invoice_lines').select('*').eq('invoice_id', id).order('line_no', { ascending: true }).order('id', { ascending: true }),
     ]);
     if (e1) throw new Error(e1.message);
@@ -1644,11 +1645,12 @@ export const api = {
     billing_address?: string | null;
   }) {
     const { data: { session } } = await supabase.auth.getSession();
+    const vatRate = data.vat_rate ?? 19.00;
     const { data: row, error } = await supabase.from('client_invoices').insert({
       client_id:       data.client_id,
       issue_date:      data.issue_date || null,
       due_date:        data.due_date || null,
-      vat_rate:        data.vat_rate ?? 19.00,
+      vat_rate:        vatRate,
       discount_type:   data.discount_type || null,
       discount_value:  data.discount_value ?? null,
       notes:           data.notes || null,
@@ -1656,6 +1658,21 @@ export const api = {
       created_by:      session?.user?.id || null,
     }).select().single();
     if (error) throw new Error(error.message);
+
+    // Seed a default fee line — the firm's standard wording for accounting
+    // fees. The user adjusts price / description / VAT per line.
+    await supabase.from('client_invoice_lines').insert({
+      invoice_id:    row.id,
+      line_no:       1,
+      line_type:     'fixed',
+      description:   'Our fees based on time spent',
+      quantity:      1,
+      unit_price:    0,
+      amount:        0,
+      vatable:       true,
+      vat_rate:      vatRate,
+      time_entry_id: null,
+    });
     return { id: row.id as number };
   },
 
@@ -1704,6 +1721,20 @@ export const api = {
       .maybeSingle();
     if (error) throw new Error(error.message);
     return data;
+  },
+
+  // Lightweight receipts lister — used by the Statements screen to compute
+  // each client's running balance.
+  async getReceipts(params?: { client_id?: number; from?: string; to?: string }) {
+    let q = supabase.from('receipts')
+      .select('id, receipt_number, client_id, invoice_id, receipt_date, amount, payment_method')
+      .order('receipt_date', { ascending: false });
+    if (params?.client_id) q = q.eq('client_id', params.client_id);
+    if (params?.from)      q = q.gte('receipt_date', params.from);
+    if (params?.to)        q = q.lte('receipt_date', params.to);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
   // Bundles everything a client statement / age analysis needs:
@@ -1779,6 +1810,7 @@ export const api = {
     unit_price: number;
     amount: number;
     vatable: boolean;
+    vat_rate?: number;
     time_entry_id?: number | null;
   }) {
     const { data, error } = await supabase.from('client_invoice_lines').insert({
@@ -1790,6 +1822,7 @@ export const api = {
       unit_price:     line.unit_price,
       amount:         line.amount,
       vatable:        line.vatable,
+      vat_rate:       line.vat_rate ?? (line.vatable ? 19 : 0),
       time_entry_id:  line.time_entry_id || null,
     }).select().single();
     if (error) throw new Error(error.message);

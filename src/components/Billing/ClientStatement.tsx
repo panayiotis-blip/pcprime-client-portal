@@ -5,29 +5,94 @@ import { useApp } from '../../context/AppContext';
 import { buildStatement } from './statement';
 import { generateDocumentPdf } from '../../services/documentPdf';
 
-// Client statements: tick one or more clients, optionally set a date range,
-// then print them all together or email each client their own.
+type Row = {
+  client_id: number;
+  name: string;
+  client_code: string | null;
+  email: string | null;
+  balance: number;
+};
+
+type BalanceFilter = 'all' | 'owing' | 'zero' | 'credit';
+
+// Client statements — a full-width searchable list with per-row tick boxes,
+// a balance filter, and one-click batch print/email of selected clients.
 export default function ClientStatement() {
   const { clients } = useApp();
-  const [selected, setSelected]     = useState<Set<number>>(new Set());
-  const [search, setSearch]         = useState('');
-  const [from, setFrom]             = useState('');
-  const [to, setTo]                 = useState('');
-  const [preview, setPreview]       = useState<any>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [emailing, setEmailing]     = useState('');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [search, setSearch]     = useState('');
+  const [from, setFrom]         = useState('');
+  const [to, setTo]             = useState('');
+  const [balFilter, setBalFilter] = useState<BalanceFilter>('all');
+
+  const [balanceByClient, setBalanceByClient] = useState<Map<number, number>>(new Map());
+  const [balancesLoaded, setBalancesLoaded]   = useState(false);
+
+  const [preview, setPreview]                 = useState<any>(null);
+  const [loadingPreview, setLoadingPreview]   = useState(false);
+  const [emailing, setEmailing]               = useState('');
 
   const selectedIds = [...selected];
 
-  const filteredClients = useMemo(() => {
-    const t = search.trim().toLowerCase();
-    if (!t) return clients;
-    return clients.filter((c: any) =>
-      (c.name || '').toLowerCase().includes(t) ||
-      (c.client_code || '').toLowerCase().includes(t));
-  }, [clients, search]);
+  // Compute the balance for every client from invoices + receipts.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [invs, rcps] = await Promise.all([
+          api.getClientInvoices(),
+          api.getReceipts(),
+        ]);
+        if (cancelled) return;
+        const m = new Map<number, number>();
+        for (const inv of invs as any[]) {
+          if (inv.status !== 'issued' && inv.status !== 'paid') continue;
+          m.set(inv.client_id, (m.get(inv.client_id) || 0) + Number(inv.total_amount || 0));
+        }
+        for (const r of rcps as any[]) {
+          m.set(r.client_id, (m.get(r.client_id) || 0) - Number(r.amount || 0));
+        }
+        // Round to 2dp to avoid floating-point fuzz on "zero".
+        for (const [k, v] of m) m.set(k, Math.round(v * 100) / 100);
+        setBalanceByClient(m);
+      } catch (err: any) {
+        alert('Failed to load balances: ' + err.message);
+      } finally {
+        if (!cancelled) setBalancesLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const toggle = (id: number) => {
+  const rows: Row[] = useMemo(() => {
+    return clients.map((c: any) => ({
+      client_id:   c.id,
+      name:        c.name || '—',
+      client_code: c.client_code || null,
+      email:       c.email || null,
+      balance:     balanceByClient.get(c.id) || 0,
+    }));
+  }, [clients, balanceByClient]);
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter(r => {
+      if (q && !(
+        r.name.toLowerCase().includes(q) ||
+        (r.client_code || '').toLowerCase().includes(q) ||
+        (r.email || '').toLowerCase().includes(q)
+      )) return false;
+      if (balFilter === 'owing'  && !(r.balance >  0)) return false;
+      if (balFilter === 'zero'   && !(r.balance === 0)) return false;
+      if (balFilter === 'credit' && !(r.balance <  0)) return false;
+      return true;
+    });
+  }, [rows, search, balFilter]);
+
+  const allVisibleTicked =
+    filteredRows.length > 0 && filteredRows.every(r => selected.has(r.client_id));
+
+  const toggleOne = (id: number) => {
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -35,7 +100,19 @@ export default function ClientStatement() {
     });
   };
 
-  // Preview the ledger when exactly one client is ticked.
+  const toggleAllVisible = () => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allVisibleTicked) {
+        for (const r of filteredRows) next.delete(r.client_id);
+      } else {
+        for (const r of filteredRows) next.add(r.client_id);
+      }
+      return next;
+    });
+  };
+
+  // Ledger preview when exactly one client is ticked.
   useEffect(() => {
     if (selectedIds.length !== 1) { setPreview(null); return; }
     let cancelled = false;
@@ -53,7 +130,7 @@ export default function ClientStatement() {
     return () => { cancelled = true; };
   }, [selected]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const statement = useMemo(() => {
+  const ledger = useMemo(() => {
     if (!preview) return null;
     return buildStatement(preview.invoices, preview.receipts, from || undefined, to || undefined);
   }, [preview, from, to]);
@@ -146,40 +223,74 @@ export default function ClientStatement() {
             <input type="date" className="form-input" value={to} onChange={e => setTo(e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Search clients</label>
+            <label>Search</label>
             <input type="text" className="form-input" value={search}
-              onChange={e => setSearch(e.target.value)} placeholder="Name or code…" />
+              onChange={e => setSearch(e.target.value)} placeholder="Name, code or email…" />
+          </div>
+          <div className="form-group">
+            <label>Balance</label>
+            <select className="form-input" value={balFilter} onChange={e => setBalFilter(e.target.value as BalanceFilter)}>
+              <option value="all">All</option>
+              <option value="owing">Owing (&gt; 0)</option>
+              <option value="zero">Zero balance</option>
+              <option value="credit">In credit (&lt; 0)</option>
+            </select>
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 16, alignItems: 'start' }}>
-        {/* Client checklist */}
-        <div className="card" style={{ maxHeight: 520, overflowY: 'auto' }}>
-          {filteredClients.length === 0 ? (
-            <p style={{ color: '#64748b' }}>No clients match.</p>
-          ) : filteredClients.map((c: any) => (
-            <label key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0', cursor: 'pointer' }}>
-              <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} />
-              <span style={{ fontSize: 13 }}>
-                {c.client_code ? c.client_code + ' — ' : ''}{c.name}
-                {!c.email && <span style={{ color: '#b91c1c', fontSize: 11 }}> (no email)</span>}
-              </span>
-            </label>
-          ))}
-        </div>
+      <div className="export-table-wrapper">
+        <table className="export-table">
+          <thead>
+            <tr>
+              <th style={{ width: 36, textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleTicked}
+                  onChange={toggleAllVisible}
+                  title={allVisibleTicked ? 'Unselect all visible' : 'Select all visible'}
+                />
+              </th>
+              <th style={{ width: 110 }}>Code</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th style={{ width: 120, textAlign: 'right' }}>Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!balancesLoaded ? (
+              <tr><td colSpan={5} style={{ color: '#64748b' }}>Loading balances…</td></tr>
+            ) : filteredRows.length === 0 ? (
+              <tr><td colSpan={5} style={{ color: '#64748b' }}>No clients match the current filters.</td></tr>
+            ) : filteredRows.map(r => (
+              <tr key={r.client_id} style={{ cursor: 'pointer' }} onClick={() => toggleOne(r.client_id)}>
+                <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={selected.has(r.client_id)} onChange={() => toggleOne(r.client_id)} />
+                </td>
+                <td style={{ whiteSpace: 'nowrap', color: '#64748b' }}>{r.client_code || '—'}</td>
+                <td>{r.name}</td>
+                <td style={{ color: r.email ? undefined : '#b91c1c' }}>{r.email || 'no email'}</td>
+                <td style={{
+                  textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600,
+                  color: r.balance > 0 ? '#b91c1c' : (r.balance < 0 ? '#166534' : '#64748b'),
+                }}>{eur(r.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-        {/* Preview / hint */}
-        <div>
-          {selectedIds.length === 0 ? (
-            <div className="empty-state"><p>Tick one or more clients on the left.</p></div>
-          ) : selectedIds.length > 1 ? (
-            <div className="empty-state">
-              <p>{selectedIds.length} clients selected — use "Print selected" or "Email selected" above.</p>
-            </div>
-          ) : loadingPreview ? (
+      <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0' }}>
+        {filteredRows.length} of {rows.length} clients shown · {selectedIds.length} selected
+      </p>
+
+      {/* Ledger preview when exactly one client is ticked */}
+      {selectedIds.length === 1 && (
+        <div style={{ marginTop: 12 }}>
+          <h3 style={{ marginBottom: 8 }}>Ledger preview</h3>
+          {loadingPreview ? (
             <div className="loading-screen">Loading…</div>
-          ) : statement ? (
+          ) : ledger ? (
             <div className="export-table-wrapper">
               <table className="export-table">
                 <thead>
@@ -194,9 +305,9 @@ export default function ClientStatement() {
                 <tbody>
                   <tr style={{ fontStyle: 'italic', color: '#64748b' }}>
                     <td colSpan={4}>Opening balance</td>
-                    <td style={{ textAlign: 'right' }}>{eur(statement.opening)}</td>
+                    <td style={{ textAlign: 'right' }}>{eur(ledger.opening)}</td>
                   </tr>
-                  {statement.rows.map((r, idx) => (
+                  {ledger.rows.map((r, idx) => (
                     <tr key={idx}>
                       <td style={{ whiteSpace: 'nowrap' }}>{r.date}</td>
                       <td>{r.description}</td>
@@ -205,21 +316,21 @@ export default function ClientStatement() {
                       <td style={{ textAlign: 'right' }}>{eur(r.balance)}</td>
                     </tr>
                   ))}
-                  {statement.rows.length === 0 && (
+                  {ledger.rows.length === 0 && (
                     <tr><td colSpan={5} style={{ color: '#64748b' }}>No transactions in this period.</td></tr>
                   )}
                 </tbody>
                 <tfoot>
                   <tr style={{ fontWeight: 700, borderTop: '2px solid #cbd5e1' }}>
                     <td colSpan={4}>Balance due</td>
-                    <td style={{ textAlign: 'right' }}>{eur(statement.closing)}</td>
+                    <td style={{ textAlign: 'right' }}>{eur(ledger.closing)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           ) : null}
         </div>
-      </div>
+      )}
     </div>
   );
 }

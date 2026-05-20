@@ -62,11 +62,33 @@ export default function InvoicePrint() {
     co.country,
   ].filter(Boolean);
 
-  // Use the snapshot if set, otherwise fall back to the client's current address
+  // Use the snapshot if set, otherwise fall back to the client's current details
   const billTo = invoice.billing_address || [
     c.address, [c.postal_code, c.city].filter(Boolean).join(' '), c.country,
     c.vat_number ? `VAT: ${c.vat_number}` : null,
+    c.phone ? `Tel: ${c.phone}` : null,
+    c.email ? `Email: ${c.email}` : null,
   ].filter(Boolean).join('\n');
+
+  // VAT breakdown — group vatable lines by rate; the discount is allocated
+  // pro-rata across vatable lines before computing each line's VAT.
+  const vatBreakdown = (() => {
+    const sv   = Number(invoice.subtotal_vatable || 0);
+    const disc = Number(invoice.discount_amount || 0);
+    const map  = new Map<number, { net: number; vat: number }>();
+    for (const l of (invoice.lines || [])) {
+      if (!l.vatable) continue;
+      const amt   = Number(l.amount || 0);
+      const rate  = Number(l.vat_rate || 0);
+      const share = sv > 0 ? amt / sv : 0;
+      const net   = Math.max(0, amt - share * disc);
+      const cur   = map.get(rate) || { net: 0, vat: 0 };
+      cur.net += net;
+      cur.vat += net * rate / 100;
+      map.set(rate, cur);
+    }
+    return [...map.entries()].sort((a, b) => a[0] - b[0]);
+  })();
 
   return (
     <div className="print-page" style={brandVars}>
@@ -170,12 +192,6 @@ export default function InvoicePrint() {
           </div>
         </div>
 
-        {invoice.services_description && (
-          <div style={{ margin: '4px 0 14px', fontSize: 13 }}>
-            <strong>{invoice.services_description}</strong>
-          </div>
-        )}
-
         {/* Lines */}
         <table className="inv-table">
           <thead>
@@ -198,7 +214,7 @@ export default function InvoicePrint() {
                 </td>
                 <td className="num">{Number(l.quantity).toFixed(2)}</td>
                 <td className="num">€{Number(l.unit_price).toFixed(2)}</td>
-                <td style={{ textAlign: 'center' }}>{l.vatable ? '✓' : '—'}</td>
+                <td style={{ textAlign: 'center' }}>{l.vatable ? `${Number(l.vat_rate || 0).toFixed(0)}%` : '—'}</td>
                 <td className="num">€{Number(l.amount).toFixed(2)}</td>
               </tr>
             ))}
@@ -227,10 +243,19 @@ export default function InvoicePrint() {
                 <td className="num" style={{ color: '#b91c1c' }}>-€{Number(invoice.discount_amount).toFixed(2)}</td>
               </tr>
             )}
-            <tr>
-              <td style={{ color: '#475569' }}>VAT ({invoice.vat_rate}%)</td>
-              <td className="num">€{Number(invoice.vat_amount || 0).toFixed(2)}</td>
-            </tr>
+            {vatBreakdown.length === 0 ? (
+              <tr>
+                <td style={{ color: '#475569' }}>VAT</td>
+                <td className="num">€0.00</td>
+              </tr>
+            ) : vatBreakdown.map(([rate, v]) => (
+              <tr key={rate}>
+                <td style={{ color: '#475569' }}>
+                  VAT @ {rate}% on €{v.net.toFixed(2)}
+                </td>
+                <td className="num">€{v.vat.toFixed(2)}</td>
+              </tr>
+            ))}
             <tr className="total">
               <td>Total</td>
               <td className="num">€{Number(invoice.total_amount || 0).toFixed(2)}</td>

@@ -19,6 +19,7 @@ type Line = {
   unit_price: number;
   amount: number;
   vatable: boolean;
+  vat_rate: number;
   time_entry_id: number | null;
   _dirty?: boolean;       // tracks local edits not yet persisted
   _new?: boolean;
@@ -42,7 +43,6 @@ type Invoice = {
   vat_amount: number;
   total_amount: number;
   billing_address: string | null;
-  services_description: string | null;
   notes: string | null;
   lines: Line[];
 };
@@ -54,12 +54,13 @@ const STATUS_BADGE: Record<Status, { bg: string; fg: string; label: string }> = 
   cancelled: { bg: '#fee2e2', fg: '#991b1b', label: 'Cancelled' },
 };
 
-// Compute invoice totals from line list. Discount applies to vatable lines only
-// (firm-side services); non-vatable lines (typically out-of-pocket expenses)
-// pass through at face value.
+// Compute invoice totals from line list. Each line carries its own VAT rate
+// (so a single invoice can mix 0/5/9/19%). Discount applies to vatable lines
+// only (firm-side services); non-vatable lines (typically out-of-pocket
+// expenses) pass through at face value. The discount is allocated pro-rata
+// across the vatable lines before VAT is calculated per line.
 function computeTotals(
   lines: Line[],
-  vat_rate: number,
   discount_type: 'percent' | 'amount' | null,
   discount_value: number | null,
 ) {
@@ -71,9 +72,16 @@ function computeTotals(
   } else if (discount_type === 'amount' && discount_value && discount_value > 0) {
     discount_amount = Math.min(discount_value, subtotal_vatable);
   }
-  const vat_base   = Math.max(0, subtotal_vatable - discount_amount);
-  const vat_amount = vat_base * (vat_rate / 100);
-  const total      = vat_base + vat_amount + subtotal_nonvatable;
+  let vat_amount = 0;
+  for (const l of lines) {
+    if (!l.vatable) continue;
+    const amt   = Number(l.amount || 0);
+    const rate  = Number(l.vat_rate || 0);
+    const share = subtotal_vatable > 0 ? amt / subtotal_vatable : 0;
+    const net   = Math.max(0, amt - share * discount_amount);
+    vat_amount += net * rate / 100;
+  }
+  const total = Math.max(0, subtotal_vatable - discount_amount) + vat_amount + subtotal_nonvatable;
   return {
     subtotal_vatable: round2(subtotal_vatable),
     subtotal_nonvatable: round2(subtotal_nonvatable),
@@ -85,8 +93,14 @@ function computeTotals(
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const formatBillingAddress = (c: any) =>
-  [c.address, [c.postal_code, c.city].filter(Boolean).join(' '), c.country, c.vat_number ? `VAT: ${c.vat_number}` : null]
-    .filter(Boolean).join('\n');
+  [
+    c.address,
+    [c.postal_code, c.city].filter(Boolean).join(' '),
+    c.country,
+    c.vat_number ? `VAT: ${c.vat_number}` : null,
+    c.phone ? `Tel: ${c.phone}` : null,
+    c.email ? `Email: ${c.email}` : null,
+  ].filter(Boolean).join('\n');
 
 export default function InvoiceEditor() {
   const { id } = useParams();
@@ -144,7 +158,7 @@ export default function InvoiceEditor() {
   // sidebar matches what gets saved.
   const liveTotals = useMemo(() => {
     if (!invoice) return null;
-    return computeTotals(lines, Number(invoice.vat_rate || 0), invoice.discount_type, invoice.discount_value);
+    return computeTotals(lines, invoice.discount_type, invoice.discount_value);
   }, [lines, invoice]);
 
   // ---------- mutations ----------
@@ -180,7 +194,7 @@ export default function InvoiceEditor() {
     if (!invoice) return;
     setSaving(true);
     try {
-      const totals = computeTotals(lines, Number(invoice.vat_rate), invoice.discount_type, invoice.discount_value);
+      const totals = computeTotals(lines, invoice.discount_type, invoice.discount_value);
       // 1. Update header
       await api.updateClientInvoice(invoice.id, {
         issue_date:     invoice.issue_date || null,
@@ -190,7 +204,6 @@ export default function InvoiceEditor() {
         discount_value: invoice.discount_value,
         notes:          invoice.notes || null,
         billing_address: invoice.billing_address || null,
-        services_description: invoice.services_description ?? '',
         ...totals,
       });
 
@@ -212,6 +225,7 @@ export default function InvoiceEditor() {
             unit_price: Number(l.unit_price || 0),
             amount: Number(l.amount || 0),
             vatable: l.vatable,
+            vat_rate: Number(l.vat_rate || 0),
             time_entry_id: l.time_entry_id,
           });
         } else if (l._dirty && l.id) {
@@ -223,6 +237,7 @@ export default function InvoiceEditor() {
             unit_price:  Number(l.unit_price || 0),
             amount:      Number(l.amount || 0),
             vatable:     l.vatable,
+            vat_rate:    Number(l.vat_rate || 0),
             time_entry_id: l.time_entry_id,
           });
         }
@@ -271,7 +286,8 @@ export default function InvoiceEditor() {
     const preset = servicePresets.find(p => p.description === value);
     const patch: Partial<Line> = { description: value };
     if (preset) {
-      patch.vatable = preset.vatable;
+      patch.vatable  = preset.vatable;
+      patch.vat_rate = preset.vatable ? Number(invoice?.vat_rate || 19) : 0;
       if (preset.default_price != null && !Number(lines[idx]?.unit_price)) {
         const q = Number(lines[idx]?.quantity || 1);
         patch.unit_price = Number(preset.default_price);
@@ -385,6 +401,7 @@ export default function InvoiceEditor() {
         unit_price: round2(rate),
         amount: amt,
         vatable: true,
+        vat_rate: Number(invoice.vat_rate || 19),
         time_entry_id: e.id,
         _dirty: true, _new: true,
       };
@@ -466,7 +483,7 @@ export default function InvoiceEditor() {
           <div className="form-section">
             <h3>Invoice details</h3>
             <div className="form-grid">
-              <div className="form-group">
+              <div className="form-group full-width">
                 <label>Client</label>
                 <div className="form-input" style={{ background: '#f8fafc' }}>
                   {c.client_code && <span style={{ color: '#64748b' }}>{c.client_code} — </span>}
@@ -489,36 +506,13 @@ export default function InvoiceEditor() {
                   disabled={!isEditable}
                 />
               </div>
-              <div className="form-group">
-                <label>VAT rate (%)</label>
-                <select className="form-input"
-                  value={invoice.vat_rate}
-                  onChange={e => patchInvoice({ vat_rate: Number(e.target.value) })}
-                  disabled={!isEditable}
-                >
-                  <option value={0}>0% (Exempt)</option>
-                  <option value={5}>5%</option>
-                  <option value={9}>9%</option>
-                  <option value={19}>19% (Standard)</option>
-                </select>
-              </div>
               <div className="form-group full-width">
-                <label>Description of services</label>
-                <input
-                  type="text" className="form-input"
-                  value={invoice.services_description || ''}
-                  onChange={e => patchInvoice({ services_description: e.target.value })}
-                  disabled={!isEditable}
-                  placeholder="Our fees based on time spent"
-                />
-              </div>
-              <div className="form-group full-width">
-                <label>Billing address (snapshot)</label>
+                <label>Bill-to details (snapshot)</label>
                 <textarea className="form-input" rows={2}
                   value={invoice.billing_address || ''}
                   onChange={e => patchInvoice({ billing_address: e.target.value })}
                   disabled={!isEditable}
-                  placeholder={formatBillingAddress(c) || 'Enter billing address'}
+                  placeholder={formatBillingAddress(c) || 'Enter bill-to address, phone, and email'}
                 />
                 {!invoice.billing_address && isEditable && (
                   <button
@@ -526,7 +520,7 @@ export default function InvoiceEditor() {
                     className="btn btn-link btn-sm"
                     style={{ marginTop: 4 }}
                     onClick={() => patchInvoice({ billing_address: formatBillingAddress(c) })}
-                  >Use client address</button>
+                  >Use client details</button>
                 )}
               </div>
             </div>
@@ -548,14 +542,14 @@ export default function InvoiceEditor() {
                     className="btn btn-secondary btn-sm"
                     onClick={() => addLine({
                       line_type: 'fixed', description: '', quantity: 1, unit_price: 0, amount: 0,
-                      vatable: true, time_entry_id: null,
+                      vatable: true, vat_rate: Number(invoice.vat_rate || 19), time_entry_id: null,
                     })}
                   >+ Fixed fee line</button>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => addLine({
                       line_type: 'expense', description: '', quantity: 1, unit_price: 0, amount: 0,
-                      vatable: false, time_entry_id: null,
+                      vatable: false, vat_rate: 0, time_entry_id: null,
                     })}
                   >+ Expense line</button>
                 </div>
@@ -689,10 +683,21 @@ export default function InvoiceEditor() {
                           ) : `€${Number(l.amount).toFixed(2)}`}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          <input type="checkbox" checked={l.vatable}
-                            disabled={!isEditable}
-                            onChange={e => updateLine(idx, { vatable: e.target.checked })}
-                          />
+                          {isEditable ? (
+                            <select
+                              className="form-input" style={{ width: 76 }}
+                              value={l.vat_rate}
+                              onChange={e => {
+                                const r = Number(e.target.value);
+                                updateLine(idx, { vat_rate: r, vatable: r > 0 });
+                              }}
+                            >
+                              <option value={0}>0%</option>
+                              <option value={5}>5%</option>
+                              <option value={9}>9%</option>
+                              <option value={19}>19%</option>
+                            </select>
+                          ) : `${Number(l.vat_rate || 0).toFixed(0)}%`}
                         </td>
                         {isEditable && (
                           <td>
@@ -740,7 +745,7 @@ export default function InvoiceEditor() {
                   <td style={{ textAlign: 'right', padding: '4px 0', color: '#b91c1c' }}>-€{liveTotals?.discount_amount.toFixed(2)}</td>
                 </tr>
                 <tr>
-                  <td style={{ color: '#475569', padding: '4px 0' }}>VAT ({invoice.vat_rate}%)</td>
+                  <td style={{ color: '#475569', padding: '4px 0' }}>VAT</td>
                   <td style={{ textAlign: 'right', padding: '4px 0' }}>€{liveTotals?.vat_amount.toFixed(2)}</td>
                 </tr>
                 <tr style={{ borderTop: '1px solid var(--border)' }}>
