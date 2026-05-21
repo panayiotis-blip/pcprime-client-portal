@@ -62,12 +62,10 @@ export default function InvoicePrint() {
     co.country,
   ].filter(Boolean);
 
-  // Use the snapshot if set, otherwise fall back to the client's current details
+  // Use the snapshot if set, otherwise fall back to the client's current postal address.
   const billTo = invoice.billing_address || [
     c.address, [c.postal_code, c.city].filter(Boolean).join(' '), c.country,
     c.vat_number ? `VAT: ${c.vat_number}` : null,
-    c.phone ? `Tel: ${c.phone}` : null,
-    c.email ? `Email: ${c.email}` : null,
   ].filter(Boolean).join('\n');
 
   // VAT breakdown — group vatable lines by rate; the discount is allocated
@@ -101,7 +99,8 @@ export default function InvoicePrint() {
           .app-shell .main-content { margin: 0; padding: 0; }
           .print-page { padding: 0 !important; }
         }
-        .print-page { padding: 24px; max-width: 900px; margin: 0 auto; background: var(--letterhead-bg, white); color: var(--letterhead-text, #0f172a); }
+        .print-page { padding: 24px; max-width: 900px; margin: 0 auto; background: var(--letterhead-bg, white); color: var(--letterhead-text, #0f172a); display: flex; flex-direction: column; min-height: 297mm; }
+        .inv-body { flex: 1; display: flex; flex-direction: column; position: relative; }
         .inv-header { display: flex; gap: 16px; align-items: flex-start; padding-bottom: 12px; border-bottom: 2px solid var(--brand-primary, #1a2e4a); }
         .inv-header img { max-width: 140px; max-height: 80px; }
         .inv-firm-name { font-weight: 700; font-size: 18px; color: var(--brand-primary, #1a2e4a); }
@@ -140,7 +139,7 @@ export default function InvoicePrint() {
         </div>
       )}
 
-      <div style={{ position: 'relative' }}>
+      <div className="inv-body">
         {invoice.status === 'paid'      && <div className="status-stamp paid">PAID</div>}
         {invoice.status === 'cancelled' && <div className="status-stamp">CANCELLED</div>}
         {invoice.status === 'draft'     && <div className="status-stamp draft">DRAFT</div>}
@@ -177,7 +176,7 @@ export default function InvoicePrint() {
           <div className="panel">
             <h4>Bill to</h4>
             <div className="body">
-              <strong>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</strong>
+              <strong>{c.name || '—'}</strong>
               {'\n'}{billTo}
             </div>
           </div>
@@ -185,6 +184,7 @@ export default function InvoicePrint() {
             <h4>Invoice details</h4>
             <div style={{ fontSize: 13 }}>
               <div><strong>Number:</strong> {invoice.invoice_number || <em>(draft)</em>}</div>
+              <div><strong>Code:</strong> {c.client_code || '—'}</div>
               <div><strong>Issue date:</strong> {fmtDate(invoice.issue_date)}</div>
               <div><strong>Due date:</strong> {fmtDate(invoice.due_date)}</div>
               {invoice.status === 'paid' && <div><strong>Paid on:</strong> {fmtDate(invoice.paid_date)}</div>}
@@ -204,7 +204,11 @@ export default function InvoicePrint() {
             </tr>
           </thead>
           <tbody>
-            {(invoice.lines || []).map((l: any) => (
+            {(invoice.lines || []).map((l: any) => l.line_type === 'remarks' ? (
+              <tr key={l.id}>
+                <td colSpan={5} style={{ fontStyle: 'italic', color: '#475569' }}>{l.description}</td>
+              </tr>
+            ) : (
               <tr key={l.id}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{l.description}</div>
@@ -263,19 +267,21 @@ export default function InvoicePrint() {
           </tbody>
         </table>
 
-        {/* Payment details */}
-        {(co.bank_name || co.iban) && (
-          <div className="inv-payment">
-            <h4>Payment details</h4>
-            {co.bank_name && <div><strong>Bank:</strong> {co.bank_name}</div>}
-            {co.iban && <div><strong>IBAN:</strong> {co.iban}</div>}
-          </div>
-        )}
-
-        {/* Notes */}
-        {invoice.notes && (
-          <div style={{ marginTop: 16, fontSize: 12, color: '#475569', whiteSpace: 'pre-wrap' }}>
-            <strong>Notes:</strong> {invoice.notes}
+        {/* Footer — notes on the left, payment details on the right */}
+        {(invoice.notes || co.bank_name || co.iban) && (
+          <div style={{ marginTop: 'auto', paddingTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div className="inv-payment" style={{ marginTop: 0 }}>
+              <h4>Notes</h4>
+              <div style={{ whiteSpace: 'pre-wrap' }}>
+                {invoice.notes || <em style={{ color: '#94a3b8' }}>—</em>}
+              </div>
+            </div>
+            <div className="inv-payment" style={{ marginTop: 0 }}>
+              <h4>Payment details</h4>
+              {co.bank_name && <div><strong>Bank:</strong> {co.bank_name}</div>}
+              {co.iban      && <div><strong>IBAN:</strong> {co.iban}</div>}
+              {(!co.bank_name && !co.iban) && <em style={{ color: '#94a3b8' }}>—</em>}
+            </div>
           </div>
         )}
 

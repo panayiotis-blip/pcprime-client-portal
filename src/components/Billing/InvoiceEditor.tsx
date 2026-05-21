@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Modal, Button } from '../ui';
 import EmailDocumentModal from './EmailDocumentModal';
 
-type LineType = 'time' | 'fixed' | 'expense';
+type LineType = 'time' | 'fixed' | 'expense' | 'remarks';
 type Status   = 'draft' | 'issued' | 'paid' | 'cancelled';
 
 type Line = {
@@ -98,8 +98,6 @@ const formatBillingAddress = (c: any) =>
     [c.postal_code, c.city].filter(Boolean).join(' '),
     c.country,
     c.vat_number ? `VAT: ${c.vat_number}` : null,
-    c.phone ? `Tel: ${c.phone}` : null,
-    c.email ? `Email: ${c.email}` : null,
   ].filter(Boolean).join('\n');
 
 export default function InvoiceEditor() {
@@ -552,6 +550,13 @@ export default function InvoiceEditor() {
                       vatable: false, vat_rate: 0, time_entry_id: null,
                     })}
                   >+ Expense line</button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => addLine({
+                      line_type: 'remarks', description: '', quantity: 0, unit_price: 0, amount: 0,
+                      vatable: false, vat_rate: 0, time_entry_id: null,
+                    })}
+                  >+ Remarks line</button>
                 </div>
               )}
             </div>
@@ -646,14 +651,14 @@ export default function InvoiceEditor() {
                         <td style={{ whiteSpace: 'nowrap', fontSize: 12, textTransform: 'capitalize' }}>{l.line_type}</td>
                         <td>
                           {isEditable ? (
-                            <input type="text" className="form-input" value={l.description}
+                            <input type="text" className="form-input" style={{ width: '100%' }} value={l.description}
                               list="invoice-service-presets"
                               onChange={e => onDescChange(idx, e.target.value)}
                             />
                           ) : l.description}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          {isEditable ? (
+                          {l.line_type === 'remarks' ? '—' : isEditable ? (
                             <input type="number" step="0.01" className="form-input" style={{ width: 70, textAlign: 'right' }}
                               value={l.quantity}
                               onChange={e => {
@@ -664,7 +669,7 @@ export default function InvoiceEditor() {
                           ) : Number(l.quantity).toFixed(2)}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          {isEditable ? (
+                          {l.line_type === 'remarks' ? '—' : isEditable ? (
                             <input type="number" step="0.01" className="form-input" style={{ width: 90, textAlign: 'right' }}
                               value={l.unit_price}
                               onChange={e => {
@@ -675,7 +680,7 @@ export default function InvoiceEditor() {
                           ) : `€${Number(l.unit_price).toFixed(2)}`}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          {isEditable ? (
+                          {l.line_type === 'remarks' ? '—' : isEditable ? (
                             <input type="number" step="0.01" className="form-input" style={{ width: 100, textAlign: 'right' }}
                               value={l.amount}
                               onChange={e => updateLine(idx, { amount: Number(e.target.value || 0) })}
@@ -683,7 +688,7 @@ export default function InvoiceEditor() {
                           ) : `€${Number(l.amount).toFixed(2)}`}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          {isEditable ? (
+                          {l.line_type === 'remarks' ? '—' : isEditable ? (
                             <select
                               className="form-input" style={{ width: 76 }}
                               value={l.vat_rate}

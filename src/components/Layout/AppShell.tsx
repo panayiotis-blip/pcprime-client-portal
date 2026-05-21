@@ -57,6 +57,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/billing/recurring',    label: 'Recurring',       icon: '↻' },
       { path: '/billing/statement',    label: 'Statements',      icon: '▤' },
       { path: '/billing/age-analysis', label: 'Age Analysis',    icon: '◔' },
+      { path: '/billing/reports',      label: 'Sales Reports',   icon: '◧' },
       { path: '/billing/service-presets', label: 'Service Presets', icon: '⊕' },
     ],
   },

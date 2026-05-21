@@ -122,7 +122,7 @@ export default function ServicePresets() {
                 <tr key={r.id ?? `new-${idx}`}>
                   <td>
                     <input
-                      type="text" className="form-input" value={r.description}
+                      type="text" className="form-input" style={{ width: '100%' }} value={r.description}
                       onChange={e => update(idx, { description: e.target.value })}
                       placeholder="e.g. Annual accounts preparation"
                     />

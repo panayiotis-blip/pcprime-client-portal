@@ -39,6 +39,7 @@ import ClientStatement from './components/Billing/ClientStatement';
 import StatementPrint from './components/Billing/StatementPrint';
 import StatementsBatchPrint from './components/Billing/StatementsBatchPrint';
 import ServicePresets from './components/Billing/ServicePresets';
+import SalesReports from './components/Billing/SalesReports';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -95,6 +96,7 @@ function AuthedApp() {
             <Route path="/billing/statements/print" element={<StatementsBatchPrint />} />
             <Route path="/billing/statement/:clientId/print" element={<StatementPrint />} />
             <Route path="/billing/service-presets" element={<ServicePresets />} />
+            <Route path="/billing/reports" element={<SalesReports />} />
             <Route path="/billing/receipt/:id/print" element={<ReceiptPrint />} />
             <Route path="/billing/:id" element={<BillingInvoiceEditor />} />
             <Route path="/billing/:id/print" element={<InvoicePrint />} />

@@ -1646,6 +1646,8 @@ export const api = {
   }) {
     const { data: { session } } = await supabase.auth.getSession();
     const vatRate = data.vat_rate ?? 19.00;
+    // Default payment-terms note — editable per invoice.
+    const defaultNotes = 'Note: Invoices outstanding for more than 15 days will carry interest at 8.5% p.a.';
     const { data: row, error } = await supabase.from('client_invoices').insert({
       client_id:       data.client_id,
       issue_date:      data.issue_date || null,
@@ -1653,7 +1655,7 @@ export const api = {
       vat_rate:        vatRate,
       discount_type:   data.discount_type || null,
       discount_value:  data.discount_value ?? null,
-      notes:           data.notes || null,
+      notes:           data.notes ?? defaultNotes,
       billing_address: data.billing_address || null,
       created_by:      session?.user?.id || null,
     }).select().single();
@@ -1723,16 +1725,27 @@ export const api = {
     return data;
   },
 
-  // Lightweight receipts lister — used by the Statements screen to compute
-  // each client's running balance.
+  // Receipts lister — used by the Statements screen (for client balances)
+  // and by Sales Reports (full listing with client / invoice context).
   async getReceipts(params?: { client_id?: number; from?: string; to?: string }) {
     let q = supabase.from('receipts')
-      .select('id, receipt_number, client_id, invoice_id, receipt_date, amount, payment_method')
+      .select('id, receipt_number, client_id, invoice_id, receipt_date, amount, payment_method, client:clients(name, client_code), invoice:client_invoices(invoice_number)')
       .order('receipt_date', { ascending: false });
     if (params?.client_id) q = q.eq('client_id', params.client_id);
     if (params?.from)      q = q.gte('receipt_date', params.from);
     if (params?.to)        q = q.lte('receipt_date', params.to);
     const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  // Invoice lines for a list of invoice IDs — used by the VAT report to
+  // aggregate output VAT by rate over a period.
+  async getInvoiceLinesByInvoices(invoiceIds: number[]) {
+    if (invoiceIds.length === 0) return [];
+    const { data, error } = await supabase.from('client_invoice_lines')
+      .select('invoice_id, vat_rate, vatable, amount')
+      .in('invoice_id', invoiceIds);
     if (error) throw new Error(error.message);
     return data || [];
   },
@@ -1804,7 +1817,7 @@ export const api = {
   // --------- Invoice lines ---------
   async addInvoiceLine(invoiceId: number, line: {
     line_no?: number;
-    line_type: 'time' | 'fixed' | 'expense';
+    line_type: 'time' | 'fixed' | 'expense' | 'remarks';
     description: string;
     quantity: number;
     unit_price: number;

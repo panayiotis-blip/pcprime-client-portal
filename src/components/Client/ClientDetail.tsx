@@ -26,12 +26,13 @@ import KYCPanel from './KYCPanel';
 import ClientEmails from './ClientEmails';
 import TaxFilingsTab from './tabs/TaxFilingsTab';
 import TimeTab from './tabs/TimeTab';
+import FinancialsTab from './tabs/FinancialsTab';
 import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
 type TabKey =
   | 'info' | 'contacts' | 'tax'
   | 'kyc' | 'directors' | 'credentials'
-  | 'documents' | 'invoices'
+  | 'documents' | 'invoices' | 'financials'
   | 'compliance' | 'tax_filings' | 'emails'
   | 'time'
   | 'notes' | 'audit'
@@ -46,6 +47,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'credentials', label: 'Credentials' },
   { key: 'documents',   label: 'Documents' },
   { key: 'invoices',    label: 'Invoices' },
+  { key: 'financials',  label: 'Financials' },
   { key: 'compliance',  label: 'Compliance' },
   { key: 'tax_filings', label: 'Tax Filings' },
   { key: 'emails',      label: 'Emails' },
@@ -397,6 +399,7 @@ export default function ClientDetail() {
         {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
         {tab === 'documents'   && <ClientDocuments clientId={clientId} />}
         {tab === 'invoices'    && <InvoiceList clientId={clientId} />}
+        {tab === 'financials'  && <FinancialsTab clientId={clientId} />}
         {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
         {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} />}
         {tab === 'emails'      && <ClientEmails clientId={clientId} />}
