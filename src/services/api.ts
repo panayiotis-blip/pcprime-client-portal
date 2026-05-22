@@ -1234,10 +1234,12 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
-  async generateRecurringInvoices(month: string) {
-    const { data, error } = await supabase.rpc('generate_recurring_invoices', { p_month: month });
+  async generateRecurringInvoices(ids: number[], issueDate: string, dueDate?: string) {
+    const { data, error } = await supabase.rpc('generate_recurring_invoices', {
+      p_ids: ids, p_issue_date: issueDate, p_due_date: dueDate || null,
+    });
     if (error) throw new Error(error.message);
-    return data as { month: string; generated: number };
+    return data as { generated: number; issue_date: string };
   },
 
   // --------- Folders ---------

@@ -8,7 +8,7 @@ import { Modal, Button } from '../ui';
 // profile; "Generate drafts" turns the active profiles into draft
 // client_invoices for a chosen month, which are then issued as normal.
 
-type Line = { description: string; quantity: number; unit_price: number; vatable: boolean; vat_rate: number };
+type Line = { description: string; quantity: number; unit_price: number; vatable: boolean; vat_rate: number; line_type: 'fixed' | 'expense' | 'remarks' };
 
 type Profile = {
   id: number;
@@ -24,16 +24,14 @@ type Profile = {
   lines?: any[];
 };
 
-const currentMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
 // Mirrors generate_recurring_invoices() so the form preview matches what
-// each monthly invoice will total.
+// each generated invoice will total. Remarks lines carry no value.
 const computeTotals = (lines: Line[], discType: string | null, discVal: number) => {
   let sv = 0, snv = 0;
   for (const l of lines) {
+    if (l.line_type === 'remarks') continue;
     const amt = (Number(l.quantity) || 0) * (Number(l.unit_price) || 0);
     if (l.vatable) sv += amt; else snv += amt;
   }
@@ -60,8 +58,11 @@ export default function RecurringInvoices() {
   const { clients } = useApp();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [genMonth, setGenMonth] = useState(currentMonth());
+  const [genIssue, setGenIssue] = useState<string>(todayStr());
+  const [genDue, setGenDue]     = useState<string>('');
   const [generating, setGenerating] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [servicePresets, setServicePresets] = useState<any[]>([]);
 
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [form, setForm] = useState<any>(EMPTY_FORM);
@@ -74,6 +75,9 @@ export default function RecurringInvoices() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    api.getServicePresets({ activeOnly: true }).then(setServicePresets).catch(() => {});
+  }, []);
 
   const clientName = (p: Profile) =>
     p.client ? `${p.client.client_code ? p.client.client_code + ' — ' : ''}${p.client.name}` : `#${p.client_id}`;
@@ -82,13 +86,14 @@ export default function RecurringInvoices() {
     const lines: Line[] = (p.lines || []).map((l: any) => ({
       description: l.description, quantity: Number(l.quantity), unit_price: Number(l.unit_price),
       vatable: l.vatable, vat_rate: Number(l.vat_rate || 0),
+      line_type: (l.line_type as Line['line_type']) || 'fixed',
     }));
     return computeTotals(lines, p.discount_type, Number(p.discount_value) || 0).total;
   };
 
   const openNew = () => {
     setForm(EMPTY_FORM);
-    setFormLines([{ description: '', quantity: 1, unit_price: 0, vatable: true, vat_rate: 19 }]);
+    setFormLines([{ description: '', quantity: 1, unit_price: 0, vatable: true, vat_rate: 19, line_type: 'fixed' }]);
     setEditingId('new');
   };
   const openEdit = (p: Profile) => {
@@ -104,13 +109,29 @@ export default function RecurringInvoices() {
         description: l.description, quantity: Number(l.quantity),
         unit_price: Number(l.unit_price), vatable: l.vatable,
         vat_rate: Number(l.vat_rate || (l.vatable ? 19 : 0)),
+        line_type: (l.line_type as Line['line_type']) || 'fixed',
       })));
     setEditingId(p.id);
   };
 
   const setLine = (i: number, patch: Partial<Line>) =>
     setFormLines(prev => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const addLine = () => setFormLines(prev => [...prev, { description: '', quantity: 1, unit_price: 0, vatable: true, vat_rate: 19 }]);
+
+  // Picking a preset description fills price + VAT (mirrors the invoice editor).
+  const setDescription = (i: number, value: string) => {
+    const preset = servicePresets.find(p => p.description === value);
+    const patch: Partial<Line> = { description: value };
+    if (preset) {
+      patch.vatable  = preset.vatable;
+      patch.vat_rate = preset.vatable ? 19 : 0;
+      if (preset.default_price != null && !Number(formLines[i]?.unit_price)) {
+        patch.unit_price = Number(preset.default_price);
+      }
+    }
+    setLine(i, patch);
+  };
+
+  const addLine = () => setFormLines(prev => [...prev, { description: '', quantity: 1, unit_price: 0, vatable: true, vat_rate: 19, line_type: 'fixed' }]);
   const removeLine = (i: number) => setFormLines(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSave = async () => {
@@ -130,12 +151,19 @@ export default function RecurringInvoices() {
           active: form.active,
           notes: form.notes.trim() || null,
         },
-        cleanLines.map((l, i) => ({
-          line_no: i + 1, line_type: 'fixed', description: l.description.trim(),
-          quantity: Number(l.quantity) || 0, unit_price: Number(l.unit_price) || 0,
-          amount: (Number(l.quantity) || 0) * (Number(l.unit_price) || 0),
-          vatable: l.vatable, vat_rate: Number(l.vat_rate || 0),
-        })),
+        cleanLines.map((l, i) => {
+          const remarks = l.line_type === 'remarks';
+          return {
+            line_no: i + 1,
+            line_type: l.line_type || 'fixed',
+            description: l.description.trim(),
+            quantity:   remarks ? 0 : (Number(l.quantity) || 0),
+            unit_price: remarks ? 0 : (Number(l.unit_price) || 0),
+            amount:     remarks ? 0 : (Number(l.quantity) || 0) * (Number(l.unit_price) || 0),
+            vatable:    remarks ? false : l.vatable,
+            vat_rate:   remarks ? 0 : Number(l.vat_rate || 0),
+          };
+        }),
       );
       setEditingId(null);
       await load();
@@ -152,13 +180,21 @@ export default function RecurringInvoices() {
     catch (err: any) { alert('Delete failed: ' + err.message); }
   };
 
+  const allTicked = profiles.length > 0 && profiles.every(p => selected.has(p.id));
+  const toggleAll = () => setSelected(allTicked ? new Set() : new Set(profiles.map(p => p.id)));
+  const toggleOne = (id: number) => setSelected(prev => {
+    const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n;
+  });
+
   const handleGenerate = async () => {
-    if (!/^\d{4}-\d{2}$/.test(genMonth)) { alert('Pick a month first.'); return; }
-    if (!confirm(`Generate draft invoices for ${genMonth}?\n\nOne draft per active recurring profile not yet generated for that month.`)) return;
+    if (selected.size === 0) { alert('Tick the recurring profiles you want to generate.'); return; }
+    if (!genIssue) { alert('Pick an issue date.'); return; }
+    if (!confirm(`Generate ${selected.size} draft invoice(s) dated ${genIssue}?`)) return;
     setGenerating(true);
     try {
-      const r = await api.generateRecurringInvoices(genMonth);
-      alert(`${r.generated} draft invoice${r.generated === 1 ? '' : 's'} generated for ${genMonth}.\n\nReview and issue them from Client Invoices.`);
+      const r = await api.generateRecurringInvoices([...selected], genIssue, genDue || undefined);
+      alert(`${r.generated} draft invoice${r.generated === 1 ? '' : 's'} created.\n\nReview and issue them from Client Invoices.`);
+      setSelected(new Set());
       await load();
     } catch (err: any) {
       alert('Generate failed: ' + err.message);
@@ -184,15 +220,19 @@ export default function RecurringInvoices() {
 
       <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
         <div className="form-group" style={{ margin: 0 }}>
-          <label>Generate invoices for</label>
-          <input type="month" className="form-input" value={genMonth} onChange={e => setGenMonth(e.target.value)} />
+          <label>Issue date</label>
+          <input type="date" className="form-input" value={genIssue} onChange={e => setGenIssue(e.target.value)} />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label>Due date (optional)</label>
+          <input type="date" className="form-input" value={genDue} onChange={e => setGenDue(e.target.value)} />
         </div>
         <Button variant="primary" onClick={handleGenerate} disabled={generating}>
-          {generating ? 'Generating…' : 'Generate drafts'}
+          {generating ? 'Generating…' : `Generate selected (${selected.size}) → drafts`}
         </Button>
         <p style={{ fontSize: 12, color: 'var(--pc-text-2)', margin: 0, flex: 1, minWidth: 220 }}>
-          Creates one draft invoice per active profile. Safe to re-run — profiles already
-          generated for the chosen month are skipped.
+          Tick the profiles below, choose the date, then Generate creates a draft invoice for
+          each. Review and issue them from Client Invoices. Due date defaults to issue + 30 days.
         </p>
       </div>
 
@@ -205,6 +245,9 @@ export default function RecurringInvoices() {
           <table className="export-table">
             <thead>
               <tr>
+                <th style={{ width: 36, textAlign: 'center' }}>
+                  <input type="checkbox" checked={allTicked} onChange={toggleAll} title="Select all" />
+                </th>
                 <th>Client</th>
                 <th>Label</th>
                 <th style={{ textAlign: 'right' }}>Monthly total</th>
@@ -216,6 +259,9 @@ export default function RecurringInvoices() {
             <tbody>
               {profiles.map(p => (
                 <tr key={p.id} style={p.active ? undefined : { opacity: 0.55 }}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} />
+                  </td>
                   <td>{clientName(p)}</td>
                   <td>{p.label || <span style={{ color: '#94a3b8' }}>—</span>}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>€{profileTotal(p).toFixed(2)}</td>
@@ -281,41 +327,67 @@ export default function RecurringInvoices() {
               <strong style={{ fontSize: 13 }}>Line items</strong>
               <Button size="sm" variant="secondary" onClick={addLine}>+ Add line</Button>
             </div>
+            <datalist id="recurring-service-presets">
+              {servicePresets.map((p, idx) => <option key={idx} value={p.description} />)}
+            </datalist>
             <table className="export-table" style={{ fontSize: 13 }}>
               <thead>
                 <tr>
+                  <th style={{ width: 96 }}>Type</th>
                   <th>Description</th>
                   <th style={{ width: 70 }}>Qty</th>
                   <th style={{ width: 90 }}>Unit €</th>
                   <th style={{ width: 90, textAlign: 'right' }}>Amount</th>
-                  <th style={{ width: 50, textAlign: 'center' }}>VAT</th>
+                  <th style={{ width: 60, textAlign: 'center' }}>VAT</th>
                   <th style={{ width: 32 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {formLines.map((l, i) => (
-                  <tr key={i}>
-                    <td><input type="text" className="form-input" value={l.description} onChange={e => setLine(i, { description: e.target.value })} /></td>
-                    <td><input type="number" step="0.001" className="form-input" value={l.quantity} onChange={e => setLine(i, { quantity: Number(e.target.value) })} /></td>
-                    <td><input type="number" step="0.01" className="form-input" value={l.unit_price} onChange={e => setLine(i, { unit_price: Number(e.target.value) })} /></td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>€{((Number(l.quantity) || 0) * (Number(l.unit_price) || 0)).toFixed(2)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <select className="form-input" style={{ width: 76 }}
-                        value={l.vat_rate}
-                        onChange={e => {
-                          const r = Number(e.target.value);
-                          setLine(i, { vat_rate: r, vatable: r > 0 });
-                        }}
-                      >
-                        <option value={0}>0%</option>
-                        <option value={5}>5%</option>
-                        <option value={9}>9%</option>
-                        <option value={19}>19%</option>
-                      </select>
-                    </td>
-                    <td><button type="button" className="btn btn-link btn-sm" onClick={() => removeLine(i)} title="Remove line">✕</button></td>
-                  </tr>
-                ))}
+                {formLines.map((l, i) => {
+                  const isRemarks = l.line_type === 'remarks';
+                  return (
+                    <tr key={i}>
+                      <td>
+                        <select className="form-input" value={l.line_type}
+                          onChange={e => {
+                            const t = e.target.value as Line['line_type'];
+                            setLine(i, t === 'remarks' ? { line_type: t, vatable: false, vat_rate: 0 } : { line_type: t });
+                          }}>
+                          <option value="fixed">Fixed</option>
+                          <option value="expense">Expense</option>
+                          <option value="remarks">Remarks</option>
+                        </select>
+                      </td>
+                      <td>
+                        <input type="text" className="form-input" style={{ width: '100%' }}
+                          list="recurring-service-presets" value={l.description}
+                          onChange={e => setDescription(i, e.target.value)} />
+                      </td>
+                      <td>{isRemarks ? '—' : <input type="number" step="0.001" className="form-input" value={l.quantity} onChange={e => setLine(i, { quantity: Number(e.target.value) })} />}</td>
+                      <td>{isRemarks ? '—' : <input type="number" step="0.01" className="form-input" value={l.unit_price} onChange={e => setLine(i, { unit_price: Number(e.target.value) })} />}</td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {isRemarks ? '—' : `€${((Number(l.quantity) || 0) * (Number(l.unit_price) || 0)).toFixed(2)}`}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {isRemarks ? '—' : (
+                          <select className="form-input" style={{ width: 76 }}
+                            value={l.vat_rate}
+                            onChange={e => {
+                              const r = Number(e.target.value);
+                              setLine(i, { vat_rate: r, vatable: r > 0 });
+                            }}
+                          >
+                            <option value={0}>0%</option>
+                            <option value={5}>5%</option>
+                            <option value={9}>9%</option>
+                            <option value={19}>19%</option>
+                          </select>
+                        )}
+                      </td>
+                      <td><button type="button" className="btn btn-link btn-sm" onClick={() => removeLine(i)} title="Remove line">✕</button></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -328,9 +400,16 @@ export default function RecurringInvoices() {
             <div style={{ fontWeight: 700, marginTop: 4 }}>Monthly total: €{preview.total.toFixed(2)}</div>
           </div>
 
+          <div className="form-group" style={{ margin: 0 }}>
+            <label>Notes (printed on each generated invoice)</label>
+            <textarea className="form-input" rows={2} value={form.notes}
+              onChange={e => setForm({ ...form, notes: e.target.value })}
+              placeholder="Leave blank to use the standard payment-terms note." />
+          </div>
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
             <input type="checkbox" checked={form.active} onChange={e => setForm({ ...form, active: e.target.checked })} />
-            Active — included when generating monthly invoices
+            Active — only ticked profiles get generated, but this flag dims inactive ones in the list
           </label>
         </div>
       </Modal>
