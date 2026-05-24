@@ -1183,6 +1183,15 @@ export const api = {
     return data;
   },
 
+  // --------- AI document extraction (extract-document Edge Function → Claude) ---------
+  // Sends base64 page image(s) and gets back structured invoice fields.
+  async extractDocument(images: { media_type: string; data: string }[]) {
+    const { data, error } = await supabase.functions.invoke('extract-document', { body: { images } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'AI extraction failed.');
+    return data.data as Record<string, any>;
+  },
+
   // --------- Recurring invoices (Accounting — billing module Phase A) ---------
   async getRecurringInvoices() {
     const { data, error } = await supabase.from('recurring_invoices')

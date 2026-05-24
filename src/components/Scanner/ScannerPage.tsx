@@ -4,11 +4,56 @@ import FileUpload from './FileUpload';
 import CameraCapture from './CameraCapture';
 import { recognizeImage } from '../../services/ocr/ocrService';
 import { extractPdfText, renderPdfToImages, getPdfPageCount, renderPdfPageToJpegBlob } from '../../services/ocr/pdfRenderer';
-import { parseInvoiceText } from '../../services/ocr/invoiceParser';
+import { parseInvoiceText, type ParsedInvoice } from '../../services/ocr/invoiceParser';
 import { useScan, type ScannedInvoice } from '../../context/ScanContext';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import SearchableSelect from '../common/SearchableSelect';
+
+// Read a file's page image(s) as base64 for the AI extractor. PDFs are
+// rendered to JPEGs (capped at 5 pages); images are sent as-is.
+async function fileToImageParts(file: File): Promise<{ media_type: string; data: string }[]> {
+  const toB64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(',')[1] || '');
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  if (file.type === 'application/pdf') {
+    const pages = await getPdfPageCount(file).catch(() => 1);
+    const parts: { media_type: string; data: string }[] = [];
+    for (let p = 1; p <= Math.min(pages, 5); p++) {
+      try {
+        const blob = await renderPdfPageToJpegBlob(file, p);
+        parts.push({ media_type: 'image/jpeg', data: await toB64(blob) });
+      } catch { /* skip unrenderable page */ }
+    }
+    return parts;
+  }
+  return [{ media_type: file.type || 'image/jpeg', data: await toB64(file) }];
+}
+
+// Map Claude's structured output onto the ParsedInvoice the review screen uses.
+function aiToParsed(ai: Record<string, any>): ParsedInvoice {
+  return {
+    invoiceNumber: ai.invoice_number || '',
+    vendorName:    ai.vendor_name || '',
+    invoiceDate:   ai.invoice_date || '',
+    dueDate:       ai.due_date || '',
+    subtotal:      Number(ai.subtotal || 0),
+    taxAmount:     Number(ai.vat_amount || 0),
+    totalAmount:   Number(ai.total_amount || 0),
+    currency:      ai.currency || '',
+    lineItems:     Array.isArray(ai.line_items) ? ai.line_items.map((li: any) => ({
+      description: li.description || '',
+      quantity:    li.quantity != null ? Number(li.quantity) : undefined,
+      unitPrice:   li.unit_price != null ? Number(li.unit_price) : undefined,
+      amount:      Number(li.amount || 0),
+    })) : [],
+    details: '',
+  };
+}
 
 // One row of the document_categories master list (migration 050).
 type DocCategory = {
@@ -175,8 +220,25 @@ export default function ScannerPage() {
       const { file, displayName } = jobs[i];
       setStatusText(`Scanning ${i + 1} of ${jobs.length}: ${displayName}`);
       try {
-        const { text, confidence } = await scanSingleFile(file);
-        const parsed = parseInvoiceText(text);
+        let parsed: ParsedInvoice;
+        let text = '';
+        let confidence = 0;
+        try {
+          // Primary: AI extraction with Claude (reads English + Greek).
+          const imageParts = await fileToImageParts(file);
+          const ai = await api.extractDocument(imageParts);
+          parsed = aiToParsed(ai);
+          text = typeof ai.full_text === 'string' ? ai.full_text : '';
+          confidence = typeof ai.confidence === 'number' ? ai.confidence : 90;
+        } catch (aiErr) {
+          // Fallback: on-device Tesseract + regex, so scanning still works
+          // if the AI key / function is unavailable.
+          console.warn('AI extraction failed, falling back to on-device OCR:', aiErr);
+          const r = await scanSingleFile(file);
+          text = r.text;
+          confidence = r.confidence;
+          parsed = parseInvoiceText(text);
+        }
         results.push({ fileBlob: file, fileName: file.name, mimeType: file.type, parsed, rawOcrText: text, confidence, journalCode, clientId });
       } catch (err) {
         console.error(`Failed to scan ${file.name}:`, err);
