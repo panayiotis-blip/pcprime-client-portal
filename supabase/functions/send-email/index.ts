@@ -7,14 +7,16 @@
 // Supports optional attachments — the portal sends them base64-encoded so a
 // generated invoice / receipt / statement PDF can travel with the message.
 //
-// Deploy normally (JWT verification ON) — only signed-in portal users
-// can call it.
+// Deploy with gateway "Verify JWT" OFF — this function authenticates the
+// caller itself (staff only), so it is never publicly callable.
 //
 // Required Edge Function secrets (Supabase → Edge Functions → Secrets):
 //   CLOUDMAILIN_OUTBOUND_USERNAME  — the SMTP username (goes in the API URL)
 //   CLOUDMAILIN_OUTBOUND_TOKEN     — the outbound API token (Bearer)
 //   CLOUDMAILIN_FROM               — the verified "from" address
 // =============================================================
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,6 +33,24 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
+    // Authenticate + authorise the caller. Gateway "Verify JWT" is off (so the
+    // preflight OPTIONS can return 200); we enforce auth HERE. Staff only —
+    // this function sends mail as the firm, and clients are also authenticated.
+    const authToken = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    const supaUrl   = Deno.env.get('SUPABASE_URL') ?? '';
+    const anon      = createClient(supaUrl, Deno.env.get('SUPABASE_ANON_KEY') ?? '');
+    const { data: { user } } = authToken ? await anon.auth.getUser(authToken) : { data: { user: null } };
+    if (!user) {
+      return new Response(JSON.stringify({ ok: false, error: 'Unauthorized.' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const admin = createClient(supaUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    const { data: prof } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
+    if (!prof || !['owner', 'supervisor', 'admin', 'staff'].includes(prof.role)) {
+      return new Response(JSON.stringify({ ok: false, error: 'Staff only.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const username = Deno.env.get('CLOUDMAILIN_OUTBOUND_USERNAME');
     const token    = Deno.env.get('CLOUDMAILIN_OUTBOUND_TOKEN');
     const from     = Deno.env.get('CLOUDMAILIN_FROM');
