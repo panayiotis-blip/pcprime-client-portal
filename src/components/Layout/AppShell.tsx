@@ -32,6 +32,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/scan',      label: 'Scan Document', icon: '⊞' },
       { path: '/tasks',     label: 'Tasks',         icon: '☑' },
       { path: '/phone-log', label: 'Phone Log',    icon: '☎' },
+      { path: '/messages',  label: 'Messages',     icon: '✉' },
       { path: '/timesheet', label: 'Timesheet',    icon: '⏱' },
       { path: '/calendar',  label: 'Calendar',     icon: '◷' },
     ],
@@ -86,6 +87,7 @@ const clientNav: NavItem[] = [
   { path: '/',           label: 'Dashboard',  icon: '⌂' },
   { path: '/my-billing',   label: 'My Account', icon: '€' },
   { path: '/my-deadlines', label: 'Deadlines',  icon: '⏰' },
+  { path: '/my-messages',  label: 'Messages',   icon: '✉' },
   { path: '/documents',    label: 'Documents',  icon: '⊟' },
   { path: '/invoices',   label: 'Invoices',   icon: '☰' },
 ];

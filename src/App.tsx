@@ -42,6 +42,8 @@ import ServicePresets from './components/Billing/ServicePresets';
 import SalesReports from './components/Billing/SalesReports';
 import MyBilling from './components/Client/MyBilling';
 import MyDeadlines from './components/Client/MyDeadlines';
+import MyMessages from './components/Client/MyMessages';
+import MessagesInbox from './components/Admin/MessagesInbox';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -93,6 +95,8 @@ function AuthedApp() {
             <Route path="/timesheet/print" element={<TimesheetPrint />} />
             <Route path="/my-billing" element={<MyBilling />} />
             <Route path="/my-deadlines" element={<MyDeadlines />} />
+            <Route path="/my-messages" element={<MyMessages />} />
+            <Route path="/messages" element={<MessagesInbox />} />
             <Route path="/billing" element={<InvoicesList />} />
             <Route path="/billing/recurring" element={<RecurringInvoices />} />
             <Route path="/billing/age-analysis" element={<AgeAnalysis />} />

@@ -1788,6 +1788,37 @@ export const api = {
     };
   },
 
+  // --------- Client ↔ firm messaging ---------
+  async getClientMessages(clientId: number) {
+    const { data, error } = await supabase.from('client_messages')
+      .select('*').eq('client_id', clientId).order('created_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async sendClientMessage(clientId: number, body: string) {
+    const { data, error } = await supabase.rpc('send_client_message', { p_client_id: clientId, p_body: body });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+  async markMessagesRead(clientId: number) {
+    const { error } = await supabase.rpc('mark_messages_read', { p_client_id: clientId });
+    if (error) throw new Error(error.message);
+  },
+  async getMessageInbox() {
+    const { data, error } = await supabase.rpc('get_message_inbox');
+    if (error) throw new Error(error.message);
+    return (data || []) as { client_id: number; client_name: string; client_code: string | null;
+      last_at: string; last_body: string; unread: number }[];
+  },
+  // Count of firm replies the client hasn't read yet (for their unread badge).
+  async getMyUnreadMessageCount(clientId: number) {
+    const { count, error } = await supabase.from('client_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId).eq('author_is_staff', true).eq('read_by_client', false);
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
+
   // --------- Service presets (reusable invoice line descriptions) ---------
   async getServicePresets(opts?: { activeOnly?: boolean }) {
     let q = supabase.from('service_presets').select('*')

@@ -42,6 +42,12 @@ function ClientDashboard() {
   const { user } = useAuth();
   const clientId = user?.client_id;
   const [summary, setSummary] = useState<{ balance: number; outstanding: number; lastPayment: string | null } | null>(null);
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!clientId) return;
+    api.getMyUnreadMessageCount(clientId).then(setUnread).catch(() => {});
+  }, [clientId]);
 
   useEffect(() => {
     if (!clientId) return;
@@ -66,6 +72,11 @@ function ClientDashboard() {
   return (
     <div className="dashboard">
       <h2>My Dashboard</h2>
+      {unread > 0 && (
+        <Link to="/my-messages" className="card" style={{ display: 'block', marginBottom: 12, background: '#dbeafe', color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}>
+          📨 You have <strong>{unread}</strong> new message{unread === 1 ? '' : 's'} from us — open Messages
+        </Link>
+      )}
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-number" style={{ color: summary && summary.balance > 0 ? '#b91c1c' : undefined }}>
