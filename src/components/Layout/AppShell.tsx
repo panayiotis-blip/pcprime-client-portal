@@ -84,8 +84,9 @@ const STAFF_GROUPS: NavGroup[] = [
 
 const clientNav: NavItem[] = [
   { path: '/',           label: 'Dashboard',  icon: '⌂' },
-  { path: '/my-billing', label: 'My Account', icon: '€' },
-  { path: '/documents',  label: 'Documents',  icon: '⊟' },
+  { path: '/my-billing',   label: 'My Account', icon: '€' },
+  { path: '/my-deadlines', label: 'Deadlines',  icon: '⏰' },
+  { path: '/documents',    label: 'Documents',  icon: '⊟' },
   { path: '/invoices',   label: 'Invoices',   icon: '☰' },
 ];
 
