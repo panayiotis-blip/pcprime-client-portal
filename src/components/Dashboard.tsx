@@ -27,28 +27,67 @@ export default function Dashboard() {
   const { user, mfa } = useAuth();
   const showMfaNag = isStaffRole(user) && !mfa.enrolled;
 
-  // ---------- Client view (unchanged — no customisation) ----------
+  // ---------- Client view ----------
   if (user?.role === 'client') {
-    const myInvoices = invoices;
-    return (
-      <div className="dashboard">
-        <h2>My Dashboard</h2>
-        <div className="stats-grid">
-          <div className="stat-card"><div className="stat-number">{myInvoices.length}</div><div className="stat-label">Invoices</div></div>
-          <div className="stat-card stat-draft"><div className="stat-number">{myInvoices.filter((i: any) => i.status === 'draft').length}</div><div className="stat-label">Drafts</div></div>
-          <div className="stat-card stat-reviewed"><div className="stat-number">{myInvoices.filter((i: any) => i.status === 'reviewed').length}</div><div className="stat-label">Reviewed</div></div>
-          <div className="stat-card stat-exported"><div className="stat-number">{myInvoices.filter((i: any) => i.status === 'exported').length}</div><div className="stat-label">Exported</div></div>
-        </div>
-        <div className="quick-actions">
-          <Link to="/documents" className="btn btn-primary btn-lg">Upload Documents</Link>
-          <Link to="/invoices" className="btn btn-secondary btn-lg">View Invoices</Link>
-        </div>
-      </div>
-    );
+    return <ClientDashboard />;
   }
 
   // ---------- Staff view (customisable) ----------
   return <StaffDashboard showMfaNag={showMfaNag} userName={user?.display_name} clients={clients} invoices={invoices} />;
+}
+
+// Client dashboard — an at-a-glance account summary (their billing position),
+// not the scanned-invoice counters staff use.
+function ClientDashboard() {
+  const { user } = useAuth();
+  const clientId = user?.client_id;
+  const [summary, setSummary] = useState<{ balance: number; outstanding: number; lastPayment: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!clientId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await api.getClientStatement(clientId);
+        if (cancelled) return;
+        const invoiced = (d.invoices as any[]).reduce((s, i) => s + Number(i.total_amount || 0), 0);
+        const received = (d.receipts as any[]).reduce((s, r) => s + Number(r.amount || 0), 0);
+        const outstanding = (d.invoices as any[]).filter((i) => i.status === 'issued').length;
+        const dates = (d.receipts as any[]).map((r) => r.receipt_date).filter(Boolean).sort();
+        setSummary({ balance: invoiced - received, outstanding, lastPayment: dates.length ? dates[dates.length - 1] : null });
+      } catch { /* RLS / load errors leave the tiles as — */ }
+    })();
+    return () => { cancelled = true; };
+  }, [clientId]);
+
+  const eur = (n: number) => '€' + n.toFixed(2);
+  const fmt = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  return (
+    <div className="dashboard">
+      <h2>My Dashboard</h2>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-number" style={{ color: summary && summary.balance > 0 ? '#b91c1c' : undefined }}>
+            {summary ? eur(summary.balance) : '—'}
+          </div>
+          <div className="stat-label">Balance due</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number">{summary ? summary.outstanding : '—'}</div>
+          <div className="stat-label">Outstanding invoices</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number">{summary?.lastPayment ? fmt(summary.lastPayment) : '—'}</div>
+          <div className="stat-label">Last payment</div>
+        </div>
+      </div>
+      <div className="quick-actions">
+        <Link to="/my-billing" className="btn btn-primary btn-lg">My Account</Link>
+        <Link to="/documents" className="btn btn-secondary btn-lg">Upload Documents</Link>
+      </div>
+    </div>
+  );
 }
 
 interface StaffDashboardProps {

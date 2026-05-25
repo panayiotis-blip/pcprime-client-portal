@@ -40,6 +40,7 @@ import StatementPrint from './components/Billing/StatementPrint';
 import StatementsBatchPrint from './components/Billing/StatementsBatchPrint';
 import ServicePresets from './components/Billing/ServicePresets';
 import SalesReports from './components/Billing/SalesReports';
+import MyBilling from './components/Client/MyBilling';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -89,6 +90,7 @@ function AuthedApp() {
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/timesheet" element={<Timesheet />} />
             <Route path="/timesheet/print" element={<TimesheetPrint />} />
+            <Route path="/my-billing" element={<MyBilling />} />
             <Route path="/billing" element={<InvoicesList />} />
             <Route path="/billing/recurring" element={<RecurringInvoices />} />
             <Route path="/billing/age-analysis" element={<AgeAnalysis />} />
