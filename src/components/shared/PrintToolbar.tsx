@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { downloadElementPdf } from '../../services/documentPdf';
 
 function saveBlob(content: string, type: string, filename: string) {
@@ -25,6 +25,7 @@ export default function PrintToolbar({
   fileBase, targetSelector = '.print-page', showClose = true,
 }: { fileBase: string; targetSelector?: string; showClose?: boolean }) {
   const [busy, setBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const getTarget = () => document.querySelector(targetSelector) as HTMLElement | null;
   const safeName  = (fileBase || 'document').replace(/[^\w-]+/g, '_');
@@ -58,6 +59,12 @@ export default function PrintToolbar({
     saveBlob('﻿' + html, 'application/vnd.ms-excel', `${safeName}.xls`);
   };
 
+  const menuItem: CSSProperties = {
+    display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px',
+    border: 'none', background: 'white', cursor: 'pointer', fontSize: 13,
+  };
+  const pick = (fn: () => void | Promise<void>) => () => { setMenuOpen(false); void fn(); };
+
   return (
     <>
       <style>{`@media print { .pt-toolbar { display: none !important; } }`}</style>
@@ -66,9 +73,28 @@ export default function PrintToolbar({
         style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}
       >
         {showClose && <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>}
-        <button className="btn btn-secondary btn-sm" onClick={onWord}>⬇ Word</button>
-        <button className="btn btn-secondary btn-sm" onClick={onExcel}>⬇ Excel</button>
-        <button className="btn btn-secondary btn-sm" onClick={onPdf} disabled={busy}>{busy ? 'PDF…' : '⬇ PDF'}</button>
+
+        {/* Export dropdown */}
+        <div style={{ position: 'relative' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setMenuOpen(o => !o)} disabled={busy}>
+            {busy ? 'Exporting…' : 'Export ▾'}
+          </button>
+          {menuOpen && (
+            <>
+              <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 20 }} />
+              <div style={{
+                position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 21, background: 'white',
+                border: '1px solid #e2e8f0', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                minWidth: 150, overflow: 'hidden',
+              }}>
+                <button style={menuItem} onClick={pick(onPdf)}>⬇ PDF</button>
+                <button style={menuItem} onClick={pick(onWord)}>⬇ Word</button>
+                <button style={menuItem} onClick={pick(onExcel)}>⬇ Excel</button>
+              </div>
+            </>
+          )}
+        </div>
+
         <button className="btn btn-primary btn-sm" onClick={() => window.print()}>🖨 Print</button>
       </div>
     </>
