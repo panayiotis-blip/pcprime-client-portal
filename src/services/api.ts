@@ -2067,6 +2067,14 @@ export const api = {
     if (error) throw new Error(error.message);
     return data;
   },
+  async getCustomerReceipts(ownerClientId: number) {
+    const { data, error } = await supabase.from('customer_receipt')
+      .select('*, customer:customer(name), invoice:customer_invoice(invoice_number)')
+      .eq('owner_client_id', ownerClientId)
+      .order('receipt_date', { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({ ...r, customer_name: r.customer?.name || null, invoice_number: r.invoice?.invoice_number || null }));
+  },
   async cancelCustomerInvoice(id: number) {
     const { error } = await supabase.rpc('cancel_customer_invoice', { p_id: id });
     if (error) throw new Error(error.message);
