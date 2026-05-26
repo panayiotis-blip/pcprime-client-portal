@@ -49,6 +49,8 @@ import MyCustomers from './components/Client/MyCustomers';
 import SalesInvoices from './components/Client/SalesInvoices';
 import CustomerInvoiceEditor from './components/Client/CustomerInvoiceEditor';
 import CustomerInvoicePrint from './components/Client/CustomerInvoicePrint';
+import CustomerReceiptPrint from './components/Client/CustomerReceiptPrint';
+import CustomerDebtors from './components/Client/CustomerDebtors';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -107,8 +109,10 @@ function AuthedApp() {
             <Route path="/my-company" element={<MyCompany />} />
             <Route path="/my-customers" element={<MyCustomers />} />
             <Route path="/sales" element={<SalesInvoices />} />
+            <Route path="/sales/receipt/:id/print" element={<CustomerReceiptPrint />} />
             <Route path="/sales/:id/print" element={<CustomerInvoicePrint />} />
             <Route path="/sales/:id" element={<CustomerInvoiceEditor />} />
+            <Route path="/debtors" element={<CustomerDebtors />} />
             <Route path="/messages" element={<MessagesInbox />} />
             <Route path="/billing" element={<InvoicesList />} />
             <Route path="/billing/recurring" element={<RecurringInvoices />} />

@@ -1972,9 +1972,25 @@ export const api = {
     if (error) throw new Error(error.message);
     return data as string;
   },
-  async markCustomerInvoicePaid(id: number, paidDate?: string) {
-    const { error } = await supabase.rpc('mark_customer_invoice_paid', { p_id: id, p_paid_date: paidDate || null });
+  async markCustomerInvoicePaid(id: number, paidDate?: string, method?: string) {
+    const { data, error } = await supabase.rpc('mark_customer_invoice_paid', {
+      p_id: id, p_paid_date: paidDate || null, p_method: method || null,
+    });
     if (error) throw new Error(error.message);
+    return data as string;   // the new receipt number
+  },
+  async getCustomerReceiptForInvoice(invoiceId: number) {
+    const { data, error } = await supabase.from('customer_receipt')
+      .select('id, receipt_number').eq('invoice_id', invoiceId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data as { id: number; receipt_number: string } | null;
+  },
+  async getCustomerReceipt(id: number) {
+    const { data, error } = await supabase.from('customer_receipt')
+      .select('*, customer:customer(name, address, vat_number), invoice:customer_invoice(invoice_number)')
+      .eq('id', id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
   },
   async cancelCustomerInvoice(id: number) {
     const { error } = await supabase.rpc('cancel_customer_invoice', { p_id: id });

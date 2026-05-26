@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { Modal, Button } from '../ui';
 
 type LineType = 'fixed' | 'expense' | 'remarks';
 type Line = {
@@ -44,6 +45,10 @@ export default function CustomerInvoiceEditor() {
   const [lines, setLines]     = useState<Line[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
+  const [payOpen, setPayOpen]     = useState(false);
+  const [payDate, setPayDate]     = useState('');
+  const [payMethod, setPayMethod] = useState('Bank Transfer');
+  const [paying, setPaying]       = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -113,11 +118,19 @@ export default function CustomerInvoiceEditor() {
     try { await save({ silent: true }); const num = await api.issueCustomerInvoice(invoice.id); alert(`Issued as ${num}.`); await load(); }
     catch (err: any) { alert('Issue failed: ' + err.message); }
   };
-  const markPaid = async () => {
-    const d = prompt('Paid on (YYYY-MM-DD)? Leave blank for today.');
-    if (d === null) return;
-    try { await api.markCustomerInvoicePaid(invoice.id, d.trim() || undefined); await load(); }
+  const markPaid = () => { setPayDate(new Date().toISOString().slice(0, 10)); setPayMethod('Bank Transfer'); setPayOpen(true); };
+  const confirmPaid = async () => {
+    setPaying(true);
+    try { await api.markCustomerInvoicePaid(invoice.id, payDate || undefined, payMethod); setPayOpen(false); await load(); }
     catch (err: any) { alert('Failed: ' + err.message); }
+    finally { setPaying(false); }
+  };
+  const printReceipt = async () => {
+    try {
+      const r = await api.getCustomerReceiptForInvoice(invoice.id);
+      if (!r) { alert('No receipt found for this invoice.'); return; }
+      window.open(`/sales/receipt/${r.id}/print`, '_blank');
+    } catch (err: any) { alert(err.message); }
   };
   const cancel = async () => {
     if (!confirm('Cancel this invoice?')) return;
@@ -138,6 +151,7 @@ export default function CustomerInvoiceEditor() {
           {invoice.status === 'draft' && <button className="btn btn-primary" onClick={issue} disabled={saving}>📨 Issue</button>}
           {invoice.status === 'issued' && <button className="btn btn-primary" onClick={markPaid}>✓ Mark paid</button>}
           <button className="btn btn-secondary" onClick={async () => { if (isEditable) { try { await save({ silent: true }); } catch { return; } } window.open(`/sales/${invoice.id}/print`, '_blank'); }}>🖨 {invoice.status === 'draft' ? 'Preview' : 'Print'}</button>
+          {invoice.status === 'paid' && <button className="btn btn-secondary" onClick={printReceipt}>🧾 Receipt</button>}
           {invoice.status !== 'paid' && invoice.status !== 'cancelled' && <button className="btn btn-danger" onClick={cancel}>Cancel</button>}
         </div>
       </div>
@@ -253,6 +267,32 @@ export default function CustomerInvoiceEditor() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={payOpen}
+        onClose={() => { if (!paying) setPayOpen(false); }}
+        title="Mark invoice paid"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPayOpen(false)} disabled={paying}>Cancel</Button>
+            <Button variant="primary" onClick={confirmPaid} disabled={paying}>{paying ? 'Saving…' : 'Mark paid & issue receipt'}</Button>
+          </>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="form-group">
+            <label>Paid on</label>
+            <input type="date" className="form-input" value={payDate} onChange={e => setPayDate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Payment method</label>
+            <select className="form-input" value={payMethod} onChange={e => setPayMethod(e.target.value)}>
+              <option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>Card</option><option>Other</option>
+            </select>
+          </div>
+          <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>A numbered receipt for the invoice total will be created.</p>
+        </div>
+      </Modal>
     </div>
   );
 }
