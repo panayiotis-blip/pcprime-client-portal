@@ -1907,6 +1907,48 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Client expense capture ---------
+  async uploadExpenseFile(clientId: number, file: File) {
+    const safe = file.name.replace(/[^\w.\-]+/g, '_');
+    const path = `${clientId}/${Date.now()}_${safe}`;
+    const { error } = await supabase.storage.from('client-expenses')
+      .upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (error) throw new Error(error.message);
+    return path;
+  },
+  async expenseFileUrl(path: string) {
+    const { data, error } = await supabase.storage.from('client-expenses').createSignedUrl(path, 300);
+    if (error) throw new Error(error.message);
+    return data.signedUrl;
+  },
+  async createClientExpense(row: Record<string, any>) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.from('client_expense')
+      .insert({ ...row, created_by: session?.user?.id || null }).select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+  async getMyExpenses(ownerClientId: number) {
+    const { data, error } = await supabase.from('client_expense')
+      .select('*').eq('owner_client_id', ownerClientId).order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async getClientExpenses(params?: { status?: string; client_id?: number }) {
+    let q = supabase.from('client_expense')
+      .select('*, client:clients(name, client_code)')
+      .order('created_at', { ascending: false });
+    if (params?.status)    q = q.eq('status', params.status);
+    if (params?.client_id) q = q.eq('owner_client_id', params.client_id);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({ ...r, client_name: r.client?.name || null, client_code: r.client?.client_code || null }));
+  },
+  async updateExpense(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('client_expense').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Customer invoices (a client billing their own customers) ---------
   async getCustomerInvoices(ownerClientId: number, params?: { status?: string; customer_id?: number }) {
     let q = supabase.from('customer_invoice')

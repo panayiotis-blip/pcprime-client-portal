@@ -33,6 +33,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/tasks',     label: 'Tasks',         icon: '☑' },
       { path: '/phone-log', label: 'Phone Log',    icon: '☎' },
       { path: '/messages',  label: 'Messages',     icon: '✉' },
+      { path: '/client-expenses', label: 'Client Expenses', icon: '📥' },
       { path: '/timesheet', label: 'Timesheet',    icon: '⏱' },
       { path: '/calendar',  label: 'Calendar',     icon: '◷' },
     ],
@@ -93,8 +94,8 @@ const clientNav: NavItem[] = [
   { path: '/my-customers', label: 'Customers',  icon: '👥' },
   { path: '/sales',        label: 'Sales Invoices', icon: '€' },
   { path: '/debtors',      label: 'Debtors',    icon: '◔' },
+  { path: '/my-expenses',  label: 'My Expenses', icon: '🧾' },
   { path: '/documents',    label: 'Documents',  icon: '⊟' },
-  { path: '/invoices',   label: 'Invoices',   icon: '☰' },
 ];
 
 // Does the active route belong to one of this group's items?
