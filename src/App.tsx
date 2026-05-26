@@ -56,6 +56,8 @@ import MergeClients from './components/Client/MergeClients';
 import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
 import PrivacyNotice from './components/Public/PrivacyNotice';
+import SignupApplication from './components/Public/SignupApplication';
+import Applications from './components/Admin/Applications';
 import MFAChallenge from './components/Auth/MFAChallenge';
 import DesignSystemDemo from './components/_design/DesignSystemDemo';
 
@@ -92,6 +94,7 @@ function AuthedApp() {
             <Route path="/tax-filings" element={<TaxFilingsPage />} />
             <Route path="/credentials" element={<CredentialsVault />} />
             <Route path="/audit" element={<AuditLog />} />
+            <Route path="/applications" element={<Applications />} />
             <Route path="/tasks" element={<StaffTasks />} />
             <Route path="/task-templates" element={<TaskTemplates />} />
             <Route path="/reports" element={<Reports />} />
@@ -154,6 +157,7 @@ function AppRoutes() {
       <Route path="/tax" element={<TaxCalculator />} />
       <Route path="/tax-calculator" element={<Navigate to="/tax" replace />} />
       <Route path="/privacy" element={<PrivacyNotice />} />
+      <Route path="/signup" element={<SignupApplication />} />
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
 
       {/* Everything else: authed → real app, anonymous → landing */}

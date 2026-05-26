@@ -77,7 +77,10 @@ export default function LoginPage() {
             Email me a magic link instead
           </button>
         </form>
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
+        <div style={{ marginTop: 16, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Link to="/signup" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
+            New client? Apply for an account
+          </Link>
           <Link to="/" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
             ← Back to Home
           </Link>

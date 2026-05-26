@@ -573,6 +573,25 @@ export const api = {
     });
   },
 
+  // --------- Client self-signup applications ---------
+  async submitApplication(payload: Record<string, any>) {
+    const { data, error } = await supabase.functions.invoke('submit-application', { body: payload });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Submission failed.');
+    return data;
+  },
+  async getApplications(status?: string) {
+    let q = supabase.from('portal_applications').select('*').order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async updateApplication(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('portal_applications').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Clients ---------
   // After migration 035, clients.email is text[]. To keep frontend code (forms,
   // displays) working with a string, translate at the API boundary: arrays come
