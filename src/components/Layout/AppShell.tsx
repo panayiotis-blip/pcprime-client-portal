@@ -88,6 +88,8 @@ const clientNav: NavItem[] = [
   { path: '/my-billing',   label: 'My Account', icon: '€' },
   { path: '/my-deadlines', label: 'Deadlines',  icon: '⏰' },
   { path: '/my-messages',  label: 'Messages',   icon: '✉' },
+  { path: '/my-company',   label: 'My Company', icon: '🏢' },
+  { path: '/my-customers', label: 'Customers',  icon: '👥' },
   { path: '/documents',    label: 'Documents',  icon: '⊟' },
   { path: '/invoices',   label: 'Invoices',   icon: '☰' },
 ];

@@ -1819,6 +1819,75 @@ export const api = {
     return count || 0;
   },
 
+  // --------- Client's own billing: company profile + customers ---------
+  // The client's invoicing identity. Falls back to their clients record so a
+  // brand-new client starts with the details the firm already holds.
+  async getCompanyProfile(clientId: number) {
+    const { data: profile, error } = await supabase.from('client_company_profile')
+      .select('*').eq('client_id', clientId).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (profile) return profile as Record<string, any>;
+    const { data: c } = await supabase.from('clients')
+      .select('name, address, city, postal_code, country, vat_number, phone, email')
+      .eq('id', clientId).maybeSingle();
+    return {
+      client_id: clientId,
+      business_name: c?.name || '',
+      registration_number: '',
+      vat_number: c?.vat_number || '',
+      address: [c?.address, [c?.postal_code, c?.city].filter(Boolean).join(' '), c?.country]
+        .filter(Boolean).join('\n'),
+      phone: c?.phone || '',
+      email: c?.email || '',
+      logo_url: null,
+      footer: '',
+      _isNew: true,
+    } as Record<string, any>;
+  },
+  async saveCompanyProfile(clientId: number, patch: Record<string, any>) {
+    const row: Record<string, any> = { ...patch, client_id: clientId };
+    delete row._isNew;
+    const { error } = await supabase.from('client_company_profile')
+      .upsert(row, { onConflict: 'client_id' });
+    if (error) throw new Error(error.message);
+  },
+  async uploadClientLogo(clientId: number, file: File): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'svg', 'webp'].includes(ext) ? ext : 'png';
+    const key = `${clientId}/logo-${Date.now()}.${safeExt}`;
+    const { error } = await supabase.storage.from('client-logos')
+      .upload(key, file, { upsert: true, contentType: file.type || 'image/png' });
+    if (error) throw new Error(error.message);
+    const { data: pub } = supabase.storage.from('client-logos').getPublicUrl(key);
+    return pub.publicUrl;
+  },
+
+  async getCustomers(ownerClientId: number) {
+    const { data, error } = await supabase.from('customer')
+      .select('*').eq('owner_client_id', ownerClientId).order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async saveCustomer(row: {
+    id?: number; owner_client_id: number; name: string;
+    contact_person?: string | null; email?: string | null; phone?: string | null;
+    vat_number?: string | null; address?: string | null; notes?: string | null; active?: boolean;
+  }) {
+    if (row.id) {
+      const { id, ...patch } = row;
+      const { error } = await supabase.from('customer').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+      return id;
+    }
+    const { data, error } = await supabase.from('customer').insert(row).select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+  async deleteCustomer(id: number) {
+    const { error } = await supabase.from('customer').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Service presets (reusable invoice line descriptions) ---------
   async getServicePresets(opts?: { activeOnly?: boolean }) {
     let q = supabase.from('service_presets').select('*')
