@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { JournalLine } from '../../types/invoice';
 import { api } from '../../services/api';
@@ -59,6 +59,25 @@ export default function InvoiceEditor() {
   const prevInvoice = currentIdx > 0 ? clientInvoices[currentIdx - 1] : null;
   const nextInvoice = currentIdx >= 0 && currentIdx < clientInvoices.length - 1 ? clientInvoices[currentIdx + 1] : null;
   const invoicePosition = currentIdx >= 0 ? `${currentIdx + 1} of ${clientInvoices.length}` : '';
+
+  // Duplicate detection — flag invoices already entered for this client that
+  // match on (supplier + invoice number) or (amount + date). Uses the
+  // already-loaded invoice list, so no extra fetch.
+  const duplicates = useMemo(() => {
+    if (!form.client_id) return [];
+    const norm = (s: any) => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+    const myId  = id && id !== 'new' ? parseInt(id) : -1;
+    const num   = norm(form.invoice_number);
+    const ven   = norm(form.vendor_name);
+    const amt   = Number(form.total_amount || 0);
+    const date  = (form.invoice_date || '').slice(0, 10);
+    return clientInvoices.filter((i: any) => {
+      if (i.id === myId) return false;
+      const sameNumberVendor = !!num && !!ven && norm(i.invoice_number) === num && norm(i.vendor_name) === ven;
+      const sameAmountDate   = amt > 0 && !!date && Number(i.total_amount || 0) === amt && (i.invoice_date || '').slice(0, 10) === date;
+      return sameNumberVendor || sameAmountDate;
+    });
+  }, [clientInvoices, form.client_id, form.invoice_number, form.vendor_name, form.total_amount, form.invoice_date, id]);
 
   useEffect(() => { api.getJournalTypes().then(setJournalTypes).catch(() => {}); }, []);
   useEffect(() => { api.getDocumentCategories().then(setDocCategories).catch(() => {}); }, []);
@@ -220,6 +239,13 @@ export default function InvoiceEditor() {
   };
 
   const handleSave = async (status: string) => {
+    if (duplicates.length > 0) {
+      const ok = window.confirm(
+        `⚠ Possible duplicate\n\nThis looks like ${duplicates.length === 1 ? 'an invoice' : `${duplicates.length} invoices`} already entered for this client `
+        + `(same supplier + invoice number, or same amount + date).\n\nSave anyway?`,
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       const data = {
@@ -302,6 +328,29 @@ export default function InvoiceEditor() {
           <button className="btn btn-primary" onClick={() => handleSave('draft')} disabled={saving}>{saving ? 'Saving...' : isBatch && batchIndex < totalInBatch - 1 ? 'Save & Next' : 'Save as Draft'}</button>
           <button className="btn btn-success" onClick={() => handleSave('reviewed')} disabled={saving}>{isBatch && batchIndex < totalInBatch - 1 ? 'Review & Next' : 'Mark as Reviewed'}</button>
         </div>
+
+        {/* Duplicate warning */}
+        {duplicates.length > 0 && (
+          <div className="no-print" style={{ background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13 }}>
+            <strong style={{ color: '#92400e' }}>⚠ Possible duplicate</strong>
+            <span style={{ color: '#92400e' }}> — already entered for this client:</span>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+              {duplicates.slice(0, 5).map((d: any) => (
+                <li key={d.id} style={{ marginBottom: 2 }}>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    style={{ background: 'none', border: 'none', padding: 0, color: '#1e40af', cursor: 'pointer', textAlign: 'left' }}
+                    onClick={() => window.open(`/invoices/${d.id}`, '_blank')}
+                  >
+                    {d.vendor_name || '—'} · {d.invoice_number || '(no number)'} · {d.invoice_date || '—'} · €{Number(d.total_amount || 0).toFixed(2)} ({d.status})
+                  </button>
+                </li>
+              ))}
+              {duplicates.length > 5 && <li style={{ color: '#92400e' }}>…and {duplicates.length - 5} more</li>}
+            </ul>
+          </div>
+        )}
 
         {/* Prev / Next navigation */}
         {id && id !== 'new' && (
