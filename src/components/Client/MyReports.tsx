@@ -18,18 +18,26 @@ export default function MyReports() {
   const [to, setTo]     = useState(today());
   const [invoices, setInvoices] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [published, setPublished] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     if (!owner) { setLoading(false); return; }
     (async () => {
       try {
-        const [inv, exp] = await Promise.all([api.getCustomerInvoices(owner), api.getMyExpenses(owner)]);
-        setInvoices(inv as any[]); setExpenses(exp as any[]);
+        const [inv, exp, pub] = await Promise.all([
+          api.getCustomerInvoices(owner), api.getMyExpenses(owner), api.getAdvisorReports(owner),
+        ]);
+        setInvoices(inv as any[]); setExpenses(exp as any[]); setPublished(pub as any[]);
       } catch (err: any) { alert('Failed to load: ' + err.message); }
       finally { setLoading(false); }
     })();
   }, [owner]);
+
+  const openReport = async (r: any) => {
+    try { window.open(await api.advisorReportFileUrl(r.storage_path), '_blank'); }
+    catch (err: any) { alert(err.message); }
+  };
 
   const r = useMemo(() => {
     const inRange = (d: string | null | undefined) => !!d && d >= from && d <= to;
@@ -87,6 +95,29 @@ export default function MyReports() {
         </div>
       </div>
 
+      {published.length > 0 && (
+        <div className="card no-print" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Reports from your accountant</h3>
+          <table className="export-table">
+            <thead>
+              <tr><th>Date</th><th>Title</th><th>Type</th><th>Period</th><th></th></tr>
+            </thead>
+            <tbody>
+              {published.map(r => (
+                <tr key={r.id}>
+                  <td>{(r.created_at || '').slice(0, 10)}</td>
+                  <td>{r.title}{r.notes ? <div style={{ fontSize: 12, color: '#94a3b8' }}>{r.notes}</div> : null}</td>
+                  <td>{r.report_type || '—'}</td>
+                  <td>{r.period_label || '—'}</td>
+                  <td style={{ textAlign: 'right' }}><button className="btn btn-link btn-sm" onClick={() => openReport(r)}>View / download</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <h3 className="no-print" style={{ marginBottom: 8 }}>Live figures from your data</h3>
       <div className="no-print" style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
         <button className={`btn ${mode === 'pnl' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMode('pnl')}>Profit &amp; Loss</button>
         <button className={`btn ${mode === 'vat' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMode('vat')}>VAT</button>

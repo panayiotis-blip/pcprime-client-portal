@@ -1949,6 +1949,39 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Advisor reports (firm publishes finished reports to a client) ---------
+  async uploadAdvisorReportFile(clientId: number, file: File) {
+    const safe = file.name.replace(/[^\w.\-]+/g, '_');
+    const path = `${clientId}/${Date.now()}_${safe}`;
+    const { error } = await supabase.storage.from('advisor-reports')
+      .upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (error) throw new Error(error.message);
+    return path;
+  },
+  async advisorReportFileUrl(path: string) {
+    const { data, error } = await supabase.storage.from('advisor-reports').createSignedUrl(path, 300);
+    if (error) throw new Error(error.message);
+    return data.signedUrl;
+  },
+  async createAdvisorReport(row: Record<string, any>) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.from('advisor_report')
+      .insert({ ...row, uploaded_by: session?.user?.id || null }).select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+  async getAdvisorReports(ownerClientId: number) {
+    const { data, error } = await supabase.from('advisor_report')
+      .select('*').eq('owner_client_id', ownerClientId).order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async deleteAdvisorReport(id: number, storagePath?: string | null) {
+    if (storagePath) await supabase.storage.from('advisor-reports').remove([storagePath]);
+    const { error } = await supabase.from('advisor_report').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Customer invoices (a client billing their own customers) ---------
   async getCustomerInvoices(ownerClientId: number, params?: { status?: string; customer_id?: number }) {
     let q = supabase.from('customer_invoice')
