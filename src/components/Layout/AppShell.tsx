@@ -176,6 +176,7 @@ export default function AppShell() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [newTaskCount, setNewTaskCount] = useState(0);
+  const [msgUnread, setMsgUnread] = useState(0);
 
   // Per-user explicit collapse/expand state. Loaded once, persisted on change.
   const [groupStates, setGroupStates] = useState<Record<string, 'expanded' | 'collapsed'>>({});
@@ -207,6 +208,20 @@ export default function AppShell() {
     try {
       const count = await api.countNewTasksForUser(user.id, lastSeen);
       setNewTaskCount(count);
+    } catch {}
+  }, [user]);
+
+  // Unread-message badge — staff: total unread across all clients' threads;
+  // client: firm replies they haven't read yet.
+  const refreshMsgBadge = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      if (isStaffRole(user)) {
+        const inbox = await api.getMessageInbox();
+        setMsgUnread(inbox.reduce((s, r) => s + (r.unread || 0), 0));
+      } else if (user.client_id) {
+        setMsgUnread(await api.getMyUnreadMessageCount(user.client_id));
+      }
     } catch {}
   }, [user]);
 
@@ -245,6 +260,15 @@ export default function AppShell() {
     return () => clearInterval(id);
   }, [refreshTaskBadge]);
   useEffect(() => { refreshTaskBadge(); }, [location.pathname, refreshTaskBadge]);
+
+  // Same cadence for the message badge (also refreshes on navigation, so it
+  // clears shortly after the user opens and reads their messages).
+  useEffect(() => {
+    refreshMsgBadge();
+    const id = setInterval(refreshMsgBadge, 60000);
+    return () => clearInterval(id);
+  }, [refreshMsgBadge]);
+  useEffect(() => { refreshMsgBadge(); }, [location.pathname, refreshMsgBadge]);
 
   // Group expanded check — explicit state wins; otherwise smart default
   const isGroupExpanded = useCallback((g: NavGroup) => {
@@ -302,6 +326,7 @@ export default function AppShell() {
             </li>
             {CLIENT_GROUPS.map(g => {
               const expanded = isGroupExpanded(g);
+              const groupBadge = g.items.some(i => i.path === '/my-messages') ? msgUnread : 0;
               return (
                 <li key={g.key} className="sidebar-group">
                   <button
@@ -311,6 +336,11 @@ export default function AppShell() {
                     title={expanded ? 'Collapse' : 'Expand'}
                   >
                     <span className="sidebar-group-label">{g.label}</span>
+                    {!expanded && groupBadge > 0 && (
+                      <span className="nav-badge" title={`${groupBadge} new message${groupBadge === 1 ? '' : 's'} from your accountant`}>
+                        {groupBadge > 9 ? '9+' : groupBadge}
+                      </span>
+                    )}
                     <span className="sidebar-group-chevron">{expanded ? '▾' : '▸'}</span>
                   </button>
                   {expanded && (
@@ -323,6 +353,11 @@ export default function AppShell() {
                             onClick={() => setSidebarOpen(false)}
                           >
                             <span className="nav-icon">{item.icon}</span>{item.label}
+                            {item.path === '/my-messages' && msgUnread > 0 && (
+                              <span className="nav-badge" title={`${msgUnread} new message${msgUnread === 1 ? '' : 's'} from your accountant`}>
+                                {msgUnread > 9 ? '9+' : msgUnread}
+                              </span>
+                            )}
                           </Link>
                         </li>
                       ))}
@@ -440,8 +475,10 @@ export default function AppShell() {
           {/* Grouped items */}
           {groupStateLoaded && visibleGroups.map(g => {
             const expanded   = isGroupExpanded(g);
-            // Count of badges inside this group (currently only Tasks)
-            const groupBadge = g.items.some(i => i.path === '/tasks') ? newTaskCount : 0;
+            // Count of badges inside this group (Tasks + unread Messages)
+            const groupBadge =
+              (g.items.some(i => i.path === '/tasks') ? newTaskCount : 0) +
+              (g.items.some(i => i.path === '/messages') ? msgUnread : 0);
             return (
               <li key={g.key} className="sidebar-group">
                 <button
@@ -475,6 +512,11 @@ export default function AppShell() {
                             {item.path === '/tasks' && newTaskCount > 0 && (
                               <span className="nav-badge" title={`${newTaskCount} new task${newTaskCount === 1 ? '' : 's'} assigned to you`}>
                                 {newTaskCount > 9 ? '9+' : newTaskCount}
+                              </span>
+                            )}
+                            {item.path === '/messages' && msgUnread > 0 && (
+                              <span className="nav-badge" title={`${msgUnread} unread client message${msgUnread === 1 ? '' : 's'}`}>
+                                {msgUnread > 9 ? '9+' : msgUnread}
                               </span>
                             )}
                             <button
