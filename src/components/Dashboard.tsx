@@ -97,6 +97,9 @@ function ClientDashboard() {
         <Link to="/my-billing" className="btn btn-primary btn-lg">My Account</Link>
         <Link to="/documents" className="btn btn-secondary btn-lg">Upload Documents</Link>
       </div>
+      <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 16 }}>
+        Documents you upload are processed with automated/AI tools and reviewed by our team before being finalised. See our <Link to="/privacy">Privacy Notice</Link>.
+      </p>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 
-const LAST_UPDATED = '11 May 2026';
+const LAST_UPDATED = '26 May 2026';
 
 export default function PrivacyNotice() {
   return (
@@ -83,7 +83,22 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>4. Who we share your data with</h2>
+        <h2>4. Automated and AI-assisted processing</h2>
+        <p>
+          To speed up bookkeeping, documents you upload (such as invoices and expenses) are
+          processed using automated and AI-assisted tools that read the document and extract
+          details such as the supplier, date, amounts and VAT.
+        </p>
+        <ul>
+          <li>This extraction is an aid, not a final record — <strong>our staff review every entry</strong> before it is finalised in your accounts.</li>
+          <li>Automated extraction can contain errors; we are not liable for decisions taken on the basis of un-reviewed extracted data.</li>
+          <li>Document images may be sent to a third-party AI provider solely to perform this extraction. Your documents are <strong>not</strong> used to train AI models.</li>
+          <li>This processing is carried out to perform our services (Art. 6(1)(b)) and in our legitimate interest in efficient processing (Art. 6(1)(f)).</li>
+        </ul>
+      </section>
+
+      <section style={{ marginBottom: 28 }}>
+        <h2>5. Who we share your data with</h2>
         <p>We only share personal data where we have to. The recipients are:</p>
         <ul>
           <li><strong>Tax and government authorities</strong> — Cyprus Tax Department, Social Insurance Services, Registrar of Companies and similar bodies, when filing on your behalf or where required by law.</li>
@@ -91,6 +106,7 @@ export default function PrivacyNotice() {
             <ul>
               <li><strong>Supabase Inc.</strong> — hosted database and file storage. EU project region (Frankfurt).</li>
               <li><strong>Vercel Inc.</strong> — web application hosting. EU edge region (Frankfurt) with global CDN.</li>
+              <li><strong>Anthropic</strong> — AI provider used to read uploaded documents and extract their details. Used only to perform the extraction; not for model training.</li>
             </ul>
           </li>
           <li><strong>Professional advisers</strong> — lawyers, auditors or other regulated professionals where strictly necessary, under a duty of confidentiality.</li>
@@ -102,7 +118,7 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>5. International transfers</h2>
+        <h2>6. International transfers</h2>
         <p>
           Your data is hosted in the European Union. Where any processor (e.g. CDN edge nodes) may
           transit data outside the EU, the transfer is protected by the European Commission's
@@ -111,7 +127,7 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>6. How long we keep your data</h2>
+        <h2>7. How long we keep your data</h2>
         <ul>
           <li><strong>Accounting records and supporting documents</strong> — at least 6 years from the end of the tax year, as required by Cyprus tax law.</li>
           <li><strong>KYC and AML records</strong> — 5 years from the end of the client relationship.</li>
@@ -123,7 +139,7 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>7. How we protect your data</h2>
+        <h2>8. How we protect your data</h2>
         <ul>
           <li>Encryption in transit (HTTPS/TLS) for all portal traffic.</li>
           <li>Encryption at rest for the database and file storage.</li>
@@ -135,7 +151,7 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>8. Your rights</h2>
+        <h2>9. Your rights</h2>
         <p>Under the EU General Data Protection Regulation (GDPR) you have the right to:</p>
         <ul>
           <li><strong>Access</strong> the personal data we hold about you.</li>
@@ -154,7 +170,7 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>9. Supervisory authority</h2>
+        <h2>10. Supervisory authority</h2>
         <p>
           If you believe we have not handled your personal data properly, you can complain to
           the Cyprus supervisory authority:
@@ -169,7 +185,7 @@ export default function PrivacyNotice() {
       </section>
 
       <section style={{ marginBottom: 28 }}>
-        <h2>10. Changes to this notice</h2>
+        <h2>11. Changes to this notice</h2>
         <p>
           We may update this notice from time to time. The current version is always available
           at <Link to="/privacy">/privacy</Link>. The date at the top of the page shows when it
