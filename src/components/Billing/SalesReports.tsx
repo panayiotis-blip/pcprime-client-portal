@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import PrintToolbar from '../shared/PrintToolbar';
 
 type Mode = 'sales' | 'vat' | 'receipts';
 
@@ -187,7 +188,6 @@ export default function SalesReports() {
         <div className="dashboard-actions no-print" style={{ display: 'flex', gap: 8 }}>
           <Link to="/billing" className="btn btn-secondary">← Invoices</Link>
           <button className="btn btn-secondary" onClick={downloadCsv}>⬇ Download CSV</button>
-          <button className="btn btn-primary" onClick={() => window.print()}>🖨 Print</button>
         </div>
       </div>
 
@@ -230,19 +230,23 @@ export default function SalesReports() {
         </div>
       </div>
 
-      <h3 style={{ marginTop: 0 }}>
-        {mode === 'sales' ? 'Sales' : mode === 'vat' ? 'Output VAT' : 'Receipts'} — {from || '…'} to {to || '…'}
-      </h3>
+      <PrintToolbar fileBase={`${mode}-${from}-to-${to}`} targetSelector=".report-export" showClose={false} />
 
-      {loading ? (
-        <div className="loading-screen">Loading…</div>
-      ) : mode === 'sales' ? (
-        <SalesTable rows={sales} totals={salesTotals} />
-      ) : mode === 'vat' ? (
-        <VatTable rows={vatSummary} totals={vatTotals} />
-      ) : (
-        <ReceiptsTable rows={receipts} totals={receiptsTotals} />
-      )}
+      <div className="report-export">
+        <h3 style={{ marginTop: 0 }}>
+          {mode === 'sales' ? 'Sales' : mode === 'vat' ? 'Output VAT' : 'Receipts'} — {from || '…'} to {to || '…'}
+        </h3>
+
+        {loading ? (
+          <div className="loading-screen">Loading…</div>
+        ) : mode === 'sales' ? (
+          <SalesTable rows={sales} totals={salesTotals} />
+        ) : mode === 'vat' ? (
+          <VatTable rows={vatSummary} totals={vatTotals} />
+        ) : (
+          <ReceiptsTable rows={receipts} totals={receiptsTotals} />
+        )}
+      </div>
     </div>
   );
 }

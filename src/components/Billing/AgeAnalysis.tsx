@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import PrintToolbar from '../shared/PrintToolbar';
 
 const DAY = 86_400_000;
 
@@ -87,9 +88,13 @@ export default function AgeAnalysis() {
         <h2>Age Analysis — Outstanding Invoices</h2>
         <div className="dashboard-actions no-print" style={{ display: 'flex', gap: 8 }}>
           <Link to="/billing" className="btn btn-secondary">← Invoices</Link>
-          <button className="btn btn-primary" onClick={() => window.print()}>Print</button>
         </div>
       </div>
+
+      <PrintToolbar fileBase={`age-analysis-${new Date().toISOString().slice(0, 10)}`} targetSelector=".report-export" showClose={false} />
+
+      <div className="report-export">
+        <h3 style={{ marginTop: 0 }}>Outstanding invoices — as at {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</h3>
 
       {loading ? (
         <div className="loading-screen">Loading…</div>
@@ -136,6 +141,7 @@ export default function AgeAnalysis() {
           </table>
         </div>
       )}
+      </div>
     </div>
   );
 }
