@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { buildStatement } from './statement';
+import PrintToolbar from '../shared/PrintToolbar';
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—';
@@ -38,12 +39,6 @@ export default function StatementPrint() {
     })();
     return () => { cancelled = true; };
   }, [clientId]);
-
-  useEffect(() => {
-    if (loading || capturing) return;
-    const t = setTimeout(() => { try { window.print(); } catch {} }, 300);
-    return () => clearTimeout(t);
-  }, [loading, capturing]);
 
   const statement = useMemo(
     () => (data ? buildStatement(data.invoices, data.receipts, from, to) : null),
@@ -106,12 +101,7 @@ export default function StatementPrint() {
         .print-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
       `}</style>
 
-      {!capturing && (
-        <div className="print-actions">
-          <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>
-          <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
-        </div>
-      )}
+      {!capturing && <PrintToolbar fileBase={`Statement-${c.client_code || clientId}`} />}
 
       <header className="inv-header">
         {co.logo_url && <img src={co.logo_url} alt={co.name || 'Company logo'} />}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import PrintToolbar from '../shared/PrintToolbar';
 
 const SERVICES = [
   'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
@@ -81,13 +82,6 @@ export default function TimesheetPrint() {
     return () => { cancelled = true; };
   }, [staffId, fromDate, toDate, clientId, serviceP]);
 
-  // Trigger the print dialog once everything has loaded
-  useEffect(() => {
-    if (loading) return;
-    const t = setTimeout(() => { try { window.print(); } catch {} }, 300);
-    return () => clearTimeout(t);
-  }, [loading]);
-
   const staffName = (uid: string) => staff.find(u => u.id === uid)?.display_name || uid;
   const subjectStaff = staffId ? staffName(staffId) : 'All staff';
 
@@ -156,10 +150,7 @@ export default function TimesheetPrint() {
         .print-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
       `}</style>
 
-      <div className="print-actions">
-        <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>
-        <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
-      </div>
+      <PrintToolbar fileBase="Timesheet" />
 
       {/* Letterhead */}
       <header className="ts-header">

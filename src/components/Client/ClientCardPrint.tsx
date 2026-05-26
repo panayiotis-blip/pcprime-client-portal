@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { EmailLinks } from '../shared/MultiEmail';
 import { vatCategoryLabel, vatPeriods } from '../../services/vatCategories';
+import PrintToolbar from '../shared/PrintToolbar';
 
 type ComplianceTask = {
   id: number;
@@ -96,11 +97,6 @@ export default function ClientCardPrint() {
     return () => { cancelled = true; };
   }, [clientId]);
 
-  useEffect(() => {
-    if (loading || error) return;
-    const t = setTimeout(() => { try { window.print(); } catch {} }, 250);
-    return () => clearTimeout(t);
-  }, [loading, error]);
 
   const complianceByKind = useMemo(() => {
     const byKind = new Map<string, ComplianceTask>();
@@ -149,7 +145,7 @@ export default function ClientCardPrint() {
     <div className="print-card-page" style={brandVars}>
       <div className="print-card-toolbar no-print">
         <Link to={`/clients/${clientId}`} className="btn btn-link">← Back to client</Link>
-        <button className="btn btn-primary" onClick={() => window.print()}>🖨 Print</button>
+        <PrintToolbar fileBase={`ClientCard-${client.client_code || client.name}`} targetSelector=".print-card-page" showClose={false} />
       </div>
 
       <article className="print-card">

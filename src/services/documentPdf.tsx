@@ -37,36 +37,48 @@ export async function generateDocumentPdf(routePath: string): Promise<string> {
     const target = await waitFor(host, '.print-page', 20_000);
     // Let the letterhead logo and fonts settle before snapshotting.
     await delay(600);
-
-    const canvas = await html2canvas(target, {
-      scale: 2,
-      backgroundColor: '#ffffff',
-      useCORS: true,
-      logging: false,
-    });
-
-    const pdf   = new jsPDF('p', 'mm', 'a4');
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const imgH  = (canvas.height * pageW) / canvas.width;
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-    let heightLeft = imgH;
-    let position   = 0;
-    pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position -= pageH;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
-      heightLeft -= pageH;
-    }
-
+    const pdf = await elementToPdf(target);
     return pdf.output('datauristring').split(',')[1];
   } finally {
     root.unmount();
     host.remove();
   }
+}
+
+// Snapshot a live DOM element into an A4 PDF (slicing tall content across
+// pages). Elements marked `.no-print` (e.g. the toolbar) are skipped.
+export async function elementToPdf(target: HTMLElement): Promise<jsPDF> {
+  const canvas = await html2canvas(target, {
+    scale: 2,
+    backgroundColor: '#ffffff',
+    useCORS: true,
+    logging: false,
+    ignoreElements: (el) => (el as HTMLElement).classList?.contains('no-print'),
+  });
+
+  const pdf   = new jsPDF('p', 'mm', 'a4');
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgH  = (canvas.height * pageW) / canvas.width;
+  const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+  let heightLeft = imgH;
+  let position   = 0;
+  pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+  heightLeft -= pageH;
+  while (heightLeft > 0) {
+    position -= pageH;
+    pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+    heightLeft -= pageH;
+  }
+  return pdf;
+}
+
+// Build the PDF for a live element and trigger a browser download.
+export async function downloadElementPdf(target: HTMLElement, filename: string): Promise<void> {
+  const pdf = await elementToPdf(target);
+  pdf.save(filename);
 }
 
 const delay = (ms: number) => new Promise<void>(r => setTimeout(r, ms));

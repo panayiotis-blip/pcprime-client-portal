@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import PrintToolbar from '../shared/PrintToolbar';
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—';
@@ -35,12 +36,6 @@ export default function InvoicePrint() {
     })();
     return () => { cancelled = true; };
   }, [id]);
-
-  useEffect(() => {
-    if (loading || capturing) return;
-    const t = setTimeout(() => { try { window.print(); } catch {} }, 300);
-    return () => clearTimeout(t);
-  }, [loading, capturing]);
 
   if (loading) return <div className="loading-screen">Loading…</div>;
   if (!invoice) return <div className="empty-state"><p>Invoice not found.</p></div>;
@@ -132,12 +127,7 @@ export default function InvoicePrint() {
         .status-stamp.draft    { color: rgba(100, 116, 139, 0.22); border-color: rgba(100, 116, 139, 0.22); }
       `}</style>
 
-      {!capturing && (
-        <div className="print-actions">
-          <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>
-          <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
-        </div>
-      )}
+      {!capturing && <PrintToolbar fileBase={`Invoice-${invoice.invoice_number || invoice.id}`} />}
 
       <div className="inv-body">
         {invoice.status === 'paid'      && <div className="status-stamp paid">PAID</div>}

@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import PrintToolbar from '../shared/PrintToolbar';
 
 const fmtDate = (iso: string | null | undefined) => {
   if (!iso) return '—';
@@ -34,12 +35,6 @@ export default function ReceiptPrint() {
     })();
     return () => { cancelled = true; };
   }, [id]);
-
-  useEffect(() => {
-    if (loading || capturing) return;
-    const t = setTimeout(() => { try { window.print(); } catch {} }, 300);
-    return () => clearTimeout(t);
-  }, [loading, capturing]);
 
   if (loading) return <div className="loading-screen">Loading…</div>;
   if (!receipt) return <div className="empty-state"><p>Receipt not found.</p></div>;
@@ -92,12 +87,7 @@ export default function ReceiptPrint() {
         .print-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
       `}</style>
 
-      {!capturing && (
-        <div className="print-actions">
-          <button className="btn btn-secondary btn-sm" onClick={() => window.close()}>Close</button>
-          <button className="btn btn-primary btn-sm" onClick={() => window.print()}>Print</button>
-        </div>
-      )}
+      {!capturing && <PrintToolbar fileBase={`Receipt-${receipt.receipt_number}`} />}
 
       <header className="inv-header">
         {co.logo_url && <img src={co.logo_url} alt={co.name || 'Company logo'} />}
