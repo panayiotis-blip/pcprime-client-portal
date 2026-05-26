@@ -27,6 +27,21 @@ Deno.serve(async (req) => {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ ok: false, error: 'Please enter a valid email address.' });
     if (!p.terms_accepted) return json({ ok: false, error: 'You must accept the terms to apply.' });
 
+    // Captcha (Cloudflare Turnstile) — enforced only when the secret is set,
+    // so the form keeps working until the keys are configured.
+    const turnstileSecret = Deno.env.get('TURNSTILE_SECRET_KEY');
+    if (turnstileSecret) {
+      const captcha = (p.captcha_token || '').trim();
+      if (!captcha) return json({ ok: false, error: 'Please complete the captcha.' });
+      const verify = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ secret: turnstileSecret, response: captcha }),
+      });
+      const vr = await verify.json().catch(() => ({ success: false }));
+      if (!vr.success) return json({ ok: false, error: 'Captcha verification failed — please try again.' });
+    }
+
     const supa = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',

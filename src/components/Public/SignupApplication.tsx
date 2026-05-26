@@ -1,6 +1,37 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+
+// Cloudflare Turnstile widget. Renders only when a site key is configured
+// (VITE_TURNSTILE_SITE_KEY); otherwise the form works without a captcha.
+function Turnstile({ siteKey, onToken }: { siteKey: string; onToken: (t: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let widgetId: string | undefined;
+    const render = () => {
+      const ts = (window as any).turnstile;
+      if (ts && ref.current && ref.current.childElementCount === 0) {
+        widgetId = ts.render(ref.current, {
+          sitekey: siteKey,
+          callback: (t: string) => onToken(t),
+          'expired-callback': () => onToken(''),
+        });
+      }
+    };
+    const SCRIPT_ID = 'cf-turnstile-script';
+    if ((window as any).turnstile) render();
+    else if (!document.getElementById(SCRIPT_ID)) {
+      const s = document.createElement('script');
+      s.id = SCRIPT_ID; s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'; s.async = true; s.defer = true;
+      s.onload = render; document.head.appendChild(s);
+    } else {
+      document.getElementById(SCRIPT_ID)!.addEventListener('load', render);
+    }
+    return () => { const ts = (window as any).turnstile; if (widgetId && ts) { try { ts.remove(widgetId); } catch { /* ignore */ } } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteKey]);
+  return <div ref={ref} style={{ marginTop: 8 }} />;
+}
 
 const EMPTY = {
   business_name: '', business_type: '', contact_person: '', email: '', phone: '',
@@ -14,13 +45,16 @@ export default function SignupApplication() {
   const [form, setForm] = useState({ ...EMPTY });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [token, setToken] = useState('');
+  const siteKey = (import.meta.env as any).VITE_TURNSTILE_SITE_KEY as string | undefined;
   const f = (k: string, v: any) => setForm(s => ({ ...s, [k]: v }));
 
   const submit = async () => {
     if (!form.business_name.trim() || !form.email.trim()) { alert('Business name and email are required.'); return; }
     if (!form.terms_accepted) { alert('Please accept the terms to apply.'); return; }
+    if (siteKey && !token) { alert('Please complete the captcha.'); return; }
     setBusy(true);
-    try { await api.submitApplication(form); setDone(true); }
+    try { await api.submitApplication({ ...form, captcha_token: token }); setDone(true); }
     catch (err: any) { alert('Could not submit: ' + err.message); }
     finally { setBusy(false); }
   };
@@ -94,6 +128,7 @@ export default function SignupApplication() {
           <input type="checkbox" checked={form.terms_accepted} onChange={e => f('terms_accepted', e.target.checked)} />
           I agree to the <Link to="/privacy">privacy notice</Link> and terms of use.
         </label>
+        {siteKey && <Turnstile siteKey={siteKey} onToken={setToken} />}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
           <Link to="/login" style={{ fontSize: 13 }}>Already have an account? Log in</Link>
           <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy ? 'Submitting…' : 'Submit application'}</button>

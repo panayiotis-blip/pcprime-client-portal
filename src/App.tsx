@@ -53,6 +53,7 @@ import CustomerReceiptPrint from './components/Client/CustomerReceiptPrint';
 import CustomerDebtors from './components/Client/CustomerDebtors';
 import MyExpenses from './components/Client/MyExpenses';
 import ClientExpenses from './components/Admin/ClientExpenses';
+import MyReports from './components/Client/MyReports';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -116,6 +117,7 @@ function AuthedApp() {
             <Route path="/sales/:id" element={<CustomerInvoiceEditor />} />
             <Route path="/debtors" element={<CustomerDebtors />} />
             <Route path="/my-expenses" element={<MyExpenses />} />
+            <Route path="/my-reports" element={<MyReports />} />
             <Route path="/client-expenses" element={<ClientExpenses />} />
             <Route path="/messages" element={<MessagesInbox />} />
             <Route path="/billing" element={<InvoicesList />} />

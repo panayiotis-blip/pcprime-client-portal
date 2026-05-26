@@ -89,22 +89,23 @@ const STAFF_GROUPS: NavGroup[] = [
 // relationship vs the client's own business.
 const CLIENT_GROUPS: NavGroup[] = [
   {
-    key: 'client-with-us', label: 'With us',
-    items: [
-      { path: '/my-billing',   label: 'My Account',  icon: '€' },
-      { path: '/my-deadlines', label: 'Deadlines',   icon: '⏰' },
-      { path: '/my-expenses',  label: 'My Expenses', icon: '🧾' },
-      { path: '/documents',    label: 'Documents',   icon: '⊟' },
-      { path: '/my-messages',  label: 'Messages',    icon: '✉' },
-    ],
-  },
-  {
     key: 'client-my-business', label: 'My business',
     items: [
       { path: '/my-company',   label: 'My Company',     icon: '🏢' },
       { path: '/my-customers', label: 'Customers',      icon: '👥' },
       { path: '/sales',        label: 'Sales Invoices', icon: '€' },
       { path: '/debtors',      label: 'Debtors',        icon: '◔' },
+      { path: '/my-expenses',  label: 'My Expenses',    icon: '🧾' },
+      { path: '/my-reports',   label: 'Reports',        icon: '◧' },
+    ],
+  },
+  {
+    key: 'client-with-us', label: 'Accountant',
+    items: [
+      { path: '/my-billing',   label: 'My Account',  icon: '€' },
+      { path: '/my-deadlines', label: 'Deadlines',   icon: '⏰' },
+      { path: '/documents',    label: 'Documents',   icon: '⊟' },
+      { path: '/my-messages',  label: 'Messages',    icon: '✉' },
     ],
   },
 ];
