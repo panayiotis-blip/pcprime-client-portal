@@ -1888,6 +1888,80 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Customer invoices (a client billing their own customers) ---------
+  async getCustomerInvoices(ownerClientId: number, params?: { status?: string; customer_id?: number }) {
+    let q = supabase.from('customer_invoice')
+      .select('*, customer:customer(name)')
+      .eq('owner_client_id', ownerClientId)
+      .order('issue_date', { ascending: false, nullsFirst: true })
+      .order('id', { ascending: false });
+    if (params?.status)      q = q.eq('status', params.status);
+    if (params?.customer_id) q = q.eq('customer_id', params.customer_id);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({ ...r, customer_name: r.customer?.name || null }));
+  },
+  async getCustomerInvoice(id: number) {
+    const [{ data: inv, error: e1 }, { data: lines, error: e2 }] = await Promise.all([
+      supabase.from('customer_invoice')
+        .select('*, customer:customer(name, address, email, phone, vat_number)')
+        .eq('id', id).maybeSingle(),
+      supabase.from('customer_invoice_line').select('*').eq('invoice_id', id)
+        .order('line_no', { ascending: true }).order('id', { ascending: true }),
+    ]);
+    if (e1) throw new Error(e1.message);
+    if (e2) throw new Error(e2.message);
+    if (!inv) throw new Error('Invoice not found');
+    return { ...inv, lines: lines || [] };
+  },
+  async createCustomerInvoice(data: {
+    owner_client_id: number; customer_id: number;
+    issue_date?: string | null; due_date?: string | null; notes?: string | null;
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('customer_invoice').insert({
+      owner_client_id: data.owner_client_id,
+      customer_id:     data.customer_id,
+      issue_date:      data.issue_date || null,
+      due_date:        data.due_date || null,
+      notes:           data.notes ?? null,
+      created_by:      session?.user?.id || null,
+    }).select('id').single();
+    if (error) throw new Error(error.message);
+    return { id: row.id as number };
+  },
+  async updateCustomerInvoice(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('customer_invoice').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async addCustomerInvoiceLine(invoiceId: number, line: Record<string, any>) {
+    const { data, error } = await supabase.from('customer_invoice_line')
+      .insert({ invoice_id: invoiceId, ...line }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async updateCustomerInvoiceLine(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('customer_invoice_line').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteCustomerInvoiceLine(id: number) {
+    const { error } = await supabase.from('customer_invoice_line').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async issueCustomerInvoice(id: number) {
+    const { data, error } = await supabase.rpc('issue_customer_invoice', { p_id: id });
+    if (error) throw new Error(error.message);
+    return data as string;
+  },
+  async markCustomerInvoicePaid(id: number, paidDate?: string) {
+    const { error } = await supabase.rpc('mark_customer_invoice_paid', { p_id: id, p_paid_date: paidDate || null });
+    if (error) throw new Error(error.message);
+  },
+  async cancelCustomerInvoice(id: number) {
+    const { error } = await supabase.rpc('cancel_customer_invoice', { p_id: id });
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Service presets (reusable invoice line descriptions) ---------
   async getServicePresets(opts?: { activeOnly?: boolean }) {
     let q = supabase.from('service_presets').select('*')
