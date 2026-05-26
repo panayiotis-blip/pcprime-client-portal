@@ -177,6 +177,7 @@ export default function AppShell() {
   const { user, logout } = useAuth();
   const [newTaskCount, setNewTaskCount] = useState(0);
   const [msgUnread, setMsgUnread] = useState(0);
+  const [expenseCount, setExpenseCount] = useState(0);
 
   // Per-user explicit collapse/expand state. Loaded once, persisted on change.
   const [groupStates, setGroupStates] = useState<Record<string, 'expanded' | 'collapsed'>>({});
@@ -225,6 +226,12 @@ export default function AppShell() {
     } catch {}
   }, [user]);
 
+  // Staff-only badge: client expenses awaiting review (status 'submitted').
+  const refreshExpenseBadge = useCallback(async () => {
+    if (!user?.id || !isStaffRole(user)) return;
+    try { setExpenseCount(await api.countSubmittedExpenses()); } catch {}
+  }, [user]);
+
   // Load sidebar state once on mount
   useEffect(() => {
     if (!user?.id || !isStaffRole(user)) { setGroupStateLoaded(true); return; }
@@ -269,6 +276,13 @@ export default function AppShell() {
     return () => clearInterval(id);
   }, [refreshMsgBadge]);
   useEffect(() => { refreshMsgBadge(); }, [location.pathname, refreshMsgBadge]);
+
+  useEffect(() => {
+    refreshExpenseBadge();
+    const id = setInterval(refreshExpenseBadge, 60000);
+    return () => clearInterval(id);
+  }, [refreshExpenseBadge]);
+  useEffect(() => { refreshExpenseBadge(); }, [location.pathname, refreshExpenseBadge]);
 
   // Group expanded check — explicit state wins; otherwise smart default
   const isGroupExpanded = useCallback((g: NavGroup) => {
@@ -475,10 +489,11 @@ export default function AppShell() {
           {/* Grouped items */}
           {groupStateLoaded && visibleGroups.map(g => {
             const expanded   = isGroupExpanded(g);
-            // Count of badges inside this group (Tasks + unread Messages)
+            // Count of badges inside this group (Tasks + unread Messages + expenses to review)
             const groupBadge =
               (g.items.some(i => i.path === '/tasks') ? newTaskCount : 0) +
-              (g.items.some(i => i.path === '/messages') ? msgUnread : 0);
+              (g.items.some(i => i.path === '/messages') ? msgUnread : 0) +
+              (g.items.some(i => i.path === '/client-expenses') ? expenseCount : 0);
             return (
               <li key={g.key} className="sidebar-group">
                 <button
@@ -517,6 +532,11 @@ export default function AppShell() {
                             {item.path === '/messages' && msgUnread > 0 && (
                               <span className="nav-badge" title={`${msgUnread} unread client message${msgUnread === 1 ? '' : 's'}`}>
                                 {msgUnread > 9 ? '9+' : msgUnread}
+                              </span>
+                            )}
+                            {item.path === '/client-expenses' && expenseCount > 0 && (
+                              <span className="nav-badge" title={`${expenseCount} client expense${expenseCount === 1 ? '' : 's'} awaiting review`}>
+                                {expenseCount > 9 ? '9+' : expenseCount}
                               </span>
                             )}
                             <button

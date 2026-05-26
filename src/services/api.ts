@@ -1948,6 +1948,13 @@ export const api = {
     const { error } = await supabase.from('client_expense').update(patch).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  // Count of client expenses awaiting review (for the staff sidebar badge).
+  async countSubmittedExpenses() {
+    const { count, error } = await supabase.from('client_expense')
+      .select('id', { count: 'exact', head: true }).eq('status', 'submitted');
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
 
   // --------- Advisor reports (firm publishes finished reports to a client) ---------
   async uploadAdvisorReportFile(clientId: number, file: File) {
