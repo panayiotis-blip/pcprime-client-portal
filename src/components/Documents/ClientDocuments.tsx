@@ -271,14 +271,15 @@ export default function ClientDocuments({ clientId }: Props) {
     <div className="client-documents">
       <div className="list-header">
         <h3>Documents</h3>
-        {isStaffRole(user) && (
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {isStaffRole(user) && (
             <button className="btn btn-secondary btn-sm" onClick={() => setShowNewFolder('root')}>+ New Top Folder</button>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowUpload(!showUpload)} disabled={!activeFolder}>
-              {showUpload ? 'Cancel' : '+ Upload'}
-            </button>
-          </div>
-        )}
+          )}
+          {/* Clients may upload into existing folders, but not create/delete folders or delete files. */}
+          <button className="btn btn-primary btn-sm" onClick={() => setShowUpload(!showUpload)} disabled={!activeFolder}>
+            {showUpload ? 'Cancel' : '+ Upload'}
+          </button>
+        </div>
       </div>
 
       {showNewFolder === 'root' && (
@@ -387,7 +388,7 @@ export default function ClientDocuments({ clientId }: Props) {
               {visibleDocs.length === 0 ? (
                 <div className="empty-state">
                   <p>No documents in this folder.</p>
-                  {isStaffRole(user) && <button className="btn btn-primary" onClick={() => setShowUpload(true)}>+ Upload</button>}
+                  <button className="btn btn-primary" onClick={() => setShowUpload(true)}>+ Upload</button>
                 </div>
               ) : (
                 <div className="document-grid">
