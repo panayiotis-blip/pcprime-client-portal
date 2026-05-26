@@ -85,17 +85,28 @@ const STAFF_GROUPS: NavGroup[] = [
   },
 ];
 
-const clientNav: NavItem[] = [
-  { path: '/',           label: 'Dashboard',  icon: '⌂' },
-  { path: '/my-billing',   label: 'My Account', icon: '€' },
-  { path: '/my-deadlines', label: 'Deadlines',  icon: '⏰' },
-  { path: '/my-messages',  label: 'Messages',   icon: '✉' },
-  { path: '/my-company',   label: 'My Company', icon: '🏢' },
-  { path: '/my-customers', label: 'Customers',  icon: '👥' },
-  { path: '/sales',        label: 'Sales Invoices', icon: '€' },
-  { path: '/debtors',      label: 'Debtors',    icon: '◔' },
-  { path: '/my-expenses',  label: 'My Expenses', icon: '🧾' },
-  { path: '/documents',    label: 'Documents',  icon: '⊟' },
+// Client sidebar — Dashboard stands alone; the rest grouped into the firm
+// relationship vs the client's own business.
+const CLIENT_GROUPS: NavGroup[] = [
+  {
+    key: 'client-with-us', label: 'With us',
+    items: [
+      { path: '/my-billing',   label: 'My Account',  icon: '€' },
+      { path: '/my-deadlines', label: 'Deadlines',   icon: '⏰' },
+      { path: '/my-expenses',  label: 'My Expenses', icon: '🧾' },
+      { path: '/documents',    label: 'Documents',   icon: '⊟' },
+      { path: '/my-messages',  label: 'Messages',    icon: '✉' },
+    ],
+  },
+  {
+    key: 'client-my-business', label: 'My business',
+    items: [
+      { path: '/my-company',   label: 'My Company',     icon: '🏢' },
+      { path: '/my-customers', label: 'Customers',      icon: '👥' },
+      { path: '/sales',        label: 'Sales Invoices', icon: '€' },
+      { path: '/debtors',      label: 'Debtors',        icon: '◔' },
+    ],
+  },
 ];
 
 // Does the active route belong to one of this group's items?
@@ -282,19 +293,43 @@ export default function AppShell() {
             </Link>
             <p className="sidebar-subtitle">Client Portal</p>
           </div>
-          <ul>
+          <ul className="sidebar-nav-list">
             <li>
               <Link to="/" className={location.pathname === '/' ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
                 <span className="nav-icon">⌂</span>Dashboard
               </Link>
             </li>
-            {clientNav.filter(n => n.path !== '/').map(item => (
-              <li key={item.path}>
-                <Link to={item.path} className={location.pathname === item.path ? 'active' : ''} onClick={() => setSidebarOpen(false)}>
-                  <span className="nav-icon">{item.icon}</span>{item.label}
-                </Link>
-              </li>
-            ))}
+            {CLIENT_GROUPS.map(g => {
+              const expanded = isGroupExpanded(g);
+              return (
+                <li key={g.key} className="sidebar-group">
+                  <button
+                    type="button"
+                    className={`sidebar-group-header ${expanded ? 'expanded' : ''}`}
+                    onClick={() => toggleGroup(g.key, expanded)}
+                    title={expanded ? 'Collapse' : 'Expand'}
+                  >
+                    <span className="sidebar-group-label">{g.label}</span>
+                    <span className="sidebar-group-chevron">{expanded ? '▾' : '▸'}</span>
+                  </button>
+                  {expanded && (
+                    <ul className="sidebar-group-items">
+                      {g.items.map(item => (
+                        <li key={item.path}>
+                          <Link
+                            to={item.path}
+                            className={`sidebar-link sidebar-sub-link ${location.pathname === item.path ? 'active' : ''}`}
+                            onClick={() => setSidebarOpen(false)}
+                          >
+                            <span className="nav-icon">{item.icon}</span>{item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <SidebarUserMenu user={user} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
         </nav>
