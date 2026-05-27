@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import type { JournalLine } from '../../types/invoice';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { useScan, type ScannedInvoice } from '../../context/ScanContext';
 import SearchableSelect from '../common/SearchableSelect';
 import { Modal, Button, FormField, Input } from '../ui';
@@ -18,6 +19,7 @@ export default function InvoiceEditor() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { clients, refreshInvoices, refreshClients } = useApp();
+  const { user } = useAuth();
   const { scannedInvoices } = useScan();
   const [form, setForm] = useState<any>({
     client_id: 0, invoice_number: '', vendor_name: '', invoice_date: '', due_date: '',
@@ -163,7 +165,7 @@ export default function InvoiceEditor() {
     if (isBatch) {
       loadScannedInvoice(scannedInvoices.current[batchIndex]);
     } else if (location.state?.parsed) {
-      const { parsed, rawOcrText, journalCode, clientId: stateClientId } = location.state;
+      const { parsed, rawOcrText, journalCode, clientId: stateClientId, fromExpense } = location.state;
       const details = parsed.vendorName ? `${parsed.vendorName}${parsed.invoiceNumber ? ' - ' + parsed.invoiceNumber : ''}` : parsed.invoiceNumber || '';
       setForm({
         client_id: stateClientId || 0, journal: journalCode || 'JV',
@@ -173,6 +175,20 @@ export default function InvoiceEditor() {
         currency_rate: '', raw_ocr_text: rawOcrText || '', status: 'draft', reference: '',
         journal_lines: [{ ...emptyLine, amount: parsed.totalAmount || 0, vatAmount: parsed.taxAmount || 0, details }],
       });
+      // Came from a client expense: pull its uploaded file in for preview and
+      // attach it to the invoice on save (mirrors a real scan).
+      if (fromExpense?.fileUrl) {
+        (async () => {
+          try {
+            const resp = await fetch(fromExpense.fileUrl);
+            const blob = await resp.blob();
+            const mime = fromExpense.fileMime || blob.type || 'application/octet-stream';
+            setFileToUpload(new File([blob], fromExpense.fileName || 'expense', { type: mime }));
+            setPreviewUrl(URL.createObjectURL(blob));
+            setPreviewMime(mime);
+          } catch { /* preview is optional — fields are still prefilled */ }
+        })();
+      }
     } else if (location.state?.journalCode || location.state?.clientId) {
       setForm((prev: any) => ({ ...prev, journal: location.state?.journalCode || prev.journal, client_id: location.state?.clientId || prev.client_id }));
     } else if (id && id !== 'new') {
@@ -257,14 +273,28 @@ export default function InvoiceEditor() {
           t_analysis_4: l.tAnalysis4, t_analysis_5: l.tAnalysis5,
         })),
       };
+      let createdId: number | null = null;
       if (id && id !== 'new') {
         await api.updateInvoice(parseInt(id), data);
       } else {
-        await api.createInvoice(data, fileToUpload || undefined);
+        const res = await api.createInvoice(data, fileToUpload || undefined);
+        createdId = (res as any)?.id ?? null;
       }
       await refreshInvoices();
+
+      // If this came from a client expense, mark it allocated + link the invoice.
+      const fromExpense = location.state?.fromExpense;
+      if (fromExpense?.id && createdId) {
+        try {
+          await api.updateExpense(fromExpense.id, {
+            status: 'allocated', invoice_id: createdId,
+            reviewed_by: user?.id || null, reviewed_at: new Date().toISOString(),
+          });
+        } catch { /* invoice saved; allocation link is best-effort */ }
+      }
+
       if (isBatch && batchIndex < totalInBatch - 1) { setBatchIndex((p) => p + 1); setSaving(false); window.scrollTo(0, 0); return; }
-      navigate('/invoices');
+      navigate(fromExpense?.id ? '/client-expenses' : '/invoices');
     } catch (err: any) {
       alert('Failed to save: ' + err.message);
     } finally {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -10,6 +11,7 @@ const statusBadge = (s: string) => ({
 // Back-office queue of client-submitted expenses to review & allocate.
 export default function ClientExpenses() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [rows, setRows]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [fStatus, setFStatus] = useState('submitted');
@@ -28,15 +30,40 @@ export default function ClientExpenses() {
     try { window.open(await api.expenseFileUrl(path), '_blank'); } catch (err: any) { alert(err.message); }
   };
 
-  const setStatus = async (e: any, status: 'allocated' | 'rejected') => {
-    const notes = prompt(status === 'allocated' ? 'Allocation notes (e.g. account / journal ref):' : 'Reason for rejection:');
+  const reject = async (e: any) => {
+    const notes = prompt('Reason for rejection:');
     if (notes === null) return;
     setBusyId(e.id);
     try {
-      await api.updateExpense(e.id, { status, allocation_notes: notes || null, reviewed_by: user?.id || null, reviewed_at: new Date().toISOString() });
+      await api.updateExpense(e.id, { status: 'rejected', allocation_notes: notes || null, reviewed_by: user?.id || null, reviewed_at: new Date().toISOString() });
       await load();
     } catch (err: any) { alert('Failed: ' + err.message); }
     finally { setBusyId(null); }
+  };
+
+  // Allocate = open the scanned-document editor prefilled from this expense and
+  // its uploaded file, so staff assign journal lines as if they had scanned it.
+  // The editor marks the expense allocated + linked once the invoice is saved.
+  const allocate = async (e: any) => {
+    setBusyId(e.id);
+    try {
+      const fileUrl = e.storage_path ? await api.expenseFileUrl(e.storage_path) : null;
+      navigate('/invoices/new', {
+        state: {
+          clientId: e.owner_client_id,
+          journalCode: 'JV',
+          parsed: {
+            invoiceNumber: '',
+            vendorName: e.vendor_name || '',
+            invoiceDate: e.expense_date || '',
+            totalAmount: Number(e.amount || 0),
+            taxAmount: Number(e.vat_amount || 0),
+            currency: e.currency || '',
+          },
+          fromExpense: { id: e.id, fileUrl, fileName: e.file_name, fileMime: e.mime_type },
+        },
+      });
+    } catch (err: any) { alert('Could not open: ' + err.message); setBusyId(null); }
   };
 
   return (
@@ -84,8 +111,8 @@ export default function ClientExpenses() {
                       {e.storage_path && <button className="btn btn-secondary btn-sm" onClick={() => viewFile(e.storage_path)}>View</button>}{' '}
                       {e.status === 'submitted' && (
                         <>
-                          <button className="btn btn-primary btn-sm" disabled={busyId === e.id} onClick={() => setStatus(e, 'allocated')}>Allocate</button>{' '}
-                          <button className="btn btn-secondary btn-sm" disabled={busyId === e.id} onClick={() => setStatus(e, 'rejected')}>Reject</button>
+                          <button className="btn btn-primary btn-sm" disabled={busyId === e.id} onClick={() => allocate(e)}>Allocate</button>{' '}
+                          <button className="btn btn-secondary btn-sm" disabled={busyId === e.id} onClick={() => reject(e)}>Reject</button>
                         </>
                       )}
                     </td>
