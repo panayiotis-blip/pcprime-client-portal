@@ -35,6 +35,8 @@ export default function MessageThread({
     setSending(true);
     try {
       await api.sendClientMessage(clientId, text);
+      // Notify the firm by email when a CLIENT posts (best-effort, non-blocking).
+      if (!viewerIsStaff) void api.notifyNewMessage(clientId);
       setBody('');
       await load();
     } catch (err: any) {

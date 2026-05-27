@@ -1857,6 +1857,12 @@ export const api = {
     if (error) throw new Error(error.message);
     return data || [];
   },
+  // Best-effort: email the firm that a client posted a message. Never throws —
+  // a failed notification must not affect sending the message itself.
+  async notifyNewMessage(clientId: number) {
+    try { await supabase.functions.invoke('notify-new-message', { body: { client_id: clientId } }); }
+    catch { /* ignore */ }
+  },
   async sendClientMessage(clientId: number, body: string) {
     const { data, error } = await supabase.rpc('send_client_message', { p_client_id: clientId, p_body: body });
     if (error) throw new Error(error.message);
