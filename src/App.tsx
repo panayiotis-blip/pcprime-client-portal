@@ -65,15 +65,21 @@ import PrivacyNotice from './components/Public/PrivacyNotice';
 import SignupApplication from './components/Public/SignupApplication';
 import Applications from './components/Admin/Applications';
 import MFAChallenge from './components/Auth/MFAChallenge';
+import ForcedMfaSetup from './components/Auth/ForcedMfaSetup';
+import { isStaffRole } from './services/api';
 import DesignSystemDemo from './components/_design/DesignSystemDemo';
 
 function AuthedApp() {
-  const { mfa } = useAuth();
+  const { user, mfa } = useAuth();
 
   // Hard gate: if the user has MFA enrolled but the session is at aal1,
   // block the entire app behind the 6-digit challenge — unless this device
   // has been marked as trusted (then the prompt is skipped).
   if (mfa.challenge_required && !mfa.trusted_device_validated) return <MFAChallenge />;
+
+  // Hard gate: staff must enrol an authenticator before using the portal.
+  // (mfa is fully loaded by the time AuthedApp renders — AppRoutes awaits it.)
+  if (isStaffRole(user) && !mfa.enrolled) return <ForcedMfaSetup />;
 
   return (
     <AppProvider>
