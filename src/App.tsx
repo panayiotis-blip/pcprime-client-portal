@@ -66,6 +66,8 @@ import SignupApplication from './components/Public/SignupApplication';
 import Applications from './components/Admin/Applications';
 import MFAChallenge from './components/Auth/MFAChallenge';
 import ForcedMfaSetup from './components/Auth/ForcedMfaSetup';
+import TermsGate from './components/Auth/TermsGate';
+import { CURRENT_TOS_VERSION } from './components/Auth/terms';
 import { isStaffRole } from './services/api';
 import DesignSystemDemo from './components/_design/DesignSystemDemo';
 
@@ -80,6 +82,9 @@ function AuthedApp() {
   // Hard gate: staff must enrol an authenticator before using the portal.
   // (mfa is fully loaded by the time AuthedApp renders — AppRoutes awaits it.)
   if (isStaffRole(user) && !mfa.enrolled) return <ForcedMfaSetup />;
+
+  // Hard gate: every user must accept the current Terms before continuing.
+  if (user && (user.tos_accepted_version ?? 0) < CURRENT_TOS_VERSION) return <TermsGate />;
 
   return (
     <AppProvider>

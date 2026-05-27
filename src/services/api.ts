@@ -78,6 +78,7 @@ export interface AuthUser {
   client_id: number | null;   // convenience: first linked client
   client_ids: number[];
   permissions: string[];      // effective permissions (role defaults ± per-user overrides)
+  tos_accepted_version: number; // latest Terms version this user has accepted
 }
 
 // True if the user effectively has the given permission key.
@@ -526,8 +527,14 @@ export const api = {
         client_ids,
         client_id: client_ids[0] ?? null,
         permissions: (permsResult.data as string[]) || [],
+        tos_accepted_version: (prof as any).tos_accepted_version ?? 0,
       },
     };
+  },
+
+  async acceptTos(version: number) {
+    const { error } = await supabase.rpc('accept_tos', { p_version: version });
+    if (error) throw new Error(error.message);
   },
 
   // Users admin — limited without service role key. Creating and deleting auth users requires

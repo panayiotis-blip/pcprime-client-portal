@@ -27,6 +27,7 @@ interface AuthState {
   loading: boolean;
   mfa: MfaState;
   refreshMfa: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   login: (emailOrUsername: string, password: string) => Promise<void>;
   sendMagicLink: (email: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -44,6 +45,7 @@ const AuthContext = createContext<AuthState>({
   user: null, loading: true,
   mfa: initialMfa,
   refreshMfa: async () => {},
+  refreshUser: async () => {},
   login: async () => {}, sendMagicLink: async () => {}, logout: async () => {},
 });
 
@@ -108,6 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { mounted = false; sub.subscription.unsubscribe(); };
   }, [loadMfa]);
 
+  const refreshUser = useCallback(async () => {
+    try { const { user } = await api.me(); setUser(user); } catch { /* ignore */ }
+  }, []);
+
   const login = async (emailOrUsername: string, password: string) => {
     await api.login(emailOrUsername, password);
     const { user } = await api.me();
@@ -130,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useInactivityTimeout(inactivityMs, () => { if (user) logout(); });
 
   return (
-    <AuthContext.Provider value={{ user, loading, mfa, refreshMfa: loadMfa, login, sendMagicLink, logout }}>
+    <AuthContext.Provider value={{ user, loading, mfa, refreshMfa: loadMfa, refreshUser, login, sendMagicLink, logout }}>
       {children}
     </AuthContext.Provider>
   );
