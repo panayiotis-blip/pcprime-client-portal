@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import LogMessageModal from './LogMessageModal';
 import LogCallModal from './LogCallModal';
+import { formatDateTime } from '../../services/dates';
 
 type CallLog = {
   id: number;
@@ -22,11 +23,7 @@ type CallLog = {
   task_status: string | null;
 };
 
-const fmtTime = (iso: string) => {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+const fmtTime = (iso: string) => formatDateTime(iso);
 
 const toLocalInput = (iso: string) => {
   if (!iso) return '';

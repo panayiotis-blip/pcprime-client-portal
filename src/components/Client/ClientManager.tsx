@@ -10,6 +10,7 @@ import MergeClients from './MergeClients';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
 import * as XLSX from 'xlsx';
 import { Modal, Button } from '../ui';
+import { formatDate } from '../../services/dates';
 
 type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
 type SortDir = 'asc' | 'desc';
@@ -389,8 +390,8 @@ export default function ClientManager() {
       case 'email':                return c.email || '-';
       case 'contact_person':       return c.contact_person || '-';
       case 'invoices_count':       return getInvoiceCount(c.id);
-      case 'created_at':           return c.created_at ? new Date(c.created_at).toLocaleDateString() : '-';
-      case 'updated_at':           return c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '-';
+      case 'created_at':           return formatDate(c.created_at, '-');
+      case 'updated_at':           return formatDate(c.updated_at, '-');
       case 'tags': {
         const arr: string[] = Array.isArray(c.tags) ? c.tags : [];
         if (arr.length === 0) return '-';

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { formatDate } from '../../services/dates';
 
 export default function VendorPatterns({ clientId }: { clientId: number }) {
   const [patterns, setPatterns] = useState<any[]>([]);
@@ -64,7 +65,7 @@ export default function VendorPatterns({ clientId }: { clientId: number }) {
                     <td>{isEditing ? <input defaultValue={p.vat_code} onChange={(e) => setEdits((d: any) => ({ ...d, vat_code: e.target.value }))} className="form-input" style={{ width: 80 }} /> : p.vat_code || '-'}</td>
                     <td>{isEditing ? <input type="number" step="0.1" defaultValue={p.vat_rate} onChange={(e) => setEdits((d: any) => ({ ...d, vat_rate: parseFloat(e.target.value) || 0 }))} className="form-input" style={{ width: 70 }} /> : (p.vat_rate ? `${p.vat_rate}%` : '-')}</td>
                     <td>{p.match_count}×</td>
-                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{new Date(p.last_used).toLocaleDateString()}</td>
+                    <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{formatDate(p.last_used)}</td>
                     <td>
                       {isEditing ? (
                         <>

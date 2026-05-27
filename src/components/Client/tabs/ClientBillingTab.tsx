@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../../services/api';
+import { formatDate } from '../../../services/dates';
 
 const DAY = 86_400_000;
 const eur = (n: number) => '€' + Number(n || 0).toFixed(2);
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtDate = (iso: string | null) => formatDate(iso, '—');
 const statusBadge = (s: string) => ({
   draft: { bg: '#f1f5f9', fg: '#475569' }, issued: { bg: '#dbeafe', fg: '#1e40af' },
   paid: { bg: '#dcfce7', fg: '#166534' }, cancelled: { bg: '#fee2e2', fg: '#991b1b' },

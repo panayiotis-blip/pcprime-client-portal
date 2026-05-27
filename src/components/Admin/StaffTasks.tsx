@@ -5,6 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 import LogMessageModal from './LogMessageModal';
+import { formatDateTime } from '../../services/dates';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
@@ -296,7 +297,7 @@ export default function StaffTasks() {
                       </td>
                       <td>{assigneeName(t.assigned_to)}</td>
                       <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
-                        {new Date(t.created_at).toLocaleString()}
+                        {formatDateTime(t.created_at)}
                       </td>
                       <td style={{ maxWidth: 360, fontSize: 13 }}>
                         <span style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>

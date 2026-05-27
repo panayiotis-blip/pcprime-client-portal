@@ -3,12 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { buildStatement } from './statement';
 import PrintToolbar from '../shared/PrintToolbar';
+import { formatDate } from '../../services/dates';
 
-const fmtDate = (iso: string | null | undefined) => {
-  if (!iso) return '—';
-  const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
+const fmtDate = (iso: string | null | undefined) => formatDate(iso, '—');
 
 const eur = (n: number) => '€' + n.toFixed(2);
 

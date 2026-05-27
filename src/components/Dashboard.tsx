@@ -6,6 +6,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useDashboardLayout } from '../context/DashboardLayoutContext';
 import { api, isStaffRole } from '../services/api';
+import { formatDate } from '../services/dates';
 import KpiTile from './Dashboard/KpiTile';
 import SecurityAlertsBanner from './Dashboard/SecurityAlertsBanner';
 import CustomisePanel from './Dashboard/CustomisePanel';
@@ -67,7 +68,7 @@ function ClientDashboard() {
   }, [clientId]);
 
   const eur = (n: number) => '€' + n.toFixed(2);
-  const fmt = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const fmt = (iso: string) => formatDate(iso);
 
   return (
     <div className="dashboard">

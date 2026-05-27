@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api, isStaffRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatDate } from '../../services/dates';
 
 const DOC_TYPES = [
   { value: 'invoice', label: 'Invoice (Received)' },
@@ -404,7 +405,7 @@ export default function ClientDocuments({ clientId }: Props) {
                           {doc.doc_type && <span className="doc-type-tag">{doc.doc_type.replace(/_/g, ' ')}</span>}
                         </p>
                         {doc.notes && <p className="doc-notes">{doc.notes}</p>}
-                        <p className="doc-uploaded">Uploaded {new Date(doc.created_at).toLocaleDateString()}</p>
+                        <p className="doc-uploaded">Uploaded {formatDate(doc.created_at)}</p>
                       </div>
                       <div className="doc-actions">
                         <button

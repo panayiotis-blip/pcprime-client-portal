@@ -6,6 +6,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { formatDateTime } from '../../services/dates';
 
 const TIMESHEET_SERVICES = [
   'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
@@ -264,8 +265,8 @@ export default function Calendar() {
       alert('No recipient — the linked client has no email on file. Add a recipient below.');
       return;
     }
-    const start = form.starts_at ? new Date(form.starts_at).toLocaleString() : '';
-    const end   = form.ends_at ? new Date(form.ends_at).toLocaleString() : '';
+    const start = formatDateTime(form.starts_at, '');
+    const end   = formatDateTime(form.ends_at, '');
     const subject = `Meeting: ${form.title}`;
     const html = [
       '<p>This is a notification for the following meeting:</p>',

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatDate } from '../../services/dates';
 
 const firstOfMonth = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -105,7 +106,7 @@ export default function MyReports() {
             <tbody>
               {published.map(r => (
                 <tr key={r.id}>
-                  <td>{(r.created_at || '').slice(0, 10)}</td>
+                  <td>{formatDate(r.created_at, '')}</td>
                   <td>{r.title}{r.notes ? <div style={{ fontSize: 12, color: '#94a3b8' }}>{r.notes}</div> : null}</td>
                   <td>{r.report_type || '—'}</td>
                   <td>{r.period_label || '—'}</td>

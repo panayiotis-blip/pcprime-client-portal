@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, Button } from '../ui';
+import { formatDate } from '../../services/dates';
 
-const fmtDate = (iso: string | null) => iso || '—';
+const fmtDate = (iso: string | null) => formatDate(iso, '—');
 const eur = (n: number) => '€' + Number(n || 0).toFixed(2);
 const statusBadge = (s: string) => ({
   draft: { bg: '#f1f5f9', fg: '#475569' }, issued: { bg: '#dbeafe', fg: '#1e40af' },

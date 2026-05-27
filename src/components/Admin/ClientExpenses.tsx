@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatDate } from '../../services/dates';
 
-const fmtDate = (iso: string | null) => iso || '—';
+const fmtDate = (iso: string | null) => formatDate(iso, '—');
 const statusBadge = (s: string) => ({
   submitted: { bg: '#fef9c3', fg: '#854d0e' }, allocated: { bg: '#dcfce7', fg: '#166534' }, rejected: { bg: '#fee2e2', fg: '#991b1b' },
 }[s] || { bg: '#f1f5f9', fg: '#475569' });

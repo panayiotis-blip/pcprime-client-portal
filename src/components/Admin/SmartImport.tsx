@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { Toolbar, Button, Modal, FormField, Input } from '../ui';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { formatDate } from '../../services/dates';
 import {
   autoMatch, fieldLabel, IMPORT_FIELDS, FIELD_GROUPS,
   CONFIDENT_THRESHOLD, type AutoMatch,
@@ -42,7 +43,7 @@ const normName = (v: any) => norm(v).replace(/\s+/g, ' ');
 
 function displayVal(v: any): string {
   if (v == null || v === '') return '';
-  if (v instanceof Date) return v.toLocaleDateString();
+  if (v instanceof Date) return formatDate(v);
   if (Array.isArray(v)) return v.join('; ');
   return String(v);
 }
@@ -266,7 +267,7 @@ export default function SmartImport() {
     (sheet?.rows.slice(0, 3) || []).map((r) => {
       const v = r[colIndex];
       if (v == null || v === '') return '';
-      if (v instanceof Date) return v.toLocaleDateString();
+      if (v instanceof Date) return formatDate(v);
       return String(v);
     });
 

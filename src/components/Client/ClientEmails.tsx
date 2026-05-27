@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../../services/api';
+import { formatDateTime } from '../../services/dates';
 
 type EmailListRow = {
   id: number;
@@ -29,11 +30,7 @@ type Attachment = {
   storage_path: string;
 };
 
-const fmtDateTime = (iso: string) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
+const fmtDateTime = (iso: string) => formatDateTime(iso, '');
 
 const fmtSize = (bytes: number | null) => {
   if (bytes == null) return '';

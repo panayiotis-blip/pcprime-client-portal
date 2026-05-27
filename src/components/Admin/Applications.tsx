@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatDate } from '../../services/dates';
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+const fmtDate = (iso: string) => formatDate(iso);
 const statusBadge = (s: string) => ({
   pending: { bg: '#fef9c3', fg: '#854d0e' }, approved: { bg: '#dcfce7', fg: '#166534' }, rejected: { bg: '#fee2e2', fg: '#991b1b' },
 }[s] || { bg: '#f1f5f9', fg: '#475569' });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../services/api';
+import { formatDate } from '../../../services/dates';
 
 interface Props { clientId: number; }
 
@@ -32,11 +33,7 @@ const STATUS_COLOR: Record<string, string> = {
   overdue:    '#b91c1c',
 };
 
-const fmtDate = (iso: string) => {
-  if (!iso) return '';
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
+const fmtDate = (iso: string) => formatDate(iso, '');
 
 // Tab 9: Compliance — read-only summary of all compliance tasks for this
 // client, grouped by kind. Full editing happens on the global /compliance page.

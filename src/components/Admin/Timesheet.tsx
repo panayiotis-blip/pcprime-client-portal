@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { formatDate } from '../../services/dates';
 
 // Billable services (charged to clients).
 const BILLABLE_SERVICES = [
@@ -901,7 +902,7 @@ export default function Timesheet() {
                       <td style={{ whiteSpace: 'nowrap' }}>{value}</td>
                       <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>
                         {e.approval_status === 'approved' && (
-                          <span title={`Approved by ${staffName(e.approved_by || '')}${e.approved_at ? ' on ' + new Date(e.approved_at).toLocaleDateString() : ''}`} style={{
+                          <span title={`Approved by ${staffName(e.approved_by || '')}${e.approved_at ? ' on ' + formatDate(e.approved_at) : ''}`} style={{
                             background: '#dcfce7', color: '#166534', padding: '2px 6px', borderRadius: 4, marginRight: 4,
                           }}>🔒 Approved</span>
                         )}

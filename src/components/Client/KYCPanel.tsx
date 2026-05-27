@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { formatDate } from '../../services/dates';
 
 const RISK_LEVELS = ['Low', 'Medium', 'High'];
 const KYC_STATUSES = ['pending', 'approved', 'expired', 'rejected'];
@@ -72,7 +73,7 @@ export default function KYCPanel({ clientId, onRefresh }: { clientId: number; on
         <div className={`kyc-status-box ${isExpired ? 'kyc-rejected' : daysUntilReview !== null && daysUntilReview < 30 ? 'kyc-pending' : ''}`}>
           <div className="kyc-label">Next Review</div>
           <div className="kyc-value">
-            {nextReview ? nextReview.toLocaleDateString() : 'Not scheduled'}
+            {formatDate(nextReview, 'Not scheduled')}
             {daysUntilReview !== null && (
               <span style={{ fontSize: 11, display: 'block', fontWeight: 400 }}>
                 {isExpired ? `OVERDUE by ${Math.abs(daysUntilReview)} days` : `in ${daysUntilReview} days`}
@@ -82,7 +83,7 @@ export default function KYCPanel({ clientId, onRefresh }: { clientId: number; on
         </div>
         <div className="kyc-status-box">
           <div className="kyc-label">Last Reviewed</div>
-          <div className="kyc-value">{lastReviewed ? lastReviewed.toLocaleDateString() : 'Never'}</div>
+          <div className="kyc-value">{formatDate(lastReviewed, 'Never')}</div>
         </div>
       </div>
 

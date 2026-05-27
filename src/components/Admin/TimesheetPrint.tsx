@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import PrintToolbar from '../shared/PrintToolbar';
+import { formatDate } from '../../services/dates';
 
 const SERVICES = [
   'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
@@ -22,12 +23,8 @@ type TimeEntry = {
   rate_snapshot: number | null;
 };
 
-const fmtDate = (iso: string) => {
-  if (!iso) return '';
-  const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-const todayLong = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const fmtDate = (iso: string) => formatDate(iso, '');
+const todayLong = () => formatDate(new Date());
 
 const formatMinutes = (m: number) => {
   const h = Math.floor(m / 60); const r = m % 60;

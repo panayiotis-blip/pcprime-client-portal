@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getPdfPageCount, renderPdfPageToJpegBlob } from '../../services/ocr/pdfRenderer';
+import { formatDate } from '../../services/dates';
 
 const EXPENSE_TYPES = ['Rent', 'Utilities', 'Stock / Purchases', 'Travel', 'Subscriptions', 'Professional fees', 'Office supplies', 'Equipment', 'Marketing', 'Bank charges', 'Other'];
 const EMPTY = { vendor_name: '', expense_date: '', amount: '', vat_amount: '', currency: 'EUR', expense_type: '', project_code: '', notes: '' };
@@ -21,7 +22,7 @@ async function fileToImageParts(file: File): Promise<{ media_type: string; data:
   return [{ media_type: file.type || 'image/jpeg', data: await toB64(file) }];
 }
 
-const fmtDate = (iso: string | null) => iso || '—';
+const fmtDate = (iso: string | null) => formatDate(iso, '—');
 const fromExpense = (r: any) => ({
   vendor_name: r.vendor_name || '', expense_date: r.expense_date || '',
   amount: r.amount != null ? String(r.amount) : '', vat_amount: r.vat_amount != null ? String(r.vat_amount) : '',

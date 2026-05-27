@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { EmailLinks } from '../shared/MultiEmail';
 import { vatCategoryLabel, vatPeriods } from '../../services/vatCategories';
 import PrintToolbar from '../shared/PrintToolbar';
+import { formatDate } from '../../services/dates';
 
 type ComplianceTask = {
   id: number;
@@ -23,12 +24,8 @@ const COMPLIANCE_LABEL: Record<string, string> = {
 };
 const COMPLIANCE_ORDER: string[] = ['vat_quarterly','social_insurance','ir7','provisional_tax','he32','ubo'];
 
-const fmtDate = (iso: string | null | undefined): string => {
-  if (!iso) return '';
-  const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-};
-const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const fmtDate = (iso: string | null | undefined): string => formatDate(iso, '');
+const today = () => formatDate(new Date());
 
 const fmtAddress = (a: any) => {
   if (!a) return null;

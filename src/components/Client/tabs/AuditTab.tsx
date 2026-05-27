@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, hasPermission } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
+import { formatDateTime } from '../../../services/dates';
 
 interface Props { clientId: number; }
 
@@ -14,12 +15,7 @@ type AuditEntry = {
   summary: any;
 };
 
-const fmtTs = (iso: string) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+const fmtTs = (iso: string) => formatDateTime(iso, '');
 
 // Tab 11: Audit — entries from the audit log that reference this client.
 // Gated on audit.read. Falls back to a friendly message if user lacks the perm.

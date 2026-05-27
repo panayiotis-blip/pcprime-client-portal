@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import PrintToolbar from '../shared/PrintToolbar';
+import { formatDate } from '../../services/dates';
 
 const DAY = 86_400_000;
 
@@ -94,7 +95,7 @@ export default function AgeAnalysis() {
       <PrintToolbar fileBase={`age-analysis-${new Date().toISOString().slice(0, 10)}`} targetSelector=".report-export" showClose={false} />
 
       <div className="report-export">
-        <h3 style={{ marginTop: 0 }}>Outstanding invoices — as at {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</h3>
+        <h3 style={{ marginTop: 0 }}>Outstanding invoices — as at {formatDate(new Date())}</h3>
 
       {loading ? (
         <div className="loading-screen">Loading…</div>

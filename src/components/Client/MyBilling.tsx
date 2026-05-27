@@ -2,12 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { buildStatement } from '../Billing/statement';
+import { formatDate } from '../../services/dates';
 
-const fmtDate = (iso: string | null | undefined) => {
-  if (!iso) return '—';
-  const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
+const fmtDate = (iso: string | null | undefined) => formatDate(iso, '—');
 const eur = (n: number) => '€' + n.toFixed(2);
 
 const statusBadge = (s: string) => s === 'paid'

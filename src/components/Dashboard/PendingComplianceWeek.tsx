@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { formatDate } from '../../services/dates';
 
 type Task = {
   id: number;
@@ -21,11 +22,7 @@ const KIND_LABEL: Record<string, string> = {
   ubo: 'UBO',
 };
 
-const fmtDate = (iso: string) => {
-  if (!iso) return '';
-  const d = new Date(iso + 'T00:00:00');
-  return `${d.getDate()}/${d.getMonth() + 1}`;
-};
+const fmtDate = (iso: string) => formatDate(iso, '');
 
 // Optional widget — hidden by default. Shows compliance tasks due in the
 // next 7 days that aren't filed/completed.

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, hasPermission } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatDateTime } from '../../services/dates';
 
 type Alert = {
   id: number;
@@ -18,11 +19,7 @@ const SEVERITY_STYLE: Record<Alert['severity'], { bg: string; border: string; co
   critical: { bg: '#fee2e2', border: '#dc2626', color: '#7f1d1d', icon: '🚨' },
 };
 
-const fmtTime = (iso: string) => {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+const fmtTime = (iso: string) => formatDateTime(iso);
 
 export default function SecurityAlertsBanner() {
   const { user } = useAuth();

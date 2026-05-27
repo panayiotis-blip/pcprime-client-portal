@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { formatDate } from '../../services/dates';
 
 // Optional widget — hidden by default. Shows the 5 most-recently-created
 // clients in AppContext (which is already loaded for the rest of the app).
@@ -25,7 +26,7 @@ export default function RecentlyAddedClients() {
                 {c.client_code ? `${c.client_code} — ` : ''}{c.name}
               </Link>
               <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                {c.created_at ? new Date(c.created_at).toLocaleDateString() : ''}
+                {formatDate(c.created_at, '')}
               </span>
             </li>
           ))}

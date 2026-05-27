@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/api';
+import { formatDateTime } from '../../services/dates';
 
 // Shared chat thread for one client's conversation. Used by the client
 // "Messages" screen (viewerIsStaff=false) and the staff inbox (=true).
@@ -43,8 +44,7 @@ export default function MessageThread({
     }
   };
 
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const fmt = (iso: string) => formatDateTime(iso);
 
   if (loading) return <div className="loading-screen">Loading…</div>;
 
