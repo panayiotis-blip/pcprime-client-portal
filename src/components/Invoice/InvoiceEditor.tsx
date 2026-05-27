@@ -38,6 +38,9 @@ export default function InvoiceEditor() {
   // AI self-assessed extraction confidence (0-100) for a freshly scanned doc;
   // null when this isn't a scan (manual entry / editing / expense allocation).
   const [scanConfidence, setScanConfidence] = useState<number | null>(null);
+  // Document preview legibility controls (reset whenever the document changes).
+  const [zoom, setZoom] = useState(1);
+  const [rotate, setRotate] = useState(0);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [vendorSuggestion, setVendorSuggestion] = useState<any>(null);
   const [patternApplied, setPatternApplied] = useState(false);
@@ -220,6 +223,9 @@ export default function InvoiceEditor() {
     return () => { if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl); };
   }, [id, batchIndex]);
 
+  // Reset zoom/rotation whenever a different document is shown.
+  useEffect(() => { setZoom(1); setRotate(0); }, [previewUrl]);
+
   const handleChange = (field: string, value: any) => setForm((prev: any) => ({ ...prev, [field]: value }));
 
   const handleLineChange = (index: number, field: string, value: any) => {
@@ -357,21 +363,33 @@ export default function InvoiceEditor() {
 
   return (
     <div className="editor-layout">
-      {previewUrl && (
-        <div className="editor-preview">
-          <div className="preview-header">
-            <h3>Invoice Preview</h3>
-          </div>
-          <div className="preview-content">
-            {(() => {
-              const mime = fileToUpload?.type || previewMime || '';
-              return mime === 'application/pdf' || mime.startsWith('application/')
+      {previewUrl && (() => {
+        const mime = fileToUpload?.type || previewMime || '';
+        const isPdf = mime === 'application/pdf' || mime.startsWith('application/');
+        return (
+          <div className="editor-preview">
+            <div className="preview-header">
+              <h3>Document{fileToUpload?.name ? <span className="preview-filename"> · {fileToUpload.name}</span> : null}</h3>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {!isPdf && (
+                  <>
+                    <button type="button" className="btn btn-secondary btn-sm" title="Zoom out" disabled={zoom <= 0.5} onClick={() => setZoom(z => Math.max(0.5, Math.round((z - 0.25) * 100) / 100))}>−</button>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', minWidth: 38, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+                    <button type="button" className="btn btn-secondary btn-sm" title="Zoom in" disabled={zoom >= 4} onClick={() => setZoom(z => Math.min(4, Math.round((z + 0.25) * 100) / 100))}>+</button>
+                    <button type="button" className="btn btn-secondary btn-sm" title="Rotate 90°" onClick={() => setRotate(r => (r + 90) % 360)}>⟳</button>
+                  </>
+                )}
+                <a className="btn btn-secondary btn-sm" href={previewUrl} target="_blank" rel="noreferrer" title="Open full size in a new tab">⤢</a>
+              </div>
+            </div>
+            <div className="preview-content">
+              {isPdf
                 ? <iframe src={previewUrl} className="preview-pdf" title="Invoice PDF" />
-                : <img src={previewUrl} alt="Invoice" className="preview-img" />;
-            })()}
+                : <img src={previewUrl} alt="Invoice" className="preview-img" style={{ width: `${zoom * 100}%`, transform: `rotate(${rotate}deg)`, transformOrigin: 'top center' }} />}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="editor-form">
         <div className="editor-header">
