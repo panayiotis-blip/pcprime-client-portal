@@ -3,36 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import FileUpload from './FileUpload';
 import CameraCapture from './CameraCapture';
 import { recognizeImage } from '../../services/ocr/ocrService';
-import { extractPdfText, renderPdfToImages, getPdfPageCount, renderPdfPageToJpegBlob } from '../../services/ocr/pdfRenderer';
+import { extractPdfText, renderPdfToImages, getPdfPageCount, renderPdfPageToJpegBlob, fileToAiImageParts, MAX_OCR_PAGES } from '../../services/ocr/pdfRenderer';
 import { parseInvoiceText, type ParsedInvoice } from '../../services/ocr/invoiceParser';
 import { useScan, type ScannedInvoice } from '../../context/ScanContext';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import SearchableSelect from '../common/SearchableSelect';
-
-// Read a file's page image(s) as base64 for the AI extractor. PDFs are
-// rendered to JPEGs (capped at 5 pages); images are sent as-is.
-async function fileToImageParts(file: File): Promise<{ media_type: string; data: string }[]> {
-  const toB64 = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(String(r.result).split(',')[1] || '');
-      r.onerror = reject;
-      r.readAsDataURL(blob);
-    });
-  if (file.type === 'application/pdf') {
-    const pages = await getPdfPageCount(file).catch(() => 1);
-    const parts: { media_type: string; data: string }[] = [];
-    for (let p = 1; p <= Math.min(pages, 5); p++) {
-      try {
-        const blob = await renderPdfPageToJpegBlob(file, p);
-        parts.push({ media_type: 'image/jpeg', data: await toB64(blob) });
-      } catch { /* skip unrenderable page */ }
-    }
-    return parts;
-  }
-  return [{ media_type: file.type || 'image/jpeg', data: await toB64(file) }];
-}
 
 // Map Claude's structured output onto the ParsedInvoice the review screen uses.
 function aiToParsed(ai: Record<string, any>): ParsedInvoice {
@@ -216,6 +192,7 @@ export default function ScannerPage() {
 
     const journalCode = cat.journal_code || 'JV';
     const results: ScannedInvoice[] = [];
+    const truncated: string[] = [];
     for (let i = 0; i < jobs.length; i++) {
       const { file, displayName } = jobs[i];
       setStatusText(`Scanning ${i + 1} of ${jobs.length}: ${displayName}`);
@@ -225,8 +202,9 @@ export default function ScannerPage() {
         let confidence = 0;
         try {
           // Primary: AI extraction with Claude (reads English + Greek).
-          const imageParts = await fileToImageParts(file);
-          const ai = await api.extractDocument(imageParts);
+          const img = await fileToAiImageParts(file);
+          if (img.truncated) truncated.push(`${displayName} (${img.totalPages} pages)`);
+          const ai = await api.extractDocument(img.parts);
           parsed = aiToParsed(ai);
           text = typeof ai.full_text === 'string' ? ai.full_text : '';
           confidence = typeof ai.confidence === 'number' ? ai.confidence : 90;
@@ -248,6 +226,10 @@ export default function ScannerPage() {
           rawOcrText: '', confidence: 0, journalCode, clientId,
         });
       }
+    }
+
+    if (truncated.length > 0) {
+      alert(`Only the first ${MAX_OCR_PAGES} pages were read for AI extraction on:\n\n${truncated.join('\n')}\n\nReview the extracted fields, and split the PDF if later pages are needed.`);
     }
 
     // Hand off to the Edit Invoice screen — its batch mode steps through each

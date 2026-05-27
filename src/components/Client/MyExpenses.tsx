@@ -1,26 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { getPdfPageCount, renderPdfPageToJpegBlob } from '../../services/ocr/pdfRenderer';
+import { fileToAiImageParts, MAX_OCR_PAGES } from '../../services/ocr/pdfRenderer';
 import { formatDate } from '../../services/dates';
 
 const EXPENSE_TYPES = ['Rent', 'Utilities', 'Stock / Purchases', 'Travel', 'Subscriptions', 'Professional fees', 'Office supplies', 'Equipment', 'Marketing', 'Bank charges', 'Other'];
 const EMPTY = { vendor_name: '', expense_date: '', amount: '', vat_amount: '', currency: 'EUR', expense_type: '', project_code: '', notes: '' };
-
-async function fileToImageParts(file: File): Promise<{ media_type: string; data: string }[]> {
-  const toB64 = (blob: Blob) => new Promise<string>((res, rej) => {
-    const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob);
-  });
-  if (file.type === 'application/pdf') {
-    const pages = await getPdfPageCount(file).catch(() => 1);
-    const parts: { media_type: string; data: string }[] = [];
-    for (let p = 1; p <= Math.min(pages, 3); p++) {
-      try { parts.push({ media_type: 'image/jpeg', data: await toB64(await renderPdfPageToJpegBlob(file, p)) }); } catch { /* skip */ }
-    }
-    return parts;
-  }
-  return [{ media_type: file.type || 'image/jpeg', data: await toB64(file) }];
-}
 
 const fmtDate = (iso: string | null) => formatDate(iso, '—');
 const fromExpense = (r: any) => ({
@@ -69,8 +54,9 @@ export default function MyExpenses() {
     setEditing(null); setFile(sel); setPreviewUrl(URL.createObjectURL(sel)); setForm({ ...EMPTY });
     setScanning(true);
     try {
-      const parts = await fileToImageParts(sel);
-      const ai = await api.extractDocument(parts);
+      const img = await fileToAiImageParts(sel);
+      if (img.truncated) alert(`This PDF has ${img.totalPages} pages — only the first ${MAX_OCR_PAGES} were read. Check the details below.`);
+      const ai = await api.extractDocument(img.parts);
       setForm((s: any) => ({
         ...s,
         vendor_name:  ai.vendor_name || '',
