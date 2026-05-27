@@ -1850,10 +1850,27 @@ export const api = {
     };
   },
 
-  // --------- Client ↔ firm messaging ---------
-  async getClientMessages(clientId: number) {
+  // --------- Client ↔ firm messaging (topics / threads) ---------
+  // Topics for one client (both sides): subject, last message, unread count.
+  async getClientThreads(clientId: number) {
+    const { data, error } = await supabase.rpc('get_client_threads', { p_client_id: clientId });
+    if (error) throw new Error(error.message);
+    return (data || []) as { id: number; subject: string; status: string; created_at: string;
+      last_at: string; last_body: string | null; unread: number }[];
+  },
+  async createMessageThread(clientId: number, subject: string) {
+    const { data, error } = await supabase.rpc('create_message_thread', { p_client_id: clientId, p_subject: subject });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+  async setThreadStatus(threadId: number, status: 'open' | 'closed') {
+    const { error } = await supabase.rpc('set_thread_status', { p_thread_id: threadId, p_status: status });
+    if (error) throw new Error(error.message);
+  },
+  // Messages within one topic.
+  async getThreadMessages(threadId: number) {
     const { data, error } = await supabase.from('client_messages')
-      .select('*').eq('client_id', clientId).order('created_at', { ascending: true });
+      .select('*').eq('thread_id', threadId).order('created_at', { ascending: true });
     if (error) throw new Error(error.message);
     return data || [];
   },
@@ -1863,13 +1880,13 @@ export const api = {
     try { await supabase.functions.invoke('notify-new-message', { body: { client_id: clientId } }); }
     catch { /* ignore */ }
   },
-  async sendClientMessage(clientId: number, body: string) {
-    const { data, error } = await supabase.rpc('send_client_message', { p_client_id: clientId, p_body: body });
+  async sendClientMessage(threadId: number, body: string) {
+    const { data, error } = await supabase.rpc('send_client_message', { p_thread_id: threadId, p_body: body });
     if (error) throw new Error(error.message);
     return data as number;
   },
-  async markMessagesRead(clientId: number) {
-    const { error } = await supabase.rpc('mark_messages_read', { p_client_id: clientId });
+  async markThreadRead(threadId: number) {
+    const { error } = await supabase.rpc('mark_thread_read', { p_thread_id: threadId });
     if (error) throw new Error(error.message);
   },
   async getMessageInbox() {

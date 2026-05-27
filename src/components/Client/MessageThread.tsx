@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import { formatDateTime } from '../../services/dates';
 
-// Shared chat thread for one client's conversation. Used by the client
-// "Messages" screen (viewerIsStaff=false) and the staff inbox (=true).
+// Shared chat thread for one TOPIC. Used by the client "Messages" screen
+// (viewerIsStaff=false) and the staff inbox (=true). clientId is passed so the
+// client→firm email notification can fire.
 export default function MessageThread({
-  clientId, viewerIsStaff, onActivity,
-}: { clientId: number; viewerIsStaff: boolean; onActivity?: () => void }) {
+  threadId, clientId, viewerIsStaff, onActivity,
+}: { threadId: number; clientId: number; viewerIsStaff: boolean; onActivity?: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
   const [body, setBody]         = useState('');
@@ -15,9 +16,9 @@ export default function MessageThread({
 
   const load = async () => {
     try {
-      const m = await api.getClientMessages(clientId);
+      const m = await api.getThreadMessages(threadId);
       setMessages(m as any[]);
-      await api.markMessagesRead(clientId).catch(() => {});
+      await api.markThreadRead(threadId).catch(() => {});
       onActivity?.();
     } catch (err: any) {
       alert('Failed to load messages: ' + err.message);
@@ -26,7 +27,7 @@ export default function MessageThread({
     }
   };
 
-  useEffect(() => { setLoading(true); load(); /* eslint-disable-next-line */ }, [clientId]);
+  useEffect(() => { setLoading(true); load(); /* eslint-disable-next-line */ }, [threadId]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [messages]);
 
   const send = async () => {
@@ -34,7 +35,7 @@ export default function MessageThread({
     if (!text) return;
     setSending(true);
     try {
-      await api.sendClientMessage(clientId, text);
+      await api.sendClientMessage(threadId, text);
       // Notify the firm by email when a CLIENT posts (best-effort, non-blocking).
       if (!viewerIsStaff) void api.notifyNewMessage(clientId);
       setBody('');
