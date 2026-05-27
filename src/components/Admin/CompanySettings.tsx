@@ -94,6 +94,12 @@ export default function CompanySettings() {
         letterhead_background_colour: form.letterhead_background_colour || '#ffffff',
         letterhead_text_colour:       form.letterhead_text_colour || '#0d1b2e',
         default_service_rates: rates,
+        autoreply_enabled: form.autoreply_enabled ?? true,
+        office_open_hour:  Number(form.office_open_hour ?? 8),
+        office_close_hour: Number(form.office_close_hour ?? 17),
+        office_days:       Array.isArray(form.office_days) ? form.office_days : [1, 2, 3, 4, 5],
+        office_timezone:   form.office_timezone || 'Europe/Nicosia',
+        autoreply_message: form.autoreply_message || null,
       });
       await load();
       setEditing(false);
@@ -293,6 +299,56 @@ export default function CompanySettings() {
             <label>Website</label>
             <input type="text" className="form-input" value={form.website || ''} onChange={e => handleChange('website', e.target.value)} disabled={!canEdit} />
           </div>
+        </div>
+      </div>
+
+      {/* Client messaging — after-hours auto-reply */}
+      <div className="form-section">
+        <h3>Client messaging — after-hours auto-reply</h3>
+        <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
+          When a client messages outside the hours below, the portal auto-acknowledges (at most once per client every 12 hours).
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <input type="checkbox" checked={form.autoreply_enabled ?? true} onChange={e => handleChange('autoreply_enabled', e.target.checked)} disabled={!canEdit} />
+          Send an after-hours auto-reply
+        </label>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Opens at (hour, 0–23)</label>
+            <input type="number" min="0" max="23" className="form-input" value={form.office_open_hour ?? 8} onChange={e => handleChange('office_open_hour', e.target.value)} disabled={!canEdit} />
+          </div>
+          <div className="form-group">
+            <label>Closes at (hour, 0–23)</label>
+            <input type="number" min="0" max="23" className="form-input" value={form.office_close_hour ?? 17} onChange={e => handleChange('office_close_hour', e.target.value)} disabled={!canEdit} />
+          </div>
+          <div className="form-group">
+            <label>Timezone</label>
+            <input type="text" className="form-input" value={form.office_timezone || 'Europe/Nicosia'} onChange={e => handleChange('office_timezone', e.target.value)} disabled={!canEdit} placeholder="Europe/Nicosia" />
+          </div>
+        </div>
+        <div className="form-group" style={{ marginTop: 8 }}>
+          <label>Working days</label>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+            {[{ n: 1, l: 'Mon' }, { n: 2, l: 'Tue' }, { n: 3, l: 'Wed' }, { n: 4, l: 'Thu' }, { n: 5, l: 'Fri' }, { n: 6, l: 'Sat' }, { n: 0, l: 'Sun' }].map(d => {
+              const days: number[] = Array.isArray(form.office_days) ? form.office_days : [1, 2, 3, 4, 5];
+              const on = days.includes(d.n);
+              return (
+                <label key={d.n} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={!canEdit}
+                    onChange={() => handleChange('office_days', on ? days.filter(x => x !== d.n) : [...days, d.n].sort())}
+                  />
+                  {d.l}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <div className="form-group" style={{ marginTop: 8 }}>
+          <label>Auto-reply message</label>
+          <textarea className="form-input" rows={3} value={form.autoreply_message || ''} onChange={e => handleChange('autoreply_message', e.target.value)} disabled={!canEdit} />
         </div>
       </div>
 

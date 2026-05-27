@@ -2316,6 +2316,9 @@ export const api = {
       iban: null, bank_name: null,
       logo_url: null, tagline: null, report_footer: null,
       default_service_rates: {},
+      autoreply_enabled: true, office_open_hour: 8, office_close_hour: 17,
+      office_days: [1, 2, 3, 4, 5], office_timezone: 'Europe/Nicosia',
+      autoreply_message: 'Thank you for your message. Our office is currently closed — a member of our team will get back to you during working hours.',
     };
   },
 
