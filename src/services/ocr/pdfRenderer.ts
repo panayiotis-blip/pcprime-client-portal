@@ -50,7 +50,7 @@ export async function renderPdfPageToJpegBlob(file: File, pageNumber: number, sc
   canvas.width = viewport.width;
   canvas.height = viewport.height;
   const ctx = canvas.getContext('2d')!;
-  await page.render({ canvasContext: ctx, viewport }).promise;
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise;
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => blob ? resolve(blob) : reject(new Error('Canvas toBlob returned null')),
@@ -75,7 +75,7 @@ export async function renderPdfToImages(file: File): Promise<HTMLCanvasElement[]
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const ctx = canvas.getContext('2d')!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
     canvases.push(canvas);
   }
 
