@@ -184,6 +184,26 @@ async function seedSystemFolders(clientId: number): Promise<void> {
   try { await p; } finally { seedingPromises.delete(clientId); }
 }
 
+// AI cost logging. Rates are an ESTIMATE for claude-haiku-4-5 in USD per
+// million tokens — verify against console.anthropic.com pricing; adjust here
+// if the model or rates change. The Anthropic console stays authoritative.
+const AI_RATE_INPUT_PER_MTOK = 1.0;   // USD / 1M input tokens
+const AI_RATE_OUTPUT_PER_MTOK = 5.0;  // USD / 1M output tokens
+const AI_MODEL = 'claude-haiku-4-5-20251001';
+
+async function logAiUsage(usage: any, pages: number): Promise<void> {
+  const inTok  = Number(usage?.input_tokens || 0);
+  const outTok = Number(usage?.output_tokens || 0);
+  if (!inTok && !outTok) return; // nothing to record
+  const cost = (inTok / 1_000_000) * AI_RATE_INPUT_PER_MTOK + (outTok / 1_000_000) * AI_RATE_OUTPUT_PER_MTOK;
+  const { data: { user } } = await supabase.auth.getUser();
+  await supabase.from('ai_usage').insert({
+    user_id: user?.id, source: 'extract-document', model: AI_MODEL,
+    input_tokens: inTok, output_tokens: outTok,
+    estimated_cost: Math.round(cost * 100000) / 100000, pages,
+  });
+}
+
 async function getJournalFolderId(clientId: number, journalCode: string): Promise<number | null> {
   await seedSystemFolders(clientId);
   const key = `scanned_${journalCode}`;
@@ -1208,7 +1228,30 @@ export const api = {
     const { data, error } = await supabase.functions.invoke('extract-document', { body: { images } });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'AI extraction failed.');
+    // Best-effort cost logging — never let it block or fail a scan.
+    try { await logAiUsage(data.usage, images.length); } catch { /* ignore */ }
     return data.data as Record<string, any>;
+  },
+
+  // Cost-monitoring view: month + all-time totals plus the most recent scans.
+  async getAiUsageSummary(recentLimit = 50) {
+    const { data, error } = await supabase.from('ai_usage')
+      .select('id, created_at, source, model, input_tokens, output_tokens, estimated_cost, pages')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    const rows = data || [];
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const sum = (list: any[]) => list.reduce((a, r) => ({
+      scans: a.scans + 1,
+      input: a.input + Number(r.input_tokens || 0),
+      output: a.output + Number(r.output_tokens || 0),
+      cost: a.cost + Number(r.estimated_cost || 0),
+    }), { scans: 0, input: 0, output: 0, cost: 0 });
+    return {
+      all: sum(rows),
+      month: sum(rows.filter(r => new Date(r.created_at) >= monthStart)),
+      recent: rows.slice(0, recentLimit),
+    };
   },
 
   // --------- Recurring invoices (Accounting — billing module Phase A) ---------

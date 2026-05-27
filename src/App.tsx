@@ -54,6 +54,7 @@ import CustomerDebtors from './components/Client/CustomerDebtors';
 import MyExpenses from './components/Client/MyExpenses';
 import ClientExpenses from './components/Admin/ClientExpenses';
 import MyReports from './components/Client/MyReports';
+import AiUsage from './components/Admin/AiUsage';
 import PhoneLog from './components/Admin/PhoneLog';
 import Security from './components/Admin/Security';
 import DeletedClients from './components/Admin/DeletedClients';
@@ -103,6 +104,7 @@ function AuthedApp() {
             <Route path="/tasks" element={<StaffTasks />} />
             <Route path="/task-templates" element={<TaskTemplates />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/ai-usage" element={<AiUsage />} />
             <Route path="/calendar" element={<Calendar />} />
             <Route path="/timesheet" element={<Timesheet />} />
             <Route path="/timesheet/print" element={<TimesheetPrint />} />
