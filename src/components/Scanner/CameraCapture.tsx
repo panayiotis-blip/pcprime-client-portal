@@ -12,12 +12,8 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
 
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
-    if (imageSrc) {
-      // Convert base64 to blob
-      fetch(imageSrc)
-        .then((res) => res.blob())
-        .then((blob) => onCapture(blob));
-    }
+    if (!imageSrc) { alert('Camera not ready yet — try again in a moment.'); return; }
+    fetch(imageSrc).then((res) => res.blob()).then((blob) => onCapture(blob));
   }, [onCapture]);
 
   const switchCamera = () => {
@@ -31,12 +27,17 @@ export default function CameraCapture({ onCapture, onClose }: CameraCaptureProps
           ref={webcamRef}
           audio={false}
           screenshotFormat="image/jpeg"
+          className="camera-video"
           videoConstraints={{
             facingMode,
             width: { ideal: 1920 },
             height: { ideal: 1080 },
           }}
-          style={{ width: '100%', borderRadius: '8px' }}
+          onUserMediaError={(err) => {
+            console.error('Camera error:', err);
+            alert('Could not start the camera. Check that this site has camera permission.');
+            onClose();
+          }}
         />
         <div className="camera-guide">
           <div className="guide-frame" />
