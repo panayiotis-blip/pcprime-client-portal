@@ -97,6 +97,10 @@ h4 { font-size: 14px; font-weight: 600; }
   height: var(--header-height);
   /* Explicitly above .main-content so the hamburger button is always tappable. */
   z-index: 100;
+  /* Helps iOS treat taps on the header as immediate (no double-tap delay) and
+     prevents adjacent page content (e.g. recharts SVG) from stealing the tap. */
+  touch-action: manipulation;
+  isolation: isolate;
   background: var(--pc-navy);
   color: #fff;
   align-items: center;
@@ -112,6 +116,9 @@ h4 { font-size: 14px; font-weight: 600; }
   color: white;
   font-size: 24px;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
+  touch-action: manipulation;
   padding: 4px;
 }
 
