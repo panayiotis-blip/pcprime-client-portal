@@ -326,6 +326,7 @@ export default function AppShell() {
           <h1>PC Prime Portal</h1>
         </header>
 
+        {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
         <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-header">
             <Link to="/" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>
@@ -385,7 +386,6 @@ export default function AppShell() {
           <SidebarUserMenu user={user} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
         </nav>
 
-        {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
         <main className="main-content"><Outlet /></main>
       </div>
     );
@@ -401,6 +401,7 @@ export default function AppShell() {
         <h1>PC Prime Portal</h1>
       </header>
 
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <Link to="/" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>
@@ -570,8 +571,6 @@ export default function AppShell() {
 
         <SidebarUserMenu user={user} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
       </nav>
-
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <main className="main-content">
         <Outlet />
