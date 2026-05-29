@@ -19,13 +19,16 @@ export default function MyMessages() {
         Start a topic for each thing you need — replies from our team appear in that topic.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'stretch' }}>
-        <div className="card" style={{ padding: 0, maxHeight: 560, overflow: 'hidden' }}>
+      <div className="messages-layout" data-selected={selected ? '1' : '0'}>
+        <div className="messages-pane-list card" style={{ padding: 0, maxHeight: 560, overflow: 'hidden' }}>
           <ThreadList clientId={clientId} selectedId={selected} onSelect={setSelected} refreshSignal={refresh} />
         </div>
-        <div className="card" style={{ minHeight: 320 }}>
+        <div className="messages-pane-thread card" style={{ minHeight: 320 }}>
           {selected ? (
-            <MessageThread threadId={selected} clientId={clientId} viewerIsStaff={false} onActivity={() => setRefresh(n => n + 1)} />
+            <>
+              <button className="btn btn-link btn-sm messages-back" onClick={() => setSelected(null)}>← Back to topics</button>
+              <MessageThread threadId={selected} clientId={clientId} viewerIsStaff={false} onActivity={() => setRefresh(n => n + 1)} />
+            </>
           ) : (
             <div className="empty-state"><p>Select a topic, or start a new one.</p></div>
           )}

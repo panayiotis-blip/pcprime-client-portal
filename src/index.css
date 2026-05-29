@@ -786,6 +786,21 @@ h4 { font-size: 14px; font-weight: 600; }
   background: rgba(0, 0, 0, 0.7);
 }
 
+/* ===== Messages (mobile-friendly: topics list ↔ thread, one at a time) ===== */
+.messages-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+.messages-back { display: none; }
+@media (max-width: 700px) {
+  .messages-layout { grid-template-columns: 1fr; }
+  .messages-layout[data-selected="1"] .messages-pane-list { display: none; }
+  .messages-layout[data-selected="0"] .messages-pane-thread { display: none; }
+  .messages-back { display: inline-flex; margin-bottom: 8px; padding-left: 0; }
+}
+
 /* ===== My Expenses (mobile-friendly split) ===== */
 .expense-split {
   display: grid;
