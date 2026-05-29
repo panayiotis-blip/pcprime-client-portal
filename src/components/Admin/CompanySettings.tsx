@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import DocumentCategories from './DocumentCategories';
+import FolderTemplates from './FolderTemplates';
 import ClientCategories from './ClientCategories';
 import Cities from './Cities';
 import Maintenance from './Maintenance';
@@ -471,6 +472,9 @@ export default function CompanySettings() {
 
       {/* Document Categories admin — self-contained, saves independently */}
       <DocumentCategories />
+
+      {/* Storage folder names — master list, renames propagate to all clients */}
+      <FolderTemplates />
 
       {/* Client Categories admin — self-contained, saves independently */}
       <ClientCategories />

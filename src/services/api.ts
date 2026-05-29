@@ -142,11 +142,33 @@ const JOURNAL_SUBFOLDERS = [
 // Per-client lock so concurrent callers don't each trigger the seed
 const seedingPromises = new Map<number, Promise<void>>();
 
+// Load the folder template from the DB (migration 091). If the table doesn't
+// exist yet or the read fails, fall back to the hardcoded arrays so the app
+// keeps seeding correctly during/before the migration is applied.
+async function loadFolderTemplate(): Promise<{
+  top: { name: string; category_key: string }[];
+  sub: { name: string; category_key: string }[];
+}> {
+  try {
+    const { data, error } = await supabase.from('folder_template')
+      .select('category_key, name, parent_key, is_active, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+    if (error || !data || data.length === 0) throw new Error('empty');
+    const top = data.filter((r: any) => !r.parent_key).map((r: any) => ({ name: r.name, category_key: r.category_key }));
+    const sub = data.filter((r: any) =>  r.parent_key === 'scanned').map((r: any) => ({ name: r.name, category_key: r.category_key }));
+    return { top, sub };
+  } catch {
+    return { top: SYSTEM_FOLDERS, sub: JOURNAL_SUBFOLDERS };
+  }
+}
+
 async function seedSystemFolders(clientId: number): Promise<void> {
   const existing = seedingPromises.get(clientId);
   if (existing) return existing;
 
   const p = (async () => {
+    const tpl = await loadFolderTemplate();
     // Read what's already there and only insert the missing keys. Avoids the
     // upsert/partial-unique-index inference issue that was creating duplicates.
     const { data: existingRows } = await supabase.from('folders')
@@ -155,7 +177,7 @@ async function seedSystemFolders(clientId: number): Promise<void> {
       .eq('is_system', true);
     const existingKeys = new Set((existingRows || []).map((r: any) => r.category_key));
 
-    const topRowsToInsert = SYSTEM_FOLDERS
+    const topRowsToInsert = tpl.top
       .filter(f => !existingKeys.has(f.category_key))
       .map(f => ({
         client_id: clientId, name: f.name, category_key: f.category_key, is_system: true,
@@ -170,7 +192,7 @@ async function seedSystemFolders(clientId: number): Promise<void> {
       .order('id', { ascending: true }).limit(1);
     const scanned = scannedRows?.[0];
     if (scanned) {
-      const subRowsToInsert = JOURNAL_SUBFOLDERS
+      const subRowsToInsert = tpl.sub
         .filter(sf => !existingKeys.has(sf.category_key))
         .map(sf => ({
           client_id: clientId, parent_id: scanned.id, name: sf.name, category_key: sf.category_key, is_system: true,
@@ -1091,6 +1113,26 @@ export const api = {
       batch_id: string; created: number; updated: number;
       credentials: number; failed: number; errors: any[];
     };
+  },
+
+  // --------- Folder templates (the master list of storage-folder NAMES) ---------
+  // One row per system folder. Renaming a row updates the template AND
+  // propagates the new name to every existing client's folder. Leadership-only.
+  async getFolderTemplates() {
+    const { data, error } = await supabase.from('folder_template')
+      .select('id, category_key, name, parent_key, sort_order, is_active, updated_at')
+      .order('parent_key', { ascending: true, nullsFirst: true })
+      .order('sort_order', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async renameFolderTemplate(id: number, name: string) {
+    const { error } = await supabase.rpc('rename_folder_template', { p_id: id, p_name: name });
+    if (error) throw new Error(error.message);
+  },
+  async setFolderTemplateActive(id: number, active: boolean) {
+    const { error } = await supabase.rpc('set_folder_template_active', { p_id: id, p_active: active });
+    if (error) throw new Error(error.message);
   },
 
   // --------- Document categories (Scan Document master list) ---------
