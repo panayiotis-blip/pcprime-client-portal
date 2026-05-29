@@ -785,6 +785,22 @@ h4 { font-size: 14px; font-weight: 600; }
   padding: 16px;
   background: rgba(0, 0, 0, 0.7);
 }
+
+/* ===== My Expenses (mobile-friendly split) ===== */
+.expense-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+.expense-preview-card { position: sticky; top: 16px; }
+@media (max-width: 700px) {
+  .expense-split { grid-template-columns: 1fr; }
+  .expense-preview-card { position: static; }
+  .expense-preview-card img,
+  .expense-preview-card iframe { max-height: 50vh !important; }
+}
 .btn-capture {
   width: 64px;
   height: 64px;

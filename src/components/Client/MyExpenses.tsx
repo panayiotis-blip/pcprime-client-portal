@@ -123,24 +123,38 @@ export default function MyExpenses() {
 
       {!open ? (
         <div className="card" style={{ marginBottom: 16, textAlign: 'center', padding: 32 }}>
-          <p style={{ color: '#64748b' }}>Select a file or photo to begin.</p>
-          <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-            + Add document
-            <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
-              onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
-          </label>
+          <p style={{ color: '#64748b' }}>Take a photo of the receipt, or choose a file.</p>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+              📷 Take photo
+              <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
+            </label>
+            <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+              📎 Choose file
+              <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
+                onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
+            </label>
+          </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start', marginBottom: 16 }}>
-          <div className="card" style={{ position: 'sticky', top: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <strong style={{ fontSize: 13 }}>{file?.name || editing?.file_name || 'Document'}</strong>
+        <div className="expense-split">
+          <div className="card expense-preview-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 6, flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis' }}>{file?.name || editing?.file_name || 'Document'}</strong>
               {!editing && (
-                <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
-                  Change
-                  <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
-                    onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
-                </label>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                    📷 Photo
+                    <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                      onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
+                  </label>
+                  <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                    Change
+                    <input type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
+                      onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
+                  </label>
+                </div>
               )}
             </div>
             <div style={{ background: '#f8fafc', borderRadius: 6, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}>
