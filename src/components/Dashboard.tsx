@@ -145,9 +145,9 @@ function ClientDashboard() {
         </div>
       </div>
 
-      {/* Trend chart — wrapper isolates the recharts SVG so it can't capture
-          taps meant for the mobile header / sidebar (iOS quirk). */}
-      <div className="card" style={{ marginBottom: 16, isolation: 'isolate', position: 'relative', zIndex: 0 }}>
+      {/* Trend chart — TEMPORARILY hidden on phones while we diagnose an iOS
+          tap-routing issue that only happens on the dashboard. */}
+      <div className="card hide-on-mobile" style={{ marginBottom: 16, isolation: 'isolate', position: 'relative', zIndex: 0 }}>
         <h3 style={{ marginTop: 0 }}>Income vs Expenses — last 6 months</h3>
         <div style={{ width: '100%', height: 260, touchAction: 'pan-y' }}>
           <ResponsiveContainer>
