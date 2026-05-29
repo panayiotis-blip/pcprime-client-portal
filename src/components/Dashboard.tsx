@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useDashboardLayout } from '../context/DashboardLayoutContext';
 import { api, isStaffRole } from '../services/api';
 import { formatDate } from '../services/dates';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import KpiTile from './Dashboard/KpiTile';
 import SecurityAlertsBanner from './Dashboard/SecurityAlertsBanner';
 import CustomisePanel from './Dashboard/CustomisePanel';
@@ -42,8 +43,13 @@ export default function Dashboard() {
 function ClientDashboard() {
   const { user } = useAuth();
   const clientId = user?.client_id;
-  const [summary, setSummary] = useState<{ balance: number; outstanding: number; lastPayment: string | null } | null>(null);
-  const [unread, setUnread] = useState(0);
+  const [profile,       setProfile]       = useState<any>(null);
+  const [expenses,      setExpenses]      = useState<any[]>([]);
+  const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
+  const [threads,       setThreads]       = useState<any[]>([]);
+  const [deadlines,     setDeadlines]     = useState<any[]>([]);
+  const [statement,     setStatement]     = useState<any>(null);
+  const [unread,        setUnread]        = useState(0);
 
   useEffect(() => {
     if (!clientId) return;
@@ -54,50 +60,168 @@ function ClientDashboard() {
     if (!clientId) return;
     let cancelled = false;
     (async () => {
-      try {
-        const d = await api.getClientStatement(clientId);
-        if (cancelled) return;
-        const invoiced = (d.invoices as any[]).reduce((s, i) => s + Number(i.total_amount || 0), 0);
-        const received = (d.receipts as any[]).reduce((s, r) => s + Number(r.amount || 0), 0);
-        const outstanding = (d.invoices as any[]).filter((i) => i.status === 'issued').length;
-        const dates = (d.receipts as any[]).map((r) => r.receipt_date).filter(Boolean).sort();
-        setSummary({ balance: invoiced - received, outstanding, lastPayment: dates.length ? dates[dates.length - 1] : null });
-      } catch { /* RLS / load errors leave the tiles as — */ }
+      const [p, exp, inv, thr, dl, stm] = await Promise.all([
+        api.getCompanyProfile(clientId).catch(() => null),
+        api.getMyExpenses(clientId).catch(() => []),
+        api.getCustomerInvoices(clientId).catch(() => []),
+        api.getClientThreads(clientId).catch(() => []),
+        api.getClientTaxFilings(clientId).catch(() => []),
+        api.getClientStatement(clientId).catch(() => null),
+      ]);
+      if (cancelled) return;
+      setProfile(p); setExpenses(exp as any[]); setSalesInvoices(inv as any[]);
+      setThreads(thr as any[]); setDeadlines(dl as any[]); setStatement(stm);
     })();
     return () => { cancelled = true; };
   }, [clientId]);
 
   const eur = (n: number) => '€' + n.toFixed(2);
   const fmt = (iso: string) => formatDate(iso);
+  const monthOf = (s: string | null | undefined) => s ? String(s).slice(0, 7) : '';
+  const invNet  = (i: any) => Number(i.total_amount || 0) - Number(i.vat_amount || 0);
+  const expNet  = (e: any) => Number(e.amount || 0) - Number(e.vat_amount || 0);
+
+  const thisYM = todayIso().slice(0, 7);
+  const last6  = (() => {
+    const now = new Date(); const out: string[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    return out;
+  })();
+
+  const expensesCounted   = expenses.filter(e => e.status !== 'rejected');
+  const salesIssuedPaid   = salesInvoices.filter(i => i.status === 'issued' || i.status === 'paid');
+  const incomeThisMonth   = salesIssuedPaid.filter(i => monthOf(i.issue_date) === thisYM).reduce((s, i) => s + invNet(i), 0);
+  const expensesThisMonth = expensesCounted.filter(e => monthOf(e.expense_date || e.created_at) === thisYM).reduce((s, e) => s + expNet(e), 0);
+  const outstanding       = salesInvoices.filter(i => i.status === 'issued').reduce((s, i) => s + Number(i.total_amount || 0), 0);
+  const firmBalance       = statement
+    ? (statement.invoices as any[]).reduce((s: number, i: any) => s + Number(i.total_amount || 0), 0)
+      - (statement.receipts as any[]).reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
+    : null;
+
+  const chartData = last6.map(ym => ({
+    month: ym.slice(5) + '/' + ym.slice(2, 4),
+    Income:   salesIssuedPaid.filter(i => monthOf(i.issue_date) === ym).reduce((s, i) => s + invNet(i), 0),
+    Expenses: expensesCounted.filter(e => monthOf(e.expense_date || e.created_at) === ym).reduce((s, e) => s + expNet(e), 0),
+  }));
+
+  const messagesPreview = threads.filter(t => t.last_body).slice(0, 3);
+  const recentExpenses  = expenses.slice(0, 3);
+  const today           = todayIso();
+  const upcomingDeadlines = deadlines
+    .filter(d => d.due_date && d.due_date >= today && d.status !== 'completed' && d.status !== 'filed')
+    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))
+    .slice(0, 3);
 
   return (
     <div className="dashboard">
-      <h2>My Dashboard</h2>
+      <h2>Welcome back{profile?.business_name ? `, ${profile.business_name}` : ''}</h2>
+
       {unread > 0 && (
         <Link to="/my-messages" className="card" style={{ display: 'block', marginBottom: 12, background: '#dbeafe', color: '#1e40af', textDecoration: 'none', fontWeight: 500 }}>
-          📨 You have <strong>{unread}</strong> new message{unread === 1 ? '' : 's'} from us — open Messages
+          📨 You have <strong>{unread}</strong> new message{unread === 1 ? '' : 's'} — open Messages
         </Link>
       )}
-      <div className="stats-grid">
+
+      {/* KPI tiles */}
+      <div className="stats-grid" style={{ marginBottom: 16 }}>
         <div className="stat-card">
-          <div className="stat-number" style={{ color: summary && summary.balance > 0 ? '#b91c1c' : undefined }}>
-            {summary ? eur(summary.balance) : '—'}
+          <div className="stat-number" style={{ color: '#166534' }}>{eur(incomeThisMonth)}</div>
+          <div className="stat-label">Income this month</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number" style={{ color: expensesThisMonth > 0 ? '#92400e' : undefined }}>{eur(expensesThisMonth)}</div>
+          <div className="stat-label">Expenses this month</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number" style={{ color: outstanding > 0 ? '#1e40af' : undefined }}>{eur(outstanding)}</div>
+          <div className="stat-label">Owed to you</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-number" style={{ color: firmBalance && firmBalance > 0 ? '#b91c1c' : undefined }}>{firmBalance != null ? eur(firmBalance) : '—'}</div>
+          <div className="stat-label">Balance with us</div>
+        </div>
+      </div>
+
+      {/* Trend chart */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Income vs Expenses — last 6 months</h3>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer>
+            <BarChart data={chartData} margin={{ top: 12, right: 8, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => '€' + Math.round(v).toString()} />
+              <Tooltip formatter={(v: any) => '€' + Number(v).toFixed(2)} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="Income"   fill="#16a34a" />
+              <Bar dataKey="Expenses" fill="#dc2626" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Preview cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 16 }}>
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>📨 Latest messages</h3>
+            <Link to="/my-messages" style={{ fontSize: 12 }}>Open</Link>
           </div>
-          <div className="stat-label">Balance due</div>
+          {messagesPreview.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>No messages yet.</p>
+          ) : messagesPreview.map(t => (
+            <div key={t.id} style={{ paddingBottom: 6, borderBottom: '1px solid #f1f5f9', marginBottom: 6 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{t.subject}</div>
+              <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.last_body}</div>
+            </div>
+          ))}
         </div>
-        <div className="stat-card">
-          <div className="stat-number">{summary ? summary.outstanding : '—'}</div>
-          <div className="stat-label">Outstanding invoices</div>
+
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>🧾 Recent expenses</h3>
+            <Link to="/my-expenses" style={{ fontSize: 12 }}>All</Link>
+          </div>
+          {recentExpenses.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>No expenses uploaded yet.</p>
+          ) : recentExpenses.map((e: any) => (
+            <div key={e.id} style={{ paddingBottom: 6, borderBottom: '1px solid #f1f5f9', marginBottom: 6, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vendor_name || '—'}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{fmt(e.expense_date || e.created_at)} · {e.expense_type || '—'}</div>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap' }}>{eur(Number(e.amount || 0))}</div>
+            </div>
+          ))}
         </div>
-        <div className="stat-card">
-          <div className="stat-number">{summary?.lastPayment ? fmt(summary.lastPayment) : '—'}</div>
-          <div className="stat-label">Last payment</div>
+
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>⏰ Upcoming deadlines</h3>
+            <Link to="/my-deadlines" style={{ fontSize: 12 }}>All</Link>
+          </div>
+          {upcomingDeadlines.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>No upcoming deadlines.</p>
+          ) : upcomingDeadlines.map((d: any, i: number) => (
+            <div key={i} style={{ paddingBottom: 6, borderBottom: '1px solid #f1f5f9', marginBottom: 6 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{d.label || d.kind || 'Filing'}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{fmt(d.due_date)}</div>
+            </div>
+          ))}
         </div>
       </div>
-      <div className="quick-actions">
-        <Link to="/my-billing" className="btn btn-primary btn-lg">My Account</Link>
-        <Link to="/documents" className="btn btn-secondary btn-lg">Upload Documents</Link>
+
+      {/* Quick actions */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Link to="/my-expenses" className="btn btn-primary">📷 Take photo</Link>
+        <Link to="/my-messages" className="btn btn-secondary">✉ New message</Link>
+        <Link to="/sales"       className="btn btn-secondary">💶 New invoice</Link>
+        <Link to="/documents"   className="btn btn-secondary">📁 Upload document</Link>
       </div>
+
       <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 16 }}>
         Documents you upload are processed with automated/AI tools and reviewed by our team before being finalised. See our <Link to="/privacy">Privacy Notice</Link>.
       </p>
