@@ -119,10 +119,37 @@ export async function renderPdfPagesToJpegBlobs(
 }
 
 /**
+ * Resize/recompress an image File to a JPEG Blob with longest side ≤ maxDim.
+ * Phone-camera photos are easily 8 MB+, which (after base64) overflows the
+ * Supabase Edge Function payload limit and the AI extractor silently fails.
+ * 1600 px / quality 0.75 keeps invoices very readable at a fraction of the size.
+ */
+async function resizeImageToJpegBlob(file: File, maxDim = 1600, quality = 0.75): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas 2D context unavailable.')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas toBlob returned null')), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read the image.')); };
+    img.src = url;
+  });
+}
+
+/**
  * Read a file's page image(s) as base64 for the AI extractor. PDFs are
- * rendered to JPEGs (first MAX_OCR_PAGES, single parse); images are sent
- * as-is. Returns page count + whether the PDF was truncated so callers can
- * warn the user.
+ * rendered to JPEGs (first MAX_OCR_PAGES, single parse); images are downsized
+ * to keep the request under the Edge Function payload cap. Returns page count
+ * + whether the PDF was truncated so callers can warn the user.
  */
 export async function fileToAiImageParts(
   file: File, maxPages = MAX_OCR_PAGES,
@@ -140,5 +167,10 @@ export async function fileToAiImageParts(
     for (const b of blobs) parts.push({ media_type: 'image/jpeg', data: await toB64(b) });
     return { parts, totalPages, truncated };
   }
-  return { parts: [{ media_type: file.type || 'image/jpeg', data: await toB64(file) }], totalPages: 1, truncated: false };
+  // Image — downsize before sending so phone photos don't blow the request size.
+  let blob: Blob = file;
+  if (file.type.startsWith('image/')) {
+    try { blob = await resizeImageToJpegBlob(file); } catch { /* keep original if resize fails */ }
+  }
+  return { parts: [{ media_type: 'image/jpeg', data: await toB64(blob) }], totalPages: 1, truncated: false };
 }

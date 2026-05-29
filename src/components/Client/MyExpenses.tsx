@@ -27,6 +27,7 @@ export default function MyExpenses() {
   const [editing, setEditing]       = useState<any | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [scanning, setScanning]     = useState(false);
+  const [scanMsg, setScanMsg]       = useState<string>('');
   const [form, setForm]             = useState<any>({ ...EMPTY });
   const [submitting, setSubmitting] = useState(false);
   const [rows, setRows]             = useState<any[]>([]);
@@ -52,11 +53,17 @@ export default function MyExpenses() {
   const onFile = async (sel: File) => {
     if (previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
     setEditing(null); setFile(sel); setPreviewUrl(URL.createObjectURL(sel)); setForm({ ...EMPTY });
-    setScanning(true);
+    setScanMsg(''); setScanning(true);
     try {
       const img = await fileToAiImageParts(sel);
       if (img.truncated) alert(`This PDF has ${img.totalPages} pages — only the first ${MAX_OCR_PAGES} were read. Check the details below.`);
       const ai = await api.extractDocument(img.parts);
+      const filled = [
+        ai.vendor_name && 'supplier',
+        ai.invoice_date && 'date',
+        ai.total_amount != null && 'amount',
+        ai.vat_amount != null && 'VAT',
+      ].filter(Boolean) as string[];
       setForm((s: any) => ({
         ...s,
         vendor_name:  ai.vendor_name || '',
@@ -65,8 +72,12 @@ export default function MyExpenses() {
         vat_amount:   ai.vat_amount != null ? String(ai.vat_amount) : '',
         currency:     ai.currency || 'EUR',
       }));
-    } catch (err) {
-      console.warn('AI extraction unavailable, fill manually:', err);
+      setScanMsg(filled.length
+        ? `✓ Scanner filled in ${filled.join(', ')} — please check before submitting.`
+        : 'Scanner couldn\'t read this clearly — please fill the fields in manually.');
+    } catch (err: any) {
+      console.warn('AI extraction unavailable:', err);
+      setScanMsg('Scanner failed (' + (err?.message || 'no response') + ') — please fill the fields in manually.');
     } finally { setScanning(false); }
   };
 
@@ -123,10 +134,10 @@ export default function MyExpenses() {
 
       {!open ? (
         <div className="card" style={{ marginBottom: 16, textAlign: 'center', padding: 32 }}>
-          <p style={{ color: '#64748b' }}>Take a photo of the receipt, or choose a file.</p>
+          <p style={{ color: '#64748b' }}>Scan a document (camera) or choose a file from your device.</p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
             <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-              📷 Take photo
+              📷 Scan document
               <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                 onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
             </label>
@@ -145,7 +156,7 @@ export default function MyExpenses() {
               {!editing && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
-                    📷 Photo
+                    📷 Scan
                     <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                       onChange={e => { const sel = e.target.files?.[0]; if (sel) onFile(sel); }} />
                   </label>
@@ -168,8 +179,16 @@ export default function MyExpenses() {
           <div className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <strong style={{ fontSize: 13 }}>{editing ? 'Edit expense' : 'Details'}</strong>
-              {scanning && <span style={{ color: '#1e40af', fontSize: 12 }}>reading…</span>}
+              {scanning && <span style={{ color: '#1e40af', fontSize: 12 }}>scanning…</span>}
             </div>
+            {scanMsg && !scanning && (
+              <div style={{
+                background: scanMsg.startsWith('✓') ? '#dcfce7' : '#fef9c3',
+                border: '1px solid ' + (scanMsg.startsWith('✓') ? '#86efac' : '#facc15'),
+                color: scanMsg.startsWith('✓') ? '#166534' : '#92400e',
+                padding: '6px 10px', borderRadius: 6, fontSize: 12, marginBottom: 8,
+              }}>{scanMsg}</div>
+            )}
             <div className="form-grid">
               <div className="form-group"><label>Expense type *</label><input className="form-input" list="expense-types" value={form.expense_type} onChange={e => f('expense_type', e.target.value)} placeholder="e.g. Utilities" /></div>
               <div className="form-group"><label>Project code</label><input className="form-input" value={form.project_code} onChange={e => f('project_code', e.target.value)} /></div>
