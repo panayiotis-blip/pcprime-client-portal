@@ -95,6 +95,8 @@ h4 { font-size: 14px; font-weight: 600; }
   left: 0;
   right: 0;
   height: var(--header-height);
+  /* Explicitly above .main-content so the hamburger button is always tappable. */
+  z-index: 100;
   background: var(--pc-navy);
   color: #fff;
   align-items: center;
@@ -123,9 +125,10 @@ h4 { font-size: 14px; font-weight: 600; }
   top: 0;
   left: 0;
   bottom: 0;
-  /* High enough to clear any in-page overlay (chart tooltips, modals, etc.).
-     Must stay above .sidebar-overlay which is rendered just before it. */
-  z-index: 1100;
+  /* Above the mobile header (z 100) and the dimming overlay (z 200), but
+     in a normal range so iOS doesn't get confused by huge z-index values
+     on transformed elements. */
+  z-index: 300;
   transition: transform 0.3s;
   display: flex;
   flex-direction: column;
@@ -466,8 +469,9 @@ h4 { font-size: 14px; font-weight: 600; }
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.5);
-  /* Below .sidebar (z-index 1100) so menu items remain tappable. */
-  z-index: 1050;
+  /* Below .sidebar (z-index 300) so menu items remain tappable, above
+     .mobile-header (100) so the dim covers it when sidebar is open. */
+  z-index: 200;
 }
 
 /* ===== Main Content ===== */
