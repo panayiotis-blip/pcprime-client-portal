@@ -106,11 +106,24 @@ Deno.serve(async (req) => {
     }
     content.push({
       type: 'text',
-      text: 'Extract the details of this invoice/receipt using the record_invoice tool. ' +
-            'The document may be in English or Greek. Give amounts as plain numbers ' +
-            '(no currency symbols, decimal point as "."). Use ISO dates (YYYY-MM-DD). ' +
-            'Omit any field you cannot find. vendor_name is the party that ISSUED the ' +
-            'document (the supplier), not the recipient.',
+      text:
+        'Extract the details of this supplier invoice or receipt using the record_invoice tool.\n\n' +
+        'OUTPUT RULES\n' +
+        '• Amounts as plain numbers (no currency symbols, decimal point ".", no thousands separators).\n' +
+        '• Dates as ISO YYYY-MM-DD. Documents commonly show DD/MM/YYYY (Cyprus/Greek convention) — convert.\n' +
+        '• currency: 3-letter ISO code. If the document shows "€" or no symbol but is clearly a Cyprus document, use "EUR".\n' +
+        '• vendor_name: the party that ISSUED the document (the supplier / seller / shop / πωλητής / προμηθευτής), NOT the recipient or the buyer.\n' +
+        '• total_amount: the GROSS payable (VAT-inclusive). On receipts this is usually the largest amount, labelled "TOTAL", "GRAND TOTAL", "ΣΥΝΟΛΟ", "ΓΕΝΙΚΟ ΣΥΝΟΛΟ", or "ΠΛΗΡΩΤΕΟ".\n' +
+        '• subtotal: net amount before VAT, labelled "Subtotal", "Net", "ΑΞΙΑ", "ΚΑΘΑΡΗ ΑΞΙΑ".\n' +
+        '• vat_amount: the VAT figure ("VAT", "Tax", "ΦΠΑ"). vat_rate: the percentage (Cyprus rates are typically 19, 9, 5, or 0).\n' +
+        '• invoice_number: labels include "Invoice No", "Inv #", "Receipt No", "Α/Α", "Αρ. Τιμολογίου", "Αρ. Απόδειξης". Tills often print a transaction number — that counts.\n' +
+        '• If a field truly cannot be read, OMIT it — do not guess. Empty strings count as omission.\n' +
+        '• confidence (0-100): be honest. Crisp PDF/photo → 90+. Slightly skewed phone photo of a clear invoice → 70-90. Blurry / partial / heavy glare / faded thermal receipt → below 60.\n\n' +
+        'COMMON PITFALLS\n' +
+        '• Receipts (especially thermal till slips): vendor name is at the very top, often in larger or bolder text; the address and VAT number follow.\n' +
+        '• "TOTAL" on a receipt may equal what the customer paid (gross) — that\'s total_amount.\n' +
+        '• Multi-page invoice: read all pages; pick the final totals from the last page.\n' +
+        '• Documents in Greek may mix English column headers. The fields above apply regardless of language; set document_language to "el" if the document is mostly Greek.',
     });
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -119,6 +132,12 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 2048,
+        system:
+          'You are an extraction specialist for a Cyprus accounting firm. You read supplier invoices and ' +
+          'receipts (purchase documents, not the firm\'s own sales documents) in English and Greek and ' +
+          'return clean structured data. Cyprus context: currency defaults to EUR; standard VAT rates are ' +
+          '19%, 9%, 5%, 0%; date convention is DD/MM/YYYY (you convert to ISO). Prefer omitting a field ' +
+          'over hallucinating it.',
         tools: [TOOL],
         tool_choice: { type: 'tool', name: 'record_invoice' },
         messages: [{ role: 'user', content }],
