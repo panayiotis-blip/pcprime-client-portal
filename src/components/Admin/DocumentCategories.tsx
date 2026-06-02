@@ -21,9 +21,9 @@ type DocCategory = {
   display_order: number;
 };
 
-// The system folders a category can file into (mirrors api.ts SYSTEM_FOLDERS
-// + JOURNAL_SUBFOLDERS).
-const FOLDER_OPTIONS = [
+// Fallback used only if `folder_template` (migration 091) is missing/empty —
+// keeps the dropdown populated so the editor never goes blank.
+const FALLBACK_FOLDER_OPTIONS = [
   { value: 'kyc',              label: 'KYC Documents' },
   { value: 'contracts',        label: 'Contracts' },
   { value: 'agreements',       label: 'Agreements' },
@@ -38,7 +38,6 @@ const FOLDER_OPTIONS = [
   { value: 'scanned_DEP',      label: 'DEP — Deposits' },
   { value: 'scanned_JV',       label: 'JV — Journals' },
 ];
-const folderLabel = (key: string) => FOLDER_OPTIONS.find((f) => f.value === key)?.label || key;
 
 interface EditForm {
   name: string;
@@ -62,6 +61,8 @@ export default function DocumentCategories() {
   const [cats, setCats] = useState<DocCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [journalCodes, setJournalCodes] = useState<string[]>([]);
+  const [folderOptions, setFolderOptions] = useState(FALLBACK_FOLDER_OPTIONS);
+  const folderLabel = (key: string) => folderOptions.find((f) => f.value === key)?.label || key;
   // null = modal closed · 'new' = adding · number = editing that id
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [form, setForm] = useState<EditForm>(EMPTY_FORM);
@@ -82,6 +83,22 @@ export default function DocumentCategories() {
     api.getJournalTypes()
       .then((jts) => setJournalCodes((jts as any[]).map((j) => j.code)))
       .catch(() => {});
+  }, []);
+  // Load the editable folder list (rename in Storage folder names propagates here).
+  useEffect(() => {
+    api.getFolderTemplates()
+      .then((rows) => {
+        const opts = (rows as any[])
+          .filter((r) => r.is_active)
+          .sort((a, b) => {
+            // top-level first, then sub-folders; secondary by sort_order
+            if (!!a.parent_key !== !!b.parent_key) return a.parent_key ? 1 : -1;
+            return (a.sort_order || 0) - (b.sort_order || 0);
+          })
+          .map((r) => ({ value: r.category_key as string, label: r.name as string }));
+        if (opts.length > 0) setFolderOptions(opts);
+      })
+      .catch(() => { /* keep fallback */ });
   }, []);
 
   const openNew = () => { setForm(EMPTY_FORM); setEditingId('new'); };
@@ -241,7 +258,7 @@ export default function DocumentCategories() {
             <Select
               value={form.target_folder}
               onChange={(e) => setForm((f) => ({ ...f, target_folder: e.target.value }))}
-              options={FOLDER_OPTIONS}
+              options={folderOptions}
             />
           </FormField>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
