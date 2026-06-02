@@ -321,8 +321,8 @@ export default function AppShell() {
   if (user && !isStaffRole(user)) {
     return (
       <div className="app-shell">
-        <header className="mobile-header">
-          <button className="menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>&#9776;</button>
+        <header className="mobile-header" onClick={() => setSidebarOpen(o => !o)}>
+          <button className="menu-btn" type="button" aria-label="Open menu" onClick={(e) => { e.stopPropagation(); setSidebarOpen(o => !o); }}>&#9776;</button>
           <h1>PC Prime Portal</h1>
         </header>
 

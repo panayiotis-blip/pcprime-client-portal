@@ -95,11 +95,6 @@ h4 { font-size: 14px; font-weight: 600; }
   left: 0;
   right: 0;
   height: var(--header-height);
-  /* iOS Chrome can mis-route taps to fixed elements that aren't on the
-     compositor layer. translateZ(0) forces hardware acceleration. */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  will-change: transform;
   z-index: 100;
   background: var(--pc-navy);
   color: #fff;
