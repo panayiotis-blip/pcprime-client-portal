@@ -506,8 +506,21 @@ h4 { font-size: 14px; font-weight: 600; }
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .mobile-header { display: flex; }
-  .sidebar { transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
+  .sidebar {
+    transform: translateX(-100%);
+    /* iOS Chrome hit-tests the BOUNDING BOX, not the transform — so a
+       translated-off-screen sidebar still intercepts taps on the hamburger
+       area at the top-left. Hide it from touches until the user opens it. */
+    pointer-events: none;
+    visibility: hidden;
+    transition: transform 0.3s, visibility 0s linear 0.3s;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    pointer-events: auto;
+    visibility: visible;
+    transition: transform 0.3s, visibility 0s linear 0s;
+  }
   .sidebar-overlay { display: block; }
   .main-content {
     margin-left: 0;
