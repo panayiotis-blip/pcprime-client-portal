@@ -249,15 +249,25 @@ export default function ClientManager() {
   const sortIndicator = (key: SortKey) => sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   const handleAdd = async () => {
-    if (!form.name.trim()) return;
+    const type = form.client_type || 'company';
+    // Validate the right name field for the chosen type.
+    if (type === 'individual') {
+      if (!(form.surname || '').trim()) { alert('Surname is required for an individual.'); return; }
+    } else {
+      if (!(form.legal_name || form.name || '').trim()) { alert('Legal name is required for a company.'); return; }
+    }
     try {
-      const data: any = { ...form };
+      const data: any = { ...form, client_type: type };
       await api.createClient(data);
       await refreshClients();
       if (createUser && userForm.username) {
         alert('Client created. To create a login for them, use Supabase Dashboard → Authentication → Users, then link the user in the Users screen.');
       }
-      setForm({ client_code: '', name: '', trading_name: '', email: '', phone: '', address: '', tax_number: '', notes: '', country: 'Cyprus' });
+      setForm({
+        client_code: '', name: '', trading_name: '', email: '', phone: '', address: '',
+        tax_number: '', notes: '', country: 'Cyprus',
+        client_type: 'company', first_name: '', surname: '', legal_name: '', name_tax_office: '',
+      });
       setUserForm({ username: '', password: '', display_name: '' });
       setCreateUser(false);
       setShowForm(false);
@@ -589,8 +599,75 @@ export default function ClientManager() {
         <div className="client-form card">
           <div className="form-grid">
             <div className="form-group">
-              <label>Name *</label>
-              <input type="text" value={form.name} onChange={(e) => { setForm((p: any) => ({ ...p, name: e.target.value })); previewCode(e.target.value); }} className="form-input" placeholder="Client name" autoFocus />
+              <label>Type</label>
+              <select
+                className="form-input"
+                value={form.client_type || 'company'}
+                onChange={(e) => setForm((p: any) => ({ ...p, client_type: e.target.value }))}
+              >
+                <option value="company">Company</option>
+                <option value="individual">Individual</option>
+              </select>
+            </div>
+            {(form.client_type || 'company') === 'individual' ? (
+              <>
+                <div className="form-group">
+                  <label>Surname *</label>
+                  <input
+                    type="text"
+                    value={form.surname || ''}
+                    onChange={(e) => {
+                      const surname = e.target.value;
+                      const next = `${form.first_name || ''} ${surname}`.trim();
+                      setForm((p: any) => ({ ...p, surname, name: next }));
+                      previewCode(surname);
+                    }}
+                    className="form-input"
+                    placeholder="Surname (used for the client code)"
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group">
+                  <label>First Name</label>
+                  <input
+                    type="text"
+                    value={form.first_name || ''}
+                    onChange={(e) => {
+                      const first_name = e.target.value;
+                      const next = `${first_name} ${form.surname || ''}`.trim();
+                      setForm((p: any) => ({ ...p, first_name, name: next }));
+                    }}
+                    className="form-input"
+                    placeholder="First name"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="form-group">
+                <label>Legal Name *</label>
+                <input
+                  type="text"
+                  value={form.legal_name || form.name || ''}
+                  onChange={(e) => {
+                    const legal_name = e.target.value;
+                    setForm((p: any) => ({ ...p, legal_name, name: legal_name }));
+                    previewCode(legal_name);
+                  }}
+                  className="form-input"
+                  placeholder="Company legal name"
+                  autoFocus
+                />
+              </div>
+            )}
+            <div className="form-group">
+              <label>Name as per Tax Office</label>
+              <input
+                type="text"
+                value={form.name_tax_office || ''}
+                onChange={(e) => setForm((p: any) => ({ ...p, name_tax_office: e.target.value }))}
+                className="form-input"
+                placeholder="Greek name as on tax returns"
+              />
             </div>
             <div className="form-group">
               <label>Client Code (auto-generated)</label>

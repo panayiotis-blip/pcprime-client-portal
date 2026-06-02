@@ -75,6 +75,40 @@ function VendorToggle() {
   );
 }
 
+// Type picker — individual vs company. Switches which name fields show.
+function ClientTypePicker() {
+  const { editing, form, client, onChange } = useFieldCtx();
+  const value: string = (editing ? form.client_type : client.client_type) || 'company';
+  return (
+    <div className="form-group">
+      <label>Type</label>
+      {editing ? (
+        <select className="form-input" value={value} onChange={(e) => onChange('client_type', e.target.value)}>
+          <option value="company">Company</option>
+          <option value="individual">Individual</option>
+        </select>
+      ) : (
+        <div style={{ padding: '8px 0', textTransform: 'capitalize' }}>{value}</div>
+      )}
+    </div>
+  );
+}
+
+// Renders the name field(s) appropriate to the selected client type.
+function NameFields() {
+  const { editing, form, client } = useFieldCtx();
+  const type = (editing ? form.client_type : client.client_type) || 'company';
+  if (type === 'individual') {
+    return (
+      <>
+        <Field label="Surname" field="surname" />
+        <Field label="First Name" field="first_name" />
+      </>
+    );
+  }
+  return <Field label="Legal Name" field="legal_name" />;
+}
+
 // Tab 1: Client Info — name, tax-office name, classification, status,
 // dates. Splits out of the legacy monolithic Info tab.
 export default function ClientInfoTab() {
@@ -90,7 +124,8 @@ export default function ClientInfoTab() {
         <h3>Identification</h3>
         <div className="form-grid">
           <Field label="Client Code" field="client_code" />
-          <Field label="Legal Name" field="name" />
+          <ClientTypePicker />
+          <NameFields />
           <Field label="Client Name" field="client_name" placeholder="Latin characters — shown in the client list" />
           <Field label="Name as per Tax Office" field="name_tax_office" placeholder="Greek name as on tax returns" />
           <Field label="Trading Name" field="trading_name" />
