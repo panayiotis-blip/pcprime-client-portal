@@ -118,10 +118,14 @@ function routeMatchesGroup(group: NavGroup, pathname: string): boolean {
   );
 }
 
-// Lookup a NavItem by its path across all groups — used by the Favourites
-// section to resolve a pinned menu_item's label + icon.
+// Lookup a NavItem by its path across all groups (staff + client) — used by
+// the Favourites section to resolve a pinned menu_item's label + icon.
 function findNavItem(path: string): NavItem | undefined {
   for (const g of STAFF_GROUPS) {
+    const found = g.items.find(i => i.path === path);
+    if (found) return found;
+  }
+  for (const g of CLIENT_GROUPS) {
     const found = g.items.find(i => i.path === path);
     if (found) return found;
   }
@@ -247,9 +251,9 @@ export default function AppShell() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  // Load favourites once
+  // Load favourites once (both staff and clients have their own favourites).
   useEffect(() => {
-    if (!user?.id || !isStaffRole(user)) { setFavsLoaded(true); return; }
+    if (!user?.id) { setFavsLoaded(true); return; }
     let cancelled = false;
     (async () => {
       try {
@@ -339,6 +343,60 @@ export default function AppShell() {
                 <span className="nav-icon">⌂</span>Dashboard
               </Link>
             </li>
+
+            {/* Favourites — pinned at the top of the sidebar (clients) */}
+            {favsLoaded && favourites.length > 0 && (() => {
+              const favKey = 'favourites';
+              const expanded = groupStates[favKey] ? groupStates[favKey] === 'expanded' : true;
+              return (
+                <li className="sidebar-group sidebar-group-favourites">
+                  <button
+                    type="button"
+                    className={`sidebar-group-header ${expanded ? 'expanded' : ''}`}
+                    onClick={() => toggleGroup(favKey, expanded)}
+                  >
+                    <span className="sidebar-group-label">Favourites</span>
+                    <span className="sidebar-group-chevron">{expanded ? '▾' : '▸'}</span>
+                  </button>
+                  {expanded && (
+                    <ul className="sidebar-group-items">
+                      {favourites
+                        .filter(f => f.favourite_type === 'menu_item')
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                        .map(f => {
+                          const navItem = findNavItem(f.target_id);
+                          const label = f.label || navItem?.label || f.target_id;
+                          const icon  = navItem?.icon || '⊕';
+                          return (
+                            <li key={f.id}>
+                              <Link
+                                to={f.target_id}
+                                className={`sidebar-link sidebar-sub-link ${location.pathname === f.target_id ? 'active' : ''}`}
+                                onClick={() => setSidebarOpen(false)}
+                              >
+                                <span className="nav-icon">{icon}</span>
+                                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                                <button
+                                  type="button"
+                                  className="sidebar-pin pinned"
+                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); unpinFavourite(f.id); }}
+                                  title="Unpin"
+                                >×</button>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  )}
+                </li>
+              );
+            })()}
+
+            {/* Divider — separates Favourites from the main grouped nav */}
+            {favsLoaded && favourites.length > 0 && (
+              <li className="sidebar-divider" aria-hidden="true" />
+            )}
+
             {CLIENT_GROUPS.map(g => {
               const expanded = isGroupExpanded(g);
               const groupBadge = g.items.some(i => i.path === '/my-messages') ? msgUnread : 0;
@@ -360,22 +418,39 @@ export default function AppShell() {
                   </button>
                   {expanded && (
                     <ul className="sidebar-group-items">
-                      {g.items.map(item => (
-                        <li key={item.path}>
-                          <Link
-                            to={item.path}
-                            className={`sidebar-link sidebar-sub-link ${location.pathname === item.path ? 'active' : ''}`}
-                            onClick={() => setSidebarOpen(false)}
-                          >
-                            <span className="nav-icon">{item.icon}</span>{item.label}
-                            {item.path === '/my-messages' && msgUnread > 0 && (
-                              <span className="nav-badge" title={`${msgUnread} new message${msgUnread === 1 ? '' : 's'} from your accountant`}>
-                                {msgUnread > 9 ? '9+' : msgUnread}
-                              </span>
-                            )}
-                          </Link>
-                        </li>
-                      ))}
+                      {g.items.map(item => {
+                        const isPinned = favourites.some(f => f.favourite_type === 'menu_item' && f.target_id === item.path);
+                        return (
+                          <li key={item.path}>
+                            <Link
+                              to={item.path}
+                              className={`sidebar-link sidebar-sub-link ${location.pathname === item.path ? 'active' : ''}`}
+                              onClick={() => setSidebarOpen(false)}
+                            >
+                              <span className="nav-icon">{item.icon}</span>{item.label}
+                              {item.path === '/my-messages' && msgUnread > 0 && (
+                                <span className="nav-badge" title={`${msgUnread} new message${msgUnread === 1 ? '' : 's'} from your accountant`}>
+                                  {msgUnread > 9 ? '9+' : msgUnread}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                className={`sidebar-pin ${isPinned ? 'pinned' : ''}`}
+                                onClick={(e) => {
+                                  e.preventDefault(); e.stopPropagation();
+                                  if (isPinned) {
+                                    const fav = favourites.find(f => f.favourite_type === 'menu_item' && f.target_id === item.path);
+                                    if (fav) unpinFavourite(fav.id);
+                                  } else {
+                                    pinMenuItem(item.path, item.label);
+                                  }
+                                }}
+                                title={isPinned ? 'Unpin from Favourites' : 'Pin to Favourites'}
+                              >★</button>
+                            </Link>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </li>
