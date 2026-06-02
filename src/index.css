@@ -495,6 +495,12 @@ h4 { font-size: 14px; font-weight: 600; }
      Clients / Tax Filings / Credentials list pages. */
   max-width: none;
   min-width: 0;
+  /* Contain ALL descendants in their own stacking context — nothing inside
+     main-content (chart SVGs, sticky bars, etc.) can compete with
+     .mobile-header (root z-index 100) for taps at the top of the page. */
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
 }
 
 /* ===== Responsive ===== */
