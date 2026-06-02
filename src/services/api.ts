@@ -1134,6 +1134,17 @@ export const api = {
     const { error } = await supabase.rpc('set_folder_template_active', { p_id: id, p_active: active });
     if (error) throw new Error(error.message);
   },
+  async addFolderTemplate(name: string, parentKey: string | null, sortOrder: number) {
+    const { data, error } = await supabase.rpc('add_folder_template', {
+      p_name: name, p_parent_key: parentKey, p_sort_order: sortOrder,
+    });
+    if (error) throw new Error(error.message);
+    return data as number;
+  },
+  async deleteFolderTemplate(id: number) {
+    const { error } = await supabase.rpc('delete_folder_template', { p_id: id });
+    if (error) throw new Error(error.message);
+  },
 
   // --------- Document categories (Scan Document master list) ---------
   // Active categories only — used by the Scan Document dropdown.
