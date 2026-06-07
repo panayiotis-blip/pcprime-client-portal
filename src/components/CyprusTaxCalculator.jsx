@@ -2036,6 +2036,343 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
     generatePDF(activeResults, selectedYear);
   };
 
+  // ============ TD1-FORMAT PDF (FILING LAYOUT) ============
+  // Generates a form-style PDF that mirrors the official TD1 structure
+  // (Parts 1, 2, 3, 4 with subsections, 5, 6). Branches on formType for
+  // the Individuals vs Self-Employed variants. Not pixel-perfect — focused
+  // on getting all data labelled with TD1 part / column references so it
+  // can be cross-referenced with the official form when filing.
+  const generateTd1Pdf = async (results, year) => {
+    try {
+      const jspdf = await loadJsPDF();
+      const { jsPDF } = jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+      const PAGE_W = 210, PAGE_H = 297;
+      const MARGIN_L = 15, MARGIN_R = 15, MARGIN_T = 15, MARGIN_B = 15;
+      const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
+      const NAVY = [26, 54, 93];
+      const GOLD = [155, 134, 31];
+      const MUTED = [90, 100, 120];
+      const BORDER = [200, 200, 200];
+      const isSelfEmp = formType === 'self_employed';
+      let cursorY = MARGIN_T;
+      let pageNum = 1;
+
+      const setColor = (rgb, type = 'text') => {
+        if (type === 'text') doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+        else if (type === 'draw') doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+        else if (type === 'fill') doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+      };
+      const fmtAmt = (v) => (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmtDate = (s) => s ? new Date(s).toLocaleDateString('en-GB') : '';
+
+      const newPageIfNeeded = (needed) => {
+        if (cursorY + needed > PAGE_H - MARGIN_B - 10) {
+          // Page footer
+          setColor(MUTED, 'text');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.text(`Page ${pageNum}`, PAGE_W / 2, PAGE_H - 8, { align: 'center' });
+          doc.addPage();
+          pageNum++;
+          cursorY = MARGIN_T;
+        }
+      };
+
+      const drawPartHeader = (label) => {
+        newPageIfNeeded(14);
+        setColor(NAVY, 'fill');
+        doc.rect(MARGIN_L, cursorY, CONTENT_W, 6, 'F');
+        setColor([255, 255, 255], 'text');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(label, MARGIN_L + 2, cursorY + 4.2);
+        cursorY += 8;
+      };
+
+      const drawSubHeader = (label) => {
+        newPageIfNeeded(8);
+        setColor(GOLD, 'text');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text(label, MARGIN_L, cursorY + 3);
+        setColor(GOLD, 'draw');
+        doc.setLineWidth(0.2);
+        doc.line(MARGIN_L, cursorY + 4.5, MARGIN_L + CONTENT_W, cursorY + 4.5);
+        cursorY += 6;
+      };
+
+      const drawField = (label, value, indent = 0) => {
+        newPageIfNeeded(6);
+        setColor(MUTED, 'text');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text(label, MARGIN_L + indent, cursorY + 3);
+        setColor(NAVY, 'text');
+        doc.setFont('helvetica', 'bold');
+        doc.text(String(value || '—'), MARGIN_L + 70, cursorY + 3);
+        cursorY += 5;
+      };
+
+      const drawTable = (headers, rows, columnWidths) => {
+        if (rows.length === 0) {
+          setColor(MUTED, 'text');
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7.5);
+          doc.text('(no rows)', MARGIN_L + 2, cursorY + 3);
+          cursorY += 5;
+          return;
+        }
+        const rowH = 5.5;
+        newPageIfNeeded(rowH * (rows.length + 1) + 4);
+        // Header
+        setColor([240, 235, 215], 'fill');
+        doc.rect(MARGIN_L, cursorY, CONTENT_W, rowH, 'F');
+        setColor(NAVY, 'text');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        let x = MARGIN_L + 1;
+        headers.forEach((h, i) => {
+          doc.text(String(h), x, cursorY + 3.6);
+          x += columnWidths[i];
+        });
+        cursorY += rowH;
+        // Rows
+        setColor(NAVY, 'draw');
+        doc.setLineWidth(0.1);
+        setColor([26, 54, 93], 'text');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        rows.forEach(row => {
+          newPageIfNeeded(rowH + 2);
+          x = MARGIN_L + 1;
+          row.forEach((cell, i) => {
+            const text = String(cell || '');
+            // Truncate long text to column width
+            const maxChars = Math.max(8, Math.floor(columnWidths[i] / 1.6));
+            const display = text.length > maxChars ? text.slice(0, maxChars - 1) + '…' : text;
+            doc.text(display, x, cursorY + 3.6);
+            x += columnWidths[i];
+          });
+          setColor(BORDER, 'draw');
+          doc.line(MARGIN_L, cursorY + rowH, MARGIN_L + CONTENT_W, cursorY + rowH);
+          cursorY += rowH;
+        });
+        cursorY += 2;
+      };
+
+      // ============ HEADING ============
+      setColor(NAVY, 'text');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('MINISTRY OF FINANCE — TAX DEPARTMENT', PAGE_W / 2, cursorY + 5, { align: 'center' });
+      cursorY += 6;
+      doc.setFontSize(12);
+      doc.text(isSelfEmp ? 'DECLARATION OF INCOME — Self Employed' : 'DECLARATION OF INCOME — Individual', PAGE_W / 2, cursorY + 5, { align: 'center' });
+      cursorY += 6;
+      setColor(GOLD, 'text');
+      doc.setFontSize(10);
+      doc.text(`Tax Year ${year}`, PAGE_W / 2, cursorY + 5, { align: 'center' });
+      cursorY += 10;
+      setColor(MUTED, 'text');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.text(`Prepared by PC Prime & Calculate Consultants Ltd · ${new Date().toLocaleDateString('en-GB')} · Form TD1 ${isSelfEmp ? '(self employed)' : ''} ${year}`, PAGE_W / 2, cursorY + 4, { align: 'center' });
+      cursorY += 8;
+
+      // ============ PART 1 — TAXPAYER'S DETAILS ============
+      drawPartHeader("PART 1 — TAXPAYER'S DETAILS");
+      drawField('Name / Business Name:', clientName);
+      drawField('T.I.C.:', clientTIC);
+      drawField('ID / Passport No.:', clientID);
+      drawField('Date of Birth:', fmtDate(clientDOB));
+      drawField('Social Insurance No.:', clientSSN);
+      drawField('Address:', clientAddress);
+
+      // ============ PART 3 — TAX RESIDENCE & GHS ============
+      drawPartHeader('PART 3 — TAX RESIDENCE AND OTHER INFORMATION');
+      drawField('Tax Resident of Cyprus:', taxResident ? `Yes (${residencyRule}-day rule)` : 'No');
+      if (isSelfEmp) {
+        drawSubHeader('Part 3.C — Books & Records');
+        drawField('Turnover up to €70,000:', selfEmpTurnoverUnder70k ? 'YES' : 'NO');
+        drawField('Audited / Inspected:', selfEmpAuditedAccounts === 'audited' ? 'Yes — audited' : selfEmpAuditedAccounts === 'inspected' ? 'Yes — inspected' : 'No');
+      }
+
+      // ============ PART 4 — INCOME ============
+      drawPartHeader('PART 4 — INCOME');
+
+      if (!isSelfEmp) {
+        // Part 4.A — Salaried Services
+        drawSubHeader('Part 4.A — Salaried Services');
+        drawTable(
+          ['T.I.C.', 'Employer', 'Code', 'Months', 'Gross In Rep.', 'Gross Outside', 'BIK', 'Tax W/h', 'GHS W/h'],
+          employments.map(e => [
+            e.employerTic, e.employerName, e.code, e.periodMonths,
+            fmtAmt(e.grossInRepublic), fmtAmt(e.grossOutsideRepublic),
+            fmtAmt(e.bik), fmtAmt(e.taxWithheld), fmtAmt(e.ghsWithheld),
+          ]),
+          [18, 32, 12, 14, 24, 24, 18, 20, 18]
+        );
+      } else {
+        // Part 4.1 — Trade / Industry / Profession
+        drawSubHeader('Part 4.1 — Trade / Industry / Profession / Vocation');
+        drawTable(
+          ['Activity', 'Occ. Cat.', 'In/Out Rep.', 'Profit C/Y', 'Loss C/Y', 'Loss BF 1997', 'Loss >5y', 'Tax Out'],
+          selfEmployedActivities.map(a => [
+            (SELF_EMP_ACTIVITY_TYPES.find(t => t.code === a.mainCategory) || {}).label || a.mainCategory,
+            a.occupationalCategory,
+            a.isOutsideRepublic ? 'Outside' : 'In Republic',
+            fmtAmt(a.taxableProfit), fmtAmt(a.lossCurrentYear),
+            fmtAmt(a.lossesBfFrom1997), fmtAmt(a.lossesMoreThan5yNotCarried),
+            fmtAmt(a.taxPaidOutside),
+          ]),
+          [28, 16, 22, 22, 22, 22, 22, 22]
+        );
+
+        // Part 4.2 — Disposal
+        drawSubHeader('Part 4.2 — Gain / (Loss) on Disposal of Immovable Property or Shares');
+        drawField('Gain from Immovable Property:', `€${fmtAmt(disposalGainImmovable)}`);
+        drawField('(Loss) Immovable Property:', `€${fmtAmt(disposalLossImmovable)}`);
+        drawField('Gain from Shares (Private Co.):', `€${fmtAmt(disposalGainShares)}`);
+        drawField('(Loss) Shares (Private Co.):', `€${fmtAmt(disposalLossShares)}`);
+        drawField('T.I.C. of Company:', disposalTicOfCompany);
+        drawField('Country of T.I.C.:', disposalCountry);
+
+        // Part 4.3 — Partnerships
+        drawSubHeader('Part 4.3 — Income from Partnership');
+        drawTable(
+          ['T.I.C.', 'Name', 'Code', '%', 'Salary', 'Int. Cap.', 'Trade', '(Loss)', 'Tax W/h'],
+          partnerships.map(p => [
+            p.tic, p.name, p.code, p.percentage,
+            fmtAmt(p.salary), fmtAmt(p.interestOnCapital),
+            fmtAmt(p.tradingIncome), fmtAmt(p.tradingLoss),
+            fmtAmt(p.taxWithheld),
+          ]),
+          [18, 32, 10, 12, 20, 22, 22, 22, 22]
+        );
+      }
+
+      // Part 4.B — Pensions
+      drawSubHeader('Part 4.B — Pensions');
+      drawTable(
+        ['T.I.C.', 'Payer', 'Code', 'Amount', 'Tax W/h', 'GHS W/h'],
+        pensions.map(p => [p.payerTic, p.payerName, p.code, fmtAmt(p.amount), fmtAmt(p.taxWithheld), fmtAmt(p.ghsWithheld)]),
+        [22, 50, 16, 32, 30, 30]
+      );
+
+      // Part 4.C — Rents
+      drawSubHeader('Part 4.C — Rents / Income from Immovable Property');
+      drawTable(
+        ['Reg. No.', 'Type', 'Lessee', 'Share %', 'Gross In', 'Gross Out', 'Cap. Allow.', 'Interest', 'SDC W/h', 'GHS W/h'],
+        rentalProperties.map(r => [
+          r.registrationNo, r.propertyTypeCode, r.lesseeName, r.ownershipShare,
+          fmtAmt(r.annualGrossInRepublic), fmtAmt(r.annualGrossOutsideRepublic),
+          fmtAmt(r.capitalAllowances), fmtAmt(r.interestPayable),
+          fmtAmt(r.sdcWithheld), fmtAmt(r.ghsWithheld),
+        ]),
+        [22, 12, 26, 14, 20, 20, 20, 18, 14, 14]
+      );
+
+      // Part 4.E — Interest
+      drawSubHeader('Part 4.E — Interest Receivable');
+      drawTable(
+        ['Code', 'T.I.C.', 'Debtor', 'Country', 'Gross', 'Tax Out', 'SDC W/h', 'GHS W/h'],
+        interestSources.map(s => [s.code, s.debtorTic, s.debtorName, s.country, fmtAmt(s.grossInterest), fmtAmt(s.taxPaidOutside), fmtAmt(s.sdcWithheld), fmtAmt(s.ghsWithheld)]),
+        [12, 20, 40, 22, 20, 20, 18, 28]
+      );
+
+      // Part 4.F — Dividends
+      drawSubHeader('Part 4.F — Dividends');
+      drawTable(
+        ['Code', 'T.I.C.', 'Country', 'Business', 'Gross', 'SDC W/h', 'GHS W/h', 'Tax Out'],
+        dividendSources.map(d => [d.code, d.payerTic, d.country, d.businessName, fmtAmt(d.grossDividend), fmtAmt(d.sdcWithheld), fmtAmt(d.ghsWithheld), fmtAmt(d.taxPaidOutside)]),
+        [12, 20, 22, 36, 22, 18, 18, 32]
+      );
+
+      // Part 4.G — Life redemption (only when populated)
+      if (lifeRedemptions.length > 0) {
+        drawSubHeader('Part 4.G — Redemption of Life Insurance Policies');
+        drawTable(
+          ['T.I.C.', 'Company', 'Issued', 'Cancelled', 'Premiums Deducted'],
+          lifeRedemptions.map(r => [r.insuranceCompanyTic, r.insuranceCompanyName, fmtDate(r.issueDate), fmtDate(r.cancellationDate), fmtAmt(r.premiumsDeducted)]),
+          [22, 60, 30, 30, 38]
+        );
+        drawField('Add-back to income:', `€${fmtAmt(results.lifeRedemptionAddback)}`);
+      }
+
+      // ============ PART 5 — DEDUCTIONS ============
+      drawPartHeader('PART 5 — DEDUCTIONS / ALLOWANCES');
+
+      drawSubHeader('Part 5.A — Miscellaneous Deductions');
+      drawField('1. Trade union contributions:', `€${fmtAmt(tradeUnionContrib)}`);
+      drawField('2. Professional subscriptions:', `€${fmtAmt(profSubscriptions)}`);
+      drawField('3. Donations to approved charities:', `€${fmtAmt(donations)}`);
+      drawField('4. Broader public sector reductions:', `€${fmtAmt(broaderPublicSectorReduction)}`);
+      drawField('5. Donations to political parties (max €50K):', `€${fmtAmt(politicalPartyDonations)}`);
+      drawField('6. Community / Customs officer expenses:', `€${fmtAmt(communityOfficerExpenses)}`);
+
+      // Part 5.B — Innovative business investments
+      if (innovativeInvestments.length > 0) {
+        drawSubHeader('Part 5.B — Investment in Innovative Businesses');
+        drawTable(
+          ['T.I.C.', 'Code', 'Year Inv.', 'Yr Cont.', 'Initial', 'Claimed ≤2023', 'Claim This Yr'],
+          innovativeInvestments.map(r => [r.tic, r.code, r.yearOfInvestment, r.yearOfContinuationInvestment, fmtAmt(r.initialAmount), fmtAmt(r.amountClaimedUpTo2023), fmtAmt(r.amountToClaim)]),
+          [22, 12, 22, 22, 28, 32, 42]
+        );
+        drawField('Allowed (capped 50% post-deduction):', `€${fmtAmt(results.innovativeAllowed)}`);
+      }
+
+      // Part 5.C — Life / SI / Pension funds
+      drawSubHeader('Part 5.C — Life / Social Insurance / Pension Funds');
+      drawTable(
+        ['T.I.C.', 'Fund / Insurer', 'Code', 'Life of', 'Sum Assured', 'Amount Paid'],
+        lifeSiPensionFunds.map(r => [r.fundTic, r.fundName, r.code, r.code === '3' ? r.lifeOf : '', fmtAmt(r.sumAssured), fmtAmt(r.amountPaid)]),
+        [22, 50, 16, 18, 30, 44]
+      );
+
+      // ============ PART 6 — INCOME TAX COMPUTATION ============
+      drawPartHeader('PART 6 — INCOME TAX COMPUTATION');
+      drawField('Total Progressive Income:', `€${fmtAmt(results.totalProgressiveIncome)}`);
+      drawField('Total Deductions:', `€${fmtAmt(results.totalDeductions)}`);
+      if (results.innovativeAllowed > 0) drawField('Innovative Business Deduction:', `€${fmtAmt(results.innovativeAllowed)}`);
+      drawField('Chargeable Income:', `€${fmtAmt(results.chargeableIncome)}`);
+      cursorY += 2;
+      drawField('Personal Income Tax (PIT):', `€${fmtAmt(results.pit)}`);
+      drawField('Special Defence Contribution (SDC):', `€${fmtAmt(results.totalSDC)}`);
+      drawField('Social Insurance Contribution:', `€${fmtAmt(results.totalSI)}`);
+      drawField('GHS / GeSY Contribution:', `€${fmtAmt(results.totalGHS)}`);
+      if (results.foreignPensionFlatTax > 0) drawField('Foreign Pension Flat Tax (5%):', `€${fmtAmt(results.foreignPensionFlatTax)}`);
+      if (results.cyprusPensionFlatTax > 0) drawField("Widow's Pension Flat Tax (20%):", `€${fmtAmt(results.cyprusPensionFlatTax)}`);
+      if (results.cryptoTax > 0) drawField('Crypto Disposal Tax (8%):', `€${fmtAmt(results.cryptoTax)}`);
+      cursorY += 1;
+      setColor(NAVY, 'fill');
+      doc.rect(MARGIN_L, cursorY, CONTENT_W, 7, 'F');
+      setColor([255, 255, 255], 'text');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text('TOTAL LIABILITY:', MARGIN_L + 2, cursorY + 4.8);
+      doc.text(`€${fmtAmt(results.totalLiability)}`, MARGIN_L + CONTENT_W - 2, cursorY + 4.8, { align: 'right' });
+      cursorY += 10;
+
+      // Final page footer
+      setColor(MUTED, 'text');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.text(`Page ${pageNum}`, PAGE_W / 2, PAGE_H - 8, { align: 'center' });
+      doc.text('Indicative TD1 filing draft — verify against official Cyprus Tax Department forms before submission.', PAGE_W / 2, PAGE_H - 4, { align: 'center' });
+
+      const safeName = clientName ? clientName.replace(/[^a-z0-9]/gi, '_') : 'Client';
+      doc.save(`TD1_${isSelfEmp ? 'SelfEmployed' : 'Individual'}_${safeName}_${year}.pdf`);
+    } catch (err) {
+      console.error('TD1 PDF failed:', err);
+      alert(`TD1 PDF generation failed: ${err.message}`);
+    }
+  };
+  const handleDownloadTd1Pdf = () => {
+    setShowExportDialog(false);
+    generateTd1Pdf(activeResults, selectedYear);
+  };
+
   const handlePrintPreview = () => {
     // Simple HTML preview for those who prefer browser print
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -2455,18 +2792,35 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                 Choose your preferred export method for Tax Year {selectedYear}.
               </p>
 
-              {/* PDF DOWNLOAD - Primary */}
+              {/* PDF DOWNLOAD - Primary (professional summary) */}
               <button onClick={handleDownloadPDF}
                 style={{ width: '100%', padding: '0.85rem', background: COLORS.accent, color: COLORS.bg,
                   border: 'none', borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit',
                   fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center',
                   justifyContent: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
                 <FileDown size={16} />
-                Download PDF
+                Download PDF (Summary)
               </button>
               <p style={{ fontSize: '0.68rem', color: COLORS.textDim, marginBottom: '0.85rem', fontStyle: 'italic', paddingLeft: '0.25rem' }}>
-                Professional branded PDF — recommended for client deliverables
+                Professional branded computation summary — for client deliverables and the firm's file
               </p>
+
+              {/* TD1 FILING-FORMAT PDF (portal-only) */}
+              {embedded && (
+                <>
+                  <button onClick={handleDownloadTd1Pdf}
+                    style={{ width: '100%', padding: '0.85rem', background: COLORS.bg, color: COLORS.accent,
+                      border: `1.5px solid ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                    <FileDown size={16} />
+                    Download TD1 PDF ({formType === 'self_employed' ? 'Self Employed' : 'Individuals'})
+                  </button>
+                  <p style={{ fontSize: '0.68rem', color: COLORS.textDim, marginBottom: '0.85rem', fontStyle: 'italic', paddingLeft: '0.25rem' }}>
+                    TD1-shaped filing draft — all parts laid out with codes / columns matching the official form
+                  </p>
+                </>
+              )}
 
               {/* CSV EXPORT */}
               <button onClick={handleDownloadCSV}
