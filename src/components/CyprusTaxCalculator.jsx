@@ -602,7 +602,11 @@ const ComputationPanel = React.memo(({ results, year, isComparison = false, Y })
 //   initialState  — previously-saved input_data; restores every field
 //   onSave(inputData, snapshot)  — called by the Save button; snapshot = { year, results }
 //   taxYearLock  — when editing an existing return, lock the year selector to this year
-export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState, onSave, taxYearLock } = {}) {
+//   formType      — 'individuals' | 'self_employed' (Chunk D wires this to a different field layout;
+//                   for now it's just stored on the row and shown in the tab header)
+export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState, onSave, taxYearLock, formType } = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  void formType; // referenced to silence unused-prop warnings until Chunk D consumes it
   // Pull a previously-saved value if present, else use the supplied fallback.
   const init = (key, fallback) =>
     (initialState && initialState[key] !== undefined && initialState[key] !== null) ? initialState[key] : fallback;

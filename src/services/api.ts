@@ -2118,7 +2118,7 @@ export const api = {
   // --------- Tax returns (personal income tax — individual clients only) ---------
   async listTaxReturns(clientId: number) {
     const { data, error } = await supabase.from('tax_returns')
-      .select('id, tax_year, status, reference_number, updated_at, submitted_at')
+      .select('id, tax_year, form_type, status, reference_number, updated_at, submitted_at')
       .eq('client_id', clientId)
       .order('tax_year', { ascending: false });
     if (error) throw new Error(error.message);
@@ -2130,7 +2130,7 @@ export const api = {
     if (error) throw new Error(error.message);
     return data;
   },
-  async createTaxReturn(row: { client_id: number; tax_year: number; input_data?: any; results?: any; status?: string; notes?: string }) {
+  async createTaxReturn(row: { client_id: number; tax_year: number; form_type?: 'individuals' | 'self_employed'; input_data?: any; results?: any; status?: string; notes?: string }) {
     const { data: { session } } = await supabase.auth.getSession();
     const { data, error } = await supabase.from('tax_returns')
       .insert({ ...row, created_by: session?.user?.id || null })
