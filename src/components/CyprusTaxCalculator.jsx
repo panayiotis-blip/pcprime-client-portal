@@ -247,6 +247,76 @@ const initRentalProperties = (initialState) => {
   return []; // rentals are optional
 };
 
+// ============ INTEREST SOURCE HELPERS (TD1 Part 4.E) — portal-only ============
+// Codes match the TD1 form. SDC withholding behaviour varies by code (3% for code 2,
+// 17% for codes 3/4, none for codes 1/5).
+const INTEREST_CODES = [
+  { code: '1', label: 'Code 1 — Loans / other sources (no SDC at source)' },
+  { code: '2', label: 'Code 2 — Securities / bonds of Government & listed corps (3% SDC)' },
+  { code: '3', label: 'Code 3 — Bank deposits / debentures of companies (17% SDC at source)' },
+  { code: '4', label: 'Code 4 — Other bonds (17% SDC at source)' },
+  { code: '5', label: 'Code 5 — Sources outside the Republic' },
+];
+
+const newInterestSourceId = () => `int-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyInterestSource = () => ({
+  id: newInterestSourceId(),
+  code: '3',
+  debtorTic: '',
+  debtorName: '',
+  grossInterest: '',
+  taxPaidOutside: '',
+  sdcWithheld: '',
+  ghsWithheld: '',
+  country: '',
+  accountType: '',
+});
+
+const initInterestSources = (initialState) => {
+  if (initialState?.interestSources && Array.isArray(initialState.interestSources) && initialState.interestSources.length > 0) {
+    return initialState.interestSources.map(s => ({ ...emptyInterestSource(), ...s, id: s.id || newInterestSourceId() }));
+  }
+  // Legacy single interestIncome field → one row with code 3 (bank deposits is most common)
+  if (initialState?.interestIncome) {
+    return [{ ...emptyInterestSource(), grossInterest: String(initialState.interestIncome), debtorName: '(Bank — legacy)' }];
+  }
+  return [];
+};
+
+// ============ DIVIDEND SOURCE HELPERS (TD1 Part 4.F) — portal-only ============
+const DIVIDEND_CODES = [
+  { code: '1', label: 'Code 1 — From companies in the Republic' },
+  { code: '2', label: 'Code 2 — From companies outside the Republic' },
+  { code: '3', label: 'Code 3 — From qualifying ships (Merchant Shipping Law, exempt)' },
+  { code: '4', label: 'Code 4 — Deemed dividends from 2022 profits (Republic companies)' },
+];
+
+const newDividendSourceId = () => `div-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyDividendSource = () => ({
+  id: newDividendSourceId(),
+  code: '1',
+  payerTic: '',
+  country: '',
+  businessName: '',
+  grossDividend: '',
+  sdcWithheld: '',
+  ghsWithheld: '',
+  taxPaidOutside: '',
+  receiptDate: '',
+});
+
+const initDividendSources = (initialState) => {
+  if (initialState?.dividendSources && Array.isArray(initialState.dividendSources) && initialState.dividendSources.length > 0) {
+    return initialState.dividendSources.map(s => ({ ...emptyDividendSource(), ...s, id: s.id || newDividendSourceId() }));
+  }
+  if (initialState?.dividendIncome) {
+    return [{ ...emptyDividendSource(), grossDividend: String(initialState.dividendIncome), businessName: '(Legacy dividend)' }];
+  }
+  return [];
+};
+
 // Migrate legacy single-pension fields (foreignPension* + cyprusPension*) into rows.
 const initPensions = (initialState) => {
   if (initialState?.pensions && Array.isArray(initialState.pensions) && initialState.pensions.length > 0) {
@@ -472,6 +542,10 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const [otherIncome, setOtherIncome] = useState(init('otherIncome', ''));
   const [dividendIncome, setDividendIncome] = useState(init('dividendIncome', ''));
   const [interestIncome, setInterestIncome] = useState(init('interestIncome', ''));
+  // B3 (portal-only): per-source arrays for TD1 Part 4.E / 4.F. The legacy single-field
+  // state above stays for the public /tax route; the portal swaps to the row UIs.
+  const [interestSources, setInterestSources] = useState(() => initInterestSources(initialState));
+  const [dividendSources, setDividendSources] = useState(() => initDividendSources(initialState));
   const [cryptoGains, setCryptoGains] = useState(init('cryptoGains', ''));
   const [foreignReliefType, setForeignReliefType] = useState(init('foreignReliefType', 'none'));
   const [isNonDom, setIsNonDom] = useState(init('isNonDom', false));
@@ -560,6 +634,26 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   }, []);
   const updateRentalProperty = useCallback((id, field, value) => {
     setRentalProperties(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }, []);
+
+  // ============ INTEREST + DIVIDEND ROW MUTATORS (portal-only) ============
+  const addInterestSource = useCallback(() => {
+    setInterestSources(prev => [...prev, emptyInterestSource()]);
+  }, []);
+  const removeInterestSource = useCallback((id) => {
+    setInterestSources(prev => prev.filter(s => s.id !== id));
+  }, []);
+  const updateInterestSource = useCallback((id, field, value) => {
+    setInterestSources(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
+  }, []);
+  const addDividendSource = useCallback(() => {
+    setDividendSources(prev => [...prev, emptyDividendSource()]);
+  }, []);
+  const removeDividendSource = useCallback((id) => {
+    setDividendSources(prev => prev.filter(s => s.id !== id));
+  }, []);
+  const updateDividendSource = useCallback((id, field, value) => {
+    setDividendSources(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
   }, []);
 
   const calculate = useCallback((yearKey) => {
@@ -775,13 +869,22 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       }
     }
 
+    // ============ INTEREST + DIVIDEND TOTALS ============
+    // When the portal-only row arrays are populated, they win over the legacy single
+    // fields. This keeps the public /tax calculator using interestIncome / dividendIncome
+    // as before while the portal sums across rows.
+    const interestArraySum = interestSources.reduce((s, x) => s + num(x.grossInterest), 0);
+    const dividendArraySum = dividendSources.reduce((s, x) => s + num(x.grossDividend), 0);
+    const effectiveInterest = interestSources.length > 0 ? interestArraySum : num(interestIncome);
+    const effectiveDividend = dividendSources.length > 0 ? dividendArraySum : num(dividendIncome);
+
     // ============ SDC (only Cyprus tax residents who are also domiciled) ============
-    const sdcDividends = (isNonDom || !taxResident) ? 0 : num(dividendIncome) * Y.sdcRates.dividends;
-    const sdcInterest = (isNonDom || !taxResident) ? 0 : num(interestIncome) * Y.sdcRates.interest;
+    const sdcDividends = (isNonDom || !taxResident) ? 0 : effectiveDividend * Y.sdcRates.dividends;
+    const sdcInterest = (isNonDom || !taxResident) ? 0 : effectiveInterest * Y.sdcRates.interest;
     const sdcRental = (isNonDom || !taxResident) ? 0 : grossRent * Y.sdcRates.rental;
     const totalSDC = sdcDividends + sdcInterest + sdcRental;
 
-    const passiveGhsAddl = Math.min(num(dividendIncome) + num(interestIncome), Math.max(0, Y.ghsCap - passiveBase)) * Y.ghsRates.passive;
+    const passiveGhsAddl = Math.min(effectiveDividend + effectiveInterest, Math.max(0, Y.ghsCap - passiveBase)) * Y.ghsRates.passive;
     const totalGHS = empGhs + seGhs + passiveGhs + passiveGhsAddl;
 
     // ============ FLAT RATE TAXES ============
@@ -793,7 +896,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
 
     // ============ TOTAL GROSS INCOME (for net calc) ============
     const totalGrossIncome = grossEmployment + grossSelfEmp + grossRent + foreignPension + cyprusPension + otherInc +
-                             num(dividendIncome) + num(interestIncome) + num(cryptoGains) +
+                             effectiveDividend + effectiveInterest + num(cryptoGains) +
                              royaltyQualifying + royaltyOrdinary + courtOrder + goodwill + cryptoMining;
     const netIncome = totalGrossIncome - totalLiability;
     const effectiveRate = totalGrossIncome > 0 ? (totalLiability / totalGrossIncome) * 100 : 0;
@@ -826,7 +929,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       capGainsSharesAmount, capGainsPropertyAmount,
       taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
-  }, [employments, pensions, rentalProperties, selfEmpIncome,
+  }, [employments, pensions, rentalProperties, interestSources, dividendSources, selfEmpIncome,
       otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
@@ -849,7 +952,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const getInputState = () => ({
     selectedYear,
     clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
-    employments, pensions, rentalProperties,
+    employments, pensions, rentalProperties, interestSources, dividendSources,
     selfEmpIncome,
     otherIncome, dividendIncome, interestIncome, cryptoGains,
     foreignReliefType, isNonDom,
@@ -2355,10 +2458,122 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                 <strong>Non-Dom Status</strong> <span style={{ color: COLORS.textDim, fontSize: '0.72rem' }}>(0% SDC)</span>
               </label>
 
-              <InputRow label="Dividend Income (€)" value={dividendIncome} onChange={setDividendIncome}
-                hint={isNonDom ? "0% SDC + 2.65% GHS" : selectedYear === 2025 ? "17% SDC + 2.65% GHS" : "5% SDC + 2.65% GHS"} />
-              <InputRow label="Interest Income (€)" value={interestIncome} onChange={setInterestIncome} hint={isNonDom ? "0% SDC + 2.65% GHS" : "17% SDC + 2.65% GHS"} />
+              {/* Public /tax: simple single-field dividend/interest inputs. Portal mode
+                  swaps these for the TD1-shaped row arrays below. */}
+              {!embedded && (
+                <>
+                  <InputRow label="Dividend Income (€)" value={dividendIncome} onChange={setDividendIncome}
+                    hint={isNonDom ? "0% SDC + 2.65% GHS" : selectedYear === 2025 ? "17% SDC + 2.65% GHS" : "5% SDC + 2.65% GHS"} />
+                  <InputRow label="Interest Income (€)" value={interestIncome} onChange={setInterestIncome} hint={isNonDom ? "0% SDC + 2.65% GHS" : "17% SDC + 2.65% GHS"} />
+                </>
+              )}
               <InputRow label="Crypto Disposal Gains (€)" value={cryptoGains} onChange={setCryptoGains} hint="flat 8%" />
+
+              {embedded && (
+                <>
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>
+                    Dividends <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.F (one row per company)</span>
+                  </div>
+                  {dividendSources.map((d, idx) => (
+                    <div key={d.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                          Dividend #{idx + 1}{d.businessName ? ` — ${d.businessName}` : ''}
+                        </span>
+                        <button type="button" onClick={() => removeDividendSource(d.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                          title="Remove this dividend">✕ Remove</button>
+                      </div>
+                      <div style={{ marginBottom: '0.7rem' }}>
+                        <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code (TD1 column 4)</label>
+                        <select value={d.code} onChange={e => updateDividendSource(d.id, 'code', e.target.value)}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                          {DIVIDEND_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Business Name" type="text" placeholder="Company paying the dividend"
+                          value={d.businessName} onChange={v => updateDividendSource(d.id, 'businessName', v)} />
+                        <InputRow label="Payer TIC / ID" type="text" placeholder=""
+                          value={d.payerTic} onChange={v => updateDividendSource(d.id, 'payerTic', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Country of Origin" type="text" placeholder="if foreign"
+                          value={d.country} onChange={v => updateDividendSource(d.id, 'country', v)} />
+                        <InputRow label="Gross Dividend (€)"
+                          value={d.grossDividend} onChange={v => updateDividendSource(d.id, 'grossDividend', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="SDC Withheld (€)"
+                          value={d.sdcWithheld} onChange={v => updateDividendSource(d.id, 'sdcWithheld', v)} />
+                        <InputRow label="GHS Withheld (€)"
+                          value={d.ghsWithheld} onChange={v => updateDividendSource(d.id, 'ghsWithheld', v)} />
+                        <InputRow label="Tax Paid Outside (€)" hint="foreign tax credit"
+                          value={d.taxPaidOutside} onChange={v => updateDividendSource(d.id, 'taxPaidOutside', v)} />
+                      </div>
+                      <InputRow label="Dividend Receipt Date" type="date" placeholder=""
+                        value={d.receiptDate} onChange={v => updateDividendSource(d.id, 'receiptDate', v)} />
+                    </div>
+                  ))}
+                  <button type="button" onClick={addDividendSource}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add dividend source
+                  </button>
+
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.5rem', marginBottom: '0.6rem' }}>
+                    Interest <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.E (one row per source)</span>
+                  </div>
+                  {interestSources.map((s, idx) => (
+                    <div key={s.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                          Interest #{idx + 1}{s.debtorName ? ` — ${s.debtorName}` : ''}
+                        </span>
+                        <button type="button" onClick={() => removeInterestSource(s.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                          title="Remove this interest source">✕ Remove</button>
+                      </div>
+                      <div style={{ marginBottom: '0.7rem' }}>
+                        <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code (TD1 column 3)</label>
+                        <select value={s.code} onChange={e => updateInterestSource(s.id, 'code', e.target.value)}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                          {INTEREST_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Debtor / Bank Name" type="text" placeholder="e.g. Bank of Cyprus"
+                          value={s.debtorName} onChange={v => updateInterestSource(s.id, 'debtorName', v)} />
+                        <InputRow label="TIC / ID Card No." type="text" placeholder=""
+                          value={s.debtorTic} onChange={v => updateInterestSource(s.id, 'debtorTic', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Gross Interest (€)"
+                          value={s.grossInterest} onChange={v => updateInterestSource(s.id, 'grossInterest', v)} />
+                        <InputRow label="Tax Paid Outside (€)" hint="foreign sources only"
+                          value={s.taxPaidOutside} onChange={v => updateInterestSource(s.id, 'taxPaidOutside', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="SDC Withheld (€)"
+                          value={s.sdcWithheld} onChange={v => updateInterestSource(s.id, 'sdcWithheld', v)} />
+                        <InputRow label="GHS Withheld (€)"
+                          value={s.ghsWithheld} onChange={v => updateInterestSource(s.id, 'ghsWithheld', v)} />
+                      </div>
+                      {s.code === '5' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                          <InputRow label="Country of Origin" type="text" placeholder="for foreign sources"
+                            value={s.country} onChange={v => updateInterestSource(s.id, 'country', v)} />
+                          <InputRow label="Account Type" type="text" placeholder="savings, etc."
+                            value={s.accountType} onChange={v => updateInterestSource(s.id, 'accountType', v)} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" onClick={addInterestSource}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add interest source
+                  </button>
+                </>
+              )}
 
               <div style={{ marginTop: '0.85rem', marginBottom: '0.4rem' }}>
                 <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, display: 'block', marginBottom: '0.25rem' }}>Foreign Employee Relief</label>
