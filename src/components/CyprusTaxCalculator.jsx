@@ -247,6 +247,29 @@ const initRentalProperties = (initialState) => {
   return []; // rentals are optional
 };
 
+// ============ LIFE INSURANCE REDEMPTION (TD1 Part 4.G) — portal-only ============
+// Per TD1 Notes for Tax Computation, note 1:
+//   • Cancellation within 3 years of issue → 30% of total premiums deducted is added back to income
+//   • Cancellation between 3 and 6 years   → 20% added back
+//   • Cancellation after 6 years           → 0% (no add-back)
+const newLifeRedemptionId = () => `lr-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyLifeRedemption = () => ({
+  id: newLifeRedemptionId(),
+  insuranceCompanyTic: '',
+  insuranceCompanyName: '',
+  issueDate: '',
+  cancellationDate: '',
+  premiumsDeducted: '',
+});
+
+const initLifeRedemptions = (initialState) => {
+  if (initialState?.lifeRedemptions && Array.isArray(initialState.lifeRedemptions)) {
+    return initialState.lifeRedemptions.map(r => ({ ...emptyLifeRedemption(), ...r, id: r.id || newLifeRedemptionId() }));
+  }
+  return [];
+};
+
 // ============ INTEREST SOURCE HELPERS (TD1 Part 4.E) — portal-only ============
 // Codes match the TD1 form. SDC withholding behaviour varies by code (3% for code 2,
 // 17% for codes 3/4, none for codes 1/5).
@@ -409,6 +432,7 @@ const ComputationPanel = React.memo(({ results, year, isComparison = false, Y })
         {results.grossRent > 0 && <ResultRow label="Rental (net of 20% W&T + interest)" value={results.rentNet} />}
         {results.foreignPensionAddedToProgressive > 0 && <ResultRow label="Foreign pension (progressive)" value={results.foreignPensionAddedToProgressive} />}
         {results.cyprusPensionAddedToProgressive > 0 && <ResultRow label="Cyprus pension" value={results.cyprusPensionAddedToProgressive} />}
+        {results.lifeRedemptionAddback > 0 && <ResultRow label="Life policy early-redemption add-back" value={results.lifeRedemptionAddback} />}
         {results.royaltyTaxable > 0 && (
           <>
             {results.royaltyQualifying > 0 && <ResultRow label="Qualifying IP royalties (gross)" value={results.royaltyQualifying} />}
@@ -546,6 +570,13 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   // state above stays for the public /tax route; the portal swaps to the row UIs.
   const [interestSources, setInterestSources] = useState(() => initInterestSources(initialState));
   const [dividendSources, setDividendSources] = useState(() => initDividendSources(initialState));
+  // B3b (portal-only): Life insurance redemption rows (TD1 Part 4.G).
+  const [lifeRedemptions, setLifeRedemptions] = useState(() => initLifeRedemptions(initialState));
+  // B3b (portal-only): Additional Part 5.A miscellaneous deductions beyond donations + profSubs.
+  const [tradeUnionContrib, setTradeUnionContrib] = useState(init('tradeUnionContrib', ''));
+  const [politicalPartyDonations, setPoliticalPartyDonations] = useState(init('politicalPartyDonations', ''));
+  const [broaderPublicSectorReduction, setBroaderPublicSectorReduction] = useState(init('broaderPublicSectorReduction', ''));
+  const [communityOfficerExpenses, setCommunityOfficerExpenses] = useState(init('communityOfficerExpenses', ''));
   const [cryptoGains, setCryptoGains] = useState(init('cryptoGains', ''));
   const [foreignReliefType, setForeignReliefType] = useState(init('foreignReliefType', 'none'));
   const [isNonDom, setIsNonDom] = useState(init('isNonDom', false));
@@ -634,6 +665,17 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   }, []);
   const updateRentalProperty = useCallback((id, field, value) => {
     setRentalProperties(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }, []);
+
+  // ============ LIFE REDEMPTION MUTATORS (portal-only) ============
+  const addLifeRedemption = useCallback(() => {
+    setLifeRedemptions(prev => [...prev, emptyLifeRedemption()]);
+  }, []);
+  const removeLifeRedemption = useCallback((id) => {
+    setLifeRedemptions(prev => prev.filter(r => r.id !== id));
+  }, []);
+  const updateLifeRedemption = useCallback((id, field, value) => {
+    setLifeRedemptions(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   }, []);
 
   // ============ INTEREST + DIVIDEND ROW MUTATORS (portal-only) ============
@@ -758,6 +800,21 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     }
     const employmentAfterAllExemptions = employmentAfterFirstExemption - ninetyDayExempt;
 
+    // ============ LIFE INSURANCE REDEMPTION ADD-BACK (TD1 Part 4.G + note 1) ============
+    // Early redemption of life policies adds part of previously-deducted premiums back to income:
+    //   < 3 years from issue → 30%; 3–6 years → 20%; > 6 years → 0%.
+    const lifeRedemptionAddback = lifeRedemptions.reduce((sum, r) => {
+      const premiums = num(r.premiumsDeducted);
+      if (premiums <= 0 || !r.issueDate || !r.cancellationDate) return sum;
+      const issue = new Date(r.issueDate);
+      const cancel = new Date(r.cancellationDate);
+      if (isNaN(issue.getTime()) || isNaN(cancel.getTime())) return sum;
+      const years = (cancel.getTime() - issue.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+      if (years < 3) return sum + premiums * 0.30;
+      if (years < 6) return sum + premiums * 0.20;
+      return sum;
+    }, 0);
+
     // ============ TOTAL PROGRESSIVE INCOME ============
     const totalProgressiveIncome =
       employmentAfterAllExemptions +
@@ -769,6 +826,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       courtOrder +
       goodwill +
       cryptoMining +
+      lifeRedemptionAddback +
       otherInc;
 
     // ============ SI & GHS ============
@@ -810,18 +868,27 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     const lifeAllowed = lifeSum > 0 ? Math.min(lifePremium, lifeSum * 0.07) : lifePremium;
     const donationsAllowed = num(donations);
     const subscriptionsAllowed = num(profSubscriptions);
+    // B3b: additional Part 5.A miscellaneous deductions (portal-only state; 0 in public mode).
+    // Political party donations capped at €50,000 per TD1 income tax computation note.
+    // Broader public sector reduction is grouped separately per the TD1 form but folded into
+    // the same overall deductions bucket here.
+    const tradeUnionAllowed = num(tradeUnionContrib);
+    const politicalPartyAllowed = Math.min(num(politicalPartyDonations), 50000);
+    const broaderPublicSectorAllowed = num(broaderPublicSectorReduction);
+    const communityOfficerAllowed = num(communityOfficerExpenses);
+    const part5AExtras = tradeUnionAllowed + politicalPartyAllowed + broaderPublicSectorAllowed + communityOfficerAllowed;
 
     // New self-employed deductions
     const capAllowancesAllowed = num(capitalAllowances);
     const badDebtsAllowed = num(badDebts);
     const disabilityAllowed = num(disabilityAllowance);
 
-    const incomeBeforeOptional = totalProgressiveIncome - ownSI_GHS - donationsAllowed - subscriptionsAllowed - capAllowancesAllowed - badDebtsAllowed - disabilityAllowed;
+    const incomeBeforeOptional = totalProgressiveIncome - ownSI_GHS - donationsAllowed - subscriptionsAllowed - part5AExtras - capAllowancesAllowed - badDebtsAllowed - disabilityAllowed;
     const optionalCap = incomeBeforeOptional * 0.20;
     const totalOptional = pensionAllowed + medicalAllowed + lifeAllowed;
     const cappedOptional = Math.min(totalOptional, optionalCap);
 
-    const totalDeductions = ownSI_GHS + donationsAllowed + subscriptionsAllowed + capAllowancesAllowed + badDebtsAllowed + disabilityAllowed + cappedOptional;
+    const totalDeductions = ownSI_GHS + donationsAllowed + subscriptionsAllowed + part5AExtras + capAllowancesAllowed + badDebtsAllowed + disabilityAllowed + cappedOptional;
     const lossesUsed = Math.min(num(lossesCarriedForward), Math.max(0, totalProgressiveIncome - totalDeductions));
 
     // ============ 2026 FAMILY/HOUSING ALLOWANCES ============
@@ -909,6 +976,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       year: yearKey, Y,
       grossEmployment, grossSelfEmp, grossRent, rentNet, foreignPension, otherInc,
       employmentInRepublic, employmentOutsideRepublic, employmentBik, employmentTaxWithheld, employmentGhsWithheld,
+      lifeRedemptionAddback,
       cyprusPension, cyprusPensionFlatTax, cyprusPensionAddedToProgressive,
       royaltyQualifying, royaltyOrdinary, royaltyExempt, royaltyTaxable,
       courtOrder, goodwill, cryptoMining,
@@ -929,7 +997,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       capGainsSharesAmount, capGainsPropertyAmount,
       taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
-  }, [employments, pensions, rentalProperties, interestSources, dividendSources, selfEmpIncome,
+  }, [employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions, selfEmpIncome,
       otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
@@ -938,7 +1006,8 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       royaltyIncomeQualifying, royaltyIncomeOrdinary, courtOrderIncome, tradingGoodwill,
       capitalGainsShares, capitalGainsProperty, capitalGainsCryptoMining,
       daysWorkedAbroad, totalWorkDays, foreignEmployer,
-      capitalAllowances, badDebts, disabilityAllowance]);
+      capitalAllowances, badDebts, disabilityAllowance,
+      tradeUnionContrib, politicalPartyDonations, broaderPublicSectorReduction, communityOfficerExpenses]);
 
   const results2025 = useMemo(() => calculate(2025), [calculate]);
   const results2026 = useMemo(() => calculate(2026), [calculate]);
@@ -952,12 +1021,13 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const getInputState = () => ({
     selectedYear,
     clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
-    employments, pensions, rentalProperties, interestSources, dividendSources,
+    employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions,
     selfEmpIncome,
     otherIncome, dividendIncome, interestIncome, cryptoGains,
     foreignReliefType, isNonDom,
     pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
     donations, profSubscriptions, lossesCarriedForward,
+    tradeUnionContrib, politicalPartyDonations, broaderPublicSectorReduction, communityOfficerExpenses,
     numChildren, numStudents,
     mortgageOrRent, greenSpend, homeInsurance,
     taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
@@ -2036,20 +2106,22 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
       `}</style>
 
       <div style={{ maxWidth: '1500px', margin: '0 auto', background: COLORS.card, borderRadius: '10px', padding: '2rem 1.75rem', boxShadow: '0 8px 32px rgba(0,0,0,0.18)' }}>
-        {/* HEADER */}
-        <div style={{ textAlign: 'center', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: `1px solid ${COLORS.border}` }}>
-          <div style={{ display: 'inline-block', padding: '0.2rem 0.9rem', border: `1px solid ${COLORS.accent}`, borderRadius: '2px', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.62rem', letterSpacing: '0.2em', color: COLORS.accent, textTransform: 'uppercase', fontWeight: 500 }}>
-              PC Prime & Calculate Consultants Ltd
-            </span>
+        {/* HEADER — public /tax only. In the portal the tab header already labels the context. */}
+        {!embedded && (
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: `1px solid ${COLORS.border}` }}>
+            <div style={{ display: 'inline-block', padding: '0.2rem 0.9rem', border: `1px solid ${COLORS.accent}`, borderRadius: '2px', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.62rem', letterSpacing: '0.2em', color: COLORS.accent, textTransform: 'uppercase', fontWeight: 500 }}>
+                PC Prime & Calculate Consultants Ltd
+              </span>
+            </div>
+            <h1 className="serif" style={{ fontSize: '2rem', fontWeight: 600, margin: '0.3rem 0', color: COLORS.text }}>
+              Cyprus Personal Tax Calculator
+            </h1>
+            <p style={{ color: COLORS.textDim, fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
+              Multi-Year · 2025 · 2026 · Comparison · PDF Export
+            </p>
           </div>
-          <h1 className="serif" style={{ fontSize: '2rem', fontWeight: 600, margin: '0.3rem 0', color: COLORS.text }}>
-            Cyprus Personal Tax Calculator
-          </h1>
-          <p style={{ color: COLORS.textDim, fontSize: '0.75rem', letterSpacing: '0.08em', textTransform: 'uppercase', margin: 0 }}>
-            Multi-Year · 2025 · 2026 · Comparison · PDF Export
-          </p>
-        </div>
+        )}
 
         {/* CONTROLS */}
         <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: '4px', padding: '1rem 1.25rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -2572,6 +2644,45 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                     style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
                     + Add interest source
                   </button>
+
+                  {/* Life insurance redemption (TD1 Part 4.G) — adds 30%/20%/0% of premiums back to income */}
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.5rem', marginBottom: '0.6rem' }}>
+                    Life Insurance Redemption <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.G (early cancellation only)</span>
+                  </div>
+                  <div style={{ marginBottom: '0.6rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
+                    <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
+                    Cancellation within 3 years adds <strong>30%</strong> of total premiums back to income; 3–6 years adds <strong>20%</strong>; over 6 years adds nothing.
+                  </div>
+                  {lifeRedemptions.map((r, idx) => (
+                    <div key={r.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                          Redemption #{idx + 1}{r.insuranceCompanyName ? ` — ${r.insuranceCompanyName}` : ''}
+                        </span>
+                        <button type="button" onClick={() => removeLifeRedemption(r.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                          title="Remove this redemption">✕ Remove</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Insurance Company" type="text" placeholder="e.g. CNP Asfalistiki"
+                          value={r.insuranceCompanyName} onChange={v => updateLifeRedemption(r.id, 'insuranceCompanyName', v)} />
+                        <InputRow label="Insurance Company TIC" type="text" placeholder=""
+                          value={r.insuranceCompanyTic} onChange={v => updateLifeRedemption(r.id, 'insuranceCompanyTic', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Date of Issue" type="date" placeholder=""
+                          value={r.issueDate} onChange={v => updateLifeRedemption(r.id, 'issueDate', v)} />
+                        <InputRow label="Date of Cancellation" type="date" placeholder=""
+                          value={r.cancellationDate} onChange={v => updateLifeRedemption(r.id, 'cancellationDate', v)} />
+                      </div>
+                      <InputRow label="Total Premiums Previously Deducted (€)" hint="from prior tax returns"
+                        value={r.premiumsDeducted} onChange={v => updateLifeRedemption(r.id, 'premiumsDeducted', v)} />
+                    </div>
+                  ))}
+                  <button type="button" onClick={addLifeRedemption}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add life insurance redemption
+                  </button>
                 </>
               )}
 
@@ -2614,8 +2725,21 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               <InputRow label="Medical Scheme (€)" value={medicalContrib} onChange={setMedicalContrib} hint={selectedYear === 2026 ? "max 2%" : "max 1.5%"} />
               <InputRow label="Life Insurance Premium (€)" value={lifeInsurance} onChange={setLifeInsurance} />
               <InputRow label="Life Sum Assured (€)" value={lifeSumAssured} onChange={setLifeSumAssured} hint="cap at 7%" />
-              <InputRow label="Donations (€)" value={donations} onChange={setDonations} hint="approved charities" />
-              <InputRow label="Prof. Subscriptions (€)" value={profSubscriptions} onChange={setProfSubscriptions} />
+              <InputRow label="Donations (€)" value={donations} onChange={setDonations} hint="approved charities (TD1 5.A line 3)" />
+              <InputRow label="Prof. Subscriptions (€)" value={profSubscriptions} onChange={setProfSubscriptions} hint="TD1 5.A line 2" />
+
+              {/* B3b: Additional Part 5.A miscellaneous deductions — portal only. The TD1 form
+                  has 6 numbered miscellaneous deduction lines; the existing fields above cover
+                  lines 2 and 3, and these cover the rest. */}
+              {embedded && (
+                <>
+                  <InputRow label="Trade Union Contributions (€)" value={tradeUnionContrib} onChange={setTradeUnionContrib} hint="TD1 5.A line 1" />
+                  <InputRow label="Political Party Donations (€)" value={politicalPartyDonations} onChange={setPoliticalPartyDonations} hint="TD1 5.A line 5 — max €50,000" />
+                  <InputRow label="Broader Public Sector Reductions (€)" value={broaderPublicSectorReduction} onChange={setBroaderPublicSectorReduction} hint="TD1 5.A line 4 — salary/wage reductions" />
+                  <InputRow label="Community / Customs Officer Expenses (€)" value={communityOfficerExpenses} onChange={setCommunityOfficerExpenses} hint="TD1 5.A line 6 — 5/10/20% of commissions" />
+                </>
+              )}
+
               <InputRow label="Losses c/f (€)" value={lossesCarriedForward} onChange={setLossesCarriedForward} hint={`${Y.lossCarryForward}-yr c/f`} />
 
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '1rem', marginBottom: '0.6rem' }}>Self-Employed Deductions</div>
@@ -2678,14 +2802,17 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
           </div>
         )}
 
-        <div style={{ marginTop: '1.25rem', padding: '0.85rem', background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: '4px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.6 }}>
-          <div style={{ fontSize: '0.65rem', letterSpacing: '0.15em', color: COLORS.accent, textTransform: 'uppercase', marginBottom: '0.4rem', fontWeight: 600 }}>
-            ✓ Verified against Cyprus MOF official tax calculator (taxtools.mof.gov.cy)
+        {/* Marketing footer — public /tax only. */}
+        {!embedded && (
+          <div style={{ marginTop: '1.25rem', padding: '0.85rem', background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: '4px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.6 }}>
+            <div style={{ fontSize: '0.65rem', letterSpacing: '0.15em', color: COLORS.accent, textTransform: 'uppercase', marginBottom: '0.4rem', fontWeight: 600 }}>
+              ✓ Verified against Cyprus MOF official tax calculator (taxtools.mof.gov.cy)
+            </div>
+            <div style={{ fontStyle: 'italic', fontSize: '0.66rem' }}>
+              Stage 1 + PDF Export. Indicative only — verify against official Cyprus Tax Department guidance before filing.
+            </div>
           </div>
-          <div style={{ fontStyle: 'italic', fontSize: '0.66rem' }}>
-            Stage 1 + PDF Export. Indicative only — verify against official Cyprus Tax Department guidance before filing.
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
