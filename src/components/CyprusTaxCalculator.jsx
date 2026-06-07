@@ -82,15 +82,16 @@ const fmtNoEuro = (val) => {
 };
 
 // ============ STABLE SUB-COMPONENTS ============
-const InputRow = React.memo(({ label, hint, value, onChange, type = 'number', placeholder = '0.00' }) => (
+const InputRow = React.memo(({ label, hint, value, onChange, type = 'number', placeholder = '0.00', readOnly = false }) => (
   <div style={{ marginBottom: '0.7rem' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
       <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600 }}>{label}</label>
       {hint && <span style={{ fontSize: '0.66rem', color: COLORS.textDim, fontStyle: 'italic' }}>{hint}</span>}
     </div>
-    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`,
-        color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+    <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} readOnly={readOnly}
+      style={{ width: '100%', padding: '0.55rem 0.75rem', background: readOnly ? COLORS.borderLight : COLORS.bg, border: `1px solid ${COLORS.border}`,
+        color: readOnly ? COLORS.textMuted : COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.85rem', boxSizing: 'border-box',
+        cursor: readOnly ? 'not-allowed' : 'text' }} />
   </div>
 ));
 
@@ -234,84 +235,100 @@ const ComputationPanel = React.memo(({ results, year, isComparison = false, Y })
 });
 
 // ============ MAIN COMPONENT ============
-export default function CyprusTaxCalculatorWithPDF() {
-  const [selectedYear, setSelectedYear] = useState(2026);
+// Props (all optional, for portal embedding):
+//   clientPrefill { name, tic, idNumber, dob, siNumber, address } — pulled from the clients table
+//   initialState  — previously-saved input_data; restores every field
+//   onSave(inputData, snapshot)  — called by the Save button; snapshot = { year, results }
+//   taxYearLock  — when editing an existing return, lock the year selector to this year
+export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState, onSave, taxYearLock } = {}) {
+  // Pull a previously-saved value if present, else use the supplied fallback.
+  const init = (key, fallback) =>
+    (initialState && initialState[key] !== undefined && initialState[key] !== null) ? initialState[key] : fallback;
+  // Client identification: clientPrefill wins over saved state.
+  const initClient = (prefillKey, stateKey) =>
+    (clientPrefill && clientPrefill[prefillKey] != null && clientPrefill[prefillKey] !== '')
+      ? clientPrefill[prefillKey] : init(stateKey, '');
+  const embedded = !!clientPrefill || !!onSave;
+
+  const [selectedYear, setSelectedYear] = useState(taxYearLock ?? init('selectedYear', 2026));
   const [comparisonMode, setComparisonMode] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [printFriendlyMode, setPrintFriendlyMode] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
 
-  // Client details
-  const [clientName, setClientName] = useState('');
-  const [clientTIC, setClientTIC] = useState('');
-  const [clientID, setClientID] = useState('');
-  const [clientDOB, setClientDOB] = useState(''); // YYYY-MM-DD from <input type="date">
-  const [clientSSN, setClientSSN] = useState(''); // Social Insurance number — required on the tax return
-  const [clientAddress, setClientAddress] = useState('');
+  // Client details (prefill from client record when embedded; otherwise from saved state)
+  const [clientName, setClientName] = useState(initClient('name', 'clientName'));
+  const [clientTIC, setClientTIC] = useState(initClient('tic', 'clientTIC'));
+  const [clientID, setClientID] = useState(initClient('idNumber', 'clientID'));
+  const [clientDOB, setClientDOB] = useState(initClient('dob', 'clientDOB'));
+  const [clientSSN, setClientSSN] = useState(initClient('siNumber', 'clientSSN'));
+  const [clientAddress, setClientAddress] = useState(initClient('address', 'clientAddress'));
 
   // All other state...
-  const [employmentIncome, setEmploymentIncome] = useState('');
-  const [bik, setBik] = useState('');
-  const [selfEmpIncome, setSelfEmpIncome] = useState('');
-  const [rentalIncome, setRentalIncome] = useState('');
-  const [rentalInterest, setRentalInterest] = useState('');
-  const [foreignPensionIncome, setForeignPensionIncome] = useState('');
-  const [foreignPensionElectFlat, setForeignPensionElectFlat] = useState(true);
-  const [otherIncome, setOtherIncome] = useState('');
-  const [dividendIncome, setDividendIncome] = useState('');
-  const [interestIncome, setInterestIncome] = useState('');
-  const [cryptoGains, setCryptoGains] = useState('');
-  const [foreignReliefType, setForeignReliefType] = useState('none');
-  const [isNonDom, setIsNonDom] = useState(false);
-  const [pensionContrib, setPensionContrib] = useState('');
-  const [medicalContrib, setMedicalContrib] = useState('');
-  const [lifeInsurance, setLifeInsurance] = useState('');
-  const [lifeSumAssured, setLifeSumAssured] = useState('');
-  const [donations, setDonations] = useState('');
-  const [profSubscriptions, setProfSubscriptions] = useState('');
-  const [lossesCarriedForward, setLossesCarriedForward] = useState('');
-  const [numChildren, setNumChildren] = useState(0);
-  const [numStudents, setNumStudents] = useState(0);
-  const [mortgageOrRent, setMortgageOrRent] = useState('');
-  const [greenSpend, setGreenSpend] = useState('');
-  const [homeInsurance, setHomeInsurance] = useState('');
+  const [employmentIncome, setEmploymentIncome] = useState(init('employmentIncome', ''));
+  const [bik, setBik] = useState(init('bik', ''));
+  const [selfEmpIncome, setSelfEmpIncome] = useState(init('selfEmpIncome', ''));
+  const [rentalIncome, setRentalIncome] = useState(init('rentalIncome', ''));
+  const [rentalInterest, setRentalInterest] = useState(init('rentalInterest', ''));
+  const [foreignPensionIncome, setForeignPensionIncome] = useState(init('foreignPensionIncome', ''));
+  const [foreignPensionElectFlat, setForeignPensionElectFlat] = useState(init('foreignPensionElectFlat', true));
+  const [otherIncome, setOtherIncome] = useState(init('otherIncome', ''));
+  const [dividendIncome, setDividendIncome] = useState(init('dividendIncome', ''));
+  const [interestIncome, setInterestIncome] = useState(init('interestIncome', ''));
+  const [cryptoGains, setCryptoGains] = useState(init('cryptoGains', ''));
+  const [foreignReliefType, setForeignReliefType] = useState(init('foreignReliefType', 'none'));
+  const [isNonDom, setIsNonDom] = useState(init('isNonDom', false));
+  const [pensionContrib, setPensionContrib] = useState(init('pensionContrib', ''));
+  const [medicalContrib, setMedicalContrib] = useState(init('medicalContrib', ''));
+  const [lifeInsurance, setLifeInsurance] = useState(init('lifeInsurance', ''));
+  const [lifeSumAssured, setLifeSumAssured] = useState(init('lifeSumAssured', ''));
+  const [donations, setDonations] = useState(init('donations', ''));
+  const [profSubscriptions, setProfSubscriptions] = useState(init('profSubscriptions', ''));
+  const [lossesCarriedForward, setLossesCarriedForward] = useState(init('lossesCarriedForward', ''));
+  const [numChildren, setNumChildren] = useState(init('numChildren', 0));
+  const [numStudents, setNumStudents] = useState(init('numStudents', 0));
+  const [mortgageOrRent, setMortgageOrRent] = useState(init('mortgageOrRent', ''));
+  const [greenSpend, setGreenSpend] = useState(init('greenSpend', ''));
+  const [homeInsurance, setHomeInsurance] = useState(init('homeInsurance', ''));
 
   // ========== NEW COMPREHENSIVE FIELDS ==========
   // Personal Profile
-  const [taxResident, setTaxResident] = useState(true); // Cyprus tax resident (183-day or 60-day rule)
-  const [residencyRule, setResidencyRule] = useState('183'); // '183' or '60'
-  const [firstEmployment, setFirstEmployment] = useState(false); // First employment in Cyprus (60% / 50% relief eligibility)
-  const [hasDisability, setHasDisability] = useState(false); // Self disability
-  const [hasDisabledDependant, setHasDisabledDependant] = useState(false); // Disabled dependant
-  const [isOver65, setIsOver65] = useState(false); // Age 65+ — exempt from Social Insurance (GHS still applies)
+  const [taxResident, setTaxResident] = useState(init('taxResident', true));
+  const [residencyRule, setResidencyRule] = useState(init('residencyRule', '183'));
+  const [firstEmployment, setFirstEmployment] = useState(init('firstEmployment', false));
+  const [hasDisability, setHasDisability] = useState(init('hasDisability', false));
+  const [hasDisabledDependant, setHasDisabledDependant] = useState(init('hasDisabledDependant', false));
+  const [isOver65, setIsOver65] = useState(init('isOver65', false));
 
   // Additional Income Sources
-  const [cyprusPensionIncome, setCyprusPensionIncome] = useState(''); // Cyprus pensions (taxable progressively or 5% over €3,420)
-  const [cyprusPensionElectFlat, setCyprusPensionElectFlat] = useState(false); // Elect 5% on amount > €3,420 for widow's pension
-  const [royaltyIncomeQualifying, setRoyaltyIncomeQualifying] = useState(''); // IP Box qualifying — 80% exempt
-  const [royaltyIncomeOrdinary, setRoyaltyIncomeOrdinary] = useState(''); // Ordinary royalties — fully taxable
-  const [courtOrderIncome, setCourtOrderIncome] = useState(''); // Alimony, court-ordered payments
-  const [tradingGoodwill, setTradingGoodwill] = useState(''); // Trading goodwill income
+  const [cyprusPensionIncome, setCyprusPensionIncome] = useState(init('cyprusPensionIncome', ''));
+  const [cyprusPensionElectFlat, setCyprusPensionElectFlat] = useState(init('cyprusPensionElectFlat', false));
+  const [royaltyIncomeQualifying, setRoyaltyIncomeQualifying] = useState(init('royaltyIncomeQualifying', ''));
+  const [royaltyIncomeOrdinary, setRoyaltyIncomeOrdinary] = useState(init('royaltyIncomeOrdinary', ''));
+  const [courtOrderIncome, setCourtOrderIncome] = useState(init('courtOrderIncome', ''));
+  const [tradingGoodwill, setTradingGoodwill] = useState(init('tradingGoodwill', ''));
 
   // Capital Gains (Display Only)
-  const [capitalGainsShares, setCapitalGainsShares] = useState(''); // Shares — 0% tax
-  const [capitalGainsProperty, setCapitalGainsProperty] = useState(''); // Cyprus property — separate CGT
-  const [capitalGainsCryptoMining, setCapitalGainsCryptoMining] = useState(''); // Crypto from mining (general PIT)
+  const [capitalGainsShares, setCapitalGainsShares] = useState(init('capitalGainsShares', ''));
+  const [capitalGainsProperty, setCapitalGainsProperty] = useState(init('capitalGainsProperty', ''));
+  const [capitalGainsCryptoMining, setCapitalGainsCryptoMining] = useState(init('capitalGainsCryptoMining', ''));
 
   // 90-day rule (foreign work)
-  const [daysWorkedAbroad, setDaysWorkedAbroad] = useState(''); // Days worked outside Cyprus
-  const [totalWorkDays, setTotalWorkDays] = useState('260'); // Default 260 work days/year (52 weeks × 5)
-  const [foreignEmployer, setForeignEmployer] = useState(false); // Was the employer non-Cyprus?
+  const [daysWorkedAbroad, setDaysWorkedAbroad] = useState(init('daysWorkedAbroad', ''));
+  const [totalWorkDays, setTotalWorkDays] = useState(init('totalWorkDays', '260'));
+  const [foreignEmployer, setForeignEmployer] = useState(init('foreignEmployer', false));
 
   // Additional Deductions
-  const [rentalMaintenance, setRentalMaintenance] = useState(''); // Actual rental maintenance/repair (in addition to 20% W&T... but mutually exclusive in practice)
-  const [capitalAllowances, setCapitalAllowances] = useState(''); // Plant/machinery depreciation (self-employed)
-  const [badDebts, setBadDebts] = useState(''); // Bad debt provisions (self-employed)
-  const [disabilityAllowance, setDisabilityAllowance] = useState(''); // Disability-related expenses
+  const [rentalMaintenance, setRentalMaintenance] = useState(init('rentalMaintenance', ''));
+  const [capitalAllowances, setCapitalAllowances] = useState(init('capitalAllowances', ''));
+  const [badDebts, setBadDebts] = useState(init('badDebts', ''));
+  const [disabilityAllowance, setDisabilityAllowance] = useState(init('disabilityAllowance', ''));
 
   // Display tracker
   const [showCapitalGainsInfo, setShowCapitalGainsInfo] = useState(false);
 
-  const [openSections, setOpenSections] = useState({ client: false, profile: false, income: false, capitalgains: false, special: false, deductions: false, allowances: false });
+  // When embedded, open Income by default (Client Details are shown as a read-only header).
+  const [openSections, setOpenSections] = useState({ client: false, profile: false, income: embedded, capitalgains: false, special: false, deductions: false, allowances: false });
 
   const toggleSection = useCallback((key) => {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -568,6 +585,40 @@ export default function CyprusTaxCalculatorWithPDF() {
 
   const delta = results2026.netIncome - results2025.netIncome;
   const deltaPct = results2025.netIncome > 0 ? (delta / results2025.netIncome) * 100 : 0;
+
+  // ============ SAVE TO PORTAL (optional — only when onSave is provided) ============
+  const getInputState = () => ({
+    selectedYear,
+    clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
+    employmentIncome, bik, selfEmpIncome, rentalIncome, rentalInterest,
+    foreignPensionIncome, foreignPensionElectFlat,
+    otherIncome, dividendIncome, interestIncome, cryptoGains,
+    foreignReliefType, isNonDom,
+    pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
+    donations, profSubscriptions, lossesCarriedForward,
+    numChildren, numStudents,
+    mortgageOrRent, greenSpend, homeInsurance,
+    taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
+    cyprusPensionIncome, cyprusPensionElectFlat,
+    royaltyIncomeQualifying, royaltyIncomeOrdinary,
+    courtOrderIncome, tradingGoodwill,
+    capitalGainsShares, capitalGainsProperty, capitalGainsCryptoMining,
+    daysWorkedAbroad, totalWorkDays, foreignEmployer,
+    rentalMaintenance, capitalAllowances, badDebts, disabilityAllowance,
+  });
+  const handleSave = async () => {
+    if (!onSave) return;
+    setSaveStatus('saving');
+    try {
+      await onSave(getInputState(), { year: selectedYear, results: activeResults });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (err) {
+      console.error('Tax return save failed:', err);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  };
 
   // ============ CSV EXPORT ============
   const handleDownloadCSV = () => {
@@ -1645,18 +1696,22 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
             <span style={{ fontSize: '0.75rem', color: COLORS.textMuted, letterSpacing: '0.05em' }}>Tax Year:</span>
             <div style={{ display: 'flex', gap: '0' }}>
               {[2025, 2026].map(y => (
-                <button key={y} onClick={() => { setSelectedYear(y); setComparisonMode(false); }}
+                <button key={y} onClick={() => { if (taxYearLock != null) return; setSelectedYear(y); setComparisonMode(false); }}
+                  disabled={taxYearLock != null && taxYearLock !== y}
                   style={{ padding: '0.5rem 1.1rem',
                     background: !comparisonMode && selectedYear === y ? COLORS.accent : 'transparent',
                     color: !comparisonMode && selectedYear === y ? COLORS.bg : COLORS.textMuted,
                     border: `1px solid ${!comparisonMode && selectedYear === y ? COLORS.accent : COLORS.border}`,
-                    cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600,
+                    cursor: taxYearLock != null ? 'not-allowed' : 'pointer',
+                    opacity: taxYearLock != null && taxYearLock !== y ? 0.35 : 1,
+                    fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600,
                     borderRadius: y === 2025 ? '3px 0 0 3px' : '0 3px 3px 0',
                     borderLeft: y === 2026 ? 'none' : undefined,
                   }}>
                   {y}
                 </button>
               ))}
+              {taxYearLock != null && <span style={{ fontSize: '0.7rem', color: COLORS.textDim, marginLeft: '0.5rem', fontStyle: 'italic' }}>(locked for this return)</span>}
             </div>
           </div>
 
@@ -1681,6 +1736,20 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                   display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <FileDown size={14} />
                 Export PDF
+              </button>
+            )}
+
+            {onSave && (
+              <button onClick={handleSave}
+                disabled={saveStatus === 'saving'}
+                style={{ padding: '0.5rem 1rem',
+                  background: saveStatus === 'error' ? COLORS.danger : COLORS.success,
+                  color: COLORS.bg,
+                  border: `1px solid ${saveStatus === 'error' ? COLORS.danger : COLORS.success}`,
+                  borderRadius: '3px', cursor: saveStatus === 'saving' ? 'wait' : 'pointer',
+                  fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'error' ? 'Save failed — retry' : 'Save Tax Return'}
               </button>
             )}
           </div>
@@ -1784,16 +1853,16 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
 
           <div>
             {/* CLIENT DETAILS SECTION */}
-            <Section id="client" title="Client Details (for PDF)" icon={User} isOpen={openSections.client} onToggle={toggleSection} summary={clientName ? `· ${clientName}` : '(optional)'}>
-              <InputRow label="Client Name" value={clientName} onChange={setClientName} type="text" placeholder="e.g. John Demetriou" />
-              <InputRow label="Tax Identification Code (TIC)" value={clientTIC} onChange={setClientTIC} type="text" placeholder="e.g. 12345678X" />
-              <InputRow label="ID / Passport Number" value={clientID} onChange={setClientID} type="text" placeholder="e.g. 987654321" />
-              <InputRow label="Date of Birth" value={clientDOB} onChange={setClientDOB} type="date" placeholder="" />
-              <InputRow label="Social Insurance Number" value={clientSSN} onChange={setClientSSN} type="text" placeholder="e.g. 12345678" />
-              <InputRow label="Address" value={clientAddress} onChange={setClientAddress} type="text" placeholder="e.g. 1 Main St, Nicosia" />
+            <Section id="client" title={embedded ? 'Client Details (from client record)' : 'Client Details (for PDF)'} icon={User} isOpen={openSections.client} onToggle={toggleSection} summary={clientName ? `· ${clientName}` : '(optional)'}>
+              <InputRow label="Client Name" value={clientName} onChange={setClientName} type="text" placeholder="e.g. John Demetriou" readOnly={embedded} />
+              <InputRow label="Tax Identification Code (TIC)" value={clientTIC} onChange={setClientTIC} type="text" placeholder="e.g. 12345678X" readOnly={embedded} />
+              <InputRow label="ID / Passport Number" value={clientID} onChange={setClientID} type="text" placeholder="e.g. 987654321" readOnly={embedded} />
+              <InputRow label="Date of Birth" value={clientDOB} onChange={setClientDOB} type="date" placeholder="" readOnly={embedded} />
+              <InputRow label="Social Insurance Number" value={clientSSN} onChange={setClientSSN} type="text" placeholder="e.g. 12345678" readOnly={embedded} />
+              <InputRow label="Address" value={clientAddress} onChange={setClientAddress} type="text" placeholder="e.g. 1 Main St, Nicosia" readOnly={embedded} />
               <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
                 <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
-                These details appear on the exported PDF. Leave blank for a generic computation.
+                {embedded ? 'These details are pulled from the client record. Edit them in the Client Info tab.' : 'These details appear on the exported PDF. Leave blank for a generic computation.'}
               </div>
             </Section>
 

@@ -2115,6 +2115,38 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Tax returns (personal income tax — individual clients only) ---------
+  async listTaxReturns(clientId: number) {
+    const { data, error } = await supabase.from('tax_returns')
+      .select('id, tax_year, status, reference_number, updated_at, submitted_at')
+      .eq('client_id', clientId)
+      .order('tax_year', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async getTaxReturn(id: number) {
+    const { data, error } = await supabase.from('tax_returns')
+      .select('*').eq('id', id).single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async createTaxReturn(row: { client_id: number; tax_year: number; input_data?: any; results?: any; status?: string; notes?: string }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.from('tax_returns')
+      .insert({ ...row, created_by: session?.user?.id || null })
+      .select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+  async updateTaxReturn(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('tax_returns').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteTaxReturn(id: number) {
+    const { error } = await supabase.from('tax_returns').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Customer invoices (a client billing their own customers) ---------
   async getCustomerInvoices(ownerClientId: number, params?: { status?: string; customer_id?: number }) {
     let q = supabase.from('customer_invoice')

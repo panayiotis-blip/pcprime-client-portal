@@ -29,13 +29,14 @@ import TimeTab from './tabs/TimeTab';
 import FinancialsTab from './tabs/FinancialsTab';
 import ClientBillingTab from './tabs/ClientBillingTab';
 import ClientReportsTab from './ClientReportsTab';
+import ClientTaxReturnTab from './tabs/ClientTaxReturnTab';
 import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
 type TabKey =
   | 'info' | 'contacts' | 'tax'
   | 'kyc' | 'directors' | 'credentials'
   | 'documents' | 'invoices' | 'financials' | 'customer_billing' | 'reports'
-  | 'compliance' | 'tax_filings' | 'emails'
+  | 'compliance' | 'tax_filings' | 'tax_return' | 'emails'
   | 'time'
   | 'notes' | 'audit'
   | 'accounts' | 'patterns';
@@ -54,6 +55,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'reports',     label: 'Reports' },
   { key: 'compliance',  label: 'Compliance' },
   { key: 'tax_filings', label: 'Tax Filings' },
+  { key: 'tax_return',  label: 'Tax Return' },
   { key: 'emails',      label: 'Emails' },
   { key: 'time',        label: 'Time' },
   { key: 'notes',       label: 'Notes' },
@@ -361,7 +363,7 @@ export default function ClientDetail() {
 
       {/* Tab bar */}
       <div className="cd-tabbar">
-        {PRIMARY_TABS.map(t => (
+        {PRIMARY_TABS.filter(t => t.key !== 'tax_return' || client?.client_type === 'individual').map(t => (
           <button
             key={t.key}
             className={`cd-tab ${tab === t.key ? 'active' : ''}`}
@@ -408,6 +410,7 @@ export default function ClientDetail() {
         {tab === 'reports'     && <ClientReportsTab clientId={clientId} />}
         {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
         {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} />}
+        {tab === 'tax_return'  && client?.client_type === 'individual' && <ClientTaxReturnTab clientId={clientId} client={client} editable={editable} />}
         {tab === 'emails'      && <ClientEmails clientId={clientId} />}
         {tab === 'time'        && <TimeTab clientId={clientId} clientName={client.name} />}
         {tab === 'notes'       && <NotesTab />}
