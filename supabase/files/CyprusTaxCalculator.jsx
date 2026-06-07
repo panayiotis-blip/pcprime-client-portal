@@ -404,12 +404,26 @@ export default function CyprusTaxCalculatorWithPDF() {
 
     // ============ SI & GHS ============
     // Age 65+ exempt from Social Insurance (Cyprus pensionable age). GHS still applies to pensioners.
+    // If DOB is provided, auto-derive from age at 31 Dec of yearKey; else fall back to the manual checkbox.
+    let effectiveOver65 = isOver65;
+    let ageAtYearEnd = null;
+    if (clientDOB) {
+      const dob = new Date(clientDOB);
+      if (!isNaN(dob.getTime())) {
+        const yearEnd = new Date(yearKey, 11, 31);
+        let age = yearEnd.getFullYear() - dob.getFullYear();
+        const mDiff = yearEnd.getMonth() - dob.getMonth();
+        if (mDiff < 0 || (mDiff === 0 && yearEnd.getDate() < dob.getDate())) age--;
+        ageAtYearEnd = age;
+        effectiveOver65 = age >= 65;
+      }
+    }
     const annualEmployment = num(employmentIncome);
     const empSiBase = Math.min(annualEmployment, Y.siCap);
-    const empSi = isOver65 ? 0 : empSiBase * Y.siRates.employee;
+    const empSi = effectiveOver65 ? 0 : empSiBase * Y.siRates.employee;
     const empGhs = Math.min(annualEmployment, Y.ghsCap) * Y.ghsRates.employee;
     const seSiBase = Math.min(grossSelfEmp, Y.siCap);
-    const seSi = isOver65 ? 0 : seSiBase * Y.siRates.selfEmployed;
+    const seSi = effectiveOver65 ? 0 : seSiBase * Y.siRates.selfEmployed;
     const seGhs = Math.min(grossSelfEmp, Y.ghsCap) * Y.ghsRates.selfEmployed;
     const passiveBase = Math.min(grossRent + foreignPension + cyprusPension + otherInc + royaltyTaxable, Y.ghsCap);
     const passiveGhs = passiveBase * Y.ghsRates.passive;
@@ -533,14 +547,14 @@ export default function CyprusTaxCalculatorWithPDF() {
       sdcDividends, sdcInterest, sdcRental, totalSDC, cryptoTax,
       totalTax, totalContributions, totalLiability, totalGrossIncome, netIncome, effectiveRate,
       capGainsSharesAmount, capGainsPropertyAmount,
-      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
+      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
   }, [employmentIncome, bik, selfEmpIncome, rentalIncome, rentalInterest, rentalMaintenance, foreignPensionIncome,
       foreignPensionElectFlat, cyprusPensionIncome, cyprusPensionElectFlat, otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
       mortgageOrRent, greenSpend, homeInsurance,
-      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
+      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, clientDOB,
       royaltyIncomeQualifying, royaltyIncomeOrdinary, courtOrderIncome, tradingGoodwill,
       capitalGainsShares, capitalGainsProperty, capitalGainsCryptoMining,
       daysWorkedAbroad, totalWorkDays, foreignEmployer,
@@ -1815,9 +1829,9 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                 <span>Disabled dependant <span style={{ color: COLORS.textDim, fontSize: '0.72rem' }}>(check eligibility for relief)</span></span>
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: COLORS.textMuted, marginBottom: '0.6rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isOver65} onChange={(e) => setIsOver65(e.target.checked)} />
-                <span>Age 65 or over <span style={{ color: COLORS.textDim, fontSize: '0.72rem' }}>(exempt from Social Insurance; GHS still applies)</span></span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: COLORS.textMuted, marginBottom: '0.6rem', cursor: clientDOB ? 'default' : 'pointer' }}>
+                <input type="checkbox" checked={activeResults.effectiveOver65} onChange={(e) => setIsOver65(e.target.checked)} disabled={!!clientDOB} />
+                <span>Age 65 or over <span style={{ color: COLORS.textDim, fontSize: '0.72rem' }}>{clientDOB ? `(auto-derived: age ${activeResults.ageAtYearEnd} at end of ${selectedYear})` : '(exempt from Social Insurance; GHS still applies)'}</span></span>
               </label>
 
               <div style={{ marginTop: '0.6rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
