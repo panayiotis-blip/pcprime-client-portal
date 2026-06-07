@@ -55,6 +55,12 @@ export const ROBOTO_REGULAR_BASE64 = '${base64}';
 export function registerRobotoFont(doc) {
   doc.addFileToVFS('Roboto-Regular-normal.ttf', ROBOTO_REGULAR_BASE64);
   doc.addFont('Roboto-Regular-normal.ttf', 'Roboto', 'normal');
+  // Point the bold and italic style variants at the same regular TTF.
+  // Without this, doc.setFont('Roboto', 'bold') falls back to Helvetica
+  // (Latin-only) and Greek characters render as gibberish. Bold/italic
+  // lose visual weight until proper Bold/Italic TTFs are bundled.
+  doc.addFont('Roboto-Regular-normal.ttf', 'Roboto', 'bold');
+  doc.addFont('Roboto-Regular-normal.ttf', 'Roboto', 'italic');
 }
 `;
 
