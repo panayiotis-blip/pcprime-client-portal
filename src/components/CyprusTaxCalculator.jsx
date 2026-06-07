@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { jsPDF } from 'jspdf';
 import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, Coins, GitCompare, Download, Printer, User, FileDown, FileSpreadsheet, Mail, Eye, EyeOff } from 'lucide-react';
 
 // ============ TAX YEAR CONSTANTS ============
@@ -1476,26 +1477,9 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
   };
 
   // ============ PDF GENERATION USING jsPDF ============
-  // Loads jsPDF from CDN dynamically (no npm dependency required)
-  const loadJsPDF = () => {
-    return new Promise((resolve, reject) => {
-      if (window.jspdf) {
-        resolve(window.jspdf);
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-      script.onload = () => resolve(window.jspdf);
-      script.onerror = () => reject(new Error('Failed to load jsPDF library'));
-      document.head.appendChild(script);
-    });
-  };
-
+  // jsPDF is bundled via the npm package (see package.json) — no CDN load.
   const generatePDF = async (results, year) => {
     try {
-      const jspdf = await loadJsPDF();
-      const { jsPDF } = jspdf;
-
       // Initialize A4 portrait PDF (units in mm)
       const doc = new jsPDF({
         orientation: 'portrait',
@@ -2043,8 +2027,6 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
   // can be cross-referenced with the official form when filing.
   const generateTd1Pdf = async (results, year) => {
     try {
-      const jspdf = await loadJsPDF();
-      const { jsPDF } = jspdf;
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
       const PAGE_W = 210, PAGE_H = 297;
       const MARGIN_L = 15, MARGIN_R = 15, MARGIN_T = 15, MARGIN_B = 15;
