@@ -320,6 +320,65 @@ const initInnovativeInvestments = (initialState) => {
   return [];
 };
 
+// ============ SELF-EMPLOYED: Part 4.1 Trade/Industry/Profession activities ============
+// Main activity categories per the TD1 self-employed form.
+const SELF_EMP_ACTIVITY_TYPES = [
+  { code: '1', label: '1. Trade' },
+  { code: '2', label: '2. Industry' },
+  { code: '3', label: '3. Agriculture / Fishing' },
+  { code: '4', label: '4. Profession' },
+  { code: '5', label: '5. Vocation' },
+  { code: '6', label: '6. Equestrian / OPAP betting' },
+];
+// Occupational categories drive the GHS rate: 1-16 → 4%, N/A → 2.65%.
+const SELF_EMP_OCCUPATIONAL_OPTIONS = ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','NA'];
+
+const newSelfEmpActivityId = () => `sea-${Math.random().toString(36).slice(2, 11)}`;
+const emptySelfEmpActivity = () => ({
+  id: newSelfEmpActivityId(),
+  mainCategory: '1',
+  occupationalCategory: '1',
+  isOutsideRepublic: false,
+  taxableProfit: '',
+  lossCurrentYear: '',
+  lossesBfFrom1997: '',
+  lossesMoreThan5yNotCarried: '',
+  taxPaidOutside: '',
+});
+const initSelfEmployedActivities = (initialState) => {
+  if (initialState?.selfEmployedActivities && Array.isArray(initialState.selfEmployedActivities)) {
+    return initialState.selfEmployedActivities.map(a => ({ ...emptySelfEmpActivity(), ...a, id: a.id || newSelfEmpActivityId() }));
+  }
+  // Legacy migration: if a single selfEmpIncome existed, seed a single Trade row.
+  if (initialState?.selfEmpIncome) {
+    return [{ ...emptySelfEmpActivity(), taxableProfit: String(initialState.selfEmpIncome) }];
+  }
+  return [];
+};
+
+// ============ SELF-EMPLOYED: Part 4.3 Partnership income ============
+const newPartnershipId = () => `prt-${Math.random().toString(36).slice(2, 11)}`;
+const emptyPartnership = () => ({
+  id: newPartnershipId(),
+  tic: '',
+  name: '',
+  code: '1', // 1 = in Republic, 2 = outside
+  occupationalCategory: '1',
+  percentage: '',
+  salary: '',
+  interestOnCapital: '',
+  tradingIncome: '',
+  tradingLoss: '',
+  taxWithheld: '',
+  taxPaidOutside: '',
+});
+const initPartnerships = (initialState) => {
+  if (initialState?.partnerships && Array.isArray(initialState.partnerships)) {
+    return initialState.partnerships.map(p => ({ ...emptyPartnership(), ...p, id: p.id || newPartnershipId() }));
+  }
+  return [];
+};
+
 // ============ LIFE INSURANCE REDEMPTION (TD1 Part 4.G) — portal-only ============
 // Per TD1 Notes for Tax Computation, note 1:
 //   • Cancellation within 3 years of issue → 30% of total premiums deducted is added back to income
@@ -654,6 +713,19 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const [lifeSiPensionFunds, setLifeSiPensionFunds] = useState(() => initLifeSiPensionFunds(initialState));
   // B3c (portal-only): Part 5.B innovative business investments.
   const [innovativeInvestments, setInnovativeInvestments] = useState(() => initInnovativeInvestments(initialState));
+  // Chunk D (portal-only, self-employed form): Part 4.1 trade/industry activities + Part 4.3 partnerships.
+  const [selfEmployedActivities, setSelfEmployedActivities] = useState(() => initSelfEmployedActivities(initialState));
+  const [partnerships, setPartnerships] = useState(() => initPartnerships(initialState));
+  // Chunk D: Part 3.C books / audited accounts metadata (form-fill only — no calc impact)
+  const [selfEmpTurnoverUnder70k, setSelfEmpTurnoverUnder70k] = useState(init('selfEmpTurnoverUnder70k', false));
+  const [selfEmpAuditedAccounts, setSelfEmpAuditedAccounts] = useState(init('selfEmpAuditedAccounts', 'none'));
+  // Chunk D: Part 4.2 gain/loss on disposal of immovable property / shares in private company
+  const [disposalGainImmovable, setDisposalGainImmovable] = useState(init('disposalGainImmovable', ''));
+  const [disposalLossImmovable, setDisposalLossImmovable] = useState(init('disposalLossImmovable', ''));
+  const [disposalGainShares, setDisposalGainShares] = useState(init('disposalGainShares', ''));
+  const [disposalLossShares, setDisposalLossShares] = useState(init('disposalLossShares', ''));
+  const [disposalTicOfCompany, setDisposalTicOfCompany] = useState(init('disposalTicOfCompany', ''));
+  const [disposalCountry, setDisposalCountry] = useState(init('disposalCountry', ''));
   // B3b (portal-only): Additional Part 5.A miscellaneous deductions beyond donations + profSubs.
   const [tradeUnionContrib, setTradeUnionContrib] = useState(init('tradeUnionContrib', ''));
   const [politicalPartyDonations, setPoliticalPartyDonations] = useState(init('politicalPartyDonations', ''));
@@ -780,6 +852,26 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     setInnovativeInvestments(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   }, []);
 
+  // ============ SELF-EMP ACTIVITY + PARTNERSHIP MUTATORS ============
+  const addSelfEmpActivity = useCallback(() => {
+    setSelfEmployedActivities(prev => [...prev, emptySelfEmpActivity()]);
+  }, []);
+  const removeSelfEmpActivity = useCallback((id) => {
+    setSelfEmployedActivities(prev => prev.filter(a => a.id !== id));
+  }, []);
+  const updateSelfEmpActivity = useCallback((id, field, value) => {
+    setSelfEmployedActivities(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  }, []);
+  const addPartnership = useCallback(() => {
+    setPartnerships(prev => [...prev, emptyPartnership()]);
+  }, []);
+  const removePartnership = useCallback((id) => {
+    setPartnerships(prev => prev.filter(p => p.id !== id));
+  }, []);
+  const updatePartnership = useCallback((id, field, value) => {
+    setPartnerships(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  }, []);
+
   // ============ INTEREST + DIVIDEND ROW MUTATORS (portal-only) ============
   const addInterestSource = useCallback(() => {
     setInterestSources(prev => [...prev, emptyInterestSource()]);
@@ -812,7 +904,14 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     const employmentTaxWithheld = employments.reduce((s, e) => s + num(e.taxWithheld), 0);
     const employmentGhsWithheld = employments.reduce((s, e) => s + num(e.ghsWithheld), 0);
     const grossEmployment = employmentInRepublic + employmentOutsideRepublic + employmentBik;
-    const grossSelfEmp = num(selfEmpIncome);
+    // Self-employed income: when arrays have rows, sum taxable profit minus current-year
+    // losses across activities + partnerships. Otherwise fall back to legacy selfEmpIncome.
+    const activityNet = selfEmployedActivities.reduce((s, a) =>
+      s + num(a.taxableProfit) - num(a.lossCurrentYear), 0);
+    const partnershipNet = partnerships.reduce((s, p) =>
+      s + num(p.tradingIncome) + num(p.salary) + num(p.interestOnCapital) - num(p.tradingLoss), 0);
+    const useSelfEmpArrays = selfEmployedActivities.length > 0 || partnerships.length > 0;
+    const grossSelfEmp = useSelfEmpArrays ? (activityNet + partnershipNet) : num(selfEmpIncome);
     // ============ RENTAL PROPERTIES (TD1 Part 4.C — aggregated across rentalProperties[]) ============
     // For B2 we sum across properties and apply the existing rentNet formula. Per-type
     // SDC rates (3% office/shop/flat/house, 4% storehouse, 0% land/parking, etc.) come later.
@@ -1135,7 +1234,11 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
   }, [employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions,
-      lifeSiPensionFunds, innovativeInvestments, selfEmpIncome,
+      lifeSiPensionFunds, innovativeInvestments, selfEmployedActivities, partnerships,
+      disposalGainImmovable, disposalLossImmovable, disposalGainShares, disposalLossShares,
+      disposalTicOfCompany, disposalCountry,
+      selfEmpTurnoverUnder70k, selfEmpAuditedAccounts,
+      selfEmpIncome,
       otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
@@ -1160,7 +1263,10 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     selectedYear,
     clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
     employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions,
-    lifeSiPensionFunds, innovativeInvestments,
+    lifeSiPensionFunds, innovativeInvestments, selfEmployedActivities, partnerships,
+    disposalGainImmovable, disposalLossImmovable, disposalGainShares, disposalLossShares,
+    disposalTicOfCompany, disposalCountry,
+    selfEmpTurnoverUnder70k, selfEmpAuditedAccounts,
     selfEmpIncome,
     otherIncome, dividendIncome, interestIncome, cryptoGains,
     foreignReliefType, isNonDom,
@@ -2483,6 +2589,172 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
             </Section>
 
             <Section id="income" title="1. Income" icon={Briefcase} isOpen={openSections.income} onToggle={toggleSection}>
+              {/* Self-employed-form specific sections (Part 3.C books + 4.1 activities + 4.2 disposal + 4.3 partnerships) */}
+              {embedded && formType === 'self_employed' && (
+                <>
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                    Books & Records <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 3.C</span>
+                  </div>
+                  <div style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.85rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: COLORS.textMuted, marginBottom: '0.6rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selfEmpTurnoverUnder70k} onChange={(e) => setSelfEmpTurnoverUnder70k(e.target.checked)} />
+                      <span>Turnover up to <strong>€70,000</strong> (simpler 6C/6D path)</span>
+                    </label>
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Audited / Inspected Accounts</label>
+                      <select value={selfEmpAuditedAccounts} onChange={e => setSelfEmpAuditedAccounts(e.target.value)}
+                        style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                        <option value="none">No</option>
+                        <option value="inspected">Yes — inspected</option>
+                        <option value="audited">Yes — audited</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                    Trade / Industry / Profession <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.1 (one row per activity)</span>
+                  </div>
+                  {selfEmployedActivities.map((a, idx) => (
+                    <div key={a.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>Activity #{idx + 1}</span>
+                        <button type="button" onClick={() => removeSelfEmpActivity(a.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>✕ Remove</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <div style={{ marginBottom: '0.7rem' }}>
+                          <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Main Activity</label>
+                          <select value={a.mainCategory} onChange={e => updateSelfEmpActivity(a.id, 'mainCategory', e.target.value)}
+                            style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                            {SELF_EMP_ACTIVITY_TYPES.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ marginBottom: '0.7rem' }}>
+                          <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Occupational Category (GHS)</label>
+                          <select value={a.occupationalCategory} onChange={e => updateSelfEmpActivity(a.id, 'occupationalCategory', e.target.value)}
+                            style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                            {SELF_EMP_OCCUPATIONAL_OPTIONS.map(c => <option key={c} value={c}>{c === 'NA' ? 'N/A (short-term rental — 2.65% GHS)' : `Cat. ${c} (4% GHS)`}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: COLORS.textMuted, marginBottom: '0.6rem', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={a.isOutsideRepublic} onChange={(e) => updateSelfEmpActivity(a.id, 'isOutsideRepublic', e.target.checked)} />
+                        <span>Income arises <strong>outside</strong> the Republic of Cyprus</span>
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Taxable Profit Current Year (€)"
+                          value={a.taxableProfit} onChange={v => updateSelfEmpActivity(a.id, 'taxableProfit', v)} />
+                        <InputRow label="(Loss) Current Year (€)"
+                          value={a.lossCurrentYear} onChange={v => updateSelfEmpActivity(a.id, 'lossCurrentYear', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Losses BF from 1997 (€)"
+                          value={a.lossesBfFrom1997} onChange={v => updateSelfEmpActivity(a.id, 'lossesBfFrom1997', v)} />
+                        <InputRow label="Losses > 5y Not Carried (€)"
+                          value={a.lossesMoreThan5yNotCarried} onChange={v => updateSelfEmpActivity(a.id, 'lossesMoreThan5yNotCarried', v)} />
+                      </div>
+                      {a.isOutsideRepublic && (
+                        <InputRow label="Tax Paid Outside Republic (€)" hint="foreign tax credit"
+                          value={a.taxPaidOutside} onChange={v => updateSelfEmpActivity(a.id, 'taxPaidOutside', v)} />
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" onClick={addSelfEmpActivity}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add trade activity
+                  </button>
+
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                    Property / Shares Disposal <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.2 (gain/loss on disposal)</span>
+                  </div>
+                  <div style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.85rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                      <InputRow label="Gain from Immovable Property (€)"
+                        value={disposalGainImmovable} onChange={setDisposalGainImmovable} />
+                      <InputRow label="Gain from Shares in Private Co. (€)"
+                        value={disposalGainShares} onChange={setDisposalGainShares} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                      <InputRow label="(Loss) from Immovable Property (€)"
+                        value={disposalLossImmovable} onChange={setDisposalLossImmovable} />
+                      <InputRow label="(Loss) from Shares in Private Co. (€)"
+                        value={disposalLossShares} onChange={setDisposalLossShares} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                      <InputRow label="TIC / Reg. No. of Company" type="text" placeholder=""
+                        value={disposalTicOfCompany} onChange={setDisposalTicOfCompany} />
+                      <InputRow label="Country of TIC" type="text" placeholder=""
+                        value={disposalCountry} onChange={setDisposalCountry} />
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                    Partnership Income <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.3 (one row per partnership)</span>
+                  </div>
+                  {partnerships.map((p, idx) => (
+                    <div key={p.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                          Partnership #{idx + 1}{p.name ? ` — ${p.name}` : ''}
+                        </span>
+                        <button type="button" onClick={() => removePartnership(p.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>✕ Remove</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Partnership Name" type="text" placeholder=""
+                          value={p.name} onChange={v => updatePartnership(p.id, 'name', v)} />
+                        <InputRow label="Partnership TIC" type="text" placeholder=""
+                          value={p.tic} onChange={v => updatePartnership(p.id, 'tic', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 0.6rem' }}>
+                        <div style={{ marginBottom: '0.7rem' }}>
+                          <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code</label>
+                          <select value={p.code} onChange={e => updatePartnership(p.id, 'code', e.target.value)}
+                            style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                            <option value="1">1 — In Republic</option>
+                            <option value="2">2 — Outside Republic</option>
+                          </select>
+                        </div>
+                        <div style={{ marginBottom: '0.7rem' }}>
+                          <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Occupational Cat.</label>
+                          <select value={p.occupationalCategory} onChange={e => updatePartnership(p.id, 'occupationalCategory', e.target.value)}
+                            style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                            {SELF_EMP_OCCUPATIONAL_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <InputRow label="% of Partnership" type="number" placeholder=""
+                          value={p.percentage} onChange={v => updatePartnership(p.id, 'percentage', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Salary (€)"
+                          value={p.salary} onChange={v => updatePartnership(p.id, 'salary', v)} />
+                        <InputRow label="Interest on Capital (€)"
+                          value={p.interestOnCapital} onChange={v => updatePartnership(p.id, 'interestOnCapital', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Trading Income (€)"
+                          value={p.tradingIncome} onChange={v => updatePartnership(p.id, 'tradingIncome', v)} />
+                        <InputRow label="Trading Loss (€)"
+                          value={p.tradingLoss} onChange={v => updatePartnership(p.id, 'tradingLoss', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Tax Withheld (€)"
+                          value={p.taxWithheld} onChange={v => updatePartnership(p.id, 'taxWithheld', v)} />
+                        <InputRow label="Tax Paid Outside Republic (€)"
+                          value={p.taxPaidOutside} onChange={v => updatePartnership(p.id, 'taxPaidOutside', v)} />
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addPartnership}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add partnership
+                  </button>
+                </>
+              )}
+
+              {/* Employment block — TD1 Part 4.A. Hidden for the self-employed form variant. */}
+              {!(embedded && formType === 'self_employed') && (
+                <>
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Employment <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.A (one row per employer)</span></div>
               {employments.map((emp, idx) => (
                 <div key={emp.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.75rem', marginBottom: '0.75rem' }}>
@@ -2542,6 +2814,8 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
 
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Self-Employment</div>
               <InputRow label="Net Business Income (€)" value={selfEmpIncome} onChange={setSelfEmpIncome} hint="after expenses" />
+                </>
+              )}
 
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Rental Properties <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.C (one row per property)</span></div>
               {rentalProperties.map((r, idx) => (
