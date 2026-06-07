@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useCallback, useRef, useContext, createContext } from 'react';
 import { jsPDF } from 'jspdf';
-// Side-effect import: registers Roboto-Regular with jsPDF so generated PDFs
-// render Greek characters correctly. Regenerate via `node scripts/generate-pdf-fonts.mjs`.
-import '../assets/fonts/Roboto-Regular-normal.js';
+// Roboto-Regular ships Greek glyphs (jsPDF's default Helvetica is Latin-only).
+// Each PDF generator calls registerRobotoFont(doc) immediately after new jsPDF()
+// before any setFont('Roboto', ...) calls. Regenerate via `npm run build:fonts`.
+import { registerRobotoFont } from '../assets/fonts/Roboto-Regular-normal.js';
 import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, Coins, GitCompare, Download, Printer, User, FileDown, FileSpreadsheet, Mail, Eye, EyeOff } from 'lucide-react';
 
 // ============ TAX YEAR CONSTANTS ============
@@ -1521,6 +1522,8 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         format: 'a4',
         compress: true,
       });
+      registerRobotoFont(doc); // Greek-capable font for client/payer names
+      doc.setFont('Roboto', 'normal'); // default font for the whole document
 
       // ============ CONSTANTS ============
       const PAGE_WIDTH = 210;
@@ -2062,6 +2065,8 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
   const generateTd1Pdf = async (results, year) => {
     try {
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+      registerRobotoFont(doc); // Greek-capable font for client/payer names
+      doc.setFont('Roboto', 'normal'); // default font for the whole document
       const PAGE_W = 210, PAGE_H = 297;
       const MARGIN_L = 15, MARGIN_R = 15, MARGIN_T = 15, MARGIN_B = 15;
       const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
@@ -2913,7 +2918,16 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: comparisonMode ? 'minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1.1fr) minmax(0, 1fr)', gap: '1rem' }}>
+        <div style={{
+          display: 'grid',
+          // In the portal we want a single full-width column (the computation panel
+          // is shown stacked below the inputs). Public /tax keeps the 2-col layout
+          // and the 3-col comparison layout.
+          gridTemplateColumns: embedded
+            ? '1fr'
+            : (comparisonMode ? 'minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 1fr)' : 'minmax(0, 1.1fr) minmax(0, 1fr)'),
+          gap: '1rem',
+        }}>
 
           <div>
             {/* CLIENT DETAILS SECTION */}
