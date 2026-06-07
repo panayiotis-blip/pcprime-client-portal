@@ -122,13 +122,15 @@ export default function ClientTaxReturnTab({ clientId, client, editable }: Props
 
   // ---------------- EDIT VIEW ----------------
   if (view === 'edit' && currentReturn) {
+    // Title varies by client category — self-employed clients file a different form.
+    const titlePrefix = client?.client_category === 'self_employed' ? 'Self Employed' : 'Tax Return Individuals';
     return (
       <div>
         <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={() => { setView('list'); setCurrentReturn(null); }}>
             ← Back to list
           </button>
-          <strong>Tax year {currentReturn.tax_year}</strong>
+          <strong style={{ fontSize: '1.05em' }}>{titlePrefix} {currentReturn.tax_year}</strong>
           <span style={{ fontSize: '0.78em', padding: '2px 8px', background: 'var(--pc-bg-alt, #e7eaef)', borderRadius: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {currentReturn.status}
           </span>
