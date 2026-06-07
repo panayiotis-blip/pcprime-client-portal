@@ -279,6 +279,7 @@ export default function CyprusTaxCalculatorWithPDF() {
   const [firstEmployment, setFirstEmployment] = useState(false); // First employment in Cyprus (60% / 50% relief eligibility)
   const [hasDisability, setHasDisability] = useState(false); // Self disability
   const [hasDisabledDependant, setHasDisabledDependant] = useState(false); // Disabled dependant
+  const [isOver65, setIsOver65] = useState(false); // Age 65+ — exempt from Social Insurance (GHS still applies)
 
   // Additional Income Sources
   const [cyprusPensionIncome, setCyprusPensionIncome] = useState(''); // Cyprus pensions (taxable progressively or 5% over €3,420)
@@ -307,7 +308,7 @@ export default function CyprusTaxCalculatorWithPDF() {
   // Display tracker
   const [showCapitalGainsInfo, setShowCapitalGainsInfo] = useState(false);
 
-  const [openSections, setOpenSections] = useState({ client: false, profile: false, income: true, capitalgains: false, special: false, deductions: false, allowances: false });
+  const [openSections, setOpenSections] = useState({ client: false, profile: true, income: true, capitalgains: false, special: false, deductions: false, allowances: false });
 
   const toggleSection = useCallback((key) => {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -400,12 +401,13 @@ export default function CyprusTaxCalculatorWithPDF() {
       otherInc;
 
     // ============ SI & GHS ============
+    // Age 65+ exempt from Social Insurance (Cyprus pensionable age). GHS still applies to pensioners.
     const annualEmployment = num(employmentIncome);
     const empSiBase = Math.min(annualEmployment, Y.siCap);
-    const empSi = empSiBase * Y.siRates.employee;
+    const empSi = isOver65 ? 0 : empSiBase * Y.siRates.employee;
     const empGhs = Math.min(annualEmployment, Y.ghsCap) * Y.ghsRates.employee;
     const seSiBase = Math.min(grossSelfEmp, Y.siCap);
-    const seSi = seSiBase * Y.siRates.selfEmployed;
+    const seSi = isOver65 ? 0 : seSiBase * Y.siRates.selfEmployed;
     const seGhs = Math.min(grossSelfEmp, Y.ghsCap) * Y.ghsRates.selfEmployed;
     const passiveBase = Math.min(grossRent + foreignPension + cyprusPension + otherInc + royaltyTaxable, Y.ghsCap);
     const passiveGhs = passiveBase * Y.ghsRates.passive;
@@ -529,14 +531,14 @@ export default function CyprusTaxCalculatorWithPDF() {
       sdcDividends, sdcInterest, sdcRental, totalSDC, cryptoTax,
       totalTax, totalContributions, totalLiability, totalGrossIncome, netIncome, effectiveRate,
       capGainsSharesAmount, capGainsPropertyAmount,
-      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant,
+      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
     };
   }, [employmentIncome, bik, selfEmpIncome, rentalIncome, rentalInterest, rentalMaintenance, foreignPensionIncome,
       foreignPensionElectFlat, cyprusPensionIncome, cyprusPensionElectFlat, otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
       mortgageOrRent, greenSpend, homeInsurance,
-      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant,
+      taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
       royaltyIncomeQualifying, royaltyIncomeOrdinary, courtOrderIncome, tradingGoodwill,
       capitalGainsShares, capitalGainsProperty, capitalGainsCryptoMining,
       daysWorkedAbroad, totalWorkDays, foreignEmployer,
@@ -1800,6 +1802,11 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: COLORS.textMuted, marginBottom: '0.6rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={hasDisabledDependant} onChange={(e) => setHasDisabledDependant(e.target.checked)} />
                 <span>Disabled dependant <span style={{ color: COLORS.textDim, fontSize: '0.72rem' }}>(check eligibility for relief)</span></span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', color: COLORS.textMuted, marginBottom: '0.6rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={isOver65} onChange={(e) => setIsOver65(e.target.checked)} />
+                <span>Age 65 or over <span style={{ color: COLORS.textDim, fontSize: '0.72rem' }}>(exempt from Social Insurance; GHS still applies)</span></span>
               </label>
 
               <div style={{ marginTop: '0.6rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
