@@ -3,6 +3,34 @@ import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, C
 
 // ============ TAX YEAR CONSTANTS ============
 const TAX_YEARS = {
+  2024: {
+    label: '2024',
+    description: 'For 2024 tax returns (filed by 31 July 2025)',
+    bands: [
+      { min: 0, max: 19500, rate: 0 },
+      { min: 19500, max: 28000, rate: 0.20 },
+      { min: 28000, max: 36300, rate: 0.25 },
+      { min: 36300, max: 60000, rate: 0.30 },
+      { min: 60000, max: Infinity, rate: 0.35 },
+    ],
+    // Per user: 2024 uses the same calculations as 2025. Verify siCap/ghsCap if a client's
+    // 2024 income is near the cap — adjust this entry if the actual 2024 figures differ.
+    siCap: 66612,
+    ghsCap: 180000,
+    siRates: { employee: 0.088, employer: 0.088, redundancy: 0.012, hrda: 0.005, socialCohesion: 0.02, selfEmployed: 0.166 },
+    ghsRates: { employee: 0.0265, employer: 0.029, selfEmployed: 0.04, passive: 0.0265 },
+    sdcRates: { dividends: 0.17, interest: 0.17, rental: 0.0225 },
+    flatRates: { crypto: 0.08, stockOptions: 0.08, severance: 0.20, foreignPension: 0.05 },
+    severanceExempt: 200000,
+    foreignPensionThreshold: 5000,
+    foreignReliefThreshold: 55000,
+    foreignReliefDuration: 17,
+    foreignRelief20Cap: 8550,
+    lossCarryForward: 5,
+    newAllowances: false,
+    familyThresholds: null,
+    notes: 'Pre-reform rates (same structure as 2025). SDC on dividends at 17%.',
+  },
   2025: {
     label: '2025',
     description: 'For 2025 tax returns (filed by 31 July 2026)',
@@ -82,6 +110,58 @@ const fmtNoEuro = (val) => {
 };
 
 // ============ STABLE SUB-COMPONENTS ============
+// ============ EMPLOYMENT ROW HELPERS (TD1 Part 4.A) ============
+// One row per employer; codes match the official TD1 form Part 4.A column 3.
+const EMPLOYMENT_CODES = [
+  { code: '1',  label: 'Code 1 — In Republic (standard)' },
+  { code: '2',  label: 'Code 2 — Outside Republic (salary/benefits)' },
+  { code: '3',  label: 'Code 3 — In Republic, prior non-resident (sect. 8(21))' },
+  { code: '4',  label: 'Code 4 — Outside, non-resident employer > 90 days' },
+  { code: '5',  label: 'Code 5 — Unemployed' },
+  { code: '6',  label: 'Code 6 — In Republic, prior non-resident > €100k (sect. 8(23))' },
+  { code: '7',  label: 'Code 7 — Debit-balance benefit (article 5(1)(g))' },
+  { code: '8',  label: 'Code 8 — AIF carried interest / UCITS (sect. 20B/20C)' },
+  { code: '9',  label: 'Code 9 — Benefits not subject to SI' },
+  { code: '12', label: 'Code 12 — First employment from 1.1.2022 (10y outside)' },
+  { code: '13', label: 'Code 13 — First employment from 1.1.2022 (15y outside)' },
+  { code: '14', label: 'Code 14 — First employment after 26.7.2022 (3y outside)' },
+];
+
+const newEmploymentId = () => `emp-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyEmployment = () => ({
+  id: newEmploymentId(),
+  employerName: '',
+  employerTic: '',
+  code: '1',
+  periodMonths: 12,
+  grossInRepublic: '',
+  grossOutsideRepublic: '',
+  taxWithheld: '',
+  ghsWithheld: '',
+  bik: '',
+  commencementDate: '',
+  terminationDate: '',
+});
+
+// Build the employments[] array from saved input_data.
+// Handles three cases: (1) already-array, (2) legacy single-field shape from
+// pre-B1 saves, (3) brand-new (no input_data) → one empty row.
+const initEmployments = (initialState) => {
+  if (initialState?.employments && Array.isArray(initialState.employments) && initialState.employments.length > 0) {
+    return initialState.employments.map(e => ({ ...emptyEmployment(), ...e, id: e.id || newEmploymentId() }));
+  }
+  const hasLegacy = initialState && (initialState.employmentIncome || initialState.bik);
+  if (hasLegacy) {
+    return [{
+      ...emptyEmployment(),
+      grossInRepublic: String(initialState.employmentIncome || ''),
+      bik: String(initialState.bik || ''),
+    }];
+  }
+  return [emptyEmployment()];
+};
+
 const InputRow = React.memo(({ label, hint, value, onChange, type = 'number', placeholder = '0.00', readOnly = false }) => (
   <div style={{ marginBottom: '0.7rem' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
@@ -265,8 +345,9 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const [clientAddress, setClientAddress] = useState(initClient('address', 'clientAddress'));
 
   // All other state...
-  const [employmentIncome, setEmploymentIncome] = useState(init('employmentIncome', ''));
-  const [bik, setBik] = useState(init('bik', ''));
+  // Salaried Services (TD1 Part 4.A) — array of employment rows.
+  // Legacy saves with `employmentIncome` + `bik` migrate to a single-row array.
+  const [employments, setEmployments] = useState(() => initEmployments(initialState));
   const [selfEmpIncome, setSelfEmpIncome] = useState(init('selfEmpIncome', ''));
   const [rentalIncome, setRentalIncome] = useState(init('rentalIncome', ''));
   const [rentalInterest, setRentalInterest] = useState(init('rentalInterest', ''));
@@ -334,10 +415,29 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
+  // ============ EMPLOYMENT ROW MUTATORS ============
+  const addEmployment = useCallback(() => {
+    setEmployments(prev => [...prev, emptyEmployment()]);
+  }, []);
+  const removeEmployment = useCallback((id) => {
+    setEmployments(prev => prev.length <= 1 ? prev : prev.filter(e => e.id !== id));
+  }, []);
+  const updateEmployment = useCallback((id, field, value) => {
+    setEmployments(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  }, []);
+
   const calculate = useCallback((yearKey) => {
     const Y = TAX_YEARS[yearKey];
     const num = (v) => parseFloat(v) || 0;
-    const grossEmployment = num(employmentIncome) + num(bik);
+    // ============ EMPLOYMENT TOTALS (sum across employments[]) ============
+    // employmentInRepublic — drives SI/GHS base. employmentOutsideRepublic is added to
+    // gross for tax purposes but not for Cyprus SI/GHS. BIK is per-row and tax-only.
+    const employmentInRepublic = employments.reduce((s, e) => s + num(e.grossInRepublic), 0);
+    const employmentOutsideRepublic = employments.reduce((s, e) => s + num(e.grossOutsideRepublic), 0);
+    const employmentBik = employments.reduce((s, e) => s + num(e.bik), 0);
+    const employmentTaxWithheld = employments.reduce((s, e) => s + num(e.taxWithheld), 0);
+    const employmentGhsWithheld = employments.reduce((s, e) => s + num(e.ghsWithheld), 0);
+    const grossEmployment = employmentInRepublic + employmentOutsideRepublic + employmentBik;
     const grossSelfEmp = num(selfEmpIncome);
     const grossRent = num(rentalIncome);
 
@@ -436,7 +536,8 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
         effectiveOver65 = age >= 65;
       }
     }
-    const annualEmployment = num(employmentIncome);
+    // SI/GHS base: in-Republic employment only (sum across rows).
+    const annualEmployment = employmentInRepublic;
     const empSiBase = Math.min(annualEmployment, Y.siCap);
     const empSi = effectiveOver65 ? 0 : empSiBase * Y.siRates.employee;
     const empGhs = Math.min(annualEmployment, Y.ghsCap) * Y.ghsRates.employee;
@@ -547,6 +648,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     return {
       year: yearKey, Y,
       grossEmployment, grossSelfEmp, grossRent, rentNet, foreignPension, otherInc,
+      employmentInRepublic, employmentOutsideRepublic, employmentBik, employmentTaxWithheld, employmentGhsWithheld,
       cyprusPension, cyprusPensionFlatTax, cyprusPensionAddedToProgressive,
       royaltyQualifying, royaltyOrdinary, royaltyExempt, royaltyTaxable,
       courtOrder, goodwill, cryptoMining,
@@ -567,7 +669,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       capGainsSharesAmount, capGainsPropertyAmount,
       taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
-  }, [employmentIncome, bik, selfEmpIncome, rentalIncome, rentalInterest, rentalMaintenance, foreignPensionIncome,
+  }, [employments, selfEmpIncome, rentalIncome, rentalInterest, rentalMaintenance, foreignPensionIncome,
       foreignPensionElectFlat, cyprusPensionIncome, cyprusPensionElectFlat, otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
@@ -590,7 +692,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const getInputState = () => ({
     selectedYear,
     clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
-    employmentIncome, bik, selfEmpIncome, rentalIncome, rentalInterest,
+    employments, selfEmpIncome, rentalIncome, rentalInterest,
     foreignPensionIncome, foreignPensionElectFlat,
     otherIncome, dividendIncome, interestIncome, cryptoGains,
     foreignReliefType, isNonDom,
@@ -1695,7 +1797,7 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <span style={{ fontSize: '0.75rem', color: COLORS.textMuted, letterSpacing: '0.05em' }}>Tax Year:</span>
             <div style={{ display: 'flex', gap: '0' }}>
-              {[2025, 2026].map(y => (
+              {[2024, 2025, 2026].map(y => (
                 <button key={y} onClick={() => { if (taxYearLock != null) return; setSelectedYear(y); setComparisonMode(false); }}
                   disabled={taxYearLock != null && taxYearLock !== y}
                   style={{ padding: '0.5rem 1.1rem',
@@ -1705,8 +1807,8 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                     cursor: taxYearLock != null ? 'not-allowed' : 'pointer',
                     opacity: taxYearLock != null && taxYearLock !== y ? 0.35 : 1,
                     fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600,
-                    borderRadius: y === 2025 ? '3px 0 0 3px' : '0 3px 3px 0',
-                    borderLeft: y === 2026 ? 'none' : undefined,
+                    borderRadius: y === 2024 ? '3px 0 0 3px' : (y === 2026 ? '0 3px 3px 0' : 0),
+                    borderLeft: y !== 2024 ? 'none' : undefined,
                   }}>
                   {y}
                 </button>
@@ -1911,9 +2013,62 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
             </Section>
 
             <Section id="income" title="1. Income" icon={Briefcase} isOpen={openSections.income} onToggle={toggleSection}>
-              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Employment</div>
-              <InputRow label="Annual Gross Salary (€)" value={employmentIncome} onChange={setEmploymentIncome} hint="incl. 13th if applicable" />
-              <InputRow label="Benefits-in-Kind (€)" value={bik} onChange={setBik} hint="company car, COLA, etc." />
+              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>Employment <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.A (one row per employer)</span></div>
+              {employments.map((emp, idx) => (
+                <div key={emp.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                      Employer #{idx + 1}{emp.employerName ? ` — ${emp.employerName}` : ''}
+                    </span>
+                    {employments.length > 1 && (
+                      <button type="button" onClick={() => removeEmployment(emp.id)}
+                        style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                        title="Remove this employer">✕ Remove</button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Employer Name" type="text" placeholder="e.g. ABC Ltd"
+                      value={emp.employerName} onChange={v => updateEmployment(emp.id, 'employerName', v)} />
+                    <InputRow label="Employer TIC" type="text" placeholder="e.g. 12345678X"
+                      value={emp.employerTic} onChange={v => updateEmployment(emp.id, 'employerTic', v)} />
+                  </div>
+                  <div style={{ marginBottom: '0.7rem' }}>
+                    <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code (TD1 column 3)</label>
+                    <select value={emp.code} onChange={e => updateEmployment(emp.id, 'code', e.target.value)}
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                      {EMPLOYMENT_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Gross in Republic (€)" hint="column 6"
+                      value={emp.grossInRepublic} onChange={v => updateEmployment(emp.id, 'grossInRepublic', v)} />
+                    <InputRow label="Gross outside Republic (€)" hint="column 7"
+                      value={emp.grossOutsideRepublic} onChange={v => updateEmployment(emp.id, 'grossOutsideRepublic', v)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Benefits-in-Kind (€)" hint="company car, COLA"
+                      value={emp.bik} onChange={v => updateEmployment(emp.id, 'bik', v)} />
+                    <InputRow label="Period (months)" type="number" placeholder="12"
+                      value={emp.periodMonths} onChange={v => updateEmployment(emp.id, 'periodMonths', v)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Tax Withheld (€)" hint="PAYE — column 8"
+                      value={emp.taxWithheld} onChange={v => updateEmployment(emp.id, 'taxWithheld', v)} />
+                    <InputRow label="GHS Withheld (€)" hint="column 9"
+                      value={emp.ghsWithheld} onChange={v => updateEmployment(emp.id, 'ghsWithheld', v)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Commencement Date" type="date" placeholder=""
+                      value={emp.commencementDate} onChange={v => updateEmployment(emp.id, 'commencementDate', v)} />
+                    <InputRow label="Termination Date" type="date" placeholder=""
+                      value={emp.terminationDate} onChange={v => updateEmployment(emp.id, 'terminationDate', v)} />
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={addEmployment}
+                style={{ width: '100%', padding: '0.55rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                + Add another employer
+              </button>
 
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Self-Employment</div>
               <InputRow label="Net Business Income (€)" value={selfEmpIncome} onChange={setSelfEmpIncome} hint="after expenses" />

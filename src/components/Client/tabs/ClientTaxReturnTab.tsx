@@ -18,7 +18,7 @@ type Props = {
   editable: boolean;
 };
 
-const AVAILABLE_YEARS = [2025, 2026];
+const AVAILABLE_YEARS = [2024, 2025, 2026];
 
 export default function ClientTaxReturnTab({ clientId, client, editable }: Props) {
   const [returns, setReturns] = useState<TaxReturnRow[]>([]);
