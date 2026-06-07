@@ -5,8 +5,10 @@ import {
   FILING_TYPES, FILING_STATUSES,
   filingTypeLabel, StatusPill, taxYears,
 } from '../../shared/TaxFilingMeta';
+// @ts-expect-error — JSX file with no exported types
+import CyprusTaxCalculator from '../../CyprusTaxCalculator.jsx';
 
-interface Props { clientId: number; canEdit: boolean; clientName?: string; }
+interface Props { clientId: number; canEdit: boolean; clientName?: string; client?: any; }
 
 type Filing = {
   id: number;
@@ -22,6 +24,16 @@ type Filing = {
   notes: string | null;
 };
 
+type FormType = 'individuals' | 'self_employed';
+
+// Which filing_types open the rich TD1 editor and which form variant they imply.
+const FILING_TYPE_TO_FORM_TYPE: Record<string, FormType> = {
+  individual_tax_return: 'individuals',
+  individual_tax_return_self_employed: 'self_employed',
+  individual_tax_return_pensioner: 'individuals',
+};
+const isTaxReturnFiling = (filingType: string) => filingType in FILING_TYPE_TO_FORM_TYPE;
+
 const blank = (defaultYear: number): Partial<Filing> => ({
   tax_year: defaultYear,
   filing_type: 'individual_tax_return',
@@ -33,14 +45,19 @@ const blank = (defaultYear: number): Partial<Filing> => ({
   notes: '',
 });
 
-// Tab 9 (new): Tax Filings per client — list + filter + add/edit modal +
-// inline status edit + delete + Excel export.
-export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) {
+// Tax Filings — unified tab that lists every filing type (VAT, corporate, etc.)
+// AND opens the TD1 calculator editor in-place for individual tax return rows.
+// Editor is backed by the separate `tax_returns` table, linked by (client_id, tax_year).
+export default function TaxFilingsTab({ clientId, canEdit, clientName, client }: Props) {
   const [rows, setRows] = useState<Filing[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<Partial<Filing>>(blank(new Date().getFullYear()));
   const [saving, setSaving] = useState(false);
+
+  // Editor mode (for tax-return-type filings)
+  const [editorReturn, setEditorReturn] = useState<any | null>(null);
+  const [editorBusy, setEditorBusy] = useState(false);
 
   // Filters
   const [fYear, setFYear] = useState<string>('');
@@ -64,6 +81,69 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) 
     (!fType   || r.filing_type === fType) &&
     (!fStatus || r.status === fStatus)
   ), [rows, fYear, fType, fStatus]);
+
+  // Build clientPrefill for the calculator from the client row.
+  const clientPrefill = client ? {
+    name: client?.name || [client?.first_name, client?.surname].filter(Boolean).join(' ').trim(),
+    tic: client?.tax_number || '',
+    idNumber: client?.id_number || client?.passport_number || '',
+    dob: client?.date_of_birth || '',
+    siNumber: client?.social_insurance_number || '',
+    address: client?.address || '',
+  } : undefined;
+
+  // Open the rich editor for a tax-return-type filing. Loads or lazily creates
+  // a `tax_returns` row keyed by (client_id, tax_year).
+  const openEditor = async (filing: Filing) => {
+    if (!isTaxReturnFiling(filing.filing_type)) return;
+    setEditorBusy(true);
+    try {
+      const desiredFormType: FormType = FILING_TYPE_TO_FORM_TYPE[filing.filing_type];
+      const existing = (await api.listTaxReturns(clientId)) as Array<{ id: number; tax_year: number }>;
+      const match = existing.find(r => r.tax_year === filing.tax_year);
+      let taxReturn;
+      if (match) {
+        taxReturn = await api.getTaxReturn(match.id);
+      } else {
+        const newId = await api.createTaxReturn({
+          client_id: clientId,
+          tax_year: filing.tax_year,
+          form_type: desiredFormType,
+          input_data: {},
+          results: {},
+          status: 'draft',
+        });
+        taxReturn = await api.getTaxReturn(newId);
+      }
+      setEditorReturn(taxReturn);
+    } catch (err: any) {
+      alert('Could not open the return editor: ' + err.message);
+    } finally {
+      setEditorBusy(false);
+    }
+  };
+
+  const saveCurrent = async (inputData: any, snapshot: { year: number; results: any }) => {
+    if (!editorReturn) return;
+    await api.updateTaxReturn(editorReturn.id, {
+      input_data: inputData,
+      results: snapshot.results,
+    });
+  };
+
+  const changeFormType = async (newType: FormType) => {
+    if (!editorReturn || newType === editorReturn.form_type) return;
+    if (!confirm(
+      `Switch this return to "${newType === 'self_employed' ? 'Self Employed' : 'Individuals'}"? ` +
+      `Existing input data is preserved but some fields may not apply to the other form.`
+    )) return;
+    try {
+      await api.updateTaxReturn(editorReturn.id, { form_type: newType });
+      setEditorReturn({ ...editorReturn, form_type: newType });
+    } catch (err: any) {
+      alert('Could not change form type: ' + err.message);
+    }
+  };
 
   const handleAdd = async () => {
     if (!form.tax_year || !form.filing_type || !form.status) {
@@ -132,6 +212,43 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) 
 
   if (loading) return <div className="loading-screen">Loading…</div>;
 
+  // ---------------- EDITOR VIEW (TD1 calculator for an individual tax return) ----------------
+  if (editorReturn) {
+    const formType: FormType = (editorReturn.form_type as FormType) || 'individuals';
+    const titleLabel = formType === 'self_employed' ? 'Self Employed' : 'Tax Return Individuals';
+    return (
+      <div className="client-tab-content">
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditorReturn(null)}>
+            ← Back to filings
+          </button>
+          <strong style={{ fontSize: '1.05em' }}>{titleLabel} {editorReturn.tax_year}</strong>
+          <span style={{ fontSize: '0.78em', padding: '2px 8px', background: 'var(--pc-bg-alt, #e7eaef)', borderRadius: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {editorReturn.status}
+          </span>
+          {canEdit && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85em', marginLeft: 'auto' }}>
+              <label style={{ color: 'var(--pc-text-2)' }}>Form:</label>
+              <select className="form-input" style={{ padding: '2px 6px', fontSize: '0.85em', width: 'auto' }}
+                      value={formType} onChange={(e) => changeFormType(e.target.value as FormType)}>
+                <option value="individuals">Tax Return Individuals</option>
+                <option value="self_employed">Self Employed</option>
+              </select>
+            </span>
+          )}
+        </div>
+        <CyprusTaxCalculator
+          clientPrefill={clientPrefill}
+          initialState={editorReturn.input_data || {}}
+          onSave={saveCurrent}
+          taxYearLock={editorReturn.tax_year}
+          formType={formType}
+        />
+      </div>
+    );
+  }
+
+  // ---------------- LIST VIEW (all filings) ----------------
   return (
     <div className="client-tab-content">
       <div className="form-section">
@@ -146,6 +263,10 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) 
             )}
           </div>
         </div>
+
+        <p style={{ color: '#94a3b8', fontSize: 12, marginTop: 0, marginBottom: 10 }}>
+          Individual / Self-Employed / Pensioner tax-return rows open the full TD1 editor when clicked.
+        </p>
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -183,6 +304,7 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) 
                   <th>Reference</th>
                   <th>Amount</th>
                   <th>Notes</th>
+                  <th style={{ width: 80 }}></th>
                   {canEdit && <th></th>}
                 </tr>
               </thead>
@@ -259,6 +381,18 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) 
                         />
                       ) : (r.notes || '—')}
                     </td>
+                    <td>
+                      {isTaxReturnFiling(r.filing_type) && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => openEditor(r)}
+                          disabled={editorBusy}
+                          title="Open the TD1 editor for this tax return"
+                        >
+                          {editorBusy ? '…' : 'Open Return'}
+                        </button>
+                      )}
+                    </td>
                     {canEdit && (
                       <td>
                         <button className="btn btn-link btn-sm" onClick={() => handleDelete(r)}>Delete</button>
@@ -304,6 +438,11 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName }: Props) 
               <div className="form-group"><label>Amount</label><input type="number" step={0.01} className="form-input" value={form.amount ?? ''} onChange={e => setForm(p => ({ ...p, amount: e.target.value === '' ? null : Number(e.target.value) as any }))} /></div>
               <div className="form-group full-width"><label>Notes</label><textarea className="form-input" rows={3} value={form.notes || ''} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} /></div>
             </div>
+            {form.filing_type && isTaxReturnFiling(form.filing_type) && (
+              <p style={{ marginTop: 12, fontSize: 12, color: '#5a6478', background: '#f8fafc', padding: 8, borderLeft: '3px solid #9b861f', borderRadius: 2 }}>
+                After saving you can click <strong>Open Return</strong> on the row to open the full TD1 calculator. A `tax_returns` row is created on first open.
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
               <button className="btn btn-secondary" onClick={() => setShowAdd(false)} disabled={saving}>Cancel</button>
               <button className="btn btn-primary" onClick={handleAdd} disabled={saving}>{saving ? 'Saving…' : 'Save filing'}</button>

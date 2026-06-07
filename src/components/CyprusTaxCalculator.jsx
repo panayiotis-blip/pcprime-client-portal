@@ -346,14 +346,17 @@ const emptySelfEmpActivity = () => ({
   taxPaidOutside: '',
 });
 const initSelfEmployedActivities = (initialState) => {
-  if (initialState?.selfEmployedActivities && Array.isArray(initialState.selfEmployedActivities)) {
-    return initialState.selfEmployedActivities.map(a => ({ ...emptySelfEmpActivity(), ...a, id: a.id || newSelfEmpActivityId() }));
+  // Per user direction: a self-employed return has exactly ONE trade activity row.
+  // If saved data has multiple rows (e.g. from an earlier dev state), keep only the first.
+  if (initialState?.selfEmployedActivities && Array.isArray(initialState.selfEmployedActivities) && initialState.selfEmployedActivities.length > 0) {
+    const first = initialState.selfEmployedActivities[0];
+    return [{ ...emptySelfEmpActivity(), ...first, id: first.id || newSelfEmpActivityId() }];
   }
-  // Legacy migration: if a single selfEmpIncome existed, seed a single Trade row.
+  // Legacy migration: if a single selfEmpIncome existed, seed it as the trade row.
   if (initialState?.selfEmpIncome) {
     return [{ ...emptySelfEmpActivity(), taxableProfit: String(initialState.selfEmpIncome) }];
   }
-  return [];
+  return [emptySelfEmpActivity()]; // always start with one row
 };
 
 // ============ SELF-EMPLOYED: Part 4.3 Partnership income ============
@@ -853,12 +856,8 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   }, []);
 
   // ============ SELF-EMP ACTIVITY + PARTNERSHIP MUTATORS ============
-  const addSelfEmpActivity = useCallback(() => {
-    setSelfEmployedActivities(prev => [...prev, emptySelfEmpActivity()]);
-  }, []);
-  const removeSelfEmpActivity = useCallback((id) => {
-    setSelfEmployedActivities(prev => prev.filter(a => a.id !== id));
-  }, []);
+  // Self-employed clients file exactly one trade activity per return — only
+  // `updateSelfEmpActivity` is exposed. There is no add/remove for that array.
   const updateSelfEmpActivity = useCallback((id, field, value) => {
     setSelfEmployedActivities(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
   }, []);
@@ -2968,12 +2967,10 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                   <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
                     Trade / Industry / Profession <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.1 (one row per activity)</span>
                   </div>
-                  {selfEmployedActivities.map((a, idx) => (
+                  {selfEmployedActivities.map((a) => (
                     <div key={a.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>Activity #{idx + 1}</span>
-                        <button type="button" onClick={() => removeSelfEmpActivity(a.id)}
-                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>✕ Remove</button>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>Main Trade Activity</span>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
                         <div style={{ marginBottom: '0.7rem' }}>
@@ -3013,10 +3010,7 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                       )}
                     </div>
                   ))}
-                  <button type="button" onClick={addSelfEmpActivity}
-                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
-                    + Add trade activity
-                  </button>
+                  {/* Self-employed clients file one trade activity per return — no "Add" button. */}
 
                   <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
                     Property / Shares Disposal <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.2 (gain/loss on disposal)</span>
