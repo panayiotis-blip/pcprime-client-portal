@@ -247,6 +247,79 @@ const initRentalProperties = (initialState) => {
   return []; // rentals are optional
 };
 
+// ============ PART 5.C — LIFE / SI / PENSION FUND DEDUCTIONS (portal-only) ============
+// Codes per the TD1 form. Code 2 (SIS) is informational only in our calc — SI is already
+// auto-computed from income. The other codes feed into the existing per-code allowed
+// deductions (pension 10%, life 7% of sum assured per policy, medical 1.5%/2%).
+const LIFE_SI_PENSION_CODES = [
+  { code: '1', label: 'Code 1 — Approved funds & pension plans (10% cap)' },
+  { code: '2', label: 'Code 2 — Social Insurance Fund (SIS — auto-computed, info only)' },
+  { code: '3', label: 'Code 3 — Life insurance policies (7% of sum assured)' },
+  { code: '4', label: 'Code 4 — Medical funds / private medical insurance' },
+  { code: '5', label: 'Code 5 — Widows pension fund' },
+  { code: '6', label: 'Code 6 — Overseas social insurance fund' },
+];
+
+const newLifeSiPensionFundId = () => `lsp-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyLifeSiPensionFund = () => ({
+  id: newLifeSiPensionFundId(),
+  code: '1',
+  fundName: '',
+  fundTic: '',
+  policyDate: '',
+  lifeOf: 'own',   // 'own' | 'spouse' (only relevant for code 3)
+  sumAssured: '',  // only relevant for code 3
+  amountPaid: '',
+});
+
+const initLifeSiPensionFunds = (initialState) => {
+  if (initialState?.lifeSiPensionFunds && Array.isArray(initialState.lifeSiPensionFunds) && initialState.lifeSiPensionFunds.length > 0) {
+    return initialState.lifeSiPensionFunds.map(r => ({ ...emptyLifeSiPensionFund(), ...r, id: r.id || newLifeSiPensionFundId() }));
+  }
+  // Legacy migration: each existing single-field that's non-empty becomes one row.
+  const legacy = initialState || {};
+  const rows = [];
+  if (legacy.pensionContrib) {
+    rows.push({ ...emptyLifeSiPensionFund(), code: '1', fundName: '(Legacy pension)', amountPaid: String(legacy.pensionContrib) });
+  }
+  if (legacy.lifeInsurance) {
+    rows.push({ ...emptyLifeSiPensionFund(), code: '3', fundName: '(Legacy life policy)', amountPaid: String(legacy.lifeInsurance), sumAssured: String(legacy.lifeSumAssured || '') });
+  }
+  if (legacy.medicalContrib) {
+    rows.push({ ...emptyLifeSiPensionFund(), code: '4', fundName: '(Legacy medical)', amountPaid: String(legacy.medicalContrib) });
+  }
+  return rows;
+};
+
+// ============ PART 5.B — INVESTMENT IN INNOVATIVE BUSINESSES (portal-only) ============
+const INNOVATIVE_INVESTMENT_CODES = [
+  { code: '1', label: 'Code 1 — From 2017 directly (≤5.12.2023), fund, or alt. trading platform' },
+  { code: '2', label: 'Code 2 — From 6.12.2023, direct in new SME (no prior activity)' },
+  { code: '3', label: 'Code 3 — From 6.12.2023, SME ≤10y old or ≤7y from first commercial sale' },
+  { code: '4', label: 'Code 4 — Natural person investment > 50% of last-5y turnover' },
+];
+
+const newInnovativeInvestmentId = () => `inv-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyInnovativeInvestment = () => ({
+  id: newInnovativeInvestmentId(),
+  tic: '',
+  yearOfInvestment: '',
+  yearOfContinuationInvestment: '',
+  code: '1',
+  initialAmount: '',
+  amountClaimedUpTo2023: '',
+  amountToClaim: '',
+});
+
+const initInnovativeInvestments = (initialState) => {
+  if (initialState?.innovativeInvestments && Array.isArray(initialState.innovativeInvestments)) {
+    return initialState.innovativeInvestments.map(r => ({ ...emptyInnovativeInvestment(), ...r, id: r.id || newInnovativeInvestmentId() }));
+  }
+  return [];
+};
+
 // ============ LIFE INSURANCE REDEMPTION (TD1 Part 4.G) — portal-only ============
 // Per TD1 Notes for Tax Computation, note 1:
 //   • Cancellation within 3 years of issue → 30% of total premiums deducted is added back to income
@@ -455,6 +528,7 @@ const ComputationPanel = React.memo(({ results, year, isComparison = false, Y })
           {results.cappedOptional > 0 && <ResultRow label="Pension/Medical/Life" value={results.cappedOptional} indent={1} neg />}
           {results.donationsAllowed > 0 && <ResultRow label="Donations" value={results.donationsAllowed} indent={1} neg />}
           {results.subscriptionsAllowed > 0 && <ResultRow label="Subscriptions" value={results.subscriptionsAllowed} indent={1} neg />}
+          {results.innovativeAllowed > 0 && <ResultRow label="Innovative business investment" value={results.innovativeAllowed} indent={1} neg />}
           {results.lossesUsed > 0 && <ResultRow label="Losses b/f" value={results.lossesUsed} indent={1} neg />}
           {results.total2026Allowances > 0 && <ResultRow label="2026 family/housing allowances" value={results.total2026Allowances} indent={1} neg accent />}
         </div>
@@ -572,6 +646,10 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const [dividendSources, setDividendSources] = useState(() => initDividendSources(initialState));
   // B3b (portal-only): Life insurance redemption rows (TD1 Part 4.G).
   const [lifeRedemptions, setLifeRedemptions] = useState(() => initLifeRedemptions(initialState));
+  // B3c (portal-only): Part 5.C life/SI/pension fund rows.
+  const [lifeSiPensionFunds, setLifeSiPensionFunds] = useState(() => initLifeSiPensionFunds(initialState));
+  // B3c (portal-only): Part 5.B innovative business investments.
+  const [innovativeInvestments, setInnovativeInvestments] = useState(() => initInnovativeInvestments(initialState));
   // B3b (portal-only): Additional Part 5.A miscellaneous deductions beyond donations + profSubs.
   const [tradeUnionContrib, setTradeUnionContrib] = useState(init('tradeUnionContrib', ''));
   const [politicalPartyDonations, setPoliticalPartyDonations] = useState(init('politicalPartyDonations', ''));
@@ -676,6 +754,26 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   }, []);
   const updateLifeRedemption = useCallback((id, field, value) => {
     setLifeRedemptions(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }, []);
+
+  // ============ PART 5.C + 5.B MUTATORS (portal-only) ============
+  const addLifeSiPensionFund = useCallback(() => {
+    setLifeSiPensionFunds(prev => [...prev, emptyLifeSiPensionFund()]);
+  }, []);
+  const removeLifeSiPensionFund = useCallback((id) => {
+    setLifeSiPensionFunds(prev => prev.filter(r => r.id !== id));
+  }, []);
+  const updateLifeSiPensionFund = useCallback((id, field, value) => {
+    setLifeSiPensionFunds(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }, []);
+  const addInnovativeInvestment = useCallback(() => {
+    setInnovativeInvestments(prev => [...prev, emptyInnovativeInvestment()]);
+  }, []);
+  const removeInnovativeInvestment = useCallback((id) => {
+    setInnovativeInvestments(prev => prev.filter(r => r.id !== id));
+  }, []);
+  const updateInnovativeInvestment = useCallback((id, field, value) => {
+    setInnovativeInvestments(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   }, []);
 
   // ============ INTEREST + DIVIDEND ROW MUTATORS (portal-only) ============
@@ -860,12 +958,42 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
 
     // ============ DEDUCTIONS ============
     const ownSI_GHS = totalSI + empGhs + seGhs + passiveGhs;
-    const pensionAllowed = Math.min(num(pensionContrib), annualEmployment * 0.10);
     const medicalCap = Y.newAllowances ? 0.02 : 0.015;
-    const medicalAllowed = Math.min(num(medicalContrib), annualEmployment * medicalCap);
+
+    // B3c: Part 5.C — Life/SI/Pension funds. When the portal array has rows, derive
+    // each per-code bucket from it; otherwise fall back to the legacy single fields.
+    // Code 2 (SIS) is informational only — SI is already auto-computed above.
+    let pensionFromArray = 0;        // codes 1 + 5 + 6 → share the 10%-of-employment cap
+    let lifeAllowedFromArray = 0;    // code 3 → per-row 7%-of-sum-assured cap
+    let medicalFromArray = 0;        // code 4 → 1.5%/2% cap
+    for (const r of lifeSiPensionFunds) {
+      const paid = num(r.amountPaid);
+      if (paid <= 0) continue;
+      switch (r.code) {
+        case '1': pensionFromArray += paid; break;
+        case '5': pensionFromArray += paid; break;
+        case '6': pensionFromArray += paid; break;
+        case '3': {
+          const sum = num(r.sumAssured);
+          lifeAllowedFromArray += sum > 0 ? Math.min(paid, sum * 0.07) : paid;
+          break;
+        }
+        case '4': medicalFromArray += paid; break;
+        // case '2' (SIS): informational only — skip
+      }
+    }
+    const usePart5cArray = lifeSiPensionFunds.length > 0;
+    const pensionAllowed = usePart5cArray
+      ? Math.min(pensionFromArray, annualEmployment * 0.10)
+      : Math.min(num(pensionContrib), annualEmployment * 0.10);
+    const medicalAllowed = usePart5cArray
+      ? Math.min(medicalFromArray, annualEmployment * medicalCap)
+      : Math.min(num(medicalContrib), annualEmployment * medicalCap);
     const lifePremium = num(lifeInsurance);
     const lifeSum = num(lifeSumAssured);
-    const lifeAllowed = lifeSum > 0 ? Math.min(lifePremium, lifeSum * 0.07) : lifePremium;
+    const lifeAllowed = usePart5cArray
+      ? lifeAllowedFromArray
+      : (lifeSum > 0 ? Math.min(lifePremium, lifeSum * 0.07) : lifePremium);
     const donationsAllowed = num(donations);
     const subscriptionsAllowed = num(profSubscriptions);
     // B3b: additional Part 5.A miscellaneous deductions (portal-only state; 0 in public mode).
@@ -917,7 +1045,12 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       total2026Allowances = childAllowance + studentAllowance + housingAllowance + greenAllowance + homeInsAllowance;
     }
 
-    const chargeableIncome = Math.max(0, totalProgressiveIncome - totalDeductions - lossesUsed - total2026Allowances);
+    // B3c: Part 5.B — Investment in innovative businesses. Per TD1, claim is capped
+    // at 50% of taxable income after all OTHER deductions (incl. medical, life, etc.).
+    const baseBeforeInnovative = Math.max(0, totalProgressiveIncome - totalDeductions - lossesUsed - total2026Allowances);
+    const innovativeClaimRaw = innovativeInvestments.reduce((s, r) => s + num(r.amountToClaim), 0);
+    const innovativeAllowed = Math.min(innovativeClaimRaw, baseBeforeInnovative * 0.50);
+    const chargeableIncome = Math.max(0, baseBeforeInnovative - innovativeAllowed);
 
     // ============ PIT CALCULATION ============
     let pit = 0;
@@ -976,7 +1109,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       year: yearKey, Y,
       grossEmployment, grossSelfEmp, grossRent, rentNet, foreignPension, otherInc,
       employmentInRepublic, employmentOutsideRepublic, employmentBik, employmentTaxWithheld, employmentGhsWithheld,
-      lifeRedemptionAddback,
+      lifeRedemptionAddback, innovativeAllowed, innovativeClaimRaw,
       cyprusPension, cyprusPensionFlatTax, cyprusPensionAddedToProgressive,
       royaltyQualifying, royaltyOrdinary, royaltyExempt, royaltyTaxable,
       courtOrder, goodwill, cryptoMining,
@@ -997,7 +1130,8 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       capGainsSharesAmount, capGainsPropertyAmount,
       taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
-  }, [employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions, selfEmpIncome,
+  }, [employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions,
+      lifeSiPensionFunds, innovativeInvestments, selfEmpIncome,
       otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
@@ -1022,6 +1156,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     selectedYear,
     clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
     employments, pensions, rentalProperties, interestSources, dividendSources, lifeRedemptions,
+    lifeSiPensionFunds, innovativeInvestments,
     selfEmpIncome,
     otherIncome, dividendIncome, interestIncome, cryptoGains,
     foreignReliefType, isNonDom,
@@ -2721,10 +2856,16 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
             </Section>
 
             <Section id="deductions" title="3. Allowable Deductions" icon={FileText} isOpen={openSections.deductions} onToggle={toggleSection}>
-              <InputRow label="Pension / Provident (€)" value={pensionContrib} onChange={setPensionContrib} hint="max 10%" />
-              <InputRow label="Medical Scheme (€)" value={medicalContrib} onChange={setMedicalContrib} hint={selectedYear === 2026 ? "max 2%" : "max 1.5%"} />
-              <InputRow label="Life Insurance Premium (€)" value={lifeInsurance} onChange={setLifeInsurance} />
-              <InputRow label="Life Sum Assured (€)" value={lifeSumAssured} onChange={setLifeSumAssured} hint="cap at 7%" />
+              {/* Public /tax: legacy single-field Part 5.C inputs. Portal mode uses the
+                  TD1-shaped lifeSiPensionFunds[] row UI further down. */}
+              {!embedded && (
+                <>
+                  <InputRow label="Pension / Provident (€)" value={pensionContrib} onChange={setPensionContrib} hint="max 10%" />
+                  <InputRow label="Medical Scheme (€)" value={medicalContrib} onChange={setMedicalContrib} hint={selectedYear === 2026 ? "max 2%" : "max 1.5%"} />
+                  <InputRow label="Life Insurance Premium (€)" value={lifeInsurance} onChange={setLifeInsurance} />
+                  <InputRow label="Life Sum Assured (€)" value={lifeSumAssured} onChange={setLifeSumAssured} hint="cap at 7%" />
+                </>
+              )}
               <InputRow label="Donations (€)" value={donations} onChange={setDonations} hint="approved charities (TD1 5.A line 3)" />
               <InputRow label="Prof. Subscriptions (€)" value={profSubscriptions} onChange={setProfSubscriptions} hint="TD1 5.A line 2" />
 
@@ -2748,6 +2889,116 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
 
               {/* Rental property deductions are now captured per-property in
                   the Income section's Rental Properties block (TD1 Part 4.C). */}
+
+              {embedded && (
+                <>
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '1rem', marginBottom: '0.6rem' }}>
+                    Life / SI / Pension Funds <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 5.C (one row per fund/policy)</span>
+                  </div>
+                  <div style={{ marginBottom: '0.6rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
+                    <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
+                    Pension funds (codes 1+5+6) capped at 10% of employment; life policies (code 3) capped at 7% of sum assured per policy; medical (code 4) at {selectedYear === 2026 ? '2%' : '1.5%'} of gross. Code 2 (SIS) is for completeness only — already auto-computed.
+                  </div>
+                  {lifeSiPensionFunds.map((r, idx) => (
+                    <div key={r.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                          Fund / Policy #{idx + 1}{r.fundName ? ` — ${r.fundName}` : ''}
+                        </span>
+                        <button type="button" onClick={() => removeLifeSiPensionFund(r.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                          title="Remove">✕ Remove</button>
+                      </div>
+                      <div style={{ marginBottom: '0.7rem' }}>
+                        <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code (TD1 column 3)</label>
+                        <select value={r.code} onChange={e => updateLifeSiPensionFund(r.id, 'code', e.target.value)}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                          {LIFE_SI_PENSION_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Fund / Insurance Company" type="text" placeholder="e.g. CNP / Provident Fund"
+                          value={r.fundName} onChange={v => updateLifeSiPensionFund(r.id, 'fundName', v)} />
+                        <InputRow label="TIC" type="text" placeholder=""
+                          value={r.fundTic} onChange={v => updateLifeSiPensionFund(r.id, 'fundTic', v)} />
+                      </div>
+                      {r.code === '3' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                          <InputRow label="Policy Date" type="date" placeholder=""
+                            value={r.policyDate} onChange={v => updateLifeSiPensionFund(r.id, 'policyDate', v)} />
+                          <div style={{ marginBottom: '0.7rem' }}>
+                            <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Insurance on Life of</label>
+                            <select value={r.lifeOf} onChange={e => updateLifeSiPensionFund(r.id, 'lifeOf', e.target.value)}
+                              style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                              <option value="own">Own</option>
+                              <option value="spouse">Spouse</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                        {r.code === '3' && (
+                          <InputRow label="Sum Assured (€)" hint="for 7% cap"
+                            value={r.sumAssured} onChange={v => updateLifeSiPensionFund(r.id, 'sumAssured', v)} />
+                        )}
+                        <InputRow label="Amount Paid (€)"
+                          value={r.amountPaid} onChange={v => updateLifeSiPensionFund(r.id, 'amountPaid', v)} />
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addLifeSiPensionFund}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add fund / policy
+                  </button>
+
+                  <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.5rem', marginBottom: '0.6rem' }}>
+                    Innovative Business Investments <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 5.B (codes 1-4)</span>
+                  </div>
+                  <div style={{ marginBottom: '0.6rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
+                    <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
+                    Claim capped at <strong>50% of taxable income</strong> after all other deductions. For continuation investments, add multiple rows with the same TIC.
+                  </div>
+                  {innovativeInvestments.map((r, idx) => (
+                    <div key={r.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                          Investment #{idx + 1}
+                        </span>
+                        <button type="button" onClick={() => removeInnovativeInvestment(r.id)}
+                          style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                          title="Remove">✕ Remove</button>
+                      </div>
+                      <div style={{ marginBottom: '0.7rem' }}>
+                        <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code (TD1 column 4)</label>
+                        <select value={r.code} onChange={e => updateInnovativeInvestment(r.id, 'code', e.target.value)}
+                          style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                          {INNOVATIVE_INVESTMENT_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="TIC" type="text" placeholder="Company TIC"
+                          value={r.tic} onChange={v => updateInnovativeInvestment(r.id, 'tic', v)} />
+                        <InputRow label="Year of Investment" type="number" placeholder="e.g. 2024"
+                          value={r.yearOfInvestment} onChange={v => updateInnovativeInvestment(r.id, 'yearOfInvestment', v)} />
+                        <InputRow label="Year of Continuation" type="number" placeholder="if applicable"
+                          value={r.yearOfContinuationInvestment} onChange={v => updateInnovativeInvestment(r.id, 'yearOfContinuationInvestment', v)} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 0.6rem' }}>
+                        <InputRow label="Initial Amount (€)"
+                          value={r.initialAmount} onChange={v => updateInnovativeInvestment(r.id, 'initialAmount', v)} />
+                        <InputRow label="Claimed up to 2023 (€)"
+                          value={r.amountClaimedUpTo2023} onChange={v => updateInnovativeInvestment(r.id, 'amountClaimedUpTo2023', v)} />
+                        <InputRow label="To Claim This Year (€)" hint="capped at 50% post-deduction"
+                          value={r.amountToClaim} onChange={v => updateInnovativeInvestment(r.id, 'amountToClaim', v)} />
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addInnovativeInvestment}
+                    style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                    + Add innovative business investment
+                  </button>
+                </>
+              )}
 
               {(hasDisability || hasDisabledDependant) && (
                 <>
