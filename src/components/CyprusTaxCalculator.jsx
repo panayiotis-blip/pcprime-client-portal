@@ -162,6 +162,120 @@ const initEmployments = (initialState) => {
   return [emptyEmployment()];
 };
 
+// ============ PENSION ROW HELPERS (TD1 Part 4.B) ============
+// Code → tax treatment:
+//   1, 4, 5: Cyprus pensions taxed at normal progressive rates
+//   8       : Overseas pension taxed at normal progressive rates
+//   2       : Overseas pension elected at 5% flat over €5,000 (Y.foreignPensionThreshold)
+//   6       : Widow's pension elected at 20% flat over €19,500 (per TD1 note 5)
+//   3       : Exempted (excluded from taxable income)
+const PENSION_CODES = [
+  { code: '1', label: 'Code 1 — Normal rates from the Republic',                       taxation: 'progressive' },
+  { code: '2', label: 'Code 2 — Overseas, special rate (5% over €5,000)',              taxation: 'foreignFlat'  },
+  { code: '3', label: 'Code 3 — Exempted',                                              taxation: 'exempt'       },
+  { code: '4', label: 'Code 4 — Social Insurance (SIS) — Normal rates',                taxation: 'progressive' },
+  { code: '5', label: 'Code 5 — Non-resident from employment in the Republic',         taxation: 'progressive' },
+  { code: '6', label: "Code 6 — Widow's, special rate (20% over €19,500)",              taxation: 'widowFlat'    },
+  { code: '8', label: 'Code 8 — Overseas, normal rates',                                taxation: 'progressive' },
+];
+const PENSION_CODE_TAXATION = Object.fromEntries(PENSION_CODES.map(c => [c.code, c.taxation]));
+
+const newPensionId = () => `pen-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyPension = () => ({
+  id: newPensionId(),
+  payerTic: '',
+  payerName: '',
+  code: '1',
+  amount: '',
+  taxWithheld: '',
+  ghsWithheld: '',
+});
+
+// ============ RENTAL PROPERTY HELPERS (TD1 Part 4.C) ============
+// Property type code controls the SDC rate per the official form. For B2 we
+// capture the code but the calculation continues to use the flat sdcRates.rental
+// from TAX_YEARS — per-type SDC rates can be applied in a later chunk.
+const PROPERTY_TYPES = [
+  { code: '1',  label: 'Code 1 — Office (3% SDC)' },
+  { code: '2',  label: 'Code 2 — Shop (3% SDC)' },
+  { code: '3',  label: 'Code 3 — Flat (3% SDC)' },
+  { code: '4',  label: 'Code 4 — House (3% SDC)' },
+  { code: '5',  label: 'Code 5 — Storehouse (4% SDC)' },
+  { code: '6',  label: 'Code 6 — Land (0% SDC)' },
+  { code: '7',  label: 'Code 7 — Parking space (0% SDC)' },
+  { code: '8',  label: 'Code 8 — Factory / Hotel (4%/7% SDC)' },
+  { code: '9',  label: 'Code 9 — Other property (0% SDC)' },
+  { code: '10', label: 'Code 10 — Building with 10% allowance (3% SDC)' },
+  { code: '11', label: 'Code 11 — Under requisition order (0% SDC, not subject)' },
+];
+
+const newRentalPropertyId = () => `prop-${Math.random().toString(36).slice(2, 11)}`;
+
+const emptyRentalProperty = () => ({
+  id: newRentalPropertyId(),
+  registrationNo: '',
+  propertyTypeCode: '3', // default Flat
+  acquisitionDate: '',
+  ownershipShare: '100',
+  lesseeTic: '',
+  lesseeName: '',
+  annualGrossInRepublic: '',
+  annualGrossOutsideRepublic: '',
+  capitalAllowances: '', // TD1 Part 4.C col 12
+  interestPayable: '',    // TD1 Part 4.C col 13
+  sdcWithheld: '',        // TD1 Part 4.C col 15
+  ghsWithheld: '',        // TD1 Part 4.C col 16
+});
+
+// Migrate legacy single-rental fields (rentalIncome / rentalInterest / rentalMaintenance) into rows.
+const initRentalProperties = (initialState) => {
+  if (initialState?.rentalProperties && Array.isArray(initialState.rentalProperties) && initialState.rentalProperties.length > 0) {
+    return initialState.rentalProperties.map(r => ({ ...emptyRentalProperty(), ...r, id: r.id || newRentalPropertyId() }));
+  }
+  const legacy = initialState || {};
+  if (legacy.rentalIncome || legacy.rentalInterest || legacy.rentalMaintenance) {
+    return [{
+      ...emptyRentalProperty(),
+      annualGrossInRepublic: String(legacy.rentalIncome || ''),
+      interestPayable: String(legacy.rentalInterest || ''),
+      // Legacy `rentalMaintenance` was treated as an additional deduction; TD1 puts
+      // depreciation in "capital allowances for rented property" (col 12). Same math.
+      capitalAllowances: String(legacy.rentalMaintenance || ''),
+    }];
+  }
+  return []; // rentals are optional
+};
+
+// Migrate legacy single-pension fields (foreignPension* + cyprusPension*) into rows.
+const initPensions = (initialState) => {
+  if (initialState?.pensions && Array.isArray(initialState.pensions) && initialState.pensions.length > 0) {
+    return initialState.pensions.map(p => ({ ...emptyPension(), ...p, id: p.id || newPensionId() }));
+  }
+  const legacy = initialState || {};
+  const migrated = [];
+  if (legacy.foreignPensionIncome) {
+    migrated.push({
+      ...emptyPension(),
+      amount: String(legacy.foreignPensionIncome),
+      // Election=true meant 5% flat → code 2; false meant progressive → code 8
+      code: legacy.foreignPensionElectFlat === false ? '8' : '2',
+      payerName: '(Foreign pension)',
+    });
+  }
+  if (legacy.cyprusPensionIncome) {
+    migrated.push({
+      ...emptyPension(),
+      amount: String(legacy.cyprusPensionIncome),
+      // Election=true meant the widow's special rate → code 6 (now 20%/€19,500 per TD1,
+      // was 5%/€3,420 in legacy code — bug fix)
+      code: legacy.cyprusPensionElectFlat ? '6' : '1',
+      payerName: '(Cyprus pension)',
+    });
+  }
+  return migrated; // pensions are optional — empty array is fine
+};
+
 const InputRow = React.memo(({ label, hint, value, onChange, type = 'number', placeholder = '0.00', readOnly = false }) => (
   <div style={{ marginBottom: '0.7rem' }}>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
@@ -284,7 +398,7 @@ const ComputationPanel = React.memo(({ results, year, isComparison = false, Y })
           <div style={{ fontSize: '0.65rem', letterSpacing: '0.12em', color: yearColor, textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.4rem' }}>Flat-Rate Taxes</div>
           {results.cryptoTax > 0 && <ResultRow label="Crypto disposal (8%)" value={results.cryptoTax} />}
           {results.foreignPensionFlatTax > 0 && <ResultRow label="Foreign pension (5% over €5K)" value={results.foreignPensionFlatTax} />}
-          {results.cyprusPensionFlatTax > 0 && <ResultRow label="Widow's pension (5% over €3,420)" value={results.cyprusPensionFlatTax} />}
+          {results.cyprusPensionFlatTax > 0 && <ResultRow label="Widow's pension (20% over €19,500)" value={results.cyprusPensionFlatTax} />}
         </div>
       )}
 
@@ -349,10 +463,12 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   // Legacy saves with `employmentIncome` + `bik` migrate to a single-row array.
   const [employments, setEmployments] = useState(() => initEmployments(initialState));
   const [selfEmpIncome, setSelfEmpIncome] = useState(init('selfEmpIncome', ''));
-  const [rentalIncome, setRentalIncome] = useState(init('rentalIncome', ''));
-  const [rentalInterest, setRentalInterest] = useState(init('rentalInterest', ''));
-  const [foreignPensionIncome, setForeignPensionIncome] = useState(init('foreignPensionIncome', ''));
-  const [foreignPensionElectFlat, setForeignPensionElectFlat] = useState(init('foreignPensionElectFlat', true));
+  // Rental properties (TD1 Part 4.C) — array of property rows. Replaces the
+  // three legacy single-value fields (rentalIncome, rentalInterest, rentalMaintenance).
+  const [rentalProperties, setRentalProperties] = useState(() => initRentalProperties(initialState));
+  // Pensions (TD1 Part 4.B) — array of pension rows. Replaces the four legacy
+  // single-value fields (foreignPensionIncome/Elect, cyprusPensionIncome/Elect).
+  const [pensions, setPensions] = useState(() => initPensions(initialState));
   const [otherIncome, setOtherIncome] = useState(init('otherIncome', ''));
   const [dividendIncome, setDividendIncome] = useState(init('dividendIncome', ''));
   const [interestIncome, setInterestIncome] = useState(init('interestIncome', ''));
@@ -381,9 +497,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const [hasDisabledDependant, setHasDisabledDependant] = useState(init('hasDisabledDependant', false));
   const [isOver65, setIsOver65] = useState(init('isOver65', false));
 
-  // Additional Income Sources
-  const [cyprusPensionIncome, setCyprusPensionIncome] = useState(init('cyprusPensionIncome', ''));
-  const [cyprusPensionElectFlat, setCyprusPensionElectFlat] = useState(init('cyprusPensionElectFlat', false));
+  // Additional Income Sources (pensions moved into `pensions[]` above)
   const [royaltyIncomeQualifying, setRoyaltyIncomeQualifying] = useState(init('royaltyIncomeQualifying', ''));
   const [royaltyIncomeOrdinary, setRoyaltyIncomeOrdinary] = useState(init('royaltyIncomeOrdinary', ''));
   const [courtOrderIncome, setCourtOrderIncome] = useState(init('courtOrderIncome', ''));
@@ -400,7 +514,7 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const [foreignEmployer, setForeignEmployer] = useState(init('foreignEmployer', false));
 
   // Additional Deductions
-  const [rentalMaintenance, setRentalMaintenance] = useState(init('rentalMaintenance', ''));
+  // (legacy rentalMaintenance state has moved into per-property capitalAllowances above)
   const [capitalAllowances, setCapitalAllowances] = useState(init('capitalAllowances', ''));
   const [badDebts, setBadDebts] = useState(init('badDebts', ''));
   const [disabilityAllowance, setDisabilityAllowance] = useState(init('disabilityAllowance', ''));
@@ -426,6 +540,28 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     setEmployments(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
   }, []);
 
+  // ============ PENSION ROW MUTATORS ============
+  const addPension = useCallback(() => {
+    setPensions(prev => [...prev, emptyPension()]);
+  }, []);
+  const removePension = useCallback((id) => {
+    setPensions(prev => prev.filter(p => p.id !== id));
+  }, []);
+  const updatePension = useCallback((id, field, value) => {
+    setPensions(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  }, []);
+
+  // ============ RENTAL PROPERTY MUTATORS ============
+  const addRentalProperty = useCallback(() => {
+    setRentalProperties(prev => [...prev, emptyRentalProperty()]);
+  }, []);
+  const removeRentalProperty = useCallback((id) => {
+    setRentalProperties(prev => prev.filter(r => r.id !== id));
+  }, []);
+  const updateRentalProperty = useCallback((id, field, value) => {
+    setRentalProperties(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }, []);
+
   const calculate = useCallback((yearKey) => {
     const Y = TAX_YEARS[yearKey];
     const num = (v) => parseFloat(v) || 0;
@@ -439,32 +575,53 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     const employmentGhsWithheld = employments.reduce((s, e) => s + num(e.ghsWithheld), 0);
     const grossEmployment = employmentInRepublic + employmentOutsideRepublic + employmentBik;
     const grossSelfEmp = num(selfEmpIncome);
-    const grossRent = num(rentalIncome);
+    // ============ RENTAL PROPERTIES (TD1 Part 4.C — aggregated across rentalProperties[]) ============
+    // For B2 we sum across properties and apply the existing rentNet formula. Per-type
+    // SDC rates (3% office/shop/flat/house, 4% storehouse, 0% land/parking, etc.) come later.
+    const rentalGrossInRepublic   = rentalProperties.reduce((s, r) => s + num(r.annualGrossInRepublic), 0);
+    const rentalGrossOutside      = rentalProperties.reduce((s, r) => s + num(r.annualGrossOutsideRepublic), 0);
+    const rentalInterestTotal     = rentalProperties.reduce((s, r) => s + num(r.interestPayable), 0);
+    const rentalCapitalAllowances = rentalProperties.reduce((s, r) => s + num(r.capitalAllowances), 0);
+    const rentalSdcWithheld       = rentalProperties.reduce((s, r) => s + num(r.sdcWithheld), 0);
+    const rentalGhsWithheldByTenant = rentalProperties.reduce((s, r) => s + num(r.ghsWithheld), 0);
+    // Keep the old field names so downstream references (passiveBase, totalGrossIncome,
+    // familyIncome, etc.) and outputs that read `grossRent` keep working.
+    const grossRent = rentalGrossInRepublic + rentalGrossOutside;
+    const rentalMaintNum = rentalCapitalAllowances; // capital allowances are the modern equivalent
+    const rentNet = Math.max(0, grossRent * 0.80 - rentalInterestTotal - rentalMaintNum);
 
-    // Rental: 20% W&T + interest + actual maintenance (uncommon but allowed)
-    const rentalMaintNum = num(rentalMaintenance);
-    const rentNet = Math.max(0, grossRent * 0.80 - num(rentalInterest) - rentalMaintNum);
-
-    const foreignPension = num(foreignPensionIncome);
-    const cyprusPension = num(cyprusPensionIncome);
-
-    // ============ FOREIGN PENSION ELECTION ============
+    // ============ PENSIONS (TD1 Part 4.B — aggregated across pensions[]) ============
+    // Per-row code drives the treatment. Old aggregate names (`foreignPension`,
+    // `cyprusPension`, `foreignPensionFlatTax`, `cyprusPensionFlatTax`,
+    // `foreignPensionAddedToProgressive`, `cyprusPensionAddedToProgressive`)
+    // are preserved so downstream sums/labels keep working.
+    const foreignPension = pensions.filter(p => p.code === '2' || p.code === '8').reduce((s, p) => s + num(p.amount), 0);
+    const cyprusPension  = pensions.filter(p => !['2', '8'].includes(p.code)).reduce((s, p) => s + num(p.amount), 0);
     let foreignPensionFlatTax = 0;
     let foreignPensionAddedToProgressive = 0;
-    if (foreignPensionElectFlat && foreignPension > Y.foreignPensionThreshold) {
-      foreignPensionFlatTax = (foreignPension - Y.foreignPensionThreshold) * Y.flatRates.foreignPension;
-    } else if (!foreignPensionElectFlat) {
-      foreignPensionAddedToProgressive = foreignPension;
-    }
-
-    // ============ CYPRUS PENSION ELECTION (widow's pension only — 5% over €3,420) ============
     let cyprusPensionFlatTax = 0;
     let cyprusPensionAddedToProgressive = 0;
-    if (cyprusPensionElectFlat && cyprusPension > 3420) {
-      cyprusPensionFlatTax = (cyprusPension - 3420) * 0.05;
-    } else {
-      cyprusPensionAddedToProgressive = cyprusPension;
+    for (const p of pensions) {
+      const amt = num(p.amount);
+      if (amt <= 0) continue;
+      const t = PENSION_CODE_TAXATION[p.code] || 'progressive';
+      if (t === 'foreignFlat') {
+        if (amt > Y.foreignPensionThreshold) {
+          foreignPensionFlatTax += (amt - Y.foreignPensionThreshold) * Y.flatRates.foreignPension;
+        }
+      } else if (t === 'widowFlat') {
+        // TD1 note 5: widow's pension special rate = 20% per euro exceeding €19,500
+        if (amt > 19500) {
+          cyprusPensionFlatTax += (amt - 19500) * 0.20;
+        }
+      } else if (t === 'progressive') {
+        if (p.code === '8') foreignPensionAddedToProgressive += amt;
+        else cyprusPensionAddedToProgressive += amt;
+      }
+      // taxation === 'exempt' → ignored from taxable income
     }
+    const pensionTaxWithheld = pensions.reduce((s, p) => s + num(p.taxWithheld), 0);
+    const pensionGhsWithheld = pensions.reduce((s, p) => s + num(p.ghsWithheld), 0);
 
     // ============ ROYALTIES (IP BOX) ============
     const royaltyQualifying = num(royaltyIncomeQualifying);
@@ -669,8 +826,8 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
       capGainsSharesAmount, capGainsPropertyAmount,
       taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65, effectiveOver65, ageAtYearEnd,
     };
-  }, [employments, selfEmpIncome, rentalIncome, rentalInterest, rentalMaintenance, foreignPensionIncome,
-      foreignPensionElectFlat, cyprusPensionIncome, cyprusPensionElectFlat, otherIncome, dividendIncome, interestIncome, cryptoGains,
+  }, [employments, pensions, rentalProperties, selfEmpIncome,
+      otherIncome, dividendIncome, interestIncome, cryptoGains,
       foreignReliefType, isNonDom, pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
       donations, profSubscriptions, lossesCarriedForward, numChildren, numStudents,
       mortgageOrRent, greenSpend, homeInsurance,
@@ -692,8 +849,8 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   const getInputState = () => ({
     selectedYear,
     clientName, clientTIC, clientID, clientDOB, clientSSN, clientAddress,
-    employments, selfEmpIncome, rentalIncome, rentalInterest,
-    foreignPensionIncome, foreignPensionElectFlat,
+    employments, pensions, rentalProperties,
+    selfEmpIncome,
     otherIncome, dividendIncome, interestIncome, cryptoGains,
     foreignReliefType, isNonDom,
     pensionContrib, medicalContrib, lifeInsurance, lifeSumAssured,
@@ -701,12 +858,11 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
     numChildren, numStudents,
     mortgageOrRent, greenSpend, homeInsurance,
     taxResident, residencyRule, firstEmployment, hasDisability, hasDisabledDependant, isOver65,
-    cyprusPensionIncome, cyprusPensionElectFlat,
     royaltyIncomeQualifying, royaltyIncomeOrdinary,
     courtOrderIncome, tradingGoodwill,
     capitalGainsShares, capitalGainsProperty, capitalGainsCryptoMining,
     daysWorkedAbroad, totalWorkDays, foreignEmployer,
-    rentalMaintenance, capitalAllowances, badDebts, disabilityAllowance,
+    capitalAllowances, badDebts, disabilityAllowance,
   });
   const handleSave = async () => {
     if (!onSave) return;
@@ -2073,25 +2229,100 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Self-Employment</div>
               <InputRow label="Net Business Income (€)" value={selfEmpIncome} onChange={setSelfEmpIncome} hint="after expenses" />
 
-              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Rental Income</div>
-              <InputRow label="Gross Rental Income (€)" value={rentalIncome} onChange={setRentalIncome} />
-              <InputRow label="Loan Interest on Rental (€)" value={rentalInterest} onChange={setRentalInterest} hint="deductible" />
+              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Rental Properties <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.C (one row per property)</span></div>
+              {rentalProperties.map((r, idx) => (
+                <div key={r.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                      Property #{idx + 1}{r.registrationNo ? ` — ${r.registrationNo}` : ''}
+                    </span>
+                    <button type="button" onClick={() => removeRentalProperty(r.id)}
+                      style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                      title="Remove this property">✕ Remove</button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Registration No." type="text" placeholder="Property registration"
+                      value={r.registrationNo} onChange={v => updateRentalProperty(r.id, 'registrationNo', v)} />
+                    <InputRow label="Acquisition Date" type="date" placeholder=""
+                      value={r.acquisitionDate} onChange={v => updateRentalProperty(r.id, 'acquisitionDate', v)} />
+                  </div>
+                  <div style={{ marginBottom: '0.7rem' }}>
+                    <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Property type (TD1 column 1)</label>
+                    <select value={r.propertyTypeCode} onChange={e => updateRentalProperty(r.id, 'propertyTypeCode', e.target.value)}
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                      {PROPERTY_TYPES.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Ownership Share (%)" type="number" placeholder="100"
+                      value={r.ownershipShare} onChange={v => updateRentalProperty(r.id, 'ownershipShare', v)} />
+                    <InputRow label="Lessee Name" type="text" placeholder="Tenant name"
+                      value={r.lesseeName} onChange={v => updateRentalProperty(r.id, 'lesseeName', v)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Lessee TIC" type="text" placeholder="if legal person"
+                      value={r.lesseeTic} onChange={v => updateRentalProperty(r.id, 'lesseeTic', v)} />
+                    <InputRow label="Capital Allowances (€)" hint="col 12 — depreciation"
+                      value={r.capitalAllowances} onChange={v => updateRentalProperty(r.id, 'capitalAllowances', v)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Gross Rent in Republic (€)" hint="col 10"
+                      value={r.annualGrossInRepublic} onChange={v => updateRentalProperty(r.id, 'annualGrossInRepublic', v)} />
+                    <InputRow label="Gross Rent outside Republic (€)" hint="col 11"
+                      value={r.annualGrossOutsideRepublic} onChange={v => updateRentalProperty(r.id, 'annualGrossOutsideRepublic', v)} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Interest Payable (€)" hint="col 13"
+                      value={r.interestPayable} onChange={v => updateRentalProperty(r.id, 'interestPayable', v)} />
+                    <InputRow label="SDC Withheld by Tenant (€)" hint="col 15"
+                      value={r.sdcWithheld} onChange={v => updateRentalProperty(r.id, 'sdcWithheld', v)} />
+                    <InputRow label="GHS Withheld by Tenant (€)" hint="col 16"
+                      value={r.ghsWithheld} onChange={v => updateRentalProperty(r.id, 'ghsWithheld', v)} />
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={addRentalProperty}
+                style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                + Add rental property
+              </button>
 
-              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Foreign Pension</div>
-              <InputRow label="Foreign Pension Income (€)" value={foreignPensionIncome} onChange={setForeignPensionIncome} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: COLORS.textMuted, marginBottom: '0.5rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={foreignPensionElectFlat} onChange={(e) => setForeignPensionElectFlat(e.target.checked)} />
-                Elect 5% flat rate (on amount &gt; €5,000)
-              </label>
+              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Pensions <span style={{ textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: COLORS.textDim }}>— TD1 Part 4.B (one row per payer)</span></div>
+              {pensions.map((p, idx) => (
+                <div key={p.id} style={{ background: COLORS.bg, border: `1px solid ${COLORS.borderLight}`, borderRadius: '3px', padding: '0.65rem', marginBottom: '0.65rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: COLORS.accent }}>
+                      Pension #{idx + 1}{p.payerName ? ` — ${p.payerName}` : ''}
+                    </span>
+                    <button type="button" onClick={() => removePension(p.id)}
+                      style={{ padding: '0.2rem 0.55rem', background: 'transparent', color: COLORS.danger, border: `1px solid ${COLORS.danger}`, borderRadius: '3px', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                      title="Remove this pension">✕ Remove</button>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Payer Name" type="text" placeholder="e.g. SIS, Foreign Govt"
+                      value={p.payerName} onChange={v => updatePension(p.id, 'payerName', v)} />
+                    <InputRow label="Payer TIC" type="text" placeholder=""
+                      value={p.payerTic} onChange={v => updatePension(p.id, 'payerTic', v)} />
+                  </div>
+                  <div style={{ marginBottom: '0.7rem' }}>
+                    <label style={{ fontSize: '0.78rem', color: COLORS.textMuted, fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Code (TD1 column 3)</label>
+                    <select value={p.code} onChange={e => updatePension(p.id, 'code', e.target.value)}
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', background: COLORS.bg, border: `1px solid ${COLORS.border}`, color: COLORS.text, borderRadius: '3px', fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                      {PENSION_CODES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 0.6rem' }}>
+                    <InputRow label="Pension Amount (€)" value={p.amount} onChange={v => updatePension(p.id, 'amount', v)} />
+                    <InputRow label="Tax Withheld (€)" value={p.taxWithheld} onChange={v => updatePension(p.id, 'taxWithheld', v)} />
+                    <InputRow label="GHS Withheld (€)" value={p.ghsWithheld} onChange={v => updatePension(p.id, 'ghsWithheld', v)} />
+                  </div>
+                </div>
+              ))}
+              <button type="button" onClick={addPension}
+                style={{ width: '100%', padding: '0.5rem', background: 'transparent', color: COLORS.accent, border: `1px dashed ${COLORS.accent}`, borderRadius: '3px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.85rem' }}>
+                + Add pension
+              </button>
 
               <InputRow label="Other Taxable Income (€)" value={otherIncome} onChange={setOtherIncome} hint="general other income" />
-
-              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Cyprus Pension</div>
-              <InputRow label="Cyprus Pension Income (€)" value={cyprusPensionIncome} onChange={setCyprusPensionIncome} hint="local Cyprus pension" />
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: COLORS.textMuted, marginBottom: '0.5rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={cyprusPensionElectFlat} onChange={(e) => setCyprusPensionElectFlat(e.target.checked)} />
-                Elect 5% flat rate on widow's pension (over €3,420)
-              </label>
 
               <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.85rem', marginBottom: '0.6rem' }}>Royalties / IP Income</div>
               <InputRow label="Qualifying IP Royalties (€)" value={royaltyIncomeQualifying} onChange={setRoyaltyIncomeQualifying} hint="80% exempt (IP Box)" />
@@ -2176,8 +2407,8 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               <InputRow label="Capital Allowances (€)" value={capitalAllowances} onChange={setCapitalAllowances} hint="plant/machinery/vehicles" />
               <InputRow label="Bad Debt Provisions (€)" value={badDebts} onChange={setBadDebts} hint="written-off receivables" />
 
-              <div style={{ fontSize: '0.72rem', color: COLORS.textDim, letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '1rem', marginBottom: '0.6rem' }}>Rental Property</div>
-              <InputRow label="Actual Maintenance/Repair (€)" value={rentalMaintenance} onChange={setRentalMaintenance} hint="rare — usually 20% W&T applies" />
+              {/* Rental property deductions are now captured per-property in
+                  the Income section's Rental Properties block (TD1 Part 4.C). */}
 
               {(hasDisability || hasDisabledDependant) && (
                 <>
