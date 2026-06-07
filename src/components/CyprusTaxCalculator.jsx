@@ -244,6 +244,8 @@ export default function CyprusTaxCalculatorWithPDF() {
   const [clientName, setClientName] = useState('');
   const [clientTIC, setClientTIC] = useState('');
   const [clientID, setClientID] = useState('');
+  const [clientDOB, setClientDOB] = useState(''); // YYYY-MM-DD from <input type="date">
+  const [clientSSN, setClientSSN] = useState(''); // Social Insurance number — required on the tax return
   const [clientAddress, setClientAddress] = useState('');
 
   // All other state...
@@ -309,7 +311,7 @@ export default function CyprusTaxCalculatorWithPDF() {
   // Display tracker
   const [showCapitalGainsInfo, setShowCapitalGainsInfo] = useState(false);
 
-  const [openSections, setOpenSections] = useState({ client: false, profile: true, income: true, capitalgains: false, special: false, deductions: false, allowances: false });
+  const [openSections, setOpenSections] = useState({ client: false, profile: false, income: false, capitalgains: false, special: false, deductions: false, allowances: false });
 
   const toggleSection = useCallback((key) => {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
@@ -590,6 +592,8 @@ export default function CyprusTaxCalculatorWithPDF() {
     rows.push(['Name', clientName || 'Not provided']);
     rows.push(['TIC', clientTIC || 'Not provided']);
     rows.push(['ID No', clientID || 'Not provided']);
+    rows.push(['DOB', clientDOB ? new Date(clientDOB).toLocaleDateString('en-GB') : 'Not provided']);
+    rows.push(['SI No', clientSSN || 'Not provided']);
     rows.push(['Address', clientAddress || 'Not provided']);
     rows.push([]);
 
@@ -929,7 +933,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
       // ============ DRAW CLIENT BOX ============
       const drawClientBox = () => {
-        const boxHeight = 18;
+        const boxHeight = 24;
         setColor(COLOR_BORDER, 'draw');
         doc.setLineWidth(0.2);
         doc.rect(MARGIN_L, cursorY, CONTENT_WIDTH, boxHeight, 'S');
@@ -956,12 +960,15 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
           doc.text(value && value.trim() ? value : 'Not provided', x + 18, y);
         };
 
+        const dobDisplay = clientDOB ? new Date(clientDOB).toLocaleDateString('en-GB') : '';
         const colLeft = MARGIN_L + 4;
         const colRight = MARGIN_L + (CONTENT_WIDTH / 2) + 4;
         drawField('Name:', clientName, colLeft, cursorY + 9);
         drawField('ID No:', clientID, colLeft, cursorY + 14.5);
+        drawField('DOB:', dobDisplay, colLeft, cursorY + 20);
         drawField('TIC:', clientTIC, colRight, cursorY + 9);
         drawField('Address:', clientAddress, colRight, cursorY + 14.5);
+        drawField('SI No:', clientSSN, colRight, cursorY + 20);
 
         cursorY += boxHeight + 6;
       };
@@ -1344,7 +1351,7 @@ td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
   <div><div class="meta-label">Status</div><div class="meta-value">Indicative</div></div>
 </div>
 <div class="client-box"><div class="client-title">Client Details</div>
-<table>${clientLine('Name:', clientName)}${clientLine('TIC:', clientTIC)}${clientLine('ID No:', clientID)}${clientLine('Address:', clientAddress)}</table>
+<table>${clientLine('Name:', clientName)}${clientLine('TIC:', clientTIC)}${clientLine('ID No:', clientID)}${clientLine('DOB:', clientDOB ? new Date(clientDOB).toLocaleDateString('en-GB') : '')}${clientLine('Address:', clientAddress)}${clientLine('SI No:', clientSSN)}</table>
 </div>
 <div class="section-title">Part A — Income</div>
 <table>${r.grossEmployment > 0 ? `<tr><td>Employment income (incl. BIK)</td><td>${fmt(r.grossEmployment)}</td></tr>` : ''}
@@ -1497,7 +1504,9 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               <div><span style={{ color: '#5a6478', display: 'inline-block', width: '60px' }}>Name:</span><span style={{ color: clientName ? '#1a365d' : '#b8bdc7', fontWeight: clientName ? 600 : 400, fontStyle: clientName ? 'normal' : 'italic' }}>{clientName || 'Not provided'}</span></div>
               <div><span style={{ color: '#5a6478', display: 'inline-block', width: '60px' }}>TIC:</span><span style={{ color: clientTIC ? '#1a365d' : '#b8bdc7', fontWeight: clientTIC ? 600 : 400, fontStyle: clientTIC ? 'normal' : 'italic' }}>{clientTIC || 'Not provided'}</span></div>
               <div><span style={{ color: '#5a6478', display: 'inline-block', width: '60px' }}>ID No:</span><span style={{ color: clientID ? '#1a365d' : '#b8bdc7', fontWeight: clientID ? 600 : 400, fontStyle: clientID ? 'normal' : 'italic' }}>{clientID || 'Not provided'}</span></div>
+              <div><span style={{ color: '#5a6478', display: 'inline-block', width: '60px' }}>DOB:</span><span style={{ color: clientDOB ? '#1a365d' : '#b8bdc7', fontWeight: clientDOB ? 600 : 400, fontStyle: clientDOB ? 'normal' : 'italic' }}>{clientDOB ? new Date(clientDOB).toLocaleDateString('en-GB') : 'Not provided'}</span></div>
               <div><span style={{ color: '#5a6478', display: 'inline-block', width: '60px' }}>Address:</span><span style={{ color: clientAddress ? '#1a365d' : '#b8bdc7', fontWeight: clientAddress ? 600 : 400, fontStyle: clientAddress ? 'normal' : 'italic' }}>{clientAddress || 'Not provided'}</span></div>
+              <div><span style={{ color: '#5a6478', display: 'inline-block', width: '60px' }}>SI No:</span><span style={{ color: clientSSN ? '#1a365d' : '#b8bdc7', fontWeight: clientSSN ? 600 : 400, fontStyle: clientSSN ? 'normal' : 'italic' }}>{clientSSN || 'Not provided'}</span></div>
             </div>
           </div>
 
@@ -1765,6 +1774,8 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               <InputRow label="Client Name" value={clientName} onChange={setClientName} type="text" placeholder="e.g. John Demetriou" />
               <InputRow label="Tax Identification Code (TIC)" value={clientTIC} onChange={setClientTIC} type="text" placeholder="e.g. 12345678X" />
               <InputRow label="ID / Passport Number" value={clientID} onChange={setClientID} type="text" placeholder="e.g. 987654321" />
+              <InputRow label="Date of Birth" value={clientDOB} onChange={setClientDOB} type="date" placeholder="" />
+              <InputRow label="Social Insurance Number" value={clientSSN} onChange={setClientSSN} type="text" placeholder="e.g. 12345678" />
               <InputRow label="Address" value={clientAddress} onChange={setClientAddress} type="text" placeholder="e.g. 1 Main St, Nicosia" />
               <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.65rem', background: COLORS.bg, borderLeft: `2px solid ${COLORS.accent}`, borderRadius: '2px', fontSize: '0.7rem', color: COLORS.textDim, lineHeight: 1.5 }}>
                 <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
