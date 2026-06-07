@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { jsPDF } from 'jspdf';
+// Side-effect import: registers Roboto-Regular with jsPDF so generated PDFs
+// render Greek characters correctly. Regenerate via `node scripts/generate-pdf-fonts.mjs`.
+import '../assets/fonts/Roboto-Regular-normal.js';
 import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, Coins, GitCompare, Download, Printer, User, FileDown, FileSpreadsheet, Mail, Eye, EyeOff } from 'lucide-react';
 
 // ============ TAX YEAR CONSTANTS ============
@@ -1546,11 +1549,11 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         if (isContinuation) {
           // Simplified header on continuation pages
           setColor(COLOR_GOLD, 'text');
-          doc.setFont('helvetica', 'bold');
+          doc.setFont('Roboto', 'bold');
           doc.setFontSize(8);
           doc.text('PC Prime & Calculate Consultants Ltd', MARGIN_L, cursorY);
           setColor(COLOR_MUTED, 'text');
-          doc.setFont('helvetica', 'normal');
+          doc.setFont('Roboto', 'normal');
           doc.text(`Tax Computation ${year} (cont.) · Ref: ${refNum}`, RIGHT_EDGE, cursorY, { align: 'right' });
           cursorY += 4;
           // Gold separator
@@ -1571,7 +1574,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
           } catch (e) {
             // Fallback: text logo if image fails
             setColor(COLOR_NAVY, 'text');
-            doc.setFont('helvetica', 'bold');
+            doc.setFont('Roboto', 'bold');
             doc.setFontSize(14);
             doc.text('PC Prime & Calculate', MARGIN_L, cursorY + 8);
             setColor(COLOR_GOLD, 'text');
@@ -1581,17 +1584,17 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
           // Contact details (right side) - aligned with larger logo
           setColor(COLOR_NAVY, 'text');
-          doc.setFont('helvetica', 'bold');
+          doc.setFont('Roboto', 'bold');
           doc.setFontSize(10);
           doc.text('Panayiotis Savvas', RIGHT_EDGE, cursorY + 7, { align: 'right' });
 
           setColor(COLOR_GOLD, 'text');
-          doc.setFont('helvetica', 'italic');
+          doc.setFont('Roboto', 'italic');
           doc.setFontSize(8);
           doc.text('Professional Accountant (SA)', RIGHT_EDGE, cursorY + 11.5, { align: 'right' });
 
           setColor(COLOR_MUTED, 'text');
-          doc.setFont('helvetica', 'normal');
+          doc.setFont('Roboto', 'normal');
           doc.setFontSize(8);
           doc.text('m: +357 96 332 274', RIGHT_EDGE, cursorY + 16, { align: 'right' });
           doc.text('e: panayiotis@primeandcalculate.com', RIGHT_EDGE, cursorY + 19.5, { align: 'right' });
@@ -1609,13 +1612,13 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       // ============ DRAW DOCUMENT TITLE ============
       const drawTitle = () => {
         setColor(COLOR_TEXT, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(15);
         doc.text('PERSONAL TAX COMPUTATION', PAGE_WIDTH / 2, cursorY, { align: 'center' });
         cursorY += 6;
 
         setColor(COLOR_GOLD, 'text');
-        doc.setFont('helvetica', 'italic');
+        doc.setFont('Roboto', 'italic');
         doc.setFontSize(10);
         doc.text(`Cyprus — Tax Year ${year}`, PAGE_WIDTH / 2, cursorY, { align: 'center' });
         cursorY += 8;
@@ -1642,12 +1645,12 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         cols.forEach((col, i) => {
           const x = MARGIN_L + 5 + (i * colWidth);
           setColor(COLOR_MUTED, 'text');
-          doc.setFont('helvetica', 'normal');
+          doc.setFont('Roboto', 'normal');
           doc.setFontSize(6.5);
           doc.text(col.label, x, cursorY + 4);
 
           setColor(COLOR_NAVY, 'text');
-          doc.setFont('helvetica', 'bold');
+          doc.setFont('Roboto', 'bold');
           doc.setFontSize(8.5);
           doc.text(col.value, x, cursorY + 8.5);
         });
@@ -1663,22 +1666,22 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         doc.rect(MARGIN_L, cursorY, CONTENT_WIDTH, boxHeight, 'S');
 
         setColor(COLOR_GOLD, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(7);
         doc.text('CLIENT DETAILS', MARGIN_L + 4, cursorY + 4);
 
         const drawField = (label, value, x, y) => {
           setColor(COLOR_MUTED, 'text');
-          doc.setFont('helvetica', 'normal');
+          doc.setFont('Roboto', 'normal');
           doc.setFontSize(8);
           doc.text(label, x, y);
 
           if (value && value.trim()) {
             setColor(COLOR_NAVY, 'text');
-            doc.setFont('helvetica', 'bold');
+            doc.setFont('Roboto', 'bold');
           } else {
             setColor([184, 189, 199], 'text');
-            doc.setFont('helvetica', 'italic');
+            doc.setFont('Roboto', 'italic');
           }
           doc.setFontSize(8);
           doc.text(value && value.trim() ? value : 'Not provided', x + 18, y);
@@ -1701,7 +1704,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       const drawSectionHeader = (text) => {
         checkPageBreak(8);
         setColor(COLOR_GOLD, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(8.5);
         doc.text(text, MARGIN_L, cursorY);
 
@@ -1726,9 +1729,9 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         cursorY += padding + 1;
 
         setColor(color, 'text');
-        if (bold) doc.setFont('helvetica', 'bold');
-        else if (italic) doc.setFont('helvetica', 'italic');
-        else doc.setFont('helvetica', 'normal');
+        if (bold) doc.setFont('Roboto', 'bold');
+        else if (italic) doc.setFont('Roboto', 'italic');
+        else doc.setFont('Roboto', 'normal');
         doc.setFontSize(fontSize);
 
         const labelX = MARGIN_L + (indent * 4);
@@ -1736,8 +1739,8 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
         if (value !== null && value !== undefined && value !== '') {
           setColor(valueColor || color, 'text');
-          if (bold) doc.setFont('helvetica', 'bold');
-          else doc.setFont('helvetica', 'normal');
+          if (bold) doc.setFont('Roboto', 'bold');
+          else doc.setFont('Roboto', 'normal');
           doc.text(value, RIGHT_EDGE, cursorY, { align: 'right' });
         }
 
@@ -1765,7 +1768,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
         cursorY += 5;
         setColor(COLOR_NAVY, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(10);
         doc.text(label, MARGIN_L + 2, cursorY);
         doc.text(value, RIGHT_EDGE - 2, cursorY, { align: 'right' });
@@ -1809,14 +1812,14 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
         // Title
         setColor(COLOR_GOLD, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(7.5);
         doc.text('SUMMARY OF LIABILITY', PAGE_WIDTH / 2, innerY, { align: 'center' });
         innerY += titleH;
 
         // Rows
         setColor([232, 230, 224], 'text'); // Cream text on dark
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('Roboto', 'normal');
         doc.setFontSize(9);
         rows.forEach(([label, value]) => {
           doc.text(label, MARGIN_L + 4, innerY);
@@ -1832,7 +1835,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         innerY += 4.5;
 
         setColor(COLOR_GOLD, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(11);
         doc.text('TOTAL LIABILITY', MARGIN_L + 4, innerY);
         doc.text(fmtPDF(results.totalLiability), RIGHT_EDGE - 4, innerY, { align: 'right' });
@@ -1854,19 +1857,19 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
         let innerY = cursorY + 5;
         setColor(COLOR_MUTED, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(7);
         doc.text('NET TAKE-HOME', PAGE_WIDTH / 2, innerY, { align: 'center' });
         innerY += 7;
 
         setColor(COLOR_GOLD, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(20);
         doc.text(fmtPDF(results.netIncome), PAGE_WIDTH / 2, innerY, { align: 'center' });
         innerY += 6;
 
         setColor(COLOR_MUTED, 'text');
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('Roboto', 'normal');
         doc.setFontSize(8);
         doc.text(`Effective tax rate: ${results.effectiveRate.toFixed(2)}%   ·   Monthly equivalent: ${fmtPDF(results.netIncome / 12)}`, PAGE_WIDTH / 2, innerY, { align: 'center' });
 
@@ -1893,13 +1896,13 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
         // "CONFIDENTIALITY NOTICE:" label in navy
         setColor(COLOR_NAVY, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(7);
         doc.text('CONFIDENTIALITY NOTICE:', MARGIN_L + 4, cursorY + 4);
 
         // Body text
         setColor(COLOR_MUTED, 'text');
-        doc.setFont('helvetica', 'italic');
+        doc.setFont('Roboto', 'italic');
         doc.setFontSize(6.5);
         const restOfText = 'This document and any attachments are confidential and may be privileged. If you are not the intended recipient, please notify the sender immediately and delete this document and any attachments from your system. Any unauthorized use, disclosure, or distribution is prohibited.';
         const restLines = doc.splitTextToSize(restOfText, CONTENT_WIDTH - 8);
@@ -1914,7 +1917,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         cursorY += 3;
 
         setColor(COLOR_MUTED, 'text');
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('Roboto', 'normal');
         doc.setFontSize(6.5);
         const disclaimer = `Disclaimer: This computation is indicative only, prepared based on data provided. It does not constitute a formal tax return and should not be filed as such with the Cyprus Tax Department. Verify all figures against original supporting documents before formal filing through TAXISnet / TAX FOR ALL (TFA). Individual circumstances may produce different results. This document does not constitute tax advice; consult your professional accountant for advice specific to your situation.   ·   Prepared by PC Prime & Calculate Consultants Ltd   ·   Reference: ${refNum}   ·   Generated: ${today}`;
         const disclaimerLines = doc.splitTextToSize(disclaimer, CONTENT_WIDTH);
@@ -1927,7 +1930,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
           for (let i = 1; i <= totalPages; i++) {
             doc.setPage(i);
             setColor(COLOR_MUTED, 'text');
-            doc.setFont('helvetica', 'normal');
+            doc.setFont('Roboto', 'normal');
             doc.setFontSize(7);
             doc.text(`Page ${i} of ${totalPages}`, RIGHT_EDGE, PAGE_HEIGHT - 8, { align: 'right' });
           }
@@ -2051,7 +2054,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         if (cursorY + needed > PAGE_H - MARGIN_B - 10) {
           // Page footer
           setColor(MUTED, 'text');
-          doc.setFont('helvetica', 'normal');
+          doc.setFont('Roboto', 'normal');
           doc.setFontSize(7);
           doc.text(`Page ${pageNum}`, PAGE_W / 2, PAGE_H - 8, { align: 'center' });
           doc.addPage();
@@ -2065,7 +2068,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         setColor(NAVY, 'fill');
         doc.rect(MARGIN_L, cursorY, CONTENT_W, 6, 'F');
         setColor([255, 255, 255], 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(9);
         doc.text(label, MARGIN_L + 2, cursorY + 4.2);
         cursorY += 8;
@@ -2074,7 +2077,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       const drawSubHeader = (label) => {
         newPageIfNeeded(8);
         setColor(GOLD, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(8);
         doc.text(label, MARGIN_L, cursorY + 3);
         setColor(GOLD, 'draw');
@@ -2086,11 +2089,11 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       const drawField = (label, value, indent = 0) => {
         newPageIfNeeded(6);
         setColor(MUTED, 'text');
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('Roboto', 'normal');
         doc.setFontSize(8);
         doc.text(label, MARGIN_L + indent, cursorY + 3);
         setColor(NAVY, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.text(String(value || '—'), MARGIN_L + 70, cursorY + 3);
         cursorY += 5;
       };
@@ -2098,7 +2101,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       const drawTable = (headers, rows, columnWidths) => {
         if (rows.length === 0) {
           setColor(MUTED, 'text');
-          doc.setFont('helvetica', 'italic');
+          doc.setFont('Roboto', 'italic');
           doc.setFontSize(7.5);
           doc.text('(no rows)', MARGIN_L + 2, cursorY + 3);
           cursorY += 5;
@@ -2110,7 +2113,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         setColor([240, 235, 215], 'fill');
         doc.rect(MARGIN_L, cursorY, CONTENT_W, rowH, 'F');
         setColor(NAVY, 'text');
-        doc.setFont('helvetica', 'bold');
+        doc.setFont('Roboto', 'bold');
         doc.setFontSize(7);
         let x = MARGIN_L + 1;
         headers.forEach((h, i) => {
@@ -2122,7 +2125,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
         setColor(NAVY, 'draw');
         doc.setLineWidth(0.1);
         setColor([26, 54, 93], 'text');
-        doc.setFont('helvetica', 'normal');
+        doc.setFont('Roboto', 'normal');
         doc.setFontSize(7);
         rows.forEach(row => {
           newPageIfNeeded(rowH + 2);
@@ -2144,7 +2147,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
       // ============ HEADING ============
       setColor(NAVY, 'text');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('Roboto', 'bold');
       doc.setFontSize(11);
       doc.text('MINISTRY OF FINANCE — TAX DEPARTMENT', PAGE_W / 2, cursorY + 5, { align: 'center' });
       cursorY += 6;
@@ -2156,7 +2159,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       doc.text(`Tax Year ${year}`, PAGE_W / 2, cursorY + 5, { align: 'center' });
       cursorY += 10;
       setColor(MUTED, 'text');
-      doc.setFont('helvetica', 'italic');
+      doc.setFont('Roboto', 'italic');
       doc.setFontSize(7);
       doc.text(`Prepared by PC Prime & Calculate Consultants Ltd · ${new Date().toLocaleDateString('en-GB')} · Form TD1 ${isSelfEmp ? '(self employed)' : ''} ${year}`, PAGE_W / 2, cursorY + 4, { align: 'center' });
       cursorY += 8;
@@ -2329,7 +2332,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       setColor(NAVY, 'fill');
       doc.rect(MARGIN_L, cursorY, CONTENT_W, 7, 'F');
       setColor([255, 255, 255], 'text');
-      doc.setFont('helvetica', 'bold');
+      doc.setFont('Roboto', 'bold');
       doc.setFontSize(9);
       doc.text('TOTAL LIABILITY:', MARGIN_L + 2, cursorY + 4.8);
       doc.text(`€${fmtAmt(results.totalLiability)}`, MARGIN_L + CONTENT_W - 2, cursorY + 4.8, { align: 'right' });
@@ -2337,7 +2340,7 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
 
       // Final page footer
       setColor(MUTED, 'text');
-      doc.setFont('helvetica', 'italic');
+      doc.setFont('Roboto', 'italic');
       doc.setFontSize(7);
       doc.text(`Page ${pageNum}`, PAGE_W / 2, PAGE_H - 8, { align: 'center' });
       doc.text('Indicative TD1 filing draft — verify against official Cyprus Tax Department forms before submission.', PAGE_W / 2, PAGE_H - 4, { align: 'center' });
