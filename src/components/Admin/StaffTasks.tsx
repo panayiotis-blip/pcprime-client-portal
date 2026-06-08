@@ -219,7 +219,15 @@ export default function StaffTasks() {
   const handleRestore = async (t: Task) => {
     try {
       await api.restoreStaffTask(t.id);
-      setTasks(prev => prev.filter(x => x.id !== t.id));
+      // Auto-switch back to the live list so the user actually sees the
+      // restored task — staying in the trash would have just made it
+      // disappear with no visible result. Also clear the assignee filter
+      // if the restored task isn't assigned to me, so it's not hidden by
+      // the default "my tasks" lens.
+      if (t.assigned_to !== fAssignee) setFAssignee('');
+      setFDeleted('live');
+      // reload() runs via the filter useEffect; alert confirms the action.
+      alert(`Restored "${t.title}". Now showing the live task list.`);
     } catch (err: any) {
       alert('Restore failed: ' + err.message);
     }
