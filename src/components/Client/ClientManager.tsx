@@ -607,24 +607,6 @@ export default function ClientManager() {
     return { selectedFields, visibleClients: base };
   };
 
-  // Range dropdown options — type-filtered + sorted by name. Memoised so the
-  // dropdowns don't rebuild on every keystroke in the field-picker.
-  const rangeClientOptions = useMemo(() => {
-    let base = sortedFiltered.filter((c: any) => c.client_category !== 'vendor_only');
-    if (printTypeFilter === 'individual') base = base.filter((c: any) => c.client_type === 'individual');
-    else if (printTypeFilter === 'company') base = base.filter((c: any) => c.client_type === 'company');
-    return [...base].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  }, [sortedFiltered, printTypeFilter]);
-
-  // If the type filter changes such that the currently-selected From/To
-  // client is no longer in the list, clear that field so the dropdown
-  // doesn't display a phantom value.
-  useEffect(() => {
-    if (printFromId && !rangeClientOptions.some(c => c.id === printFromId)) setPrintFromId(null);
-    if (printToId   && !rangeClientOptions.some(c => c.id === printToId))   setPrintToId(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeClientOptions]);
-
   const handlePrintPdf = (emailAfter: boolean = false) => {
     const { selectedFields, visibleClients } = buildPrintRows();
     if (selectedFields.length === 0) { alert('Pick at least one field.'); return; }
@@ -818,6 +800,24 @@ export default function ClientManager() {
     if (av > bv) return  1 * dir;
     return 0;
   });
+
+  // Range dropdown options for the Print modal — type-filtered + sorted by
+  // name. Declared AFTER sortedFiltered because the useMemo callback runs
+  // eagerly during render and would otherwise hit the TDZ on sortedFiltered.
+  const rangeClientOptions = useMemo(() => {
+    let base = sortedFiltered.filter((c: any) => c.client_category !== 'vendor_only');
+    if (printTypeFilter === 'individual') base = base.filter((c: any) => c.client_type === 'individual');
+    else if (printTypeFilter === 'company') base = base.filter((c: any) => c.client_type === 'company');
+    return [...base].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [sortedFiltered, printTypeFilter]);
+
+  // If the type filter narrows the list such that the previously-selected
+  // From/To client is no longer in it, reset those fields.
+  useEffect(() => {
+    if (printFromId && !rangeClientOptions.some(c => c.id === printFromId)) setPrintFromId(null);
+    if (printToId   && !rangeClientOptions.some(c => c.id === printToId))   setPrintToId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeClientOptions]);
 
   return (
     <div className="client-manager">
