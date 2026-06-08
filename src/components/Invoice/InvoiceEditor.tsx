@@ -38,6 +38,11 @@ export default function InvoiceEditor() {
   // AI self-assessed extraction confidence (0-100) for a freshly scanned doc;
   // null when this isn't a scan (manual entry / editing / expense allocation).
   const [scanConfidence, setScanConfidence] = useState<number | null>(null);
+  // S2: per-field confidence (vendor_name, total_amount, vat_amount, …) and
+  // free-text notes the extractor flagged. Empty when no AI extraction was
+  // run or the model returned no detail.
+  const [fieldConfidences, setFieldConfidences] = useState<Record<string, number> | null>(null);
+  const [fieldNotes, setFieldNotes] = useState<string[] | null>(null);
   // Document preview legibility controls (reset whenever the document changes).
   const [zoom, setZoom] = useState(1);
   const [rotate, setRotate] = useState(0);
@@ -161,6 +166,8 @@ export default function InvoiceEditor() {
       }],
     });
     setScanConfidence(typeof scan.confidence === 'number' ? scan.confidence : null);
+    setFieldConfidences(scan.fieldConfidences || null);
+    setFieldNotes(scan.fieldNotes && scan.fieldNotes.length > 0 ? scan.fieldNotes : null);
     if (scan.fileBlob instanceof File) setFileToUpload(scan.fileBlob);
     else setFileToUpload(new File([scan.fileBlob], scan.fileName, { type: scan.mimeType }));
     if (previewUrl && previewUrl.startsWith('blob:')) URL.revokeObjectURL(previewUrl);
@@ -325,23 +332,41 @@ export default function InvoiceEditor() {
   // implausible, so they get a second look before saving.
   const fromScan = scanConfidence != null;
   const looksLikeDate = (s: string) => !!s && (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(s) || /^\d{4}-\d{2}-\d{2}$/.test(s));
+  // S2: a field is "low confidence" if the AI's self-rated score for it is
+  // below 70. Combined with the existing "blank / implausible" checks.
+  const CONF_THRESHOLD = 70;
+  const lowConf = (key: string) =>
+    !!fieldConfidences && typeof fieldConfidences[key] === 'number' && fieldConfidences[key] < CONF_THRESHOLD;
   const fieldFlags = {
-    invoice_number: fromScan && !String(form.invoice_number || '').trim(),
-    vendor_name:    fromScan && !String(form.vendor_name || '').trim(),
-    invoice_date:   fromScan && !looksLikeDate(String(form.invoice_date || '')),
-    total_amount:   fromScan && !(Number(form.total_amount) > 0),
+    invoice_number: fromScan && (!String(form.invoice_number || '').trim() || lowConf('invoice_number')),
+    vendor_name:    fromScan && (!String(form.vendor_name || '').trim()    || lowConf('vendor_name')),
+    invoice_date:   fromScan && (!looksLikeDate(String(form.invoice_date || '')) || lowConf('invoice_date')),
+    total_amount:   fromScan && (!(Number(form.total_amount) > 0)          || lowConf('total_amount')),
+    vat_amount:     fromScan && lowConf('vat_amount'),
+    vat_rate:       fromScan && lowConf('vat_rate'),
+    subtotal:       fromScan && lowConf('subtotal'),
   };
   const flaggedLabels = [
     fieldFlags.vendor_name    && 'Vendor',
     fieldFlags.invoice_number && 'Invoice number',
     fieldFlags.invoice_date   && 'Date',
     fieldFlags.total_amount   && 'Total amount',
+    fieldFlags.vat_amount     && 'VAT amount',
+    fieldFlags.vat_rate       && 'VAT rate',
+    fieldFlags.subtotal       && 'Subtotal',
   ].filter(Boolean) as string[];
   const confColor = scanConfidence == null ? '#64748b' : scanConfidence >= 85 ? '#166534' : scanConfidence >= 70 ? '#92400e' : '#b91c1c';
-  const needsReview = fromScan && (scanConfidence! < 85 || flaggedLabels.length > 0);
-  const flag = (on: boolean) => on
-    ? <span title="The AI left this blank or unclear — please check it" style={{ color: '#b45309', fontWeight: 600 }}> ⚠</span>
-    : null;
+  const needsReview = fromScan && (scanConfidence! < 85 || flaggedLabels.length > 0 || (fieldNotes && fieldNotes.length > 0));
+  const flag = (on: boolean, key?: string) => {
+    if (!on) return null;
+    const score = key && fieldConfidences && typeof fieldConfidences[key] === 'number'
+      ? Math.round(fieldConfidences[key])
+      : null;
+    const title = score != null
+      ? `AI confidence on this field: ${score}% — please verify`
+      : 'The AI left this blank or unclear — please check it';
+    return <span title={title} style={{ color: '#b45309', fontWeight: 600 }}> ⚠</span>;
+  };
 
   // 5B — Due Date visibility is driven by the matching document category.
   const dueDateCat = docCategories.find((c: any) => c.journal_code && c.journal_code === form.journal);
@@ -431,12 +456,34 @@ export default function InvoiceEditor() {
         {/* AI confidence / review prompt (scanned docs only) */}
         {fromScan && (
           <div className="no-print" style={{ background: needsReview ? '#fffbeb' : '#f0fdf4', border: `1px solid ${needsReview ? '#f59e0b' : '#86efac'}`, borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13 }}>
-            <span style={{ fontWeight: 600, color: confColor }}>AI extraction confidence: {Math.round(scanConfidence!)}%</span>
-            {needsReview ? (
-              flaggedLabels.length > 0
-                ? <span style={{ color: '#92400e' }}> — please check the highlighted field{flaggedLabels.length === 1 ? '' : 's'}: {flaggedLabels.join(', ')}.</span>
-                : <span style={{ color: '#92400e' }}> — please review the fields before saving.</span>
-            ) : <span style={{ color: '#166534' }}> — looks good, but please confirm before saving.</span>}
+            <div>
+              <span style={{ fontWeight: 600, color: confColor }}>AI extraction confidence: {Math.round(scanConfidence!)}%</span>
+              {needsReview ? (
+                flaggedLabels.length > 0
+                  ? <span style={{ color: '#92400e' }}> — please check the highlighted field{flaggedLabels.length === 1 ? '' : 's'}: {flaggedLabels.join(', ')}.</span>
+                  : <span style={{ color: '#92400e' }}> — please review the fields before saving.</span>
+              ) : <span style={{ color: '#166534' }}> — looks good, but please confirm before saving.</span>}
+            </div>
+            {/* Per-field self-assessed confidence scores from the extractor. Hover the ⚠ next to a field to see the same number. */}
+            {fieldConfidences && Object.keys(fieldConfidences).length > 0 && (
+              <div style={{ marginTop: 6, fontSize: 12, color: '#475569', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {Object.entries(fieldConfidences).map(([k, v]) => {
+                  const score = Math.round(v as number);
+                  const c = score >= 85 ? '#166534' : score >= 70 ? '#92400e' : '#b91c1c';
+                  return (
+                    <span key={k} style={{ background: 'white', border: `1px solid ${c}33`, color: c, padding: '1px 6px', borderRadius: 4, fontVariantNumeric: 'tabular-nums' }}>
+                      {k.replace(/_/g, ' ')}: <strong>{score}%</strong>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {/* Free-text caveats the model raised about ambiguous bits of the document. */}
+            {fieldNotes && fieldNotes.length > 0 && (
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: '#92400e', fontSize: 12 }}>
+                {fieldNotes.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            )}
           </div>
         )}
 
@@ -521,9 +568,9 @@ export default function InvoiceEditor() {
                 {journalTypes.map((jt: any) => <option key={jt.id} value={jt.code}>{jt.code} - {jt.label}</option>)}
               </select>
             </div>
-            <div className="form-group"><label>Invoice Number / Reference{flag(fieldFlags.invoice_number)}</label><input type="text" value={form.invoice_number} onChange={(e) => handleChange('invoice_number', e.target.value)} className="form-input" style={fieldFlags.invoice_number ? { borderColor: '#f59e0b' } : undefined} /></div>
+            <div className="form-group"><label>Invoice Number / Reference{flag(fieldFlags.invoice_number, 'invoice_number')}</label><input type="text" value={form.invoice_number} onChange={(e) => handleChange('invoice_number', e.target.value)} className="form-input" style={fieldFlags.invoice_number ? { borderColor: '#f59e0b' } : undefined} /></div>
             <div className="form-group">
-              <label>{isPurchase ? 'Vendor' : 'Vendor / Customer'}{flag(fieldFlags.vendor_name)}</label>
+              <label>{isPurchase ? 'Vendor' : 'Vendor / Customer'}{flag(fieldFlags.vendor_name, 'vendor_name')}</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 <div style={{ flex: 1 }}>
                   <SearchableSelect
@@ -545,11 +592,11 @@ export default function InvoiceEditor() {
                 )}
               </div>
             </div>
-            <div className="form-group"><label>Date (DD/MM/YYYY){flag(fieldFlags.invoice_date)}</label><input type="text" value={form.invoice_date} onChange={(e) => handleChange('invoice_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" style={fieldFlags.invoice_date ? { borderColor: '#f59e0b' } : undefined} /></div>
+            <div className="form-group"><label>Date (DD/MM/YYYY){flag(fieldFlags.invoice_date, 'invoice_date')}</label><input type="text" value={form.invoice_date} onChange={(e) => handleChange('invoice_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" style={fieldFlags.invoice_date ? { borderColor: '#f59e0b' } : undefined} /></div>
             {showDueDate && (
               <div className="form-group"><label>Due Date</label><input type="text" value={form.due_date} onChange={(e) => handleChange('due_date', e.target.value)} className="form-input" placeholder="DD/MM/YYYY" /></div>
             )}
-            <div className="form-group"><label>Total Amount{flag(fieldFlags.total_amount)}</label><input type="number" step="0.01" value={form.total_amount} onChange={(e) => handleChange('total_amount', parseFloat(e.target.value) || 0)} className="form-input" style={fieldFlags.total_amount ? { borderColor: '#f59e0b' } : undefined} /></div>
+            <div className="form-group"><label>Total Amount{flag(fieldFlags.total_amount, 'total_amount')}</label><input type="number" step="0.01" value={form.total_amount} onChange={(e) => handleChange('total_amount', parseFloat(e.target.value) || 0)} className="form-input" style={fieldFlags.total_amount ? { borderColor: '#f59e0b' } : undefined} /></div>
             <div className="form-group"><label>Currency</label><input type="text" value={form.currency} onChange={(e) => handleChange('currency', e.target.value)} className="form-input" /></div>
             <div className="form-group"><label>Currency Rate</label><input type="text" value={form.currency_rate} onChange={(e) => handleChange('currency_rate', e.target.value)} className="form-input" /></div>
           </div>

@@ -200,6 +200,8 @@ export default function ScannerPage() {
         let parsed: ParsedInvoice;
         let text = '';
         let confidence = 0;
+        let fieldConfidences: Record<string, number> | undefined;
+        let fieldNotes: string[] | undefined;
         try {
           // Primary: AI extraction with Claude (reads English + Greek).
           const img = await fileToAiImageParts(file);
@@ -208,16 +210,25 @@ export default function ScannerPage() {
           parsed = aiToParsed(ai);
           text = typeof ai.full_text === 'string' ? ai.full_text : '';
           confidence = typeof ai.confidence === 'number' ? ai.confidence : 90;
+          // S2: capture per-field confidence + notes so InvoiceEditor can flag
+          // low-confidence values for the reviewer to verify.
+          if (ai.field_confidences && typeof ai.field_confidences === 'object') {
+            fieldConfidences = ai.field_confidences as Record<string, number>;
+          }
+          if (Array.isArray(ai.field_notes) && ai.field_notes.length > 0) {
+            fieldNotes = ai.field_notes.filter((n: any) => typeof n === 'string' && n.trim());
+          }
         } catch (aiErr) {
           // Fallback: on-device Tesseract + regex, so scanning still works
-          // if the AI key / function is unavailable.
+          // if the AI key / function is unavailable. Per-field confidences
+          // aren't available from the fallback path.
           console.warn('AI extraction failed, falling back to on-device OCR:', aiErr);
           const r = await scanSingleFile(file);
           text = r.text;
           confidence = r.confidence;
           parsed = parseInvoiceText(text);
         }
-        results.push({ fileBlob: file, fileName: file.name, mimeType: file.type, parsed, rawOcrText: text, confidence, journalCode, clientId });
+        results.push({ fileBlob: file, fileName: file.name, mimeType: file.type, parsed, rawOcrText: text, confidence, fieldConfidences, fieldNotes, journalCode, clientId });
       } catch (err) {
         console.error(`Failed to scan ${file.name}:`, err);
         results.push({
