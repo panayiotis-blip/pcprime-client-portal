@@ -169,6 +169,10 @@ export default function ClientManager() {
   const [printFields, setPrintFields] = useState<Set<string>>(() => new Set(DEFAULT_PRINT_FIELDS));
   // 'all' = current filtered+sorted list; 'selected' = only ticked rows from bulk selection.
   const [printScope, setPrintScope] = useState<'all' | 'selected'>('all');
+  // Optional filters applied on top of the scope.
+  const [printTypeFilter, setPrintTypeFilter] = useState<'all' | 'individual' | 'company'>('all');
+  const [printFromId, setPrintFromId] = useState<number | null>(null); // alphabetic range start
+  const [printToId, setPrintToId] = useState<number | null>(null);     // alphabetic range end
 
   // Load column prefs once
   useEffect(() => {
@@ -575,15 +579,49 @@ export default function ClientManager() {
   // in the table on screen, minus the vendor-only category.
   const buildPrintRows = () => {
     const selectedFields = PRINT_FIELDS.filter(f => printFields.has(f.id));
-    // Source list depends on scope. 'selected' uses the bulk-ticked rows
-    // (preserving the current sort order from sortedFiltered); 'all' uses the
-    // full filtered list. Vendor-only entries are always excluded.
-    const base = printScope === 'selected'
+    // 1) Start from scope. 'selected' uses the bulk-ticked rows; 'all' uses
+    //    the full filtered+sorted list. Vendor-only entries are excluded.
+    let base = (printScope === 'selected'
       ? sortedFiltered.filter((c: any) => selectedIds.has(c.id))
-      : sortedFiltered;
-    const visibleClients = base.filter((c: any) => c.client_category !== 'vendor_only');
-    return { selectedFields, visibleClients };
+      : sortedFiltered
+    ).filter((c: any) => c.client_category !== 'vendor_only');
+    // 2) Apply the type filter (Individuals / Companies / All).
+    if (printTypeFilter === 'individual') base = base.filter((c: any) => c.client_type === 'individual');
+    else if (printTypeFilter === 'company') base = base.filter((c: any) => c.client_type === 'company');
+    // 3) Apply the alphabetic-name range, but only in 'all' scope. The user
+    //    picks "from" and "to" clients; the output is the inclusive slice in
+    //    alphabetic order (we re-sort by name for the range so the slice is
+    //    meaningful even if the on-screen sort is by Code).
+    if (printScope === 'all' && (printFromId || printToId)) {
+      const byName = [...base].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+      const fromIdx = printFromId ? byName.findIndex(c => c.id === printFromId) : 0;
+      const toIdx   = printToId   ? byName.findIndex(c => c.id === printToId)   : byName.length - 1;
+      if (fromIdx !== -1 && toIdx !== -1) {
+        const lo = Math.min(fromIdx, toIdx);
+        const hi = Math.max(fromIdx, toIdx);
+        base = byName.slice(lo, hi + 1);
+      }
+    }
+    return { selectedFields, visibleClients: base };
   };
+
+  // Range dropdown options — type-filtered + sorted by name. Memoised so the
+  // dropdowns don't rebuild on every keystroke in the field-picker.
+  const rangeClientOptions = useMemo(() => {
+    let base = sortedFiltered.filter((c: any) => c.client_category !== 'vendor_only');
+    if (printTypeFilter === 'individual') base = base.filter((c: any) => c.client_type === 'individual');
+    else if (printTypeFilter === 'company') base = base.filter((c: any) => c.client_type === 'company');
+    return [...base].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [sortedFiltered, printTypeFilter]);
+
+  // If the type filter changes such that the currently-selected From/To
+  // client is no longer in the list, clear that field so the dropdown
+  // doesn't display a phantom value.
+  useEffect(() => {
+    if (printFromId && !rangeClientOptions.some(c => c.id === printFromId)) setPrintFromId(null);
+    if (printToId   && !rangeClientOptions.some(c => c.id === printToId))   setPrintToId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeClientOptions]);
 
   const handlePrintPdf = () => {
     const { selectedFields, visibleClients } = buildPrintRows();
@@ -1049,11 +1087,68 @@ export default function ClientManager() {
             </h3>
             <p style={{ color: '#64748b', fontSize: '0.88em', marginTop: 0 }}>
               {printScope === 'selected' ? (
-                <>Pick which fields to include. The PDF will contain the <strong>{selectedIds.size} selected</strong> client{selectedIds.size === 1 ? '' : 's'} in the current sort order.</>
+                <>The PDF will contain the <strong>{selectedIds.size} selected</strong> client{selectedIds.size === 1 ? '' : 's'} in the current sort order. Pick which fields to include.</>
               ) : (
-                <>Pick which fields to include. The PDF uses the current filter + sort and produces a landscape A4 document with one row per client.</>
+                <>The PDF uses the current filter + sort. Use the filters below to narrow further by client type and/or an alphabetic range, then pick which fields to include.</>
               )}
             </p>
+
+            {/* Filter section: type radios + (in 'all' scope) From / To range pickers */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: '0.78em', fontWeight: 600, color: '#1a365d', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Filter</div>
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: printScope === 'all' ? 10 : 0, fontSize: '0.86em' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                  <input type="radio" name="ptype" checked={printTypeFilter === 'all'}        onChange={() => setPrintTypeFilter('all')} />
+                  All clients
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                  <input type="radio" name="ptype" checked={printTypeFilter === 'individual'} onChange={() => setPrintTypeFilter('individual')} />
+                  Individuals only
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                  <input type="radio" name="ptype" checked={printTypeFilter === 'company'}    onChange={() => setPrintTypeFilter('company')} />
+                  Companies only
+                </label>
+              </div>
+              {printScope === 'all' && (
+                <>
+                  <div style={{ fontSize: '0.74em', color: '#64748b', marginBottom: 4 }}>
+                    Range (alphabetic by name) — leave either side blank for "first" / "last"
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <div>
+                      <label style={{ fontSize: '0.74em', color: '#5a6478', display: 'block', marginBottom: 2 }}>From client</label>
+                      <select className="form-input form-input-sm" value={printFromId ?? ''} onChange={e => setPrintFromId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%' }}>
+                        <option value="">— First —</option>
+                        {rangeClientOptions.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' · ' : ''}{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.74em', color: '#5a6478', display: 'block', marginBottom: 2 }}>To client</label>
+                      <select className="form-input form-input-sm" value={printToId ?? ''} onChange={e => setPrintToId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%' }}>
+                        <option value="">— Last —</option>
+                        {rangeClientOptions.map((c: any) => (
+                          <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' · ' : ''}{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {(printFromId || printToId || printTypeFilter !== 'all') && (
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm"
+                      onClick={() => { setPrintTypeFilter('all'); setPrintFromId(null); setPrintToId(null); }}
+                      style={{ padding: 0, marginTop: 4 }}
+                    >Clear filters</button>
+                  )}
+                </>
+              )}
+              <div style={{ marginTop: 8, fontSize: '0.78em', color: '#1a365d', fontWeight: 600 }}>
+                {buildPrintRows().visibleClients.length} client{buildPrintRows().visibleClients.length === 1 ? '' : 's'} will be printed
+              </div>
+            </div>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 12px',
               marginBottom: 14, padding: '8px 4px', maxHeight: 320, overflowY: 'auto',
