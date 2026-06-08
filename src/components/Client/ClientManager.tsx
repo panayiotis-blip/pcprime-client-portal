@@ -286,8 +286,9 @@ export default function ClientManager() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showMerge, setShowMerge] = useState(false);
 
-  // Column sort state for List view
-  const [sortKey, setSortKey] = useState<SortKey>('name');
+  // Column sort state for List view. Default to code so the list lines up
+  // with how the user reads paper files.
+  const [sortKey, setSortKey] = useState<SortKey>('client_code');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const onSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -302,6 +303,12 @@ export default function ClientManager() {
       if (!(form.surname || '').trim()) { alert('Surname is required for an individual.'); return; }
     } else {
       if (!(form.legal_name || form.name || '').trim()) { alert('Legal name is required for a company.'); return; }
+    }
+    // Last-line defence — the form already blocks Save when codeDuplicate is
+    // set, but if a race somehow let this through, refuse here too.
+    if (codeDuplicate) {
+      alert(`Client code "${form.client_code}" is already used by ${codeDuplicate.name}. Pick a different code.`);
+      return;
     }
     try {
       const data: any = { ...form, client_type: type };
@@ -322,6 +329,17 @@ export default function ClientManager() {
       alert(err.message);
     }
   };
+
+  // Live duplicate detection for the Add Client form — checks the in-memory
+  // client list as the user types so they can't even click Save with a code
+  // that already exists. Empty / blank codes are not flagged here (a blank
+  // means "auto-generate on save").
+  const codeDuplicate = (() => {
+    const code = (form.client_code || '').trim().toUpperCase();
+    if (!code) return null as null | { id: number; name: string };
+    const hit = clients.find((c: any) => (c.client_code || '').toUpperCase() === code);
+    return hit ? { id: hit.id, name: hit.client_name || hit.name || '(unnamed)' } : null;
+  })();
 
   const previewCode = async (name: string) => {
     if (!name.trim()) { setForm((p: any) => ({ ...p, client_code: '' })); return; }
@@ -412,7 +430,9 @@ export default function ClientManager() {
   // Helper: render any column's cell content for a given client row
   const renderCell = (col: string, c: any) => {
     switch (col) {
-      case 'client_code':          return <strong>{c.client_code || '-'}</strong>;
+      case 'client_code':          return c.client_code
+        ? <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 600, fontFamily: 'monospace' }}>{c.client_code}</Link>
+        : <span style={{ color: '#94a3b8' }}>-</span>;
       case 'name':                 return (
         <>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -962,8 +982,24 @@ export default function ClientManager() {
             </div>
             <div className="form-group">
               <label>Client Code (auto-generated)</label>
-              <input type="text" value={form.client_code} onChange={(e) => setForm((p: any) => ({ ...p, client_code: e.target.value.toUpperCase() }))} className="form-input" placeholder="Will auto-generate: 221XXX001" style={{ fontFamily: 'monospace' }} />
-              <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Format: 221 + first 3 letters + sequential number</p>
+              <input
+                type="text"
+                value={form.client_code}
+                onChange={(e) => setForm((p: any) => ({ ...p, client_code: e.target.value.toUpperCase() }))}
+                className="form-input"
+                placeholder="Will auto-generate: 221XXX001"
+                style={{ fontFamily: 'monospace', borderColor: codeDuplicate ? '#dc2626' : undefined }}
+              />
+              {codeDuplicate ? (
+                <p style={{ fontSize: 12, color: '#dc2626', marginTop: 4, fontWeight: 500 }}>
+                  ⚠ Code <strong>{form.client_code}</strong> is already used by{' '}
+                  <Link to={`/clients/${codeDuplicate.id}`} style={{ color: '#dc2626', textDecoration: 'underline' }}>
+                    {codeDuplicate.name}
+                  </Link>. Pick a different code before saving.
+                </p>
+              ) : (
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>Format: 221 + first 3 letters + sequential number</p>
+              )}
             </div>
             <div className="form-group"><label>Trading Name</label><input type="text" value={form.trading_name} onChange={(e) => setForm((p: any) => ({ ...p, trading_name: e.target.value }))} className="form-input" /></div>
             <div className="form-group"><label>Tax Number (TIC)</label><input type="text" value={form.tax_number} onChange={(e) => setForm((p: any) => ({ ...p, tax_number: e.target.value }))} className="form-input" /></div>
@@ -985,7 +1021,9 @@ export default function ClientManager() {
               </div>
             )}
           </div>
-          <button className="btn btn-primary" onClick={handleAdd} style={{ marginTop: 12 }}>Save Client</button>
+          <button className="btn btn-primary" onClick={handleAdd} style={{ marginTop: 12 }} disabled={!!codeDuplicate} title={codeDuplicate ? `Code already used by ${codeDuplicate.name}` : undefined}>
+            Save Client
+          </button>
           <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>Other details (VAT, services, directors, credentials) can be added after creating the client.</p>
         </div>
       )}

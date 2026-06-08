@@ -109,6 +109,29 @@ function NameFields() {
   return <Field label="Legal Name" field="legal_name" />;
 }
 
+// "Personal Details" section — only renders for individuals. The full set
+// (passport, nationality, etc.) still lives on the Tax Registration tab; the
+// two TD1-required fields surface here so they're not buried.
+function PersonalDetailsSection() {
+  const { editing, form, client } = useFieldCtx();
+  const type = (editing ? form.client_type : client.client_type) || 'company';
+  if (type !== 'individual') return null;
+  return (
+    <div className="form-section">
+      <h3>Personal Details</h3>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+        Required for tax returns. Passport, nationality and SI registration date are on the <strong>Registrations</strong> tab.
+      </p>
+      <div className="form-grid">
+        <Field label="ID Number" field="id_number" />
+        <Field label="Date of Birth" field="date_of_birth" type="date" />
+        <Field label="Social Insurance Number" field="social_insurance_number" />
+        <Field label="Tax Number (TIC)" field="tax_number" />
+      </div>
+    </div>
+  );
+}
+
 // Tab 1: Client Info — name, tax-office name, classification, status,
 // dates. Splits out of the legacy monolithic Info tab.
 export default function ClientInfoTab() {
@@ -131,6 +154,8 @@ export default function ClientInfoTab() {
           <Field label="Trading Name" field="trading_name" />
         </div>
       </div>
+
+      <PersonalDetailsSection />
 
       <div className="form-section">
         <h3>Classification</h3>
