@@ -122,9 +122,9 @@ insert into public.service_stages (
   default_day_of_month, default_use_last_day,
   active_months, sends_email, creates_task, task_priority
 )
-select s.id, v.ordinal, v.key, v.label, 'annual',
-       v.day, v.last_day,
-       v.months::int[], true, true, v.priority
+select s.id, v.ordinal::int, v.key::text, v.label::text, 'annual'::text,
+       v.day::int, v.last_day::boolean,
+       v.months::int[], true, true, v.priority::text
 from public.service_definitions s
 cross join (values
   (1, 'doc_request',      'Tax Return: document request',     1,    false, '{2}',  'medium'),
@@ -151,13 +151,14 @@ insert into public.service_stages (
   default_day_of_month, default_use_last_day,
   active_months, sends_email, creates_task, task_priority
 )
-select s.id, v.ordinal, v.key, v.label, v.cadence,
-       v.day, v.last_day,
-       v.months::int[], true, true, v.priority
+select s.id, v.ordinal::int, v.key::text, v.label::text, v.cadence::text,
+       v.day::int, v.last_day::boolean,
+       v.months::int[], true, true, v.priority::text
 from public.service_definitions s
 cross join (values
-  -- The first NULL is cast to int so Postgres types this VALUES column as int
-  -- instead of text (which would fail to cast into default_day_of_month).
+  -- All explicit casts in the SELECT above protect against Postgres typing
+  -- a NULL-only VALUES column as text. The first row's null::int is belt-
+  -- and-braces in case the SELECT-side cast isn't enough on some PG versions.
   (1, 'provisional_tax_h1', 'Provisional Tax: 1st instalment',  null::int, true, 'annual',   '{7}',         'high'),
   (2, 'provisional_tax_h2', 'Provisional Tax: 2nd instalment',  null,      true, 'annual',   '{12}',        'high'),
   (3, 'sdc_gesy_h1',        'SDC + GeSY (rents/dividends): H1', null,      true, 'annual',   '{6}',         'high'),
