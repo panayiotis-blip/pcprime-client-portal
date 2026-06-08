@@ -2147,6 +2147,54 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- User SMTP settings (per-user Outlook credentials for sending email) ---------
+  // The plaintext password is never returned via the table read — only the
+  // SECURITY DEFINER get_user_smtp_password() RPC can decrypt it, and that's
+  // intended to be called from the send-mail Edge Function (Phase B).
+  async getMySmtpSettings() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+    const { data, error } = await supabase.from('user_smtp_settings')
+      .select('user_id, smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, last_used_at, last_error, smtp_password_enc, updated_at')
+      .eq('user_id', session.user.id)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    // The encrypted password is bytea — surface a simple "has password set" flag
+    // so the UI can show "Password configured" without ever touching the cipher.
+    const hasPassword = !!data.smtp_password_enc;
+    const { smtp_password_enc, ...rest } = data as any;
+    void smtp_password_enc;
+    return { ...rest, has_password: hasPassword };
+  },
+  async saveMySmtpSettings(row: { smtp_host?: string; smtp_port?: number; smtp_secure?: boolean; smtp_user: string; from_name?: string | null; is_active?: boolean }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) throw new Error('Not authenticated');
+    const payload = {
+      user_id: session.user.id,
+      smtp_host: row.smtp_host || 'smtp.office365.com',
+      smtp_port: row.smtp_port ?? 587,
+      smtp_secure: row.smtp_secure ?? false,
+      smtp_user: row.smtp_user,
+      from_name: row.from_name ?? null,
+      is_active: row.is_active ?? true,
+    };
+    const { error } = await supabase.from('user_smtp_settings').upsert(payload, { onConflict: 'user_id' });
+    if (error) throw new Error(error.message);
+  },
+  async setMySmtpPassword(password: string) {
+    // Calls the SECURITY DEFINER fn which encrypts the password with the
+    // Vault-stored key. Only the current user's row is affected (auth.uid()).
+    const { error } = await supabase.rpc('set_user_smtp_password', { p_password: password });
+    if (error) throw new Error(error.message);
+  },
+  async deleteMySmtpSettings() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) throw new Error('Not authenticated');
+    const { error } = await supabase.from('user_smtp_settings').delete().eq('user_id', session.user.id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Customer invoices (a client billing their own customers) ---------
   async getCustomerInvoices(ownerClientId: number, params?: { status?: string; customer_id?: number }) {
     let q = supabase.from('customer_invoice')

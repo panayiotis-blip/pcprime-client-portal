@@ -1224,9 +1224,20 @@ export default function ClientManager() {
               </div>
             </div>
             <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: '0.74em', color: '#5a6478', display: 'block', marginBottom: 2 }}>
-                Email to (optional) — used when clicking "Email PDF"
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <label style={{ fontSize: '0.74em', color: '#5a6478' }}>
+                  Email to (optional) — used when clicking "Email PDF"
+                </label>
+                <Link
+                  to="/settings/email"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontSize: '0.72em', color: '#9b861f' }}
+                  title="Connect your Outlook account so the app can send mail on your behalf"
+                >
+                  ⚙ Email settings
+                </Link>
+              </div>
               <input
                 type="email"
                 className="form-input form-input-sm"
