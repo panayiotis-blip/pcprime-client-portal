@@ -2790,6 +2790,9 @@ export const api = {
     from?: string;
     to?: string;
     category?: string;
+    // Migration 102: defaults to live rows only. Pass 'deleted' for the
+    // trash view, 'all' to include both.
+    deleted?: 'live' | 'deleted' | 'all';
   }) {
     let q = supabase.from('staff_tasks')
       .select('*, client:clients(name, client_code)')
@@ -2802,6 +2805,9 @@ export const api = {
     if (params?.category)  q = q.eq('category', params.category);
     if (params?.from)      q = q.gte('due_date', params.from);
     if (params?.to)        q = q.lte('due_date', params.to);
+    if (!params?.deleted || params.deleted === 'live') q = q.is('deleted_at', null);
+    else if (params.deleted === 'deleted')             q = q.not('deleted_at', 'is', null);
+    // 'all' adds no filter.
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     return (data || []).map((t: any) => ({
@@ -2850,7 +2856,22 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // Soft delete (migration 102). The row stays in the table — the UI's
+  // "Show deleted" filter brings it back. Use purgeStaffTask for a real
+  // delete (admin-only flow, not wired into the default UI).
   async deleteStaffTask(id: number) {
+    const { error } = await supabase.from('staff_tasks')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async restoreStaffTask(id: number) {
+    const { error } = await supabase.from('staff_tasks')
+      .update({ deleted_at: null })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async purgeStaffTask(id: number) {
     const { error } = await supabase.from('staff_tasks').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },

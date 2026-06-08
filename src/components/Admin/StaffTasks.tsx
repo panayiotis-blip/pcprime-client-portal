@@ -84,6 +84,10 @@ export default function StaffTasks() {
   const [fFrom, setFFrom]         = useState<string>('');
   const [fTo, setFTo]             = useState<string>('');
   const [search, setSearch]       = useState<string>('');
+  // Migration 102: 'live' hides soft-deleted rows (default), 'deleted'
+  // shows ONLY the trash so the user can restore something they killed
+  // by mistake.
+  const [fDeleted, setFDeleted]   = useState<'live' | 'deleted'>('live');
 
   // New task form (inline) — auto-opens when navigated to with ?new=1 (FAB)
   const [showForm, setShowForm] = useState(() => new URLSearchParams(location.search).get('new') === '1');
@@ -108,6 +112,7 @@ export default function StaffTasks() {
       if (fStatus && fStatus !== 'all' && fStatus !== 'open') params.status = fStatus;
       if (fFrom)      params.from = fFrom;
       if (fTo)        params.to   = fTo;
+      params.deleted = fDeleted;
       const data = await api.getStaffTasks(params);
       setTasks(data as Task[]);
     } catch (err: any) {
@@ -126,7 +131,7 @@ export default function StaffTasks() {
   };
 
   useEffect(() => { loadStaff(); }, []);
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fAssignee, fStatus, fPriority, fClient, fFrom, fTo]);
+  useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fAssignee, fStatus, fPriority, fClient, fFrom, fTo, fDeleted]);
 
   // Stamp the "I've now seen the Tasks page" marker, so the sidebar badge
   // resets to 0 — also fires on every visit so newly-arrived tasks get cleared.
@@ -188,12 +193,35 @@ export default function StaffTasks() {
   };
 
   const handleDelete = async (t: Task) => {
-    if (!confirm(`Delete task: "${t.title}"?`)) return;
+    if (!confirm(`Delete task: "${t.title}"?\n\nThis can be undone — use the "Show: Deleted" filter to find and restore it.`)) return;
     try {
       await api.deleteStaffTask(t.id);
       setTasks(prev => prev.filter(x => x.id !== t.id));
     } catch (err: any) {
       alert('Delete failed: ' + err.message);
+    }
+  };
+
+  // Soft-delete twin: marks the task as not-needed but keeps it visible
+  // (status='cancelled'). Different from delete — this is a decision
+  // ("we won't do this"), not a mistake ("oops").
+  const handleNotRequired = async (t: Task) => {
+    if (t.status === 'cancelled') return;
+    if (!confirm(`Mark "${t.title}" as not required?\n\nThe task stays in the list (greyed out) so the decision is auditable. Use Delete instead if it was created by mistake.`)) return;
+    try {
+      await api.updateStaffTask(t.id, { status: 'cancelled' } as any);
+      setTasks(prev => prev.map(x => x.id === t.id ? { ...x, status: 'cancelled' as Status } : x));
+    } catch (err: any) {
+      alert('Update failed: ' + err.message);
+    }
+  };
+
+  const handleRestore = async (t: Task) => {
+    try {
+      await api.restoreStaffTask(t.id);
+      setTasks(prev => prev.filter(x => x.id !== t.id));
+    } catch (err: any) {
+      alert('Restore failed: ' + err.message);
     }
   };
 
@@ -399,6 +427,19 @@ export default function StaffTasks() {
             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
         </div>
+        <div className="form-group" style={{ minWidth: 120 }}>
+          <label>Show</label>
+          <select
+            className="form-input"
+            value={fDeleted}
+            onChange={e => setFDeleted(e.target.value as 'live' | 'deleted')}
+            title="Switch between the live list and the trash (recoverable deletes)"
+            style={fDeleted === 'deleted' ? { background: '#fef3c7', borderColor: '#f59e0b' } : undefined}
+          >
+            <option value="live">Live tasks</option>
+            <option value="deleted">🗑 Deleted (restorable)</option>
+          </select>
+        </div>
         <div className="form-group" style={{ minWidth: 140 }}>
           <label>Priority</label>
           <select className="form-input" value={fPriority} onChange={e => setFPriority(e.target.value)}>
@@ -558,7 +599,16 @@ export default function StaffTasks() {
                     <span className="print-only">{STATUS_LABEL[t.status]}</span>
                   </td>
                   <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
-                    <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)}>Delete</button>
+                    {fDeleted === 'deleted' ? (
+                      <button className="btn btn-link btn-sm" onClick={() => handleRestore(t)} title="Move back to the live list">↶ Restore</button>
+                    ) : (
+                      <>
+                        {t.status !== 'cancelled' && (
+                          <button className="btn btn-link btn-sm" onClick={() => handleNotRequired(t)} title="Mark as cancelled but keep in list">Not required</button>
+                        )}
+                        <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} title="Soft delete — restorable from the Show: Deleted filter">Delete</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
