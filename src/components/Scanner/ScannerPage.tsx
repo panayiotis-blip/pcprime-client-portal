@@ -63,6 +63,19 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
   const [notes, setNotes] = useState('');
   // Branch B confirmation state — set once documents have been filed.
   const [done, setDone] = useState<{ count: number; folder: string; client: string } | null>(null);
+  // Bulk batch progress — one row per job (post-split). Drives the inline
+  // panel that shows queued / scanning / done / failed for each file as the
+  // batch runs.
+  type BatchStatus = 'queued' | 'scanning' | 'done' | 'failed';
+  type BatchRow = {
+    name: string;
+    status: BatchStatus;
+    vendor?: string;
+    total?: number;
+    confidence?: number;
+    error?: string;
+  };
+  const [batchProgress, setBatchProgress] = useState<BatchRow[]>([]);
 
   useEffect(() => {
     api.getDocumentCategories()
@@ -199,12 +212,16 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
     }
     if (jobs.length === 0) { alert('Nothing to scan.'); return; }
 
+    // Seed the batch progress panel — one row per job, all queued.
+    setBatchProgress(jobs.map(j => ({ name: j.displayName, status: 'queued' as BatchStatus })));
+
     const journalCode = cat.journal_code || 'JV';
     const results: ScannedInvoice[] = [];
     const truncated: string[] = [];
     for (let i = 0; i < jobs.length; i++) {
       const { file, displayName } = jobs[i];
       setStatusText(`Scanning ${i + 1} of ${jobs.length}: ${displayName}`);
+      setBatchProgress(prev => prev.map((row, idx) => idx === i ? { ...row, status: 'scanning' } : row));
       try {
         let parsed: ParsedInvoice;
         let text = '';
@@ -238,6 +255,14 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
           parsed = parseInvoiceText(text);
         }
         results.push({ fileBlob: file, fileName: file.name, mimeType: file.type, parsed, rawOcrText: text, confidence, fieldConfidences, fieldNotes, journalCode, clientId });
+        // Mark this row done with a quick preview the panel can show.
+        setBatchProgress(prev => prev.map((row, idx) => idx === i ? {
+          ...row,
+          status: 'done',
+          vendor: parsed.vendorName || '—',
+          total: parsed.totalAmount || 0,
+          confidence,
+        } : row));
       } catch (err) {
         console.error(`Failed to scan ${file.name}:`, err);
         results.push({
@@ -245,6 +270,11 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
           parsed: { invoiceNumber: '', vendorName: '', invoiceDate: '', dueDate: '', subtotal: 0, taxAmount: 0, totalAmount: 0, currency: '', lineItems: [], details: '' },
           rawOcrText: '', confidence: 0, journalCode, clientId,
         });
+        setBatchProgress(prev => prev.map((row, idx) => idx === i ? {
+          ...row,
+          status: 'failed',
+          error: err instanceof Error ? err.message : String(err),
+        } : row));
       }
     }
 
@@ -439,6 +469,76 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
       {scanning && (
         <div className="progress-bar">
           <div className="progress-fill progress-indeterminate" />
+        </div>
+      )}
+
+      {/* Bulk-batch live progress panel — one row per job, updates as the
+          loop in runOcrBranch advances. Hidden until a batch starts. */}
+      {batchProgress.length > 0 && (
+        <div className="form-section" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '10px 12px', marginTop: 12 }}>
+          {(() => {
+            const total = batchProgress.length;
+            const done = batchProgress.filter(r => r.status === 'done').length;
+            const failed = batchProgress.filter(r => r.status === 'failed').length;
+            const scanningCount = batchProgress.filter(r => r.status === 'scanning').length;
+            const pct = total > 0 ? Math.round(((done + failed) / total) * 100) : 0;
+            return (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <strong style={{ color: '#1a365d', fontSize: 14 }}>
+                    Batch progress: {done + failed} of {total}
+                    {scanningCount > 0 && <span style={{ color: '#64748b', fontWeight: 400 }}> · {scanningCount} in flight</span>}
+                  </strong>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>
+                    {done > 0 && <span style={{ color: '#166534' }}>✓ {done} done</span>}
+                    {failed > 0 && <span style={{ color: '#b91c1c', marginLeft: 8 }}>⚠ {failed} failed</span>}
+                  </span>
+                </div>
+                {/* Determinate progress bar based on completed jobs */}
+                <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden', marginBottom: 10 }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: failed > 0 ? '#f59e0b' : '#15803d', transition: 'width 0.3s ease' }} />
+                </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 12 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ color: '#64748b', textAlign: 'left' }}>
+                        <th style={{ padding: '4px 6px', fontWeight: 500 }}>File</th>
+                        <th style={{ padding: '4px 6px', fontWeight: 500, width: 90 }}>Status</th>
+                        <th style={{ padding: '4px 6px', fontWeight: 500 }}>Vendor</th>
+                        <th style={{ padding: '4px 6px', fontWeight: 500, width: 90, textAlign: 'right' }}>Total</th>
+                        <th style={{ padding: '4px 6px', fontWeight: 500, width: 60, textAlign: 'right' }}>Conf.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchProgress.map((row, idx) => {
+                        const bg = row.status === 'done' ? '#dcfce7' : row.status === 'failed' ? '#fee2e2' : row.status === 'scanning' ? '#dbeafe' : '#f1f5f9';
+                        const fg = row.status === 'done' ? '#166534' : row.status === 'failed' ? '#b91c1c' : row.status === 'scanning' ? '#1e40af' : '#64748b';
+                        const label = row.status === 'queued' ? '⋯ queued' : row.status === 'scanning' ? '⏳ scanning' : row.status === 'done' ? '✓ done' : '⚠ failed';
+                        const conf = row.confidence != null ? Math.round(row.confidence) : null;
+                        const confColor = conf == null ? '#94a3b8' : conf >= 85 ? '#166534' : conf >= 70 ? '#92400e' : '#b91c1c';
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '4px 6px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.name}>{row.name}</td>
+                            <td style={{ padding: '4px 6px' }}>
+                              <span style={{ background: bg, color: fg, padding: '1px 6px', borderRadius: 3, fontSize: 11, fontWeight: 600 }}>{label}</span>
+                            </td>
+                            <td style={{ padding: '4px 6px', color: row.vendor ? '#1a365d' : '#94a3b8' }}>{row.vendor || (row.status === 'failed' ? <span style={{ color: '#b91c1c', fontStyle: 'italic' }} title={row.error || ''}>{row.error || 'failed'}</span> : '—')}</td>
+                            <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.total ? row.total.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>
+                            <td style={{ padding: '4px 6px', textAlign: 'right', color: confColor, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{conf != null ? `${conf}%` : ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {failed > 0 && !scanning && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#b91c1c' }}>
+                    {failed} file{failed === 1 ? '' : 's'} failed extraction — they appear in the editor with empty fields. Fix or remove them in the batch review.
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
