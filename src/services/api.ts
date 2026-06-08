@@ -819,6 +819,96 @@ export const api = {
     return { totalInserted, totalSkipped, clientCount: rows.length };
   },
 
+  // --------- Client Services (migration 098) ---------
+  // Catalogue + stages — staff-readable, supervisor-writable.
+  async getServiceDefinitions() {
+    const { data, error } = await supabase
+      .from('service_definitions').select('*').order('ordinal');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async getServiceStages() {
+    const { data, error } = await supabase
+      .from('service_stages').select('*').order('service_id').order('ordinal');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async updateServiceStage(id: number, patch: any) {
+    const { error } = await supabase.from('service_stages')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async getServiceEmailTemplates() {
+    const { data, error } = await supabase
+      .from('service_email_templates').select('*');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async upsertServiceEmailTemplate(stageId: number, subject: string, body: string) {
+    const { error } = await supabase.from('service_email_templates')
+      .upsert({ service_stage_id: stageId, subject, body, updated_at: new Date().toISOString() },
+              { onConflict: 'service_stage_id' });
+    if (error) throw new Error(error.message);
+  },
+
+  // Per-client opt-in for a service.
+  async getClientServices(clientId: number) {
+    const { data, error } = await supabase
+      .from('client_services').select('*').eq('client_id', clientId);
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async toggleClientService(clientId: number, serviceId: number, enabled: boolean) {
+    const { error } = await supabase.from('client_services')
+      .upsert({ client_id: clientId, service_id: serviceId, enabled, updated_at: new Date().toISOString() },
+              { onConflict: 'client_id,service_id' });
+    if (error) throw new Error(error.message);
+  },
+  async getClientStageOverrides(clientServiceId: number) {
+    const { data, error } = await supabase
+      .from('client_service_stage_overrides').select('*')
+      .eq('client_service_id', clientServiceId);
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async upsertStageOverride(clientServiceId: number, stageId: number, patch: {
+    day_of_month?: number | null; use_last_day?: boolean | null; skip?: boolean;
+  }) {
+    const { error } = await supabase.from('client_service_stage_overrides')
+      .upsert({
+        client_service_id: clientServiceId,
+        service_stage_id: stageId,
+        ...patch,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'client_service_id,service_stage_id' });
+    if (error) throw new Error(error.message);
+  },
+
+  // Manual trigger for today's schedules. Returns how many runs/tasks were
+  // created. Full pg_cron automation is a follow-up migration.
+  async runDueServiceSchedules(runDate?: string): Promise<{ created_runs: number; created_tasks: number }> {
+    const { data, error } = await supabase.rpc('run_due_service_schedules',
+      runDate ? { p_run_date: runDate } : {});
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return { created_runs: row?.created_runs ?? 0, created_tasks: row?.created_tasks ?? 0 };
+  },
+
+  // List pending automated emails (service_runs.email_sent=false). The UI
+  // walks this to fire send-via-outlook one row at a time.
+  async getPendingServiceEmails() {
+    const { data, error } = await supabase
+      .from('v_pending_service_emails').select('*').order('scheduled_date');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async markServiceEmailSent(runId: number, error?: string) {
+    const { error: e } = await supabase.from('service_runs')
+      .update({ email_sent: !error, email_error: error || null, fired_at: new Date().toISOString() })
+      .eq('id', runId);
+    if (e) throw new Error(e.message);
+  },
+
   // --------- Platform Credentials ---------
   // Passwords are encrypted at rest via migration 011. They never appear in the
   // table response — use getCredentialPassword(id) to decrypt (and audit-log).

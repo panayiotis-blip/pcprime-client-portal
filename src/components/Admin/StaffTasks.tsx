@@ -234,6 +234,23 @@ export default function StaffTasks() {
           <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)} style={{ marginLeft: 6 }}>
             From template
           </button>
+          <button
+            className="btn btn-secondary"
+            onClick={async () => {
+              if (!confirm('Run today\'s due client-service schedules?\n\nThis creates tasks (and queues emails) for every client whose payroll / bookkeeping stage is due today, skipping ones already fired this month.')) return;
+              try {
+                const r = await api.runDueServiceSchedules();
+                alert(`Done. Created ${r.created_runs} run(s) and ${r.created_tasks} task(s).`);
+                await reload();
+              } catch (err: any) {
+                alert('Run failed: ' + (err?.message || String(err)));
+              }
+            }}
+            style={{ marginLeft: 6 }}
+            title="Triggers due payroll / bookkeeping stages for all clients with services enabled"
+          >
+            ⟲ Run schedules
+          </button>
           <button className="btn btn-primary" onClick={() => setShowForm(s => !s)} style={{ marginLeft: 6 }}>
             {showForm ? 'Cancel' : '+ New Task'}
           </button>

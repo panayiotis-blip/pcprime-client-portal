@@ -10,6 +10,7 @@ import ClientHeader from './ClientHeader';
 import { Modal, Button } from '../ui';
 
 import ClientInfoTab from './tabs/ClientInfoTab';
+import ClientServicesTab from './tabs/ClientServicesTab';
 import ContactsTab from './tabs/ContactsTab';
 import TaxRegistrationTab from './tabs/TaxRegistrationTab';
 import DirectorsTab from './tabs/DirectorsTab';
@@ -35,7 +36,7 @@ import ClientReportsTab from './ClientReportsTab';
 import ApplyTaskTemplateModal from '../Admin/ApplyTaskTemplateModal';
 
 type TabKey =
-  | 'info' | 'contacts' | 'tax'
+  | 'info' | 'contacts' | 'tax' | 'services'
   | 'kyc' | 'directors' | 'credentials'
   | 'documents' | 'invoices' | 'financials' | 'customer_billing' | 'reports'
   | 'compliance' | 'tax_filings' | 'emails'
@@ -47,6 +48,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'info',        label: 'Client Info' },
   { key: 'contacts',    label: 'Contacts' },
   { key: 'tax',         label: 'Registrations' },
+  { key: 'services',    label: 'Services' },
   { key: 'kyc',         label: 'KYC' },
   { key: 'directors',   label: 'Directors' },
   { key: 'credentials', label: 'Credentials' },
@@ -410,6 +412,7 @@ export default function ClientDetail() {
         {tab === 'info'        && <ClientInfoTab />}
         {tab === 'contacts'    && <ContactsTab />}
         {tab === 'tax'         && <TaxRegistrationTab />}
+        {tab === 'services'    && <ClientServicesTab clientId={clientId} />}
         {tab === 'kyc'         && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
         {tab === 'directors'   && <DirectorsTab clientId={clientId} canEdit={editable} />}
         {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
