@@ -2194,6 +2194,21 @@ export const api = {
     const { error } = await supabase.from('user_smtp_settings').delete().eq('user_id', session.user.id);
     if (error) throw new Error(error.message);
   },
+  // Invokes the send-via-outlook Edge Function which relays mail through the
+  // caller's own Outlook account. Attachments arrive base64-encoded so PDFs
+  // generated client-side travel inline.
+  async sendViaOutlook(payload: {
+    to: string;
+    subject: string;
+    body: string;
+    html?: string;
+    attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
+  }) {
+    const { data, error } = await supabase.functions.invoke('send-via-outlook', { body: payload });
+    if (error) throw new Error(error.message);
+    if (data && data.ok === false) throw new Error(data.error || 'Send failed');
+    return data as { ok: true };
+  },
 
   // --------- Customer invoices (a client billing their own customers) ---------
   async getCustomerInvoices(ownerClientId: number, params?: { status?: string; customer_id?: number }) {

@@ -35,6 +35,7 @@ export default function EmailSettings() {
   const [lastUsedAt, setLastUsedAt] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -122,6 +123,32 @@ export default function EmailSettings() {
     setSmtpHost(PRESET_OUTLOOK.smtp_host);
     setSmtpPort(PRESET_OUTLOOK.smtp_port);
     setSmtpSecure(PRESET_OUTLOOK.smtp_secure);
+  };
+
+  const handleSendTest = async () => {
+    if (!hasPassword) {
+      setStatusMsg({ kind: 'err', text: 'Save settings + app password first, then send a test.' });
+      return;
+    }
+    setTesting(true);
+    setStatusMsg(null);
+    try {
+      await api.sendViaOutlook({
+        to: smtpUser.trim(),
+        subject: 'Test email from PC Prime portal',
+        body:
+          'Hello,\n\n' +
+          'This is a test message sent from the PC Prime client portal through your Outlook account.\n' +
+          'If you can read this, the SMTP connection is working.\n\n' +
+          'Sent: ' + new Date().toLocaleString('en-GB') + '\n',
+      });
+      setStatusMsg({ kind: 'ok', text: `Test email sent to ${smtpUser.trim()} — check your inbox.` });
+      await load();
+    } catch (e: any) {
+      setStatusMsg({ kind: 'err', text: 'Test send failed: ' + e.message });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -251,19 +278,31 @@ export default function EmailSettings() {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, gap: 8, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-link btn-sm" onClick={handleDelete} disabled={saving || !hasPassword} style={{ color: '#b91c1c' }}>
               Remove settings
             </button>
-            <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Settings'}
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleSendTest}
+                disabled={saving || testing || !hasPassword}
+                title={hasPassword ? `Sends a test message to ${smtpUser || 'your address'}` : 'Save your app password first'}
+              >
+                {testing ? 'Sending…' : '✉ Send test email'}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save Settings'}
+              </button>
+            </div>
           </div>
 
           <div style={{ marginTop: 16, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: '0.78em', color: '#64748b' }}>
-            <strong>Coming next:</strong> sending. Phase B deploys a Supabase Edge Function that actually relays mail
-            through your Outlook account. Phase C wires the existing Email PDF buttons to call it so attachments are
-            sent automatically — no manual attach step. Settings saved here will be used by that flow.
+            <strong>How sending works:</strong> click "✉ Send test email" to verify your settings — the portal calls
+            the send-via-outlook Edge Function, which connects to <code>{smtpHost}:{smtpPort}</code> using these
+            credentials and relays a message back to you. Once that round-trip works, the Email PDF buttons across
+            the portal (Clients → Print List, Tax Returns, etc.) will go out the same way with attachments included.
           </div>
         </div>
       )}
