@@ -121,6 +121,23 @@ const TD1 = {
   wrap:     { overflowX: 'auto', marginBottom: '0.4rem' },
   caption:  { fontSize: '0.72rem', color: '#334155', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: '0.6rem', marginBottom: '0.4rem' },
   captionItalic: { textTransform: 'none', letterSpacing: 0, fontStyle: 'italic', color: '#64748b', fontWeight: 400 },
+  // Code legend — small strip above the table listing every available code
+  // and what it means. Mirrors the inline legend on the official TD1 form.
+  legend:   { background: '#fffbeb', border: '1px solid #f5e8b8', padding: '0.4rem 0.6rem', fontSize: '0.7rem', color: '#5a6478', marginBottom: '0.4rem', lineHeight: 1.6, borderRadius: '2px' },
+  legendItem: { marginRight: '0.9rem', whiteSpace: 'nowrap', display: 'inline-block' },
+  legendBadge: { display: 'inline-block', padding: '0 5px', borderRadius: '2px', background: '#9b861f', color: '#fff', fontWeight: 700, marginRight: '4px', fontSize: '0.68rem' },
+  // Footer TOTAL row — navy band sitting under the table summing numeric cols.
+  tfootRow:   { background: '#1a365d', color: '#ffffff' },
+  tfootLabel: { padding: '0.35rem 0.5rem', textAlign: 'left', fontWeight: 700, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', borderRight: '1px solid rgba(255,255,255,0.2)' },
+  tfootCell:  { padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 700, fontSize: '0.78rem', borderRight: '1px solid rgba(255,255,255,0.2)', fontVariantNumeric: 'tabular-nums' },
+};
+
+// Strip "Code N — " prefix from a label so the legend doesn't repeat the code badge.
+const shortCodeLabel = (label) => String(label || '').replace(/^Code\s*\d+(?:\s*[—-]\s*)?/i, '');
+// Format a column sum for the TOTAL row; shows blank instead of 0.00 when there's nothing to total.
+const fmtSum = (n) => {
+  const v = Number(n) || 0;
+  return v === 0 ? '' : v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 // Firm logo (PC Prime & Calculate Consultants Ltd) - embedded as base64 for self-contained PDF
@@ -3101,6 +3118,11 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                   </div>
 
                   <div style={TD1.caption}>Part 4.3 — Income from Partnership <span style={TD1.captionItalic}>(one row per partnership)</span></div>
+                  <div style={TD1.legend}>
+                    <span style={TD1.legendItem}><span style={TD1.legendBadge}>1</span>In Republic</span>
+                    <span style={TD1.legendItem}><span style={TD1.legendBadge}>2</span>Outside Republic</span>
+                    <span style={{ ...TD1.legendItem, color: '#94a3b8', fontStyle: 'italic' }}>Occupational category 1–16 (4% GHS) or N/A (2.65% GHS short-term rental)</span>
+                  </div>
                   <div style={TD1.wrap}>
                     <table style={TD1.table}>
                       <thead>
@@ -3148,6 +3170,18 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={TD1.tfootRow}>
+                          <td colSpan={5} style={TD1.tfootLabel}>TOTAL</td>
+                          <td style={TD1.tfootCell}>{fmtSum(partnerships.reduce((s, x) => s + Number(x.salary || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(partnerships.reduce((s, x) => s + Number(x.interestOnCapital || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(partnerships.reduce((s, x) => s + Number(x.tradingIncome || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(partnerships.reduce((s, x) => s + Number(x.tradingLoss || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(partnerships.reduce((s, x) => s + Number(x.taxWithheld || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(partnerships.reduce((s, x) => s + Number(x.taxPaidOutside || 0), 0))}</td>
+                          <td style={TD1.tfootLabel}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <button type="button" onClick={addPartnership} style={TD1.addBtn}>+ Add partnership</button>
@@ -3158,6 +3192,11 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               {!(embedded && formType === 'self_employed') && (
                 <>
               <div style={TD1.caption}>Part 4.A — Salaried Services <span style={TD1.captionItalic}>(one row per employer)</span></div>
+              {embedded && (
+                <div style={TD1.legend}>
+                  {EMPLOYMENT_CODES.map(c => <span key={c.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{c.code}</span>{shortCodeLabel(c.label)}</span>)}
+                </div>
+              )}
               {embedded ? (
                 <div style={TD1.wrap}>
                   <table style={TD1.table}>
@@ -3203,6 +3242,17 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr style={TD1.tfootRow}>
+                        <td colSpan={4} style={TD1.tfootLabel}>TOTAL</td>
+                        <td style={TD1.tfootCell}>{fmtSum(employments.reduce((s, x) => s + Number(x.grossInRepublic || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(employments.reduce((s, x) => s + Number(x.grossOutsideRepublic || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(employments.reduce((s, x) => s + Number(x.bik || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(employments.reduce((s, x) => s + Number(x.taxWithheld || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(employments.reduce((s, x) => s + Number(x.ghsWithheld || 0), 0))}</td>
+                        <td colSpan={3} style={TD1.tfootLabel}></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               ) : (
@@ -3272,6 +3322,11 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               )}
 
               <div style={TD1.caption}>Part 4.C — Rents / Income from Immovable Property <span style={TD1.captionItalic}>(one row per property)</span></div>
+              {embedded && (
+                <div style={TD1.legend}>
+                  {PROPERTY_TYPES.map(t => <span key={t.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{t.code}</span>{shortCodeLabel(t.label)}</span>)}
+                </div>
+              )}
               {embedded ? (
                 <div style={TD1.wrap}>
                   <table style={TD1.table}>
@@ -3317,6 +3372,18 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr style={TD1.tfootRow}>
+                        <td colSpan={6} style={TD1.tfootLabel}>TOTAL</td>
+                        <td style={TD1.tfootCell}>{fmtSum(rentalProperties.reduce((s, x) => s + Number(x.annualGrossInRepublic || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(rentalProperties.reduce((s, x) => s + Number(x.annualGrossOutsideRepublic || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(rentalProperties.reduce((s, x) => s + Number(x.capitalAllowances || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(rentalProperties.reduce((s, x) => s + Number(x.interestPayable || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(rentalProperties.reduce((s, x) => s + Number(x.sdcWithheld || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(rentalProperties.reduce((s, x) => s + Number(x.ghsWithheld || 0), 0))}</td>
+                        <td style={TD1.tfootLabel}></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               ) : (
@@ -3377,6 +3444,11 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               </button>
 
               <div style={TD1.caption}>Part 4.B — Pensions <span style={TD1.captionItalic}>(one row per payer)</span></div>
+              {embedded && (
+                <div style={TD1.legend}>
+                  {PENSION_CODES.map(c => <span key={c.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{c.code}</span>{shortCodeLabel(c.label)}</span>)}
+                </div>
+              )}
               {embedded ? (
                 <div style={TD1.wrap}>
                   <table style={TD1.table}>
@@ -3410,6 +3482,15 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr style={TD1.tfootRow}>
+                        <td colSpan={3} style={TD1.tfootLabel}>TOTAL</td>
+                        <td style={TD1.tfootCell}>{fmtSum(pensions.reduce((s, x) => s + Number(x.amount || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(pensions.reduce((s, x) => s + Number(x.taxWithheld || 0), 0))}</td>
+                        <td style={TD1.tfootCell}>{fmtSum(pensions.reduce((s, x) => s + Number(x.ghsWithheld || 0), 0))}</td>
+                        <td style={TD1.tfootLabel}></td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               ) : (
@@ -3495,6 +3576,9 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               {embedded && (
                 <>
                   <div style={TD1.caption}>Part 4.F — Dividends <span style={TD1.captionItalic}>(one row per company)</span></div>
+                  <div style={TD1.legend}>
+                    {DIVIDEND_CODES.map(c => <span key={c.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{c.code}</span>{shortCodeLabel(c.label)}</span>)}
+                  </div>
                   <div style={TD1.wrap}>
                     <table style={TD1.table}>
                       <thead>
@@ -3533,11 +3617,24 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={TD1.tfootRow}>
+                          <td colSpan={4} style={TD1.tfootLabel}>TOTAL</td>
+                          <td style={TD1.tfootCell}>{fmtSum(dividendSources.reduce((s, x) => s + Number(x.grossDividend || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(dividendSources.reduce((s, x) => s + Number(x.sdcWithheld || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(dividendSources.reduce((s, x) => s + Number(x.ghsWithheld || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(dividendSources.reduce((s, x) => s + Number(x.taxPaidOutside || 0), 0))}</td>
+                          <td colSpan={2} style={TD1.tfootLabel}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <button type="button" onClick={addDividendSource} style={TD1.addBtn}>+ Add dividend source</button>
 
                   <div style={TD1.caption}>Part 4.E — Interest Receivable <span style={TD1.captionItalic}>(one row per source)</span></div>
+                  <div style={TD1.legend}>
+                    {INTEREST_CODES.map(c => <span key={c.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{c.code}</span>{shortCodeLabel(c.label)}</span>)}
+                  </div>
                   <div style={TD1.wrap}>
                     <table style={TD1.table}>
                       <thead>
@@ -3576,6 +3673,16 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={TD1.tfootRow}>
+                          <td colSpan={3} style={TD1.tfootLabel}>TOTAL</td>
+                          <td style={TD1.tfootCell}>{fmtSum(interestSources.reduce((s, x) => s + Number(x.grossInterest || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(interestSources.reduce((s, x) => s + Number(x.taxPaidOutside || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(interestSources.reduce((s, x) => s + Number(x.sdcWithheld || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(interestSources.reduce((s, x) => s + Number(x.ghsWithheld || 0), 0))}</td>
+                          <td colSpan={3} style={TD1.tfootLabel}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <button type="button" onClick={addInterestSource} style={TD1.addBtn}>+ Add interest source</button>
@@ -3611,6 +3718,13 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={TD1.tfootRow}>
+                          <td colSpan={4} style={TD1.tfootLabel}>TOTAL</td>
+                          <td style={TD1.tfootCell}>{fmtSum(lifeRedemptions.reduce((s, x) => s + Number(x.premiumsDeducted || 0), 0))}</td>
+                          <td style={TD1.tfootLabel}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <button type="button" onClick={addLifeRedemption} style={TD1.addBtn}>+ Add life insurance redemption</button>
@@ -3689,6 +3803,9 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
               {embedded && (
                 <>
                   <div style={TD1.caption}>Part 5.C — Life / Social Insurance / Pension Funds <span style={TD1.captionItalic}>(one row per fund/policy)</span></div>
+                  <div style={TD1.legend}>
+                    {LIFE_SI_PENSION_CODES.map(c => <span key={c.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{c.code}</span>{shortCodeLabel(c.label)}</span>)}
+                  </div>
                   <div style={{ marginBottom: '0.5rem', padding: '0.5rem 0.65rem', background: '#fffbeb', borderLeft: `2px solid #9b861f`, borderRadius: '2px', fontSize: '0.72rem', color: '#5a6478', lineHeight: 1.5 }}>
                     <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
                     Pension funds (codes 1+5+6) capped at 10% of employment; life policies (code 3) capped at 7% of sum assured per policy; medical (code 4) at {selectedYear === 2026 ? '2%' : '1.5%'} of gross. Code 2 (SIS) is for completeness only — already auto-computed.
@@ -3742,11 +3859,22 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={TD1.tfootRow}>
+                          <td colSpan={5} style={TD1.tfootLabel}>TOTAL</td>
+                          <td style={TD1.tfootCell}>{fmtSum(lifeSiPensionFunds.filter(r => r.code === '3').reduce((s, x) => s + Number(x.sumAssured || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(lifeSiPensionFunds.reduce((s, x) => s + Number(x.amountPaid || 0), 0))}</td>
+                          <td style={TD1.tfootLabel}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <button type="button" onClick={addLifeSiPensionFund} style={TD1.addBtn}>+ Add fund / policy</button>
 
                   <div style={TD1.caption}>Part 5.B — Investment in Innovative Businesses <span style={TD1.captionItalic}>(codes 1-4)</span></div>
+                  <div style={TD1.legend}>
+                    {INNOVATIVE_INVESTMENT_CODES.map(c => <span key={c.code} style={TD1.legendItem}><span style={TD1.legendBadge}>{c.code}</span>{shortCodeLabel(c.label)}</span>)}
+                  </div>
                   <div style={{ marginBottom: '0.5rem', padding: '0.5rem 0.65rem', background: '#fffbeb', borderLeft: `2px solid #9b861f`, borderRadius: '2px', fontSize: '0.72rem', color: '#5a6478', lineHeight: 1.5 }}>
                     <Info size={11} style={{ display: 'inline', marginRight: '0.25rem', verticalAlign: '-1px' }} />
                     Claim capped at <strong>50% of taxable income</strong> after all other deductions. For continuation investments, add multiple rows with the same TIC.
@@ -3785,6 +3913,15 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr style={TD1.tfootRow}>
+                          <td colSpan={4} style={TD1.tfootLabel}>TOTAL</td>
+                          <td style={TD1.tfootCell}>{fmtSum(innovativeInvestments.reduce((s, x) => s + Number(x.initialAmount || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(innovativeInvestments.reduce((s, x) => s + Number(x.amountClaimedUpTo2023 || 0), 0))}</td>
+                          <td style={TD1.tfootCell}>{fmtSum(innovativeInvestments.reduce((s, x) => s + Number(x.amountToClaim || 0), 0))}</td>
+                          <td style={TD1.tfootLabel}></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                   <button type="button" onClick={addInnovativeInvestment} style={TD1.addBtn}>+ Add innovative business investment</button>
