@@ -15,8 +15,16 @@ type Stage = {
   cadence: string;
   default_day_of_month: number | null;
   default_use_last_day: boolean;
+  active_months: number[] | null;
   sends_email: boolean; creates_task: boolean;
 };
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function monthsLabel(active: number[] | null): string {
+  if (!active || active.length === 0) return 'every month';
+  if (active.length === 12) return 'every month';
+  return active.slice().sort((a, b) => a - b).map(m => MONTH_SHORT[m - 1] || m).join(', ');
+}
 type ClientService = {
   id: number; client_id: number; service_id: number; enabled: boolean; notes: string | null;
 };
@@ -144,7 +152,7 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
                     <thead>
                       <tr style={{ color: '#64748b', textAlign: 'left' }}>
                         <th style={{ padding: '4px 6px', fontWeight: 500 }}>Stage</th>
-                        <th style={{ padding: '4px 6px', fontWeight: 500, width: 120 }}>Cadence</th>
+                        <th style={{ padding: '4px 6px', fontWeight: 500, width: 160 }}>Fires in</th>
                         <th style={{ padding: '4px 6px', fontWeight: 500, width: 130 }}>Firm default</th>
                         <th style={{ padding: '4px 6px', fontWeight: 500, width: 140 }}>This client's day</th>
                         <th style={{ padding: '4px 6px', fontWeight: 500, width: 80, textAlign: 'center' }}>Last day</th>
@@ -162,11 +170,8 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
                             <td style={{ padding: '6px', color: ov?.skip ? '#94a3b8' : '#1a365d', textDecoration: ov?.skip ? 'line-through' : 'none' }}>
                               {stage.label}
                             </td>
-                            <td style={{ padding: '6px', color: '#64748b', textTransform: 'capitalize' }}>
-                              {stage.cadence}
-                              {stage.cadence !== 'monthly' && (
-                                <span title="Quarterly / annual stages are seeded for visibility but the MVP scheduler only fires monthly stages." style={{ marginLeft: 4, color: '#f59e0b' }}>⚠</span>
-                              )}
+                            <td style={{ padding: '6px', color: '#64748b', fontSize: 12 }}>
+                              {monthsLabel(stage.active_months)}
                             </td>
                             <td style={{ padding: '6px', color: '#64748b' }}>{defaultLabel}</td>
                             <td style={{ padding: '6px' }}>

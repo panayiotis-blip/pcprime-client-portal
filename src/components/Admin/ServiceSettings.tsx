@@ -17,9 +17,16 @@ type Stage = {
   cadence: string;
   default_day_of_month: number | null;
   default_use_last_day: boolean;
+  active_months: number[] | null;
   sends_email: boolean; creates_task: boolean;
   task_priority: string;
 };
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function monthsLabel(active: number[] | null): string {
+  if (!active || active.length === 0 || active.length === 12) return 'every month';
+  return active.slice().sort((a, b) => a - b).map(m => MONTH_SHORT[m - 1] || m).join(', ');
+}
 type Template = {
   id: number; service_stage_id: number; subject: string; body: string;
 };
@@ -123,7 +130,7 @@ export default function ServiceSettings() {
               <thead>
                 <tr style={{ color: '#64748b', textAlign: 'left', background: '#fafbfc' }}>
                   <th style={{ padding: '6px 10px', fontWeight: 500 }}>Stage</th>
-                  <th style={{ padding: '6px 10px', fontWeight: 500, width: 100 }}>Cadence</th>
+                  <th style={{ padding: '6px 10px', fontWeight: 500, width: 160 }}>Fires in</th>
                   <th style={{ padding: '6px 10px', fontWeight: 500, width: 110 }}>Default day</th>
                   <th style={{ padding: '6px 10px', fontWeight: 500, width: 80, textAlign: 'center' }}>Last day</th>
                   <th style={{ padding: '6px 10px', fontWeight: 500, width: 70, textAlign: 'center' }}>Email</th>
@@ -136,7 +143,7 @@ export default function ServiceSettings() {
                 {stagesForSvc.map(stage => (
                   <tr key={stage.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '8px 10px', color: '#1a365d', fontWeight: 500 }}>{stage.label}</td>
-                    <td style={{ padding: '8px 10px', color: '#64748b', textTransform: 'capitalize' }}>{stage.cadence}</td>
+                    <td style={{ padding: '8px 10px', color: '#64748b', fontSize: 12 }}>{monthsLabel(stage.active_months)}</td>
                     <td style={{ padding: '8px 10px' }}>
                       <input
                         type="number" min={1} max={31}
