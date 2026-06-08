@@ -884,14 +884,43 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
-  // Manual trigger for today's schedules. Returns how many runs/tasks were
-  // created. Full pg_cron automation is a follow-up migration.
-  async runDueServiceSchedules(runDate?: string): Promise<{ created_runs: number; created_tasks: number }> {
-    const { data, error } = await supabase.rpc('run_due_service_schedules',
-      runDate ? { p_run_date: runDate } : {});
+  // Manual trigger for due schedules. Optional filters narrow what fires:
+  //   serviceId — only this service (NULL = all services)
+  //   clientIds — only these clients (NULL = every enabled client)
+  // Returns how many runs/tasks were created.
+  async runDueServiceSchedules(opts: {
+    runDate?: string; serviceId?: number | null; clientIds?: number[] | null;
+  } = {}): Promise<{ created_runs: number; created_tasks: number }> {
+    const args: any = {};
+    if (opts.runDate)   args.p_run_date   = opts.runDate;
+    if (opts.serviceId) args.p_service_id = opts.serviceId;
+    if (opts.clientIds && opts.clientIds.length > 0) args.p_client_ids = opts.clientIds;
+    const { data, error } = await supabase.rpc('run_due_service_schedules', args);
     if (error) throw new Error(error.message);
     const row = Array.isArray(data) ? data[0] : data;
     return { created_runs: row?.created_runs ?? 0, created_tasks: row?.created_tasks ?? 0 };
+  },
+
+  // Dry-run: returns the stage firings that WOULD happen for the given
+  // date + filters. Used by the Run Schedules modal to preview before
+  // committing. already_fired=true rows show what's already been processed
+  // this month (will be skipped on the real run).
+  async previewDueServiceSchedules(opts: {
+    runDate?: string; serviceId?: number | null; clientIds?: number[] | null;
+  } = {}): Promise<Array<{
+    client_id: number; client_name: string;
+    service_label: string; stage_label: string;
+    scheduled_date: string;
+    would_send_email: boolean; would_create_task: boolean;
+    already_fired: boolean;
+  }>> {
+    const args: any = {};
+    if (opts.runDate)   args.p_run_date   = opts.runDate;
+    if (opts.serviceId) args.p_service_id = opts.serviceId;
+    if (opts.clientIds && opts.clientIds.length > 0) args.p_client_ids = opts.clientIds;
+    const { data, error } = await supabase.rpc('preview_due_service_schedules', args);
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
   // List pending automated emails (service_runs.email_sent=false). The UI
