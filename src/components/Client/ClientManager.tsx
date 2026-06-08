@@ -9,6 +9,10 @@ import { vatCategoryLabel } from '../../services/vatCategories';
 import MergeClients from './MergeClients';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+// Registers Roboto Regular + Bold + Italic on every jsPDF instance — needed
+// so Greek client names render correctly in the printed client list.
+import { registerRobotoFont } from '../../assets/fonts/Roboto-Regular-normal.js';
 import { Modal, Button } from '../ui';
 import { formatDate } from '../../services/dates';
 
@@ -38,6 +42,32 @@ const CLIENT_COLUMNS: ColumnDef[] = [
 ];
 
 const DEFAULT_VISIBLE_COLS = CLIENT_COLUMNS.filter(c => c.defaultVisible).map(c => c.id);
+
+// Fields that can be included on the printed client list. Each row has a
+// getter that produces the cell value from a client record. Order = display
+// order in the PDF when selected.
+type PrintField = { id: string; label: string; get: (c: any) => string; width?: number };
+const PRINT_FIELDS: PrintField[] = [
+  { id: 'client_code',         label: 'Code',          get: c => c.client_code || '',                width: 18 },
+  { id: 'name',                label: 'Name',          get: c => c.name || '',                       width: 55 },
+  { id: 'client_category',     label: 'Category',      get: c => c.client_category || '',            width: 24 },
+  { id: 'client_status',       label: 'Status',        get: c => c.client_status || '',              width: 22 },
+  { id: 'tax_number',          label: 'TIC',           get: c => c.tax_number || '',                 width: 22 },
+  { id: 'vat_number',          label: 'VAT',           get: c => c.vat_number || '',                 width: 22 },
+  { id: 'registration_number', label: 'HE Number',     get: c => c.registration_number || '',        width: 22 },
+  { id: 'business_type',       label: 'Business Type', get: c => c.business_type || '',              width: 26 },
+  { id: 'phone',               label: 'Phone',         get: c => c.phone || '',                      width: 26 },
+  { id: 'mobile',              label: 'Mobile',        get: c => c.mobile || '',                     width: 26 },
+  { id: 'email',               label: 'Email',         get: c => Array.isArray(c.email) ? c.email.join('; ') : (c.email || ''), width: 50 },
+  { id: 'contact_person',      label: 'Contact',       get: c => c.contact_person || '',             width: 32 },
+  { id: 'address',             label: 'Address',       get: c => c.address || '',                    width: 50 },
+  { id: 'city',                label: 'City',          get: c => c.city || '',                       width: 26 },
+  { id: 'country',             label: 'Country',       get: c => c.country || '',                    width: 22 },
+  { id: 'tags',                label: 'Tags',          get: c => Array.isArray(c.tags) ? c.tags.join(', ') : '', width: 28 },
+  { id: 'updated_at',          label: 'Last Updated',  get: c => c.updated_at ? new Date(c.updated_at).toLocaleDateString('en-GB') : '', width: 22 },
+  { id: 'created_at',          label: 'Created',       get: c => c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB') : '', width: 22 },
+];
+const DEFAULT_PRINT_FIELDS = ['client_code', 'name', 'client_category', 'tax_number', 'phone', 'email'];
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'active',             label: 'Active' },
@@ -134,6 +164,9 @@ export default function ClientManager() {
   // Column visibility (Phase 6 / clients-v3 Part E1)
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLS);
   const [showColumnsModal, setShowColumnsModal] = useState(false);
+  // Print Client List state
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printFields, setPrintFields] = useState<Set<string>>(() => new Set(DEFAULT_PRINT_FIELDS));
 
   // Load column prefs once
   useEffect(() => {
@@ -535,6 +568,148 @@ export default function ClientManager() {
     XLSX.writeFile(wb, `clients-${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
+  // Build the rows + selected field defs for the printed list. Uses the
+  // currently-displayed (filtered + sorted) clients — same set the user sees
+  // in the table on screen, minus the vendor-only category.
+  const buildPrintRows = () => {
+    const selectedFields = PRINT_FIELDS.filter(f => printFields.has(f.id));
+    const visibleClients = sortedFiltered.filter((c: any) => c.client_category !== 'vendor_only');
+    return { selectedFields, visibleClients };
+  };
+
+  const handlePrintPdf = () => {
+    const { selectedFields, visibleClients } = buildPrintRows();
+    if (selectedFields.length === 0) { alert('Pick at least one field.'); return; }
+    if (visibleClients.length === 0) { alert('No clients to print.'); return; }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
+    registerRobotoFont(doc);
+    doc.setFont('Roboto', 'normal');
+
+    const PAGE_W = 297, PAGE_H = 210; // A4 landscape
+    const MARGIN_L = 12, MARGIN_R = 12, MARGIN_T = 14, MARGIN_B = 12;
+    const CONTENT_W = PAGE_W - MARGIN_L - MARGIN_R;
+    const NAVY: [number, number, number] = [26, 54, 93];
+    const GOLD: [number, number, number] = [155, 134, 31];
+    const MUTED: [number, number, number] = [90, 100, 120];
+
+    // Scale column widths so they fill the page exactly.
+    const requestedTotal = selectedFields.reduce((s, f) => s + (f.width || 25), 0);
+    const scale = CONTENT_W / requestedTotal;
+    const colWidths = selectedFields.map(f => (f.width || 25) * scale);
+
+    const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    let pageNum = 1;
+    let totalPages = 1;
+
+    const drawHeader = () => {
+      doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(13);
+      doc.text('PC Prime & Calculate Consultants Ltd', MARGIN_L, MARGIN_T);
+      doc.setFontSize(10);
+      doc.setTextColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.text('Client List', MARGIN_L, MARGIN_T + 5);
+      doc.setFontSize(7.5);
+      doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+      doc.setFont('Roboto', 'italic');
+      doc.text(`Generated ${today}  ·  ${visibleClients.length} clients  ·  ${selectedFields.length} fields`, MARGIN_L, MARGIN_T + 10);
+      // Gold underline
+      doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.setLineWidth(0.5);
+      doc.line(MARGIN_L, MARGIN_T + 13, PAGE_W - MARGIN_R, MARGIN_T + 13);
+    };
+
+    const drawTableHeader = (y: number) => {
+      doc.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
+      doc.rect(MARGIN_L, y, CONTENT_W, 6, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('Roboto', 'bold');
+      doc.setFontSize(7.5);
+      let x = MARGIN_L;
+      selectedFields.forEach((f, i) => {
+        doc.text(f.label, x + 1.5, y + 4);
+        x += colWidths[i];
+      });
+    };
+
+    const drawFooter = () => {
+      doc.setFont('Roboto', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+      doc.text(`Page ${pageNum} of ${totalPages}`, PAGE_W / 2, PAGE_H - 5, { align: 'center' });
+    };
+
+    drawHeader();
+    let cursorY = MARGIN_T + 16;
+    drawTableHeader(cursorY);
+    cursorY += 6;
+
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(0, 8, 20);
+    const ROW_H = 5.5;
+    const CHAR_W = 1.45; // approximate mm per character at fontSize 7.5
+
+    visibleClients.forEach((c: any, idx: number) => {
+      if (cursorY + ROW_H > PAGE_H - MARGIN_B - 6) {
+        drawFooter();
+        doc.addPage();
+        pageNum++;
+        totalPages = pageNum;
+        drawHeader();
+        cursorY = MARGIN_T + 16;
+        drawTableHeader(cursorY);
+        cursorY += 6;
+        doc.setFont('Roboto', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(0, 8, 20);
+      }
+      // Zebra striping
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(MARGIN_L, cursorY, CONTENT_W, ROW_H, 'F');
+      }
+      let x = MARGIN_L;
+      selectedFields.forEach((f, i) => {
+        const raw = String(f.get(c) || '');
+        const maxChars = Math.max(4, Math.floor((colWidths[i] - 2) / CHAR_W));
+        const display = raw.length > maxChars ? raw.slice(0, maxChars - 1) + '…' : raw;
+        doc.text(display, x + 1.5, cursorY + 3.8);
+        x += colWidths[i];
+      });
+      // Row separator
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.1);
+      doc.line(MARGIN_L, cursorY + ROW_H, MARGIN_L + CONTENT_W, cursorY + ROW_H);
+      cursorY += ROW_H;
+    });
+
+    // Stamp the final page count on every page footer (we only know it now).
+    const finalPageCount = pageNum;
+    for (let p = 1; p <= finalPageCount; p++) {
+      doc.setPage(p);
+      doc.setFont('Roboto', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+      // Clear any previous footer text first (overpaint with white rect)
+      doc.setFillColor(255, 255, 255);
+      doc.rect(MARGIN_L, PAGE_H - 8, CONTENT_W, 6, 'F');
+      doc.text(`Page ${p} of ${finalPageCount}`, PAGE_W / 2, PAGE_H - 5, { align: 'center' });
+    }
+
+    doc.save(`client-list-${new Date().toISOString().slice(0, 10)}.pdf`);
+    setShowPrintModal(false);
+  };
+
+  const togglePrintField = (id: string) => {
+    setPrintFields(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const handleBulkExportCsv = () => {
     const rows = buildExportRows();
     if (rows.length === 0) return;
@@ -580,6 +755,9 @@ export default function ClientManager() {
           )}
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
+          </button>
+          <button className="btn btn-secondary" onClick={() => setShowPrintModal(true)} title="Print the current filtered client list to PDF">
+            🖨 Print List
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Add Client'}
@@ -844,6 +1022,67 @@ export default function ClientManager() {
           onReset={resetColumns}
           onClose={() => setShowColumnsModal(false)}
         />
+      )}
+
+      {/* Print List modal — pick which fields to include then generate a PDF */}
+      {showPrintModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16,
+        }} onClick={() => setShowPrintModal(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: 'white', borderRadius: 8, padding: 20, maxWidth: 560, width: '100%',
+            maxHeight: '85vh', overflowY: 'auto',
+          }}>
+            <h3 style={{ marginTop: 0, color: '#1a365d' }}>🖨 Print Client List</h3>
+            <p style={{ color: '#64748b', fontSize: '0.88em', marginTop: 0 }}>
+              Pick which fields to include. The PDF uses the current filter + sort and produces
+              a landscape A4 document with one row per client.
+            </p>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 12px',
+              marginBottom: 14, padding: '8px 4px', maxHeight: 320, overflowY: 'auto',
+              border: '1px solid #e2e8f0', borderRadius: 4,
+            }}>
+              {PRINT_FIELDS.map(f => (
+                <label key={f.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.86em',
+                  cursor: 'pointer', padding: '3px 6px', userSelect: 'none',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={printFields.has(f.id)}
+                    onChange={() => togglePrintField(f.id)}
+                  />
+                  {f.label}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-link btn-sm"
+                  onClick={() => setPrintFields(new Set(PRINT_FIELDS.map(f => f.id)))}
+                  type="button"
+                >Select all</button>
+                <button
+                  className="btn btn-link btn-sm"
+                  onClick={() => setPrintFields(new Set(DEFAULT_PRINT_FIELDS))}
+                  type="button"
+                >Reset to defaults</button>
+              </div>
+              <div style={{ fontSize: '0.78em', color: '#64748b' }}>
+                {printFields.size} of {PRINT_FIELDS.length} fields selected
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn-secondary" onClick={() => setShowPrintModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handlePrintPdf} disabled={printFields.size === 0}>
+                Generate PDF
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Bulk action bar (E5) — visible only when rows are selected */}
