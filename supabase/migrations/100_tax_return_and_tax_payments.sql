@@ -156,12 +156,14 @@ select s.id, v.ordinal, v.key, v.label, v.cadence,
        v.months::int[], true, true, v.priority
 from public.service_definitions s
 cross join (values
-  (1, 'provisional_tax_h1', 'Provisional Tax: 1st instalment',  null, true, 'annual',   '{7}',         'high'),
-  (2, 'provisional_tax_h2', 'Provisional Tax: 2nd instalment',  null, true, 'annual',   '{12}',        'high'),
-  (3, 'sdc_gesy_h1',        'SDC + GeSY (rents/dividends): H1', null, true, 'annual',   '{6}',         'high'),
-  (4, 'sdc_gesy_h2',        'SDC + GeSY (rents/dividends): H2', null, true, 'annual',   '{12}',        'high'),
-  (5, 'se_quarterly',       'Self-Employed SI + GeSY (quarterly)', null, true, 'quarterly', '{3,6,9,12}', 'high'),
-  (6, 'gesy_annual_recon',  'GeSY annual reconciliation',       null, true, 'annual',   '{7}',         'medium')
+  -- The first NULL is cast to int so Postgres types this VALUES column as int
+  -- instead of text (which would fail to cast into default_day_of_month).
+  (1, 'provisional_tax_h1', 'Provisional Tax: 1st instalment',  null::int, true, 'annual',   '{7}',         'high'),
+  (2, 'provisional_tax_h2', 'Provisional Tax: 2nd instalment',  null,      true, 'annual',   '{12}',        'high'),
+  (3, 'sdc_gesy_h1',        'SDC + GeSY (rents/dividends): H1', null,      true, 'annual',   '{6}',         'high'),
+  (4, 'sdc_gesy_h2',        'SDC + GeSY (rents/dividends): H2', null,      true, 'annual',   '{12}',        'high'),
+  (5, 'se_quarterly',       'Self-Employed SI + GeSY (quarterly)', null,   true, 'quarterly', '{3,6,9,12}', 'high'),
+  (6, 'gesy_annual_recon',  'GeSY annual reconciliation',       null,      true, 'annual',   '{7}',         'medium')
 ) as v(ordinal, key, label, day, last_day, cadence, months, priority)
 where s.key = 'tax_payments'
   and not exists (
