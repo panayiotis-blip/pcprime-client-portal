@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
-import { api, isStaffRole, hasPermission } from '../../services/api';
+import { api, isStaffRole, hasPermission, isSupervisorOrHigher } from '../../services/api';
 
 import { FieldCtx } from './fieldContext';
 import ClientHeader from './ClientHeader';
@@ -90,7 +90,9 @@ export default function ClientDetail() {
   const { runWith } = useMFAStepUp();
 
   const isAdmin = isStaffRole(user);
-  const canDelete       = hasPermission(user, 'clients.delete');
+  // Deleting a client is a supervisor-or-higher action AND requires the
+  // clients.delete permission. Edit / add / view remain open to all staff.
+  const canDelete       = isSupervisorOrHigher(user) && hasPermission(user, 'clients.delete');
   const canInviteUsers  = hasPermission(user, 'users.write');
   const canEditClient   = hasPermission(user, 'clients.write');
 

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
-import { api, hasPermission } from '../../services/api';
+import { api, hasPermission, isSupervisorOrHigher } from '../../services/api';
 import { vatCategoryLabel } from '../../services/vatCategories';
 import MergeClients from './MergeClients';
 import ColumnVisibilityModal, { type ColumnDef } from '../shared/ColumnVisibilityModal';
@@ -82,7 +82,11 @@ export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const { runWith } = useMFAStepUp();
-  const canSeeDeleted = hasPermission(user, 'clients.restore');
+  // Supervisor+ only: viewing the deleted-clients list, merging duplicates,
+  // and the unlinked-directors fix-up. Everyone else can still edit / add
+  // clients and use everything else on this page.
+  const isSupervisor = isSupervisorOrHigher(user);
+  const canSeeDeleted = isSupervisor && hasPermission(user, 'clients.restore');
   const [unlinkedCount, setUnlinkedCount] = useState(0);
 
   useEffect(() => {
@@ -828,14 +832,16 @@ export default function ClientManager() {
             #️⃣ Gen Codes
           </button>
           {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
-          {unlinkedCount > 0 && (
+          {isSupervisor && unlinkedCount > 0 && (
             <Link to="/clients/unlinked-directors" className="btn btn-secondary" style={{ borderColor: '#f59e0b' }} title="Director rows without a linked client">
               ⚠ Unlinked Directors ({unlinkedCount})
             </Link>
           )}
-          <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
-            {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
-          </button>
+          {isSupervisor && (
+            <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
+              {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print the current filtered client list to PDF">
             🖨 Print List
           </button>
