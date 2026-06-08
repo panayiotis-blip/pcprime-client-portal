@@ -60,7 +60,26 @@ const TOOL = {
       },
       document_language: { type: 'string', description: 'e.g. en, el' },
       full_text:  { type: 'string', description: 'All text read from the document.' },
-      confidence: { type: 'number', description: 'Self-assessed 0-100 extraction confidence.' },
+      confidence: { type: 'number', description: 'Self-assessed 0-100 overall extraction confidence.' },
+      field_confidences: {
+        type: 'object',
+        description: 'Self-assessed 0-100 confidence per field. Be honest — anything below 70 will be flagged for staff to verify.',
+        properties: {
+          vendor_name:    { type: 'number' },
+          invoice_number: { type: 'number' },
+          invoice_date:   { type: 'number' },
+          total_amount:   { type: 'number' },
+          subtotal:       { type: 'number' },
+          vat_amount:     { type: 'number' },
+          vat_rate:       { type: 'number' },
+          currency:       { type: 'number' },
+        },
+      },
+      field_notes: {
+        type: 'array',
+        description: 'Short notes flagging anything ambiguous (e.g. "two TOTAL labels — picked the lower one", "thermal receipt heavily faded").',
+        items: { type: 'string' },
+      },
     },
     required: ['vendor_name', 'total_amount'],
   },
@@ -109,21 +128,27 @@ Deno.serve(async (req) => {
       text:
         'Extract the details of this supplier invoice or receipt using the record_invoice tool.\n\n' +
         'OUTPUT RULES\n' +
-        '• Amounts as plain numbers (no currency symbols, decimal point ".", no thousands separators).\n' +
+        '• Amounts as plain numbers (no currency symbols, decimal point ".", no thousands separators). Treat "1.234,56" as 1234.56 (European thousands) and "1,234.56" as 1234.56 (Anglo thousands).\n' +
         '• Dates as ISO YYYY-MM-DD. Documents commonly show DD/MM/YYYY (Cyprus/Greek convention) — convert.\n' +
-        '• currency: 3-letter ISO code. If the document shows "€" or no symbol but is clearly a Cyprus document, use "EUR".\n' +
-        '• vendor_name: the party that ISSUED the document (the supplier / seller / shop / πωλητής / προμηθευτής), NOT the recipient or the buyer.\n' +
-        '• total_amount: the GROSS payable (VAT-inclusive). On receipts this is usually the largest amount, labelled "TOTAL", "GRAND TOTAL", "ΣΥΝΟΛΟ", "ΓΕΝΙΚΟ ΣΥΝΟΛΟ", or "ΠΛΗΡΩΤΕΟ".\n' +
-        '• subtotal: net amount before VAT, labelled "Subtotal", "Net", "ΑΞΙΑ", "ΚΑΘΑΡΗ ΑΞΙΑ".\n' +
-        '• vat_amount: the VAT figure ("VAT", "Tax", "ΦΠΑ"). vat_rate: the percentage (Cyprus rates are typically 19, 9, 5, or 0).\n' +
-        '• invoice_number: labels include "Invoice No", "Inv #", "Receipt No", "Α/Α", "Αρ. Τιμολογίου", "Αρ. Απόδειξης". Tills often print a transaction number — that counts.\n' +
-        '• If a field truly cannot be read, OMIT it — do not guess. Empty strings count as omission.\n' +
-        '• confidence (0-100): be honest. Crisp PDF/photo → 90+. Slightly skewed phone photo of a clear invoice → 70-90. Blurry / partial / heavy glare / faded thermal receipt → below 60.\n\n' +
-        'COMMON PITFALLS\n' +
-        '• Receipts (especially thermal till slips): vendor name is at the very top, often in larger or bolder text; the address and VAT number follow.\n' +
-        '• "TOTAL" on a receipt may equal what the customer paid (gross) — that\'s total_amount.\n' +
-        '• Multi-page invoice: read all pages; pick the final totals from the last page.\n' +
-        '• Documents in Greek may mix English column headers. The fields above apply regardless of language; set document_language to "el" if the document is mostly Greek.',
+        '• currency: 3-letter ISO code. "€" or no symbol on a Cyprus document → "EUR".\n' +
+        '• vendor_name: the party that ISSUED the document (the supplier / seller / shop / πωλητής / προμηθευτής / "Εκδότης"), NOT the recipient / buyer / "Αγοραστής" / "Πελάτης". The vendor name is at the very TOP of receipts, usually in larger or bolder text.\n' +
+        '• total_amount: the GROSS payable (VAT-inclusive). Labels: "TOTAL", "GRAND TOTAL", "Amount Due", "ΣΥΝΟΛΟ", "ΓΕΝΙΚΟ ΣΥΝΟΛΟ", "ΠΛΗΡΩΤΕΟ", "ΤΕΛΙΚΟ ΠΟΣΟ". On a till receipt this is the largest single number near the bottom.\n' +
+        '• subtotal: NET amount BEFORE VAT. Labels: "Subtotal", "Net", "Net Amount", "ΑΞΙΑ", "ΚΑΘΑΡΗ ΑΞΙΑ", "ΥΠΟΣΥΝΟΛΟ". This is ALWAYS smaller than total_amount when VAT applies.\n' +
+        '• vat_amount: the absolute VAT figure in currency units (e.g. 38.00). Labels: "VAT", "Tax", "ΦΠΑ", "Φ.Π.Α.", "Φόρος". DO NOT put the rate here.\n' +
+        '• vat_rate: the percentage (NOT the amount). Cyprus standard rates: 19, 9, 5, 0. If you see "ΦΠΑ 19%" → vat_rate=19, then look elsewhere on the document for the vat_amount in €.\n' +
+        '• invoice_number: labels include "Invoice No", "Inv #", "Receipt No", "Α/Α", "Αρ. Τιμολογίου", "Αρ. Απόδειξης". Tills also print a transaction number — that counts.\n' +
+        '• If a field truly cannot be read, OMIT it entirely — do not guess. Empty strings count as omission.\n\n' +
+        'SANITY CHECK (apply silently — adjust if violated)\n' +
+        '• subtotal + vat_amount ≈ total_amount (within 0.05 due to rounding). If your extraction violates this, re-read the document; the most common error is mixing up vat_amount with vat_rate, or picking the wrong "TOTAL" line.\n' +
+        '• vat_amount ≈ subtotal × vat_rate / 100. Cross-check both directions.\n\n' +
+        'CONFIDENCE\n' +
+        '• confidence (0-100): overall self-assessment. Crisp PDF/photo → 90+. Skewed phone photo of clear text → 70-90. Blurry/partial/heavy-glare/faded thermal → below 60.\n' +
+        '• field_confidences: a separate 0-100 number per field for the values you returned. Anything below 70 will be flagged for staff to verify. Be honest — confidently wrong is worse than a clear "uncertain".\n' +
+        '• field_notes: short, plain-text notes flagging anything ambiguous. E.g., "two TOTAL labels — chose the lower one"; "vendor cropped at top"; "VAT rate shown only on line items, summed across rows".\n\n' +
+        'GREEK / MIXED LANGUAGE\n' +
+        '• Set document_language to "el" if the document body is mostly Greek (even with English column headers).\n' +
+        '• Vendor names in Greek (e.g. "ΓΕΡΟΝΤΑ ΓΑΒΡΙΗΛ", "ΠΑΠΑΔΟΠΟΥΛΟΣ Α.Ε.") must be returned verbatim — do NOT transliterate to Latin.\n' +
+        '• Common Greek monetary phrases: "Σύνολο πληρωτέο" = total payable; "Καθαρή αξία" = net; "Φόρος Προστιθέμενης Αξίας" = VAT.',
     });
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
