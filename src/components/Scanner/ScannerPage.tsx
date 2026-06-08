@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FileUpload from './FileUpload';
 import CameraCapture from './CameraCapture';
@@ -64,9 +64,15 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
   // Branch B confirmation state — set once documents have been filed.
   const [done, setDone] = useState<{ count: number; folder: string; client: string } | null>(null);
   // Bulk batch progress — one row per job (post-split). Drives the inline
-  // panel that shows queued / scanning / done / failed for each file as the
-  // batch runs.
-  type BatchStatus = 'queued' | 'scanning' | 'done' | 'failed';
+  // panel that shows queued / scanning / done / failed / cancelled for each
+  // file as the batch runs.
+  type BatchStatus = 'queued' | 'scanning' | 'done' | 'failed' | 'cancelled';
+  // Cancellation flag — useRef so the running loop sees the new value
+  // immediately (state setters are batched and async; the loop body would
+  // otherwise capture the initial value). `cancelling` state mirrors the
+  // ref only so the Cancel button can re-render to its "Cancelling…" label.
+  const cancelRef = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
   type BatchRow = {
     name: string;
     status: BatchStatus;
@@ -212,6 +218,10 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
     }
     if (jobs.length === 0) { alert('Nothing to scan.'); return; }
 
+    // Reset cancellation flag/state for this batch.
+    cancelRef.current = false;
+    setCancelling(false);
+
     // Seed the batch progress panel — one row per job, all queued.
     setBatchProgress(jobs.map(j => ({ name: j.displayName, status: 'queued' as BatchStatus })));
 
@@ -219,6 +229,13 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
     const results: ScannedInvoice[] = [];
     const truncated: string[] = [];
     for (let i = 0; i < jobs.length; i++) {
+      // Check the cancel flag before starting each file. If set, mark every
+      // remaining queued row as cancelled and break out — already-processed
+      // results are kept and the user is taken to review them.
+      if (cancelRef.current) {
+        setBatchProgress(prev => prev.map((row, idx) => idx >= i && row.status === 'queued' ? { ...row, status: 'cancelled' } : row));
+        break;
+      }
       const { file, displayName } = jobs[i];
       setStatusText(`Scanning ${i + 1} of ${jobs.length}: ${displayName}`);
       setBatchProgress(prev => prev.map((row, idx) => idx === i ? { ...row, status: 'scanning' } : row));
@@ -282,8 +299,13 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
       alert(`Only the first ${MAX_OCR_PAGES} pages were read for AI extraction on:\n\n${truncated.join('\n')}\n\nReview the extracted fields, and split the PDF if later pages are needed.`);
     }
 
-    // Hand off to the Edit Invoice screen — its batch mode steps through each
-    // result with "Save & Next" so nothing is saved without review.
+    // If cancelled with nothing processed, stay on the scanner page so the
+    // user can adjust files / category and try again. Otherwise hand off to
+    // the Edit Invoice screen (batch mode steps through each result).
+    if (results.length === 0) {
+      if (cancelRef.current) setStatusText('Batch cancelled — no files processed.');
+      return;
+    }
     scannedInvoices.current = results;
     navigate('/invoices/new', { state: { batch: true } });
   };
@@ -457,13 +479,25 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
       )}
 
       {selectedFiles.length > 0 && !showCamera && (
-        <button className="btn btn-primary btn-scan" onClick={handleProcess} disabled={scanning}>
-          {scanning
-            ? statusText || 'Working…'
-            : isOcr
-              ? `Scan ${selectedFiles.length} Document(s)`
-              : `Upload ${selectedFiles.length} Document(s)`}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+          <button className="btn btn-primary btn-scan" onClick={handleProcess} disabled={scanning} style={{ flex: 1 }}>
+            {scanning
+              ? statusText || 'Working…'
+              : isOcr
+                ? `Scan ${selectedFiles.length} Document(s)`
+                : `Upload ${selectedFiles.length} Document(s)`}
+          </button>
+          {scanning && isOcr && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => { cancelRef.current = true; setCancelling(true); setStatusText('Cancelling — finishing the current file…'); }}
+              disabled={cancelling}
+              title="Stop after the current file finishes. Already-processed results are kept."
+            >
+              {cancelling ? 'Cancelling…' : '⏹ Cancel batch'}
+            </button>
+          )}
+        </div>
       )}
 
       {scanning && (
@@ -480,23 +514,33 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
             const total = batchProgress.length;
             const done = batchProgress.filter(r => r.status === 'done').length;
             const failed = batchProgress.filter(r => r.status === 'failed').length;
+            const cancelled = batchProgress.filter(r => r.status === 'cancelled').length;
             const scanningCount = batchProgress.filter(r => r.status === 'scanning').length;
-            const pct = total > 0 ? Math.round(((done + failed) / total) * 100) : 0;
+            // Completed = anything that won't progress further.
+            const finished = done + failed + cancelled;
+            const pct = total > 0 ? Math.round((finished / total) * 100) : 0;
             return (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                   <strong style={{ color: '#1a365d', fontSize: 14 }}>
-                    Batch progress: {done + failed} of {total}
+                    Batch progress: {finished} of {total}
                     {scanningCount > 0 && <span style={{ color: '#64748b', fontWeight: 400 }}> · {scanningCount} in flight</span>}
                   </strong>
                   <span style={{ fontSize: 12, color: '#64748b' }}>
                     {done > 0 && <span style={{ color: '#166534' }}>✓ {done} done</span>}
                     {failed > 0 && <span style={{ color: '#b91c1c', marginLeft: 8 }}>⚠ {failed} failed</span>}
+                    {cancelled > 0 && <span style={{ color: '#64748b', marginLeft: 8 }}>⏹ {cancelled} cancelled</span>}
                   </span>
                 </div>
-                {/* Determinate progress bar based on completed jobs */}
+                {/* Determinate progress bar based on completed jobs. Grey when
+                    the batch was cancelled with no successes, amber if some
+                    failed, green otherwise. */}
                 <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden', marginBottom: 10 }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: failed > 0 ? '#f59e0b' : '#15803d', transition: 'width 0.3s ease' }} />
+                  <div style={{
+                    width: `${pct}%`, height: '100%',
+                    background: cancelled > 0 && done === 0 ? '#94a3b8' : failed > 0 ? '#f59e0b' : '#15803d',
+                    transition: 'width 0.3s ease',
+                  }} />
                 </div>
                 <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 12 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -511,13 +555,31 @@ export default function ScannerPage({ lockedClientId }: { lockedClientId?: numbe
                     </thead>
                     <tbody>
                       {batchProgress.map((row, idx) => {
-                        const bg = row.status === 'done' ? '#dcfce7' : row.status === 'failed' ? '#fee2e2' : row.status === 'scanning' ? '#dbeafe' : '#f1f5f9';
-                        const fg = row.status === 'done' ? '#166534' : row.status === 'failed' ? '#b91c1c' : row.status === 'scanning' ? '#1e40af' : '#64748b';
-                        const label = row.status === 'queued' ? '⋯ queued' : row.status === 'scanning' ? '⏳ scanning' : row.status === 'done' ? '✓ done' : '⚠ failed';
+                        const bg =
+                          row.status === 'done' ? '#dcfce7' :
+                          row.status === 'failed' ? '#fee2e2' :
+                          row.status === 'scanning' ? '#dbeafe' :
+                          row.status === 'cancelled' ? '#e2e8f0' :
+                          '#f1f5f9';
+                        const fg =
+                          row.status === 'done' ? '#166534' :
+                          row.status === 'failed' ? '#b91c1c' :
+                          row.status === 'scanning' ? '#1e40af' :
+                          row.status === 'cancelled' ? '#475569' :
+                          '#64748b';
+                        const label =
+                          row.status === 'queued' ? '⋯ queued' :
+                          row.status === 'scanning' ? '⏳ scanning' :
+                          row.status === 'done' ? '✓ done' :
+                          row.status === 'cancelled' ? '⏹ cancelled' :
+                          '⚠ failed';
                         const conf = row.confidence != null ? Math.round(row.confidence) : null;
                         const confColor = conf == null ? '#94a3b8' : conf >= 85 ? '#166534' : conf >= 70 ? '#92400e' : '#b91c1c';
+                        // Cancelled rows render with reduced opacity so the eye
+                        // immediately separates them from real failures.
+                        const rowOpacity = row.status === 'cancelled' ? 0.7 : 1;
                         return (
-                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', opacity: rowOpacity }}>
                             <td style={{ padding: '4px 6px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={row.name}>{row.name}</td>
                             <td style={{ padding: '4px 6px' }}>
                               <span style={{ background: bg, color: fg, padding: '1px 6px', borderRadius: 3, fontSize: 11, fontWeight: 600 }}>{label}</span>
