@@ -77,6 +77,10 @@ export default function ClientTaxReturnTab({ clientId, client, editable }: Props
     dob: client?.date_of_birth || '',
     siNumber: client?.social_insurance_number || '',
     address: client?.address || '',
+    // First entry is used by the calculator's Email-to-Client flow as the
+    // default recipient in the prompt. clients.email can be a string OR a
+    // text[] (per migration 035), so handle both shapes.
+    email: Array.isArray(client?.email) ? (client.email[0] || '') : (client?.email || ''),
   };
 
   const openReturn = async (id: number) => {

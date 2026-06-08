@@ -177,8 +177,10 @@ export default function ClientManager() {
   const [printTypeFilter, setPrintTypeFilter] = useState<'all' | 'individual' | 'company'>('all');
   const [printFromId, setPrintFromId] = useState<number | null>(null); // alphabetic range start
   const [printToId, setPrintToId] = useState<number | null>(null);     // alphabetic range end
-  // Optional recipient pre-filled into the mailto: link when emailing the PDF.
+  // Recipient address for the Email PDF action.
   const [printEmailTo, setPrintEmailTo] = useState<string>('');
+  // Send-status surface for the modal banner.
+  const [emailStatus, setEmailStatus] = useState<{ kind: 'idle' | 'sending' | 'sent' | 'error'; text?: string }>({ kind: 'idle' });
 
   // Load column prefs once
   useEffect(() => {
@@ -611,7 +613,12 @@ export default function ClientManager() {
     return { selectedFields, visibleClients: base };
   };
 
-  const handlePrintPdf = (emailAfter: boolean = false) => {
+  const handlePrintPdf = async (emailAfter: boolean = false) => {
+    if (emailAfter && !printEmailTo.trim()) {
+      setEmailStatus({ kind: 'error', text: 'Enter a recipient address above before clicking Email PDF.' });
+      return;
+    }
+    if (emailAfter) setEmailStatus({ kind: 'sending', text: 'Generating PDF…' });
     const { selectedFields, visibleClients } = buildPrintRows();
     if (selectedFields.length === 0) { alert('Pick at least one field.'); return; }
     if (visibleClients.length === 0) { alert('No clients to print.'); return; }
@@ -735,34 +742,54 @@ export default function ClientManager() {
     }
 
     const filename = `client-list${isSelected ? '-selected' : ''}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    // Always download a local copy too — useful for the firm's file and as
+    // a fallback in case the SMTP send fails.
     doc.save(filename);
 
     if (emailAfter) {
-      // Open the user's email client with a pre-filled message. mailto: cannot
-      // attach files for security reasons, so the body asks the user to attach
-      // the PDF we just downloaded.
-      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      // Convert the in-memory PDF to base64 so the Edge Function can attach it.
+      const ab = doc.output('arraybuffer') as ArrayBuffer;
+      const bytes = new Uint8Array(ab);
+      let binary = '';
+      const CHUNK = 0x8000;
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as unknown as number[]);
+      }
+      const contentBase64 = btoa(binary);
+
+      const todayLabel = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
       const fieldsList = selectedFields.map(f => f.label).join(', ');
       const subject = isSelected
-        ? `Client List (Selected) — ${today}`
-        : `Client List — ${today}`;
+        ? `Client List (Selected) — ${todayLabel}`
+        : `Client List — ${todayLabel}`;
       const body = [
         `Hello,`,
         ``,
-        `Please find attached the ${isSelected ? 'selected' : ''} client list PDF prepared on ${today}.`,
+        `Please find attached the ${isSelected ? 'selected ' : ''}client list PDF prepared on ${todayLabel}.`,
         ``,
         `  • File: ${filename}`,
         `  • Rows: ${visibleClients.length} client${visibleClients.length === 1 ? '' : 's'}`,
         `  • Fields included: ${fieldsList}`,
         ``,
-        `(The PDF has been downloaded to your device — please attach it to this email before sending.)`,
-        ``,
         `Kind regards,`,
         `PC Prime & Calculate Consultants Ltd`,
       ].join('\n');
-      const to = printEmailTo.trim();
-      const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.location.href = mailtoUrl;
+
+      setEmailStatus({ kind: 'sending', text: 'Sending via Outlook…' });
+      try {
+        await api.sendViaOutlook({
+          to: printEmailTo.trim(),
+          subject,
+          body,
+          attachments: [{ filename, contentBase64, contentType: 'application/pdf' }],
+        });
+        setEmailStatus({ kind: 'sent', text: `Sent to ${printEmailTo.trim()}` });
+        // Hold the success banner briefly so the user notices, then close.
+        setTimeout(() => { setShowPrintModal(false); setEmailStatus({ kind: 'idle' }); }, 1500);
+      } catch (err: any) {
+        setEmailStatus({ kind: 'error', text: 'Send failed: ' + (err?.message || String(err)) });
+      }
+      return; // keep the modal open until the user sees the result
     }
 
     setShowPrintModal(false);
@@ -1247,12 +1274,33 @@ export default function ClientManager() {
                 style={{ width: '100%' }}
               />
             </div>
+            {emailStatus.kind !== 'idle' && (
+              <div style={{
+                marginBottom: 10,
+                padding: '8px 10px',
+                borderRadius: 4,
+                fontSize: '0.84em',
+                background: emailStatus.kind === 'sent' ? '#dcfce7' : emailStatus.kind === 'error' ? '#fee2e2' : '#dbeafe',
+                color:      emailStatus.kind === 'sent' ? '#15803d' : emailStatus.kind === 'error' ? '#b91c1c' : '#1e40af',
+                border:     `1px solid ${emailStatus.kind === 'sent' ? '#86efac' : emailStatus.kind === 'error' ? '#fca5a5' : '#93c5fd'}`,
+              }}>
+                {emailStatus.kind === 'sending' && '⏳ '}
+                {emailStatus.kind === 'sent'    && '✓ '}
+                {emailStatus.kind === 'error'   && '⚠ '}
+                {emailStatus.text}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button className="btn btn-secondary" onClick={() => setShowPrintModal(false)}>Cancel</button>
-              <button className="btn btn-secondary" onClick={() => handlePrintPdf(true)} disabled={printFields.size === 0} title="Generates the PDF (it downloads) and opens your email client with a pre-filled message — attach the PDF before sending">
+              <button className="btn btn-secondary" onClick={() => { setShowPrintModal(false); setEmailStatus({ kind: 'idle' }); }} disabled={emailStatus.kind === 'sending'}>Cancel</button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => handlePrintPdf(true)}
+                disabled={printFields.size === 0 || emailStatus.kind === 'sending'}
+                title="Generates the PDF, attaches it, and sends through your Outlook account (configure in /settings/email)"
+              >
                 📧 Email PDF
               </button>
-              <button className="btn btn-primary" onClick={() => handlePrintPdf(false)} disabled={printFields.size === 0}>
+              <button className="btn btn-primary" onClick={() => handlePrintPdf(false)} disabled={printFields.size === 0 || emailStatus.kind === 'sending'}>
                 Generate PDF
               </button>
             </div>

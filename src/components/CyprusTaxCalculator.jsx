@@ -1495,18 +1495,26 @@ export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState
   };
 
   // ============ EMAIL TO CLIENT ============
-  const handleEmailClient = () => {
+  const handleEmailClient = async () => {
     const r = activeResults;
     const refNum = `PCC-${selectedYear}-${Date.now().toString().slice(-6)}`;
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    // Ask for the recipient — we don't have client.email in clientPrefill yet.
+    // Pre-fill the prompt with whatever's in clientPrefill if we ever add it.
+    const recipientInput = window.prompt(
+      `Send the ${selectedYear} tax computation PDF to which email address?`,
+      (clientPrefill && clientPrefill.email) || ''
+    );
+    if (recipientInput === null) { setShowExportDialog(false); return; }
+    const recipient = recipientInput.trim();
+    if (!recipient) { alert('Recipient email is required.'); return; }
 
     const subject = `Tax Computation - ${selectedYear} - ${clientName || 'Client'}`;
 
     const body = `Dear ${clientName || '[Client Name]'},
 
-Please find below an indicative summary of your Personal Tax Computation for tax year ${selectedYear}.
-
-A detailed PDF computation will follow as an attachment to this email.
+Please find attached your Personal Tax Computation for tax year ${selectedYear}.
 
 SUMMARY OF LIABILITY (${selectedYear})
 =========================================
@@ -1538,16 +1546,32 @@ e: panayiotis@primeandcalculate.com
 CONFIDENTIALITY NOTICE: This email and any attachments are confidential and may be privileged. If you are not the intended recipient, please notify the sender immediately and delete this message and any attachments from your system. Any unauthorized use, disclosure, or distribution is prohibited.
 
 ---
-NOTE: Please attach the PDF tax computation file to this email before sending.`;
+Sent via the PC Prime client portal — connected to my Outlook account.`;
 
-    const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailtoUrl;
     setShowExportDialog(false);
+    try {
+      const pdf = await generatePDF(activeResults, selectedYear, 'arraybuffer');
+      if (!pdf) return; // generatePDF already alerted
+      // Lazy import so this file doesn't have a hard dep on api.ts at parse time
+      // (kept consistent with how the rest of the calc loads pieces).
+      const { api } = await import('../services/api');
+      await api.sendViaOutlook({
+        to: recipient,
+        subject,
+        body,
+        attachments: [{ filename: pdf.filename, contentBase64: pdf.base64, contentType: 'application/pdf' }],
+      });
+      alert(`Tax computation sent to ${recipient}.`);
+    } catch (err) {
+      alert('Email failed: ' + (err.message || String(err)) + '\n\nCheck your settings at /settings/email — make sure your Outlook account is connected.');
+    }
   };
 
   // ============ PDF GENERATION USING jsPDF ============
   // jsPDF is bundled via the npm package (see package.json) — no CDN load.
-  const generatePDF = async (results, year) => {
+  // mode 'save' (default) downloads the file; mode 'arraybuffer' returns
+  // { filename, arraybuffer, base64 } so the caller can attach it to an email.
+  const generatePDF = async (results, year, mode = 'save') => {
     try {
       // Initialize A4 portrait PDF (units in mm)
       const doc = new jsPDF({
@@ -2074,14 +2098,26 @@ NOTE: Please attach the PDF tax computation file to this email before sending.`;
       // Add page numbers if multi-page
       addPageNumbers();
 
-      // ============ DOWNLOAD ============
+      // ============ DOWNLOAD or RETURN BYTES ============
       const safeName = clientName ? clientName.replace(/[^a-z0-9]/gi, '_') : 'Client';
       const filename = `Tax_Computation_${safeName}_${year}.pdf`;
+      if (mode === 'arraybuffer') {
+        const ab = doc.output('arraybuffer');
+        // Chunked base64 to avoid call-stack overflow on large PDFs.
+        const bytes = new Uint8Array(ab);
+        let binary = '';
+        const CHUNK = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+        }
+        return { filename, base64: btoa(binary) };
+      }
       doc.save(filename);
-
+      return { filename };
     } catch (err) {
       console.error('PDF generation failed:', err);
       alert(`PDF generation failed: ${err.message}\n\nPlease try again, or use the Print Preview option as fallback.`);
+      return null;
     }
   };
 
