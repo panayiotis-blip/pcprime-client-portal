@@ -29,6 +29,7 @@ import Calendar from './components/Admin/Calendar';
 import Timesheet from './components/Admin/Timesheet';
 import TimesheetPrint from './components/Admin/TimesheetPrint';
 import CompanySettings from './components/Admin/CompanySettings';
+import MasterChartOfAccounts from './components/Admin/MasterChartOfAccounts';
 import EmailSettings from './components/Settings/EmailSettings';
 import InvoicesList from './components/Billing/InvoicesList';
 import BillingInvoiceEditor from './components/Billing/InvoiceEditor';
@@ -149,6 +150,7 @@ function AuthedApp() {
             <Route path="/billing/:id/print" element={<InvoicePrint />} />
             <Route path="/settings/company" element={<CompanySettings />} />
             <Route path="/settings/email" element={<EmailSettings />} />
+            <Route path="/master-accounts" element={<MasterChartOfAccounts />} />
             <Route path="/phone-log" element={<PhoneLog />} />
             <Route path="/security" element={<Security />} />
             <Route path="/merge" element={<MergeClients />} />

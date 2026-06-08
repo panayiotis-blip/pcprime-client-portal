@@ -73,6 +73,7 @@ export default function ChartOfAccounts({ clientId }: { clientId: number }) {
   const [copyFromClient, setCopyFromClient] = useState<number>(0);
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [applyingMaster, setApplyingMaster] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => { try { setAccounts(await api.getAccounts(clientId)); } catch {} };
@@ -91,6 +92,25 @@ export default function ChartOfAccounts({ clientId }: { clientId: number }) {
     const result = await api.copyAccounts(clientId, copyFromClient);
     alert(`Copied ${result.copied} account(s).`);
     setCopyFromClient(0); setShowImport(false); await load();
+  };
+
+  // Pull the firm-level master CoA (migration 097) into this client. Insert-
+  // if-not-exists by code, so any codes the client already has are untouched.
+  const handleApplyMaster = async () => {
+    if (!confirm(
+      'Apply the firm Master Chart of Accounts to this client?\n\n' +
+      'Codes the client already has are left untouched — only missing codes are added.',
+    )) return;
+    setApplyingMaster(true);
+    try {
+      const r = await api.applyMasterToClient(clientId);
+      alert(`Added ${r.inserted} account(s) from master. ${r.skipped} already existed and were skipped.`);
+      await load();
+    } catch (err: any) {
+      alert('Apply Master failed: ' + (err?.message || String(err)));
+    } finally {
+      setApplyingMaster(false);
+    }
   };
 
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,6 +206,9 @@ export default function ChartOfAccounts({ clientId }: { clientId: number }) {
         <h3>Chart of Accounts ({accounts.length})</h3>
         <div className="coa-actions">
           <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(!showAdd)}>+ Add</button>
+          <button className="btn btn-secondary btn-sm" onClick={handleApplyMaster} disabled={applyingMaster} title="Pull firm Master Chart of Accounts into this client">
+            {applyingMaster ? 'Applying…' : '⇒ Apply Master'}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(!showImport)}>Import / Copy</button>
           <button className="btn btn-secondary btn-sm" onClick={async () => {
             if (!confirm('Re-categorize all accounts based on their code digits? (1xxx=Asset, 2xxx=Liability, 3xxx=Equity, 4xxx=Income, 5-8xxx=Expense). This only updates accounts where category doesn\'t match the code.')) return;

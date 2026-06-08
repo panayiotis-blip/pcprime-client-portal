@@ -81,6 +81,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/applications',            label: 'Applications',    icon: '📝' },
       { path: '/audit',                   label: 'Audit Log',       icon: '⌚', requires: (u) => hasPermission(u, 'audit.read') },
       { path: '/settings/company',        label: 'Company Settings', icon: '⚙' },
+      { path: '/master-accounts',         label: 'Master CoA',      icon: '◉' },
       { path: '/clients/deleted',         label: 'Deleted Clients', icon: '🗑' },
     ],
   },

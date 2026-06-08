@@ -777,10 +777,46 @@ export const api = {
     if (error) throw new Error(error.message);
   },
   async copyAccounts(targetId: number, sourceId: number) {
-    const { data } = await supabase.from('accounts').select('code, description, category').eq('client_id', sourceId);
+    const { data } = await supabase.from('accounts').select('code, description, category, active, is_header, report_category').eq('client_id', sourceId);
     if (!data?.length) return { copied: 0 };
     await supabase.from('accounts').insert(data.map((a: any) => ({ ...a, client_id: targetId })));
     return { copied: data.length };
+  },
+
+  // --------- Master Chart of Accounts (firm-level, migration 097) ---------
+  async getMasterAccounts() {
+    const { data, error } = await supabase.from('master_accounts').select('*').order('code');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async createMasterAccount(data: { code: string; description: string; category: string; active?: boolean; is_header?: boolean; report_category?: string | null }) {
+    const { data: row, error } = await supabase.from('master_accounts').insert(data).select().single();
+    if (error) throw new Error(error.message);
+    return { id: row.id };
+  },
+  async updateMasterAccount(id: number, data: any) {
+    const { error } = await supabase.from('master_accounts').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteMasterAccount(id: number) {
+    const { error } = await supabase.from('master_accounts').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Copy the master into one client. Insert-if-not-exists by code.
+  async applyMasterToClient(clientId: number): Promise<{ inserted: number; skipped: number }> {
+    const { data, error } = await supabase.rpc('apply_master_to_client', { p_client_id: clientId });
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return { inserted: row?.inserted ?? 0, skipped: row?.skipped ?? 0 };
+  },
+  // Copy the master into every (non-deleted) client. Supervisor-only.
+  async applyMasterToAllClients(): Promise<{ totalInserted: number; totalSkipped: number; clientCount: number }> {
+    const { data, error } = await supabase.rpc('apply_master_to_all_clients');
+    if (error) throw new Error(error.message);
+    const rows = (data || []) as Array<{ client_id: number; inserted: number; skipped: number }>;
+    let totalInserted = 0, totalSkipped = 0;
+    for (const r of rows) { totalInserted += r.inserted || 0; totalSkipped += r.skipped || 0; }
+    return { totalInserted, totalSkipped, clientCount: rows.length };
   },
 
   // --------- Platform Credentials ---------
