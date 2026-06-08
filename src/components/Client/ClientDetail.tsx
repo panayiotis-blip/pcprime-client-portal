@@ -345,6 +345,13 @@ export default function ClientDetail() {
             📄 Print statement
           </button>
         )}
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => window.open(`/clients/${clientId}/print`, '_blank')}
+          title="Open a printable card with the client's full profile"
+        >
+          🖨 Print Client
+        </button>
       </div>
 
       {/* Unique-email banner hidden until Email Integration (Task 5 / CloudMailin) is live.
