@@ -173,6 +173,8 @@ export default function ClientManager() {
   const [printTypeFilter, setPrintTypeFilter] = useState<'all' | 'individual' | 'company'>('all');
   const [printFromId, setPrintFromId] = useState<number | null>(null); // alphabetic range start
   const [printToId, setPrintToId] = useState<number | null>(null);     // alphabetic range end
+  // Optional recipient pre-filled into the mailto: link when emailing the PDF.
+  const [printEmailTo, setPrintEmailTo] = useState<string>('');
 
   // Load column prefs once
   useEffect(() => {
@@ -623,7 +625,7 @@ export default function ClientManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeClientOptions]);
 
-  const handlePrintPdf = () => {
+  const handlePrintPdf = (emailAfter: boolean = false) => {
     const { selectedFields, visibleClients } = buildPrintRows();
     if (selectedFields.length === 0) { alert('Pick at least one field.'); return; }
     if (visibleClients.length === 0) { alert('No clients to print.'); return; }
@@ -746,7 +748,37 @@ export default function ClientManager() {
       doc.text(`Page ${p} of ${finalPageCount}`, PAGE_W / 2, PAGE_H - 5, { align: 'center' });
     }
 
-    doc.save(`client-list${isSelected ? '-selected' : ''}-${new Date().toISOString().slice(0, 10)}.pdf`);
+    const filename = `client-list${isSelected ? '-selected' : ''}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    doc.save(filename);
+
+    if (emailAfter) {
+      // Open the user's email client with a pre-filled message. mailto: cannot
+      // attach files for security reasons, so the body asks the user to attach
+      // the PDF we just downloaded.
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      const fieldsList = selectedFields.map(f => f.label).join(', ');
+      const subject = isSelected
+        ? `Client List (Selected) — ${today}`
+        : `Client List — ${today}`;
+      const body = [
+        `Hello,`,
+        ``,
+        `Please find attached the ${isSelected ? 'selected' : ''} client list PDF prepared on ${today}.`,
+        ``,
+        `  • File: ${filename}`,
+        `  • Rows: ${visibleClients.length} client${visibleClients.length === 1 ? '' : 's'}`,
+        `  • Fields included: ${fieldsList}`,
+        ``,
+        `(The PDF has been downloaded to your device — please attach it to this email before sending.)`,
+        ``,
+        `Kind regards,`,
+        `PC Prime & Calculate Consultants Ltd`,
+      ].join('\n');
+      const to = printEmailTo.trim();
+      const mailtoUrl = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailtoUrl;
+    }
+
     setShowPrintModal(false);
   };
 
@@ -1185,9 +1217,25 @@ export default function ClientManager() {
                 {printFields.size} of {PRINT_FIELDS.length} fields selected
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: '0.74em', color: '#5a6478', display: 'block', marginBottom: 2 }}>
+                Email to (optional) — used when clicking "Email PDF"
+              </label>
+              <input
+                type="email"
+                className="form-input form-input-sm"
+                value={printEmailTo}
+                onChange={e => setPrintEmailTo(e.target.value)}
+                placeholder="recipient@example.com (leave blank to choose in your mail client)"
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button className="btn btn-secondary" onClick={() => setShowPrintModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handlePrintPdf} disabled={printFields.size === 0}>
+              <button className="btn btn-secondary" onClick={() => handlePrintPdf(true)} disabled={printFields.size === 0} title="Generates the PDF (it downloads) and opens your email client with a pre-filled message — attach the PDF before sending">
+                📧 Email PDF
+              </button>
+              <button className="btn btn-primary" onClick={() => handlePrintPdf(false)} disabled={printFields.size === 0}>
                 Generate PDF
               </button>
             </div>
