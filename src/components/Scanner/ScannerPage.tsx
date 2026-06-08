@@ -41,7 +41,9 @@ type DocCategory = {
   journal_code: string | null;
 };
 
-export default function ScannerPage() {
+// When `lockedClientId` is provided, the client picker UI is hidden and the
+// scan is filed against that client (used by the client-portal MyScan page).
+export default function ScannerPage({ lockedClientId }: { lockedClientId?: number } = {}) {
   const navigate = useNavigate();
   const { clients, refreshClients } = useApp();
   const { scannedInvoices } = useScan();
@@ -54,7 +56,8 @@ export default function ScannerPage() {
   const [fileMeta, setFileMeta] = useState<Map<File, { pageCount: number | null; splitMode: boolean }>>(new Map());
   const [categories, setCategories] = useState<DocCategory[]>([]);
   const [categoryId, setCategoryId] = useState<number>(0);
-  const [clientId, setClientId] = useState<number>(0);
+  const [clientId, setClientId] = useState<number>(lockedClientId ?? 0);
+  const isClientLocked = lockedClientId != null && lockedClientId > 0;
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [notes, setNotes] = useState('');
@@ -69,6 +72,12 @@ export default function ScannerPage() {
       })
       .catch(() => {});
   }, []);
+
+  // Keep the local clientId in sync if the lockedClientId prop arrives /
+  // changes after the first render (e.g. client portal loads user lazily).
+  useEffect(() => {
+    if (lockedClientId != null && lockedClientId > 0) setClientId(lockedClientId);
+  }, [lockedClientId]);
 
   const category = categories.find((c) => c.id === categoryId) || null;
   const isOcr = !!category?.ocr_enabled;
@@ -310,29 +319,32 @@ export default function ScannerPage() {
     <div className="scanner-page">
       <h2>Scan Document</h2>
 
-      {/* Step 1: Select Client */}
-      <div className="form-section">
-        <h3>1. Select Client</h3>
-        <div className="form-row">
-          <div style={{ flex: 1 }}>
-            <SearchableSelect
-              value={clientId}
-              onChange={(v) => setClientId(parseInt(String(v)) || 0)}
-              options={clients.map((c: any) => ({ value: c.id, label: c.name, sublabel: c.client_code || c.tax_number || '' }))}
-              placeholder="-- Select Client --"
-            />
+      {/* Step 1: Select Client — hidden when the page is rendered from the
+          client portal (clientId is forced to the logged-in client's row). */}
+      {!isClientLocked && (
+        <div className="form-section">
+          <h3>1. Select Client</h3>
+          <div className="form-row">
+            <div style={{ flex: 1 }}>
+              <SearchableSelect
+                value={clientId}
+                onChange={(v) => setClientId(parseInt(String(v)) || 0)}
+                options={clients.map((c: any) => ({ value: c.id, label: c.name, sublabel: c.client_code || c.tax_number || '' }))}
+                placeholder="-- Select Client --"
+              />
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowNewClient(!showNewClient)}>
+              + New Client
+            </button>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowNewClient(!showNewClient)}>
-            + New Client
-          </button>
+          {showNewClient && (
+            <div className="form-row" style={{ marginTop: 8 }}>
+              <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Client name" className="form-input" />
+              <button className="btn btn-primary btn-sm" onClick={handleAddClient}>Add</button>
+            </div>
+          )}
         </div>
-        {showNewClient && (
-          <div className="form-row" style={{ marginTop: 8 }}>
-            <input type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} placeholder="Client name" className="form-input" />
-            <button className="btn btn-primary btn-sm" onClick={handleAddClient}>Add</button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Step 2: Document Category */}
       <div className="form-section">

@@ -53,6 +53,7 @@ import CustomerInvoicePrint from './components/Client/CustomerInvoicePrint';
 import CustomerReceiptPrint from './components/Client/CustomerReceiptPrint';
 import CustomerDebtors from './components/Client/CustomerDebtors';
 import MyExpenses from './components/Client/MyExpenses';
+import MyScanPage from './components/Client/MyScanPage';
 import ClientExpenses from './components/Admin/ClientExpenses';
 import MyReports from './components/Client/MyReports';
 import AiUsage from './components/Admin/AiUsage';
@@ -131,6 +132,7 @@ function AuthedApp() {
             <Route path="/sales/:id" element={<CustomerInvoiceEditor />} />
             <Route path="/debtors" element={<CustomerDebtors />} />
             <Route path="/my-expenses" element={<MyExpenses />} />
+            <Route path="/my-scan" element={<MyScanPage />} />
             <Route path="/my-reports" element={<MyReports />} />
             <Route path="/client-expenses" element={<ClientExpenses />} />
             <Route path="/messages" element={<MessagesInbox />} />

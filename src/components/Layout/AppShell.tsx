@@ -97,6 +97,7 @@ const CLIENT_GROUPS: NavGroup[] = [
       { path: '/sales',        label: 'Sales Invoices', icon: '€' },
       { path: '/debtors',      label: 'Debtors',        icon: '◔' },
       { path: '/my-expenses',  label: 'My Expenses',    icon: '🧾' },
+      { path: '/my-scan',      label: 'Scan Document',  icon: '📷' },
       { path: '/my-reports',   label: 'Reports',        icon: '◧' },
     ],
   },
