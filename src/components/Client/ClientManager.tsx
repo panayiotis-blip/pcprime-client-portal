@@ -167,6 +167,8 @@ export default function ClientManager() {
   // Print Client List state
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [printFields, setPrintFields] = useState<Set<string>>(() => new Set(DEFAULT_PRINT_FIELDS));
+  // 'all' = current filtered+sorted list; 'selected' = only ticked rows from bulk selection.
+  const [printScope, setPrintScope] = useState<'all' | 'selected'>('all');
 
   // Load column prefs once
   useEffect(() => {
@@ -573,7 +575,13 @@ export default function ClientManager() {
   // in the table on screen, minus the vendor-only category.
   const buildPrintRows = () => {
     const selectedFields = PRINT_FIELDS.filter(f => printFields.has(f.id));
-    const visibleClients = sortedFiltered.filter((c: any) => c.client_category !== 'vendor_only');
+    // Source list depends on scope. 'selected' uses the bulk-ticked rows
+    // (preserving the current sort order from sortedFiltered); 'all' uses the
+    // full filtered list. Vendor-only entries are always excluded.
+    const base = printScope === 'selected'
+      ? sortedFiltered.filter((c: any) => selectedIds.has(c.id))
+      : sortedFiltered;
+    const visibleClients = base.filter((c: any) => c.client_category !== 'vendor_only');
     return { selectedFields, visibleClients };
   };
 
@@ -602,6 +610,8 @@ export default function ClientManager() {
     let pageNum = 1;
     let totalPages = 1;
 
+    const isSelected = printScope === 'selected';
+    const docTitle = isSelected ? 'Client List — Selected' : 'Client List';
     const drawHeader = () => {
       doc.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
       doc.setFont('Roboto', 'bold');
@@ -609,11 +619,11 @@ export default function ClientManager() {
       doc.text('PC Prime & Calculate Consultants Ltd', MARGIN_L, MARGIN_T);
       doc.setFontSize(10);
       doc.setTextColor(GOLD[0], GOLD[1], GOLD[2]);
-      doc.text('Client List', MARGIN_L, MARGIN_T + 5);
+      doc.text(docTitle, MARGIN_L, MARGIN_T + 5);
       doc.setFontSize(7.5);
       doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
       doc.setFont('Roboto', 'italic');
-      doc.text(`Generated ${today}  ·  ${visibleClients.length} clients  ·  ${selectedFields.length} fields`, MARGIN_L, MARGIN_T + 10);
+      doc.text(`Generated ${today}  ·  ${visibleClients.length} client${visibleClients.length === 1 ? '' : 's'}  ·  ${selectedFields.length} fields`, MARGIN_L, MARGIN_T + 10);
       // Gold underline
       doc.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
       doc.setLineWidth(0.5);
@@ -698,7 +708,7 @@ export default function ClientManager() {
       doc.text(`Page ${p} of ${finalPageCount}`, PAGE_W / 2, PAGE_H - 5, { align: 'center' });
     }
 
-    doc.save(`client-list-${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`client-list${isSelected ? '-selected' : ''}-${new Date().toISOString().slice(0, 10)}.pdf`);
     setShowPrintModal(false);
   };
 
@@ -756,7 +766,7 @@ export default function ClientManager() {
           <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
             {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
           </button>
-          <button className="btn btn-secondary" onClick={() => setShowPrintModal(true)} title="Print the current filtered client list to PDF">
+          <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print the current filtered client list to PDF">
             🖨 Print List
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
@@ -1034,10 +1044,15 @@ export default function ClientManager() {
             background: 'white', borderRadius: 8, padding: 20, maxWidth: 560, width: '100%',
             maxHeight: '85vh', overflowY: 'auto',
           }}>
-            <h3 style={{ marginTop: 0, color: '#1a365d' }}>🖨 Print Client List</h3>
+            <h3 style={{ marginTop: 0, color: '#1a365d' }}>
+              🖨 {printScope === 'selected' ? 'Print Selected Clients' : 'Print Client List'}
+            </h3>
             <p style={{ color: '#64748b', fontSize: '0.88em', marginTop: 0 }}>
-              Pick which fields to include. The PDF uses the current filter + sort and produces
-              a landscape A4 document with one row per client.
+              {printScope === 'selected' ? (
+                <>Pick which fields to include. The PDF will contain the <strong>{selectedIds.size} selected</strong> client{selectedIds.size === 1 ? '' : 's'} in the current sort order.</>
+              ) : (
+                <>Pick which fields to include. The PDF uses the current filter + sort and produces a landscape A4 document with one row per client.</>
+              )}
             </p>
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '4px 12px',
@@ -1099,6 +1114,9 @@ export default function ClientManager() {
           <button className="btn btn-secondary btn-sm" onClick={handleBulkMarkVendor} disabled={bulkBusy}>Mark as Vendor</button>
           <button className="btn btn-secondary btn-sm" onClick={handleBulkExportExcel} disabled={bulkBusy}>⬇ Excel</button>
           <button className="btn btn-secondary btn-sm" onClick={handleBulkExportCsv} disabled={bulkBusy}>⬇ CSV</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setPrintScope('selected'); setShowPrintModal(true); }} disabled={bulkBusy} title="Print only the selected clients to PDF">
+            🖨 Print Selected
+          </button>
           <button
             className="btn btn-secondary btn-sm"
             disabled
