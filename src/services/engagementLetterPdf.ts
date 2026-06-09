@@ -147,15 +147,30 @@ export function generateEngagementLetterPdf(
     return y;
   };
 
-  // ---------- letterhead (shared by both pages) ----------
+  // ---------- letterhead (page 1 only) ----------
+  // Draws the firm logo (proportionally scaled, capped to a tidy box) and
+  // the firm details. Page 2+ uses a lighter header instead.
   const drawLetterhead = (y: number): number => {
-    // Logo (top-right) if we have one
+    // Logo — preserve aspect ratio. Cap to a 32×16 mm box in the top-right.
     if (data.firm.logo_data_url) {
       try {
-        // Logo box: max 35×18 mm in the top-right corner.
-        const logoW = 35;
-        const logoH = 18;
-        doc.addImage(data.firm.logo_data_url, 'PNG', W - M - logoW, M - 4, logoW, logoH, undefined, 'FAST');
+        const props = (doc as any).getImageProperties
+          ? (doc as any).getImageProperties(data.firm.logo_data_url)
+          : null;
+        const maxW = 32;
+        const maxH = 16;
+        let w = maxW, h = maxH;
+        if (props && props.width && props.height) {
+          const ratio = props.width / props.height;
+          // Fit inside the box without stretching.
+          if (ratio > maxW / maxH) { w = maxW; h = maxW / ratio; }
+          else                     { h = maxH; w = maxH * ratio; }
+        }
+        // Anchor top-right. Slight visual lift so the cap-height aligns with
+        // the firm name baseline below.
+        const fmt = (data.firm.logo_data_url.match(/^data:image\/([^;]+)/)?.[1] || 'PNG').toUpperCase();
+        const safeFmt = fmt === 'JPG' ? 'JPEG' : (['PNG','JPEG','WEBP'].includes(fmt) ? fmt : 'PNG');
+        doc.addImage(data.firm.logo_data_url, safeFmt as any, W - M - w, M - 2, w, h, undefined, 'FAST');
       } catch {
         // Bad data URL or unsupported format — skip silently.
       }
@@ -180,6 +195,22 @@ export function generateEngagementLetterPdf(
     ].filter((l): l is string => !!l && l.trim().length > 0);
     for (const line of firmLines) { doc.text(line, M, y); y += 3.8; }
     y += 4;
+    return y;
+  };
+
+  // ---------- SOW header (page 2+) — lighter than the full letterhead ----------
+  // Just a thin rule + firm name on the left. No logo, no address block —
+  // the cover letter is the formal letterhead; the SOW is the continuation.
+  const drawSowHeader = (y: number): number => {
+    doc.setFontSize(8.5);
+    setColor(GREY);
+    doc.text(data.firm.legal_name || data.firm.name || '', M, y);
+    doc.text('Statement of Work — continued', W - M, y, { align: 'right' });
+    y += 2;
+    doc.setDrawColor(220, 226, 236);
+    doc.setLineWidth(0.2);
+    doc.line(M, y, W - M, y);
+    y += 6;
     return y;
   };
 
@@ -268,33 +299,34 @@ export function generateEngagementLetterPdf(
   // ============================================================
   // PAGE 2+ — STATEMENT OF WORK
   // ============================================================
+  // No full letterhead on the SOW pages — the cover letter already
+  // carries the firm identity. Use a slim continuation header instead.
   doc.addPage();
   y = M;
-  y = drawLetterhead(y);
+  y = drawSowHeader(y);
 
-  doc.setFontSize(14);
+  // Title
+  doc.setFontSize(15);
   setColor(NAVY);
   doc.setFont('Roboto', 'bold');
   doc.text('Statement of Work', M, y);
   doc.setFont('Roboto', 'normal');
-  y += 5.5;
+  y += 8;
+
+  // Client + period strip
+  setColor(BODY);
   doc.setFontSize(10);
-  setColor(GREY);
-  doc.text(`v${data.version}`, M, y);
+  doc.text(`Client: ${data.client.legal_name || data.client.name}`, M, y);
   const period = [
     data.effective_from ? `Effective from ${fmtDateGB(data.effective_from)}` : null,
     data.effective_to ? `to ${fmtDateGB(data.effective_to)}` : null,
   ].filter(Boolean).join(' ');
   if (period) {
+    setColor(GREY);
     doc.text(period, W - M, y, { align: 'right' });
   }
-  y += 7;
-
-  // Client line for context
   setColor(BODY);
-  doc.setFontSize(10);
-  doc.text(`Client: ${data.client.legal_name || data.client.name}`, M, y);
-  y += 6;
+  y += 8;
 
   // Intro
   doc.setFontSize(10);
@@ -397,7 +429,8 @@ export function generateEngagementLetterPdf(
     doc.setFontSize(10);
     setColor(BODY);
   }
-  y += 3;
+  // Generous gap between sub-section A and B so they read as distinct blocks.
+  y += 10;
 
   // B. Fee model — flat vs per_service
   if (data.fee_mode === 'flat') {
@@ -405,7 +438,7 @@ export function generateEngagementLetterPdf(
     doc.setFont('Roboto', 'bold');
     doc.text('B. Engagement fee', M, y);
     doc.setFont('Roboto', 'normal');
-    y += 5;
+    y += 6;
     const annual = Number(data.annual_estimate || 0);
     const monthly = annual / 12;
     if (data.min_monthly_fee && data.min_monthly_fee > 0) {
@@ -425,7 +458,7 @@ export function generateEngagementLetterPdf(
     doc.setFont('Roboto', 'bold');
     doc.text('B. Fee summary per service', M, y);
     doc.setFont('Roboto', 'normal');
-    y += 5;
+    y += 6;
     const total = data.services.reduce((s, x) => s + (Number(x.annual_fee) || 0), 0);
     doc.setDrawColor(180, 190, 210);
     doc.setLineWidth(0.4);
@@ -450,19 +483,21 @@ export function generateEngagementLetterPdf(
     doc.setFontSize(10);
     setColor(BODY);
   }
-  y += 4;
+  // Spacer between fee sub-sections.
+  y += 10;
 
   // C. Invoices and payment
   y = ensureRoom(15, y);
   doc.setFont('Roboto', 'bold');
   doc.text('C. Invoices and payment', M, y);
   doc.setFont('Roboto', 'normal');
-  y += 5;
+  y += 6;
   y = writeWrapped(
     'Invoices will be raised at the end of every month and all charges will be specified in Euro. All invoices are due for payment on presentation. In the event of delay in payment, we reserve the right to suspend the provision of services.',
     M, y, W - 2 * M,
   );
-  y += 4;
+  // Bigger gap before the next top-level section.
+  y += 10;
 
   // ---- Terms ----
   y = ensureRoom(20, y);
@@ -471,32 +506,32 @@ export function generateEngagementLetterPdf(
   doc.setFont('Roboto', 'bold');
   doc.text('3. Terms', M, y);
   doc.setFont('Roboto', 'normal');
-  y += 5;
+  y += 7;
   doc.setFontSize(9.5);
   setColor(BODY);
   const termsText = applyMergeFields(data.terms_text || DEFAULT_TERMS, mergeVars);
   for (const para of termsText.split(/\n+/)) {
     if (!para.trim()) continue;
-    y = writeWrapped(para.trim(), M, y, W - 2 * M, 4.2);
-    y += 2;
+    y = writeWrapped(para.trim(), M, y, W - 2 * M, 4.4);
+    y += 3;
   }
 
   // ---- Acceptance block ----
   y = ensureRoom(40, y);
-  y += 4;
+  y += 6;
   doc.setFontSize(12);
   setColor(NAVY);
   doc.setFont('Roboto', 'bold');
   doc.text('Acceptance', M, y);
   doc.setFont('Roboto', 'normal');
-  y += 5;
+  y += 6;
   doc.setFontSize(10);
   setColor(BODY);
   y = writeWrapped(
     'By signing below or by replying to the email transmitting this letter with the word "ACCEPTED", you confirm that you have read and agree to the terms set out above and authorise us to commence the engagement.',
     M, y, W - 2 * M,
   );
-  y += 10;
+  y += 12;
   doc.setDrawColor(180, 190, 210);
   doc.line(M, y, M + 80, y);
   doc.line(M + 90, y, W - M, y);
@@ -504,6 +539,27 @@ export function generateEngagementLetterPdf(
   setColor(GREY);
   doc.text('For the Client (name, signature, date)', M, y + 4);
   doc.text('For the Firm (name, signature, date)', M + 90, y + 4);
+
+  // ---- Page footer: Version / period / page X of Y on every page ----
+  const pageCount = (doc as any).getNumberOfPages ? (doc as any).getNumberOfPages() : 1;
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    setColor(GREY);
+    const today = new Date().toLocaleDateString('en-GB');
+    const periodFooter = [
+      `Version ${data.version}`,
+      data.effective_from ? `Effective ${fmtDateGB(data.effective_from)}` : null,
+      data.effective_to ? `to ${fmtDateGB(data.effective_to)}` : null,
+      `Issued ${today}`,
+    ].filter(Boolean).join('  ·  ');
+    doc.text(periodFooter, M, H - 8);
+    doc.text(`Page ${p} of ${pageCount}`, W - M, H - 8, { align: 'right' });
+    // Thin rule above the footer
+    doc.setDrawColor(225, 230, 240);
+    doc.setLineWidth(0.15);
+    doc.line(M, H - 12, W - M, H - 12);
+  }
 
   // ---- Done ----
   if (mode === 'arraybuffer') {
