@@ -833,6 +833,16 @@ export const api = {
     if (error) throw new Error(error.message);
     return data || [];
   },
+  // Deliverables per service (migration 106) — used by the engagement letter
+  // builder to show sub-bullets that snapshot into the letter's services jsonb.
+  async getServiceDeliverables() {
+    const { data, error } = await supabase
+      .from('service_deliverables').select('*')
+      .eq('enabled', true)
+      .order('service_id').order('ordinal');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
   async updateServiceStage(id: number, patch: any) {
     const { error } = await supabase.from('service_stages')
       .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);

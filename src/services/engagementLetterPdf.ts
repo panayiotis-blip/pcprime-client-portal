@@ -17,6 +17,10 @@ export type LetterService = {
   service_label: string;
   annual_fee?: number;     // only used in 'per_service' fee mode
   scope_notes?: string;
+  // Snapshot of the deliverables to render under this service. Labels only —
+  // the description is held in the catalogue and not duplicated into the
+  // letter (snapshot keeps the letter immutable post-issue).
+  deliverables?: Array<{ label: string }>;
 };
 
 export type EngagementLetterData = {
@@ -351,32 +355,51 @@ export function generateEngagementLetterPdf(
   setColor(BODY);
 
   for (const s of data.services) {
-    y = ensureRoom(7, y);
-    // bullet
+    y = ensureRoom(8, y);
+    // Service heading — bold, slightly larger than the deliverables under it.
     doc.setFont('Roboto', 'bold');
-    doc.text('•', M, y);
-    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(10.5);
+    setColor(NAVY);
     if (data.fee_mode === 'per_service' && s.annual_fee != null && s.annual_fee > 0) {
-      // Right-aligned fee
       doc.text(fmtMoney(s.annual_fee, data.currency), W - M, y, { align: 'right' });
-      // Label that wraps within the remaining width
-      const wrapped = doc.splitTextToSize(s.service_label, W - 2 * M - 4 - 30);
-      doc.text(wrapped, M + 4, y);
-      y += wrapped.length * 4.4;
+      const wrapped = doc.splitTextToSize(s.service_label, W - 2 * M - 30);
+      doc.text(wrapped, M, y);
+      y += wrapped.length * 4.6;
     } else {
-      const wrapped = doc.splitTextToSize(s.service_label, W - 2 * M - 4);
-      doc.text(wrapped, M + 4, y);
-      y += wrapped.length * 4.4;
+      const wrapped = doc.splitTextToSize(s.service_label, W - 2 * M);
+      doc.text(wrapped, M, y);
+      y += wrapped.length * 4.6;
     }
+    doc.setFont('Roboto', 'normal');
+    doc.setFontSize(10);
+    setColor(BODY);
+
+    // Optional scope notes sit just under the heading.
     if (s.scope_notes && s.scope_notes.trim()) {
       doc.setFontSize(9);
       setColor(GREY);
-      const wrapped = doc.splitTextToSize(s.scope_notes, W - 2 * M - 8);
-      y = writeWrapped(s.scope_notes, M + 8, y, W - 2 * M - 8, 4);
+      y = writeWrapped(s.scope_notes, M + 4, y, W - 2 * M - 4, 4);
       y += 1;
       doc.setFontSize(10);
       setColor(BODY);
     }
+
+    // Deliverables — sub-bullets, indented, small font.
+    const dels = s.deliverables || [];
+    if (dels.length > 0) {
+      doc.setFontSize(9.5);
+      setColor(BODY);
+      for (const d of dels) {
+        y = ensureRoom(5, y);
+        doc.text('–', M + 5, y);
+        const wrapped = doc.splitTextToSize(d.label, W - 2 * M - 10);
+        doc.text(wrapped, M + 10, y);
+        y += wrapped.length * 4.2;
+      }
+      doc.setFontSize(10);
+    }
+    // Breathing room between services.
+    y += 4;
   }
   y += 4;
 

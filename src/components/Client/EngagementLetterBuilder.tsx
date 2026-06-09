@@ -18,6 +18,7 @@ type Props = {
 };
 
 type ServiceDef = { id: number; key: string; label: string };
+type Deliverable = { id: number; service_id: number; ordinal: number; label: string; description: string | null };
 
 function arrayBufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -36,6 +37,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
   const [sending, setSending] = useState(false);
 
   const [services, setServices] = useState<ServiceDef[]>([]);
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [firm, setFirm] = useState<any>({});
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
 
@@ -74,11 +76,13 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
   useEffect(() => {
     (async () => {
       try {
-        const [svcs, settings] = await Promise.all([
+        const [svcs, delivs, settings] = await Promise.all([
           api.getServiceDefinitions(),
+          api.getServiceDeliverables(),
           api.getCompanySettings().catch(() => null),
         ]);
         setServices(svcs as ServiceDef[]);
+        setDeliverables(delivs as Deliverable[]);
         setFirm(settings || {});
 
         // Fetch logo if the firm has one
@@ -146,13 +150,32 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     setChosen(prev => {
       if (checked) {
         if (prev.find(p => p.service_id === svc.id)) return prev;
+        // Default-select every deliverable for this service — the user can
+        // untick anything they want to exclude.
+        const defaultDelivs = deliverables
+          .filter(d => d.service_id === svc.id)
+          .map(d => ({ label: d.label }));
         return [...prev, {
           service_id: svc.id, service_key: svc.key, service_label: svc.label,
           annual_fee: 0, scope_notes: '',
-        }];
+          deliverables: defaultDelivs,
+        } as any];
       }
       return prev.filter(p => p.service_id !== svc.id);
     });
+  };
+
+  // Toggle an individual deliverable for a chosen service. The letter
+  // snapshots only the labels, so we operate on the deliverables array.
+  const toggleDeliverable = (svcIdx: number, label: string, checked: boolean) => {
+    setChosen(prev => prev.map((s, i) => {
+      if (i !== svcIdx) return s;
+      const current: Array<{ label: string }> = (s as any).deliverables || [];
+      const next = checked
+        ? (current.find(d => d.label === label) ? current : [...current, { label }])
+        : current.filter(d => d.label !== label);
+      return { ...s, deliverables: next } as any;
+    }));
   };
 
   const updateChosen = (idx: number, patch: Partial<LetterService>) => {
@@ -342,15 +365,39 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
                         )}
                       </label>
                       {isChosen && (
-                        <textarea
-                          value={item!.scope_notes || ''}
-                          onChange={(e) => updateChosen(idx, { scope_notes: e.target.value })}
-                          disabled={!editable}
-                          rows={2}
-                          placeholder="Optional scope notes for this service…"
-                          className="form-input"
-                          style={{ width: '100%', marginTop: 6, fontSize: 13 }}
-                        />
+                        <>
+                          {/* Deliverables checklist — sub-bullets that go on
+                              the PDF under this service. Default all on. */}
+                          {(() => {
+                            const svcDelivs = deliverables.filter(d => d.service_id === svc.id);
+                            if (svcDelivs.length === 0) return null;
+                            const selected: Array<{ label: string }> = (item as any).deliverables || [];
+                            const isOn = (label: string) => !!selected.find(d => d.label === label);
+                            return (
+                              <div style={{ marginTop: 6, marginLeft: 24, padding: '6px 8px', background: '#fafbfc', borderRadius: 4, border: '1px solid #f1f5f9' }}>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>Deliverables included (tick to include on the letter)</div>
+                                {svcDelivs.map(d => (
+                                  <label key={d.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 12, padding: '2px 0', cursor: editable ? 'pointer' : 'default' }} title={d.description || ''}>
+                                    <input type="checkbox" checked={isOn(d.label)} onChange={(e) => toggleDeliverable(idx, d.label, e.target.checked)} disabled={!editable} style={{ marginTop: 2 }} />
+                                    <span>
+                                      <span style={{ color: '#1a365d' }}>{d.label}</span>
+                                      {d.description && <span style={{ color: '#94a3b8', display: 'block', fontSize: 11 }}>{d.description}</span>}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          <textarea
+                            value={item!.scope_notes || ''}
+                            onChange={(e) => updateChosen(idx, { scope_notes: e.target.value })}
+                            disabled={!editable}
+                            rows={2}
+                            placeholder="Additional scope notes for this service (optional)…"
+                            className="form-input"
+                            style={{ width: '100%', marginTop: 6, fontSize: 13 }}
+                          />
+                        </>
                       )}
                     </div>
                   );
