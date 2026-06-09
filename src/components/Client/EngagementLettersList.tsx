@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import EngagementLetterBuilder from './EngagementLetterBuilder';
-import { generateEngagementLetterPdf } from '../../services/engagementLetterPdf';
+import { generateEngagementLetterPdf, fetchLogoDataUrl } from '../../services/engagementLetterPdf';
 
 // Drops into the Engagement section. Lists every version (newest first)
 // with status badges + per-row actions. Handles "Mark accepted" inline
@@ -22,6 +22,17 @@ type Letter = {
   services: any[];
   intro_text: string | null;
   terms_text: string | null;
+  // v2 fields
+  fee_mode?: 'flat' | 'per_service' | null;
+  annual_estimate?: number | null;
+  engagement_leader?: string | null;
+  hourly_rate_director?: number | null;
+  hourly_rate_manager?: number | null;
+  hourly_rate_support?: number | null;
+  discount_percent?: number | null;
+  min_monthly_fee?: number | null;
+  annual_review_notice_days?: number | null;
+  cover_letter_text?: string | null;
 };
 
 const fmtMoney = (n: number, ccy = 'EUR') =>
@@ -61,7 +72,9 @@ export default function EngagementLettersList({ clientId, client }: { clientId: 
   };
   useEffect(() => { load(); }, [clientId]);
 
-  const reopenAsPdf = (l: Letter) => {
+  const reopenAsPdf = async (l: Letter) => {
+    // Fetch the logo for the letterhead — fail-soft if it can't be loaded.
+    const logoDataUrl = firm?.logo_url ? await fetchLogoDataUrl(firm.logo_url) : null;
     generateEngagementLetterPdf({
       client: {
         name: client?.name || '',
@@ -74,13 +87,22 @@ export default function EngagementLettersList({ clientId, client }: { clientId: 
         registration_number: client?.registration_number || null,
         id_number: client?.id_number || null,
       },
-      firm,
+      firm: { ...firm, logo_data_url: logoDataUrl },
       version: l.version,
       effective_from: l.effective_from,
       effective_to: l.effective_to,
+      fee_mode: (l.fee_mode || 'flat') as 'flat' | 'per_service',
+      annual_estimate: l.annual_estimate ?? null,
       services: Array.isArray(l.services) ? l.services : [],
-      total_annual_fee: l.total_annual_fee,
+      hourly_rate_director: l.hourly_rate_director ?? null,
+      hourly_rate_manager: l.hourly_rate_manager ?? null,
+      hourly_rate_support: l.hourly_rate_support ?? null,
+      discount_percent: l.discount_percent ?? null,
+      min_monthly_fee: l.min_monthly_fee ?? null,
+      annual_review_notice_days: l.annual_review_notice_days ?? null,
       currency: l.currency,
+      engagement_leader: l.engagement_leader || null,
+      cover_letter_text: l.cover_letter_text || null,
       intro_text: l.intro_text,
       terms_text: l.terms_text,
     }, 'save');

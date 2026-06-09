@@ -1,15 +1,21 @@
 import { jsPDF } from 'jspdf';
 import { registerRobotoFont } from '../assets/fonts/Roboto-Regular-normal.js';
 
-// One source of truth for rendering an engagement letter as PDF.
-// Used both by the in-browser Preview and by the "Send" flow which
-// then turns the PDF into base64 and attaches it to the Outlook email.
+// Engagement letter renderer. Produces a two-part PDF matching the PC Prime
+// "Provision of Services and Statement of Work" format:
+//
+//   Page 1 — Cover Letter: firm letterhead (with logo), date, addressee,
+//            scope summary, fees one-liner, signature block.
+//   Page 2+ — Statement of Work: scope intro, deliverables, fees structure
+//            (hourly rates + discount + min monthly + annual estimate or
+//            per-service fees), terms (Confidentiality, Data Protection,
+//            Force Majeure, Jurisdiction), acceptance block.
 
 export type LetterService = {
   service_id?: number;
   service_key?: string;
   service_label: string;
-  annual_fee: number;
+  annual_fee?: number;     // only used in 'per_service' fee mode
   scope_notes?: string;
 };
 
@@ -41,218 +47,467 @@ export type EngagementLetterData = {
     website?: string | null;
     iban?: string | null;
     bank_name?: string | null;
+    logo_url?: string | null;
+    logo_data_url?: string | null;  // pre-fetched data URL (set by caller)
   };
   version: number;
-  effective_from?: string | null;  // YYYY-MM-DD
+  effective_from?: string | null;
   effective_to?: string | null;
-  services: LetterService[];
-  total_annual_fee: number;
-  currency: string;             // 'EUR'
-  intro_text?: string | null;
+
+  // Fee structure
+  fee_mode: 'flat' | 'per_service';
+  annual_estimate?: number | null;  // flat mode
+  services: LetterService[];        // names always; per-service fees only in per_service mode
+  hourly_rate_director?: number | null;
+  hourly_rate_manager?: number | null;
+  hourly_rate_support?: number | null;
+  discount_percent?: number | null;
+  min_monthly_fee?: number | null;
+  annual_review_notice_days?: number | null;
+  currency: string;
+
+  // Editable body text
+  engagement_leader?: string | null;
+  cover_letter_text?: string | null;
+  intro_text?: string | null;       // SOW intro
   terms_text?: string | null;
 };
 
-const fmtMoney = (n: number, ccy = 'EUR') =>
-  new Intl.NumberFormat('en-GB', { style: 'currency', currency: ccy }).format(Number(n) || 0);
+const fmtMoney = (n: number | null | undefined, ccy = 'EUR') => {
+  if (n == null) return '—';
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: ccy }).format(Number(n) || 0);
+};
 const fmtDateGB = (iso?: string | null) =>
   iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-GB') : '—';
 
-// Built-in defaults so a draft is usable out of the box; users can edit.
-export const DEFAULT_INTRO = `We are pleased to set out the terms of our engagement to provide the services described below. This letter, once accepted, forms a binding agreement between our firm and yourselves and will remain in force until terminated or replaced by a new engagement letter.`;
+// Replace {{client_name}}, {{engagement_leader}} merge fields.
+function applyMergeFields(text: string | null | undefined, vars: Record<string, string>): string {
+  if (!text) return '';
+  return text.replace(/\{\{(\w+)\}\}/g, (_m, key) => vars[key] ?? `{{${key}}}`);
+}
 
-export const DEFAULT_TERMS = `1. Our responsibilities
-We will perform the services with due care and in accordance with applicable professional standards. Our work will be limited to the services explicitly listed in this letter.
+export const DEFAULT_INTRO = 'PC Prime & Calculate Consultants Ltd is pleased to confirm its engagement for the provision of accounting, payroll, taxation, and business advisory services to {{client_name}}.';
+export const DEFAULT_TERMS = '1. Your obligations\nTo be of greatest assistance to you, we should be advised in advance of any major transactions you may propose to undertake.';
+export const DEFAULT_COVER = 'Further to our discussions regarding the provision of accounting and advisory services to {{client_name}}, we set out below and in the Statement of Work the terms of business which will govern our agreement for the provision of such services.';
 
-2. Your responsibilities
-You agree to provide complete, accurate and timely information necessary for us to perform the services. You retain responsibility for the accuracy of underlying records and the timely submission of returns.
+// Fetch a remote image as a data URL so jsPDF.addImage can embed it. Returns
+// null on any failure (CORS, missing, network) so the caller renders the PDF
+// without the logo rather than blowing up the whole generation.
+export async function fetchLogoDataUrl(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(typeof r.result === 'string' ? r.result : null);
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 
-3. Fees and billing
-Fees are as set out in this letter and are payable in accordance with our invoices. Out-of-scope work will be quoted separately. Late payment may incur interest at the statutory rate.
-
-4. Confidentiality and data protection
-Information you provide will be treated as confidential and processed in accordance with applicable data-protection law. Records may be retained for the period required by law.
-
-5. Termination
-Either party may terminate this engagement by giving 30 days written notice. Fees for work performed up to the termination date remain due.
-
-6. Governing law
-This engagement is governed by the laws of the Republic of Cyprus. Any dispute will be subject to the exclusive jurisdiction of the Cyprus courts.`;
-
-export function generateEngagementLetterPdf(data: EngagementLetterData, mode: 'save' | 'arraybuffer' = 'save'): ArrayBuffer | void {
+export function generateEngagementLetterPdf(
+  data: EngagementLetterData,
+  mode: 'save' | 'arraybuffer' = 'save',
+): ArrayBuffer | void {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   registerRobotoFont(doc);
   doc.setFont('Roboto', 'normal');
 
   const W = 210;
-  const M = 18;          // page margin
+  const H = 297;
+  const M = 18;
+  const NAVY: [number, number, number] = [26, 54, 93];
+  const GREY: [number, number, number] = [90, 100, 120];
+  const BODY: [number, number, number] = [40, 50, 70];
+
+  const mergeVars: Record<string, string> = {
+    client_name: data.client.legal_name || data.client.name || '',
+    engagement_leader: data.engagement_leader || 'the Engagement Leader',
+    firm_name: data.firm.name || data.firm.legal_name || '',
+  };
+
+  // ---------- helpers ----------
+  const setColor = (rgb: [number, number, number]) => doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+  const ensureRoom = (need: number, y: number): number => {
+    if (y + need > H - M) { doc.addPage(); return M; }
+    return y;
+  };
+  const writeWrapped = (text: string, x: number, y: number, w: number, lineHeight = 4.4): number => {
+    const lines = doc.splitTextToSize(text, w);
+    for (const line of lines) {
+      y = ensureRoom(lineHeight, y);
+      doc.text(line, x, y);
+      y += lineHeight;
+    }
+    return y;
+  };
+
+  // ---------- letterhead (shared by both pages) ----------
+  const drawLetterhead = (y: number): number => {
+    // Logo (top-right) if we have one
+    if (data.firm.logo_data_url) {
+      try {
+        // Logo box: max 35×18 mm in the top-right corner.
+        const logoW = 35;
+        const logoH = 18;
+        doc.addImage(data.firm.logo_data_url, 'PNG', W - M - logoW, M - 4, logoW, logoH, undefined, 'FAST');
+      } catch {
+        // Bad data URL or unsupported format — skip silently.
+      }
+    }
+    doc.setFontSize(16);
+    setColor(NAVY);
+    doc.text(data.firm.name || data.firm.legal_name || '', M, y);
+    y += 5;
+    doc.setFontSize(9);
+    setColor(GREY);
+    const firmLines = [
+      data.firm.legal_name && data.firm.legal_name !== data.firm.name ? data.firm.legal_name : null,
+      [data.firm.address_line1, data.firm.address_line2].filter(Boolean).join(', '),
+      [data.firm.postal_code, data.firm.city, data.firm.country].filter(Boolean).join(', '),
+      [data.firm.phone, data.firm.email].filter(Boolean).join(' · '),
+      data.firm.website,
+      [
+        data.firm.registration_number ? `Reg. ${data.firm.registration_number}` : null,
+        data.firm.tax_id ? `TIC ${data.firm.tax_id}` : null,
+        data.firm.vat_number ? `VAT ${data.firm.vat_number}` : null,
+      ].filter(Boolean).join(' · '),
+    ].filter((l): l is string => !!l && l.trim().length > 0);
+    for (const line of firmLines) { doc.text(line, M, y); y += 3.8; }
+    y += 4;
+    return y;
+  };
+
+  // ============================================================
+  // PAGE 1 — COVER LETTER
+  // ============================================================
   let y = M;
+  y = drawLetterhead(y);
 
-  // --- Letterhead: firm details ---
-  doc.setFontSize(18);
-  doc.setTextColor(26, 54, 93);  // pc-navy
-  doc.text(data.firm.name || data.firm.legal_name || 'Engagement letter', M, y);
-  y += 6;
-
+  // Date + city line (top-right of letter body)
   doc.setFontSize(10);
-  doc.setTextColor(90, 100, 120);
-  const firmLines = [
-    data.firm.legal_name && data.firm.legal_name !== data.firm.name ? data.firm.legal_name : null,
-    [data.firm.address_line1, data.firm.address_line2].filter(Boolean).join(', '),
-    [data.firm.postal_code, data.firm.city, data.firm.country].filter(Boolean).join(', '),
-    [data.firm.phone, data.firm.email].filter(Boolean).join(' · '),
-    data.firm.website,
-    [
-      data.firm.registration_number ? `Reg. ${data.firm.registration_number}` : null,
-      data.firm.tax_id ? `TIC ${data.firm.tax_id}` : null,
-      data.firm.vat_number ? `VAT ${data.firm.vat_number}` : null,
-    ].filter(Boolean).join(' · '),
-  ].filter((l): l is string => !!l && l.trim().length > 0);
-  for (const line of firmLines) { doc.text(line, M, y); y += 4.2; }
-  y += 4;
+  setColor(BODY);
+  const today = new Date().toLocaleDateString('en-GB');
+  doc.text(`${data.firm.city || ''}, ${today}`.replace(/^, /, ''), W - M, y, { align: 'right' });
+  y += 8;
 
-  // --- Title ---
-  doc.setFontSize(15);
-  doc.setTextColor(26, 54, 93);
-  doc.text(`Engagement Letter — v${data.version}`, M, y);
-  y += 5.5;
-  doc.setFontSize(10);
-  doc.setTextColor(90, 100, 120);
-  const period = [
-    data.effective_from ? `Effective from ${fmtDateGB(data.effective_from)}` : null,
-    data.effective_to ? `to ${fmtDateGB(data.effective_to)}` : null,
-  ].filter(Boolean).join(' ');
-  if (period) { doc.text(period, M, y); y += 4.5; }
-  y += 4;
-
-  // --- Client block ---
-  doc.setDrawColor(220, 226, 236);
-  doc.setLineWidth(0.2);
-  doc.line(M, y, W - M, y);
-  y += 4;
-  doc.setFontSize(11);
-  doc.setTextColor(26, 54, 93);
-  doc.text('To:', M, y);
-  y += 5;
-  doc.setFontSize(10);
-  doc.setTextColor(40, 50, 70);
+  // Addressee
+  setColor(BODY);
   const clientLines = [
     data.client.legal_name || data.client.name,
     data.client.address,
     [data.client.city, data.client.country].filter(Boolean).join(', '),
-    [
-      data.client.tax_number ? `TIC ${data.client.tax_number}` : null,
-      data.client.vat_number ? `VAT ${data.client.vat_number}` : null,
-      data.client.registration_number ? `HE ${data.client.registration_number}` : null,
-      data.client.id_number ? `ID ${data.client.id_number}` : null,
-    ].filter(Boolean).join(' · '),
-  ].filter((l): l is string => !!l && (l as string).trim().length > 0);
-  for (const line of clientLines) { doc.text(line as string, M, y); y += 4.4; }
+  ].filter((l): l is string => !!l && l.trim().length > 0);
+  for (const line of clientLines) { doc.text(line, M, y); y += 4.4; }
   y += 6;
 
-  // --- Intro ---
+  // Salutation
+  doc.text(`Dear ${data.client.name || 'Sir / Madam'},`, M, y);
+  y += 7;
+
+  // Subject
+  doc.setFontSize(11);
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
+  doc.text('Provision of services as per scope of services detailed in the Statement of Work', M, y, { maxWidth: W - 2 * M });
+  // wrap if too long
+  const subjLines = doc.splitTextToSize('Provision of services as per scope of services detailed in the Statement of Work', W - 2 * M);
+  y += subjLines.length * 5;
+  doc.setFont('Roboto', 'normal');
+  y += 4;
+
+  // Body — cover letter text (with merge fields applied)
   doc.setFontSize(10);
-  doc.setTextColor(40, 50, 70);
-  if (data.intro_text) {
-    const wrapped = doc.splitTextToSize(data.intro_text, W - 2 * M);
-    doc.text(wrapped, M, y);
-    y += wrapped.length * 4.4 + 4;
+  setColor(BODY);
+  const coverText = applyMergeFields(data.cover_letter_text || DEFAULT_COVER, mergeVars);
+  // Render paragraphs with breaks
+  for (const para of coverText.split(/\n+/)) {
+    if (!para.trim()) continue;
+    y = writeWrapped(para.trim(), M, y, W - 2 * M);
+    y += 3;
   }
+  y += 6;
 
-  // --- Services table ---
-  doc.setFontSize(12);
-  doc.setTextColor(26, 54, 93);
-  doc.text('Scope of services and fees', M, y);
+  // Sign-off
+  y = ensureRoom(45, y);
+  doc.setFontSize(10);
+  setColor(BODY);
+  doc.text('Yours faithfully,', M, y);
+  y += 18;
+  doc.setDrawColor(180, 190, 210);
+  doc.line(M, y, M + 80, y);
+  y += 4;
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
+  doc.text(data.engagement_leader || '', M, y);
+  doc.setFont('Roboto', 'normal');
+  setColor(GREY);
+  doc.setFontSize(9);
+  y += 4;
+  doc.text(`For and on behalf of ${data.firm.legal_name || data.firm.name || ''}`, M, y);
+
+  // Client acceptance line at the foot of the cover letter
+  y = H - M - 24;
+  doc.setFontSize(9);
+  setColor(BODY);
+  doc.text('We accept the terms of the agreement as set out above and in the Statement of Work.', M, y);
+  y += 12;
+  doc.setDrawColor(180, 190, 210);
+  doc.line(M, y, M + 80, y);
+  doc.line(M + 90, y, M + 170, y);
+  setColor(GREY);
+  doc.setFontSize(8);
+  doc.text('Signature / Name', M, y + 4);
+  doc.text('Date', M + 90, y + 4);
+
+  // ============================================================
+  // PAGE 2+ — STATEMENT OF WORK
+  // ============================================================
+  doc.addPage();
+  y = M;
+  y = drawLetterhead(y);
+
+  doc.setFontSize(14);
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
+  doc.text('Statement of Work', M, y);
+  doc.setFont('Roboto', 'normal');
   y += 5.5;
+  doc.setFontSize(10);
+  setColor(GREY);
+  doc.text(`v${data.version}`, M, y);
+  const period = [
+    data.effective_from ? `Effective from ${fmtDateGB(data.effective_from)}` : null,
+    data.effective_to ? `to ${fmtDateGB(data.effective_to)}` : null,
+  ].filter(Boolean).join(' ');
+  if (period) {
+    doc.text(period, W - M, y, { align: 'right' });
+  }
+  y += 7;
 
-  // Header row
+  // Client line for context
+  setColor(BODY);
+  doc.setFontSize(10);
+  doc.text(`Client: ${data.client.legal_name || data.client.name}`, M, y);
+  y += 6;
+
+  // Intro
+  doc.setFontSize(10);
+  setColor(BODY);
+  const introText = applyMergeFields(data.intro_text || DEFAULT_INTRO, mergeVars);
+  for (const para of introText.split(/\n+/)) {
+    if (!para.trim()) continue;
+    y = writeWrapped(para.trim(), M, y, W - 2 * M);
+    y += 2.5;
+  }
+  y += 4;
+
+  // ---- Services / Deliverables ----
+  y = ensureRoom(20, y);
+  doc.setFontSize(12);
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
+  doc.text('1. Services to be provided', M, y);
+  doc.setFont('Roboto', 'normal');
+  y += 5;
+  doc.setFontSize(10);
+  setColor(BODY);
+
+  for (const s of data.services) {
+    y = ensureRoom(7, y);
+    // bullet
+    doc.setFont('Roboto', 'bold');
+    doc.text('•', M, y);
+    doc.setFont('Roboto', 'normal');
+    if (data.fee_mode === 'per_service' && s.annual_fee != null && s.annual_fee > 0) {
+      // Right-aligned fee
+      doc.text(fmtMoney(s.annual_fee, data.currency), W - M, y, { align: 'right' });
+      // Label that wraps within the remaining width
+      const wrapped = doc.splitTextToSize(s.service_label, W - 2 * M - 4 - 30);
+      doc.text(wrapped, M + 4, y);
+      y += wrapped.length * 4.4;
+    } else {
+      const wrapped = doc.splitTextToSize(s.service_label, W - 2 * M - 4);
+      doc.text(wrapped, M + 4, y);
+      y += wrapped.length * 4.4;
+    }
+    if (s.scope_notes && s.scope_notes.trim()) {
+      doc.setFontSize(9);
+      setColor(GREY);
+      const wrapped = doc.splitTextToSize(s.scope_notes, W - 2 * M - 8);
+      y = writeWrapped(s.scope_notes, M + 8, y, W - 2 * M - 8, 4);
+      y += 1;
+      doc.setFontSize(10);
+      setColor(BODY);
+    }
+  }
+  y += 4;
+
+  // ---- Fees, expenses, billing ----
+  y = ensureRoom(40, y);
+  doc.setFontSize(12);
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
+  doc.text('2. Fees, expenses, and billing', M, y);
+  doc.setFont('Roboto', 'normal');
+  y += 5;
+  doc.setFontSize(10);
+  setColor(BODY);
+
+  // A. Hourly rates table (always shown — these are the firm's standard rates
+  // governing any out-of-scope work).
+  doc.setFont('Roboto', 'bold');
+  doc.text('A. Professional fees — standard hourly rates', M, y);
+  doc.setFont('Roboto', 'normal');
+  y += 5;
   doc.setFillColor(241, 245, 249);
   doc.rect(M, y, W - 2 * M, 6, 'F');
   doc.setFontSize(9);
-  doc.setTextColor(90, 100, 120);
-  doc.text('Service', M + 2, y + 4);
-  doc.text('Annual fee', W - M - 2, y + 4, { align: 'right' });
-  y += 7;
-
+  setColor(GREY);
+  doc.text('Role', M + 2, y + 4);
+  doc.text('Hourly rate', W - M - 2, y + 4, { align: 'right' });
+  y += 6;
   doc.setFontSize(10);
-  doc.setTextColor(40, 50, 70);
-  for (const s of data.services) {
-    // Page-break check
-    if (y > 260) { doc.addPage(); y = M; }
-    doc.setFont('Roboto', 'normal');
-    doc.text(s.service_label, M + 2, y + 4);
-    doc.text(fmtMoney(s.annual_fee, data.currency), W - M - 2, y + 4, { align: 'right' });
-    y += 6;
-    if (s.scope_notes && s.scope_notes.trim()) {
-      doc.setFontSize(9);
-      doc.setTextColor(100, 110, 130);
-      const wrapped = doc.splitTextToSize(s.scope_notes, W - 2 * M - 4);
-      doc.text(wrapped, M + 4, y + 3);
-      y += wrapped.length * 4 + 2;
-      doc.setFontSize(10);
-      doc.setTextColor(40, 50, 70);
-    }
+  setColor(BODY);
+  const rateRows: Array<[string, number | null | undefined]> = [
+    ['Director', data.hourly_rate_director],
+    ['Manager', data.hourly_rate_manager],
+    ['Support Staff', data.hourly_rate_support],
+  ];
+  for (const [role, rate] of rateRows) {
+    if (rate == null) continue;
+    y = ensureRoom(5, y);
+    doc.text(role, M + 2, y + 4);
+    doc.text(fmtMoney(rate, data.currency), W - M - 2, y + 4, { align: 'right' });
     doc.setDrawColor(240, 244, 250);
     doc.setLineWidth(0.15);
-    doc.line(M, y, W - M, y);
-    y += 1.5;
+    doc.line(M, y + 5.5, W - M, y + 5.5);
+    y += 5.8;
   }
-
-  // Total
+  if (data.discount_percent && data.discount_percent > 0) {
+    setColor(GREY);
+    doc.setFontSize(9);
+    doc.text(`A discount of ${data.discount_percent}% applies to the above rates.`, M, y + 4);
+    y += 6;
+    doc.setFontSize(10);
+    setColor(BODY);
+  }
   y += 3;
-  doc.setDrawColor(180, 190, 210);
-  doc.setLineWidth(0.4);
-  doc.line(M, y, W - M, y);
-  y += 5;
-  doc.setFontSize(11);
-  doc.setTextColor(26, 54, 93);
-  doc.text('Total annual fee', M + 2, y);
-  doc.text(fmtMoney(data.total_annual_fee, data.currency), W - M - 2, y, { align: 'right' });
-  y += 8;
 
-  // --- Terms ---
-  if (data.terms_text) {
-    if (y > 240) { doc.addPage(); y = M; }
-    doc.setFontSize(12);
-    doc.setTextColor(26, 54, 93);
-    doc.text('Terms', M, y);
+  // B. Fee model — flat vs per_service
+  if (data.fee_mode === 'flat') {
+    y = ensureRoom(20, y);
+    doc.setFont('Roboto', 'bold');
+    doc.text('B. Engagement fee', M, y);
+    doc.setFont('Roboto', 'normal');
     y += 5;
-    doc.setFontSize(9.5);
-    doc.setTextColor(40, 50, 70);
-    const wrapped = doc.splitTextToSize(data.terms_text, W - 2 * M);
-    for (const line of wrapped) {
-      if (y > 280) { doc.addPage(); y = M; doc.setFontSize(9.5); doc.setTextColor(40, 50, 70); }
-      doc.text(line, M, y);
-      y += 4.2;
+    const annual = Number(data.annual_estimate || 0);
+    const monthly = annual / 12;
+    if (data.min_monthly_fee && data.min_monthly_fee > 0) {
+      y = writeWrapped(`Minimum monthly fee: ${fmtMoney(data.min_monthly_fee, data.currency)} regardless of service volume.`, M, y, W - 2 * M);
+      y += 1;
     }
-    y += 4;
+    if (annual > 0) {
+      y = writeWrapped(
+        `Estimated annual fee: ${fmtMoney(annual, data.currency)} (i.e. ${fmtMoney(monthly, data.currency)} per month) plus necessary out-of-pocket expenses and VAT at the applicable rate. Invoices raised monthly.`,
+        M, y, W - 2 * M,
+      );
+      y += 2;
+    }
+  } else {
+    // per_service total
+    y = ensureRoom(15, y);
+    doc.setFont('Roboto', 'bold');
+    doc.text('B. Fee summary per service', M, y);
+    doc.setFont('Roboto', 'normal');
+    y += 5;
+    const total = data.services.reduce((s, x) => s + (Number(x.annual_fee) || 0), 0);
+    doc.setDrawColor(180, 190, 210);
+    doc.setLineWidth(0.4);
+    doc.line(M, y, W - M, y);
+    y += 5;
+    doc.setFontSize(11);
+    setColor(NAVY);
+    doc.text('Total annual fee', M, y);
+    doc.text(fmtMoney(total, data.currency), W - M, y, { align: 'right' });
+    y += 6;
+    doc.setFontSize(10);
+    setColor(BODY);
+    if (data.min_monthly_fee && data.min_monthly_fee > 0) {
+      y = writeWrapped(`Minimum monthly fee: ${fmtMoney(data.min_monthly_fee, data.currency)} regardless of service volume.`, M, y, W - 2 * M);
+      y += 2;
+    }
+  }
+  if (data.annual_review_notice_days) {
+    setColor(GREY);
+    doc.setFontSize(9);
+    y = writeWrapped(`We reserve the right to adjust our rates annually with ${data.annual_review_notice_days} days prior notice.`, M, y, W - 2 * M, 4);
+    doc.setFontSize(10);
+    setColor(BODY);
+  }
+  y += 4;
+
+  // C. Invoices and payment
+  y = ensureRoom(15, y);
+  doc.setFont('Roboto', 'bold');
+  doc.text('C. Invoices and payment', M, y);
+  doc.setFont('Roboto', 'normal');
+  y += 5;
+  y = writeWrapped(
+    'Invoices will be raised at the end of every month and all charges will be specified in Euro. All invoices are due for payment on presentation. In the event of delay in payment, we reserve the right to suspend the provision of services.',
+    M, y, W - 2 * M,
+  );
+  y += 4;
+
+  // ---- Terms ----
+  y = ensureRoom(20, y);
+  doc.setFontSize(12);
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
+  doc.text('3. Terms', M, y);
+  doc.setFont('Roboto', 'normal');
+  y += 5;
+  doc.setFontSize(9.5);
+  setColor(BODY);
+  const termsText = applyMergeFields(data.terms_text || DEFAULT_TERMS, mergeVars);
+  for (const para of termsText.split(/\n+/)) {
+    if (!para.trim()) continue;
+    y = writeWrapped(para.trim(), M, y, W - 2 * M, 4.2);
+    y += 2;
   }
 
-  // --- Acceptance block ---
-  if (y > 240) { doc.addPage(); y = M; }
+  // ---- Acceptance block ----
+  y = ensureRoom(40, y);
   y += 4;
   doc.setFontSize(12);
-  doc.setTextColor(26, 54, 93);
+  setColor(NAVY);
+  doc.setFont('Roboto', 'bold');
   doc.text('Acceptance', M, y);
+  doc.setFont('Roboto', 'normal');
   y += 5;
   doc.setFontSize(10);
-  doc.setTextColor(40, 50, 70);
-  const acceptText = `By signing below or by replying to the email transmitting this letter with the word "ACCEPTED", you confirm that you have read and agree to the terms set out above and authorise us to commence the engagement.`;
-  const aw = doc.splitTextToSize(acceptText, W - 2 * M);
-  doc.text(aw, M, y);
-  y += aw.length * 4.4 + 8;
-
-  // Signature lines
-  const colW = (W - 2 * M - 10) / 2;
+  setColor(BODY);
+  y = writeWrapped(
+    'By signing below or by replying to the email transmitting this letter with the word "ACCEPTED", you confirm that you have read and agree to the terms set out above and authorise us to commence the engagement.',
+    M, y, W - 2 * M,
+  );
+  y += 10;
   doc.setDrawColor(180, 190, 210);
-  doc.line(M, y + 10, M + colW, y + 10);
-  doc.line(M + colW + 10, y + 10, W - M, y + 10);
+  doc.line(M, y, M + 80, y);
+  doc.line(M + 90, y, W - M, y);
   doc.setFontSize(9);
-  doc.setTextColor(100, 110, 130);
-  doc.text('For the Client (name, signature, date)', M, y + 14);
-  doc.text('For the Firm (name, signature, date)', M + colW + 10, y + 14);
+  setColor(GREY);
+  doc.text('For the Client (name, signature, date)', M, y + 4);
+  doc.text('For the Firm (name, signature, date)', M + 90, y + 4);
 
+  // ---- Done ----
   if (mode === 'arraybuffer') {
     return doc.output('arraybuffer') as ArrayBuffer;
   }
-  doc.save(`engagement-letter-${data.client.name || 'client'}-v${data.version}.pdf`);
+  doc.save(`engagement-letter-${(data.client.name || 'client').replace(/[^\w-]+/g, '_')}-v${data.version}.pdf`);
 }

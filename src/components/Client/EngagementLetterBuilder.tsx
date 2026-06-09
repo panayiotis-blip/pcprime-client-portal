@@ -2,27 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import {
   generateEngagementLetterPdf,
+  fetchLogoDataUrl,
   DEFAULT_INTRO,
   DEFAULT_TERMS,
+  DEFAULT_COVER,
   type LetterService,
 } from '../../services/engagementLetterPdf';
 
-// Two-mode editor: 'new' creates a fresh draft (auto-versioned); 'edit'
-// loads an existing draft and lets you change it. Sent / accepted /
-// superseded letters open read-only.
-
 type Props = {
   clientId: number;
-  client: any;             // for the To: block on the PDF
-  letterId?: number;       // if set: edit existing
+  client: any;
+  letterId?: number;
   onClose: () => void;
   onSaved: () => void;
 };
 
 type ServiceDef = { id: number; key: string; label: string };
 
-// PDF generation returns ArrayBuffer when mode='arraybuffer'; convert that
-// to base64 (chunked to dodge "Maximum call stack" on bigger PDFs).
 function arrayBufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let binary = '';
@@ -39,29 +35,40 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // Service catalogue from the Services tab.
   const [services, setServices] = useState<ServiceDef[]>([]);
+  const [firm, setFirm] = useState<any>({});
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
 
-  // The draft being edited.
+  // Letter state
   const [version, setVersion] = useState(1);
   const [status, setStatus] = useState<string>('draft');
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
   const [chosen, setChosen] = useState<LetterService[]>([]);
+  const [feeMode, setFeeMode] = useState<'flat' | 'per_service'>('flat');
+  const [annualEstimate, setAnnualEstimate] = useState<number>(0);
+  const [engagementLeader, setEngagementLeader] = useState('');
+  const [hourlyDirector, setHourlyDirector] = useState<number | ''>('');
+  const [hourlyManager, setHourlyManager]   = useState<number | ''>('');
+  const [hourlySupport, setHourlySupport]   = useState<number | ''>('');
+  const [discountPct, setDiscountPct]       = useState<number | ''>('');
+  const [minMonthlyFee, setMinMonthlyFee]   = useState<number | ''>('');
+  const [reviewNoticeDays, setReviewNoticeDays] = useState<number | ''>(30);
+  const [coverLetterText, setCoverLetterText] = useState(DEFAULT_COVER);
   const [introText, setIntroText] = useState(DEFAULT_INTRO);
   const [termsText, setTermsText] = useState(DEFAULT_TERMS);
   const [notes, setNotes] = useState('');
   const [currency] = useState('EUR');
-  // Firm details (for the PDF letterhead)
-  const [firm, setFirm] = useState<any>({});
-  // Send-modal state
   const [sendToEmail, setSendToEmail] = useState('');
   const [showSendForm, setShowSendForm] = useState(false);
 
-  const totalFee = useMemo(
-    () => chosen.reduce((sum, s) => sum + (Number(s.annual_fee) || 0), 0),
+  // Derived totals
+  const perServiceTotal = useMemo(
+    () => chosen.reduce((s, x) => s + (Number(x.annual_fee) || 0), 0),
     [chosen],
   );
+  const monthlyFromAnnual = useMemo(() => (Number(annualEstimate) || 0) / 12, [annualEstimate]);
+  const totalAnnualFee = feeMode === 'flat' ? Number(annualEstimate) || 0 : perServiceTotal;
 
   // Initial load
   useEffect(() => {
@@ -74,6 +81,11 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
         setServices(svcs as ServiceDef[]);
         setFirm(settings || {});
 
+        // Fetch logo if the firm has one
+        if (settings?.logo_url) {
+          fetchLogoDataUrl(settings.logo_url).then(setLogoDataUrl);
+        }
+
         if (isEditing && letterId != null) {
           const row = await api.getEngagementLetter(letterId);
           if (row) {
@@ -82,15 +94,24 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
             setEffectiveFrom(row.effective_from || '');
             setEffectiveTo(row.effective_to || '');
             setChosen(Array.isArray(row.services) ? row.services : []);
-            setIntroText(row.intro_text || DEFAULT_INTRO);
-            setTermsText(row.terms_text || DEFAULT_TERMS);
+            setFeeMode((row.fee_mode || 'flat') as 'flat' | 'per_service');
+            setAnnualEstimate(Number(row.annual_estimate) || 0);
+            setEngagementLeader(row.engagement_leader || settings?.engagement_leader_default || '');
+            setHourlyDirector(row.hourly_rate_director ?? settings?.hourly_rate_director ?? '');
+            setHourlyManager(row.hourly_rate_manager ?? settings?.hourly_rate_manager ?? '');
+            setHourlySupport(row.hourly_rate_support ?? settings?.hourly_rate_support ?? '');
+            setDiscountPct(row.discount_percent ?? settings?.default_discount_percent ?? '');
+            setMinMonthlyFee(row.min_monthly_fee ?? settings?.default_min_monthly_fee ?? '');
+            setReviewNoticeDays(row.annual_review_notice_days ?? 30);
+            setCoverLetterText(row.cover_letter_text || settings?.default_cover_letter_text || DEFAULT_COVER);
+            setIntroText(row.intro_text || settings?.default_sow_intro_text || DEFAULT_INTRO);
+            setTermsText(row.terms_text || settings?.default_terms_text || DEFAULT_TERMS);
             setNotes(row.notes || '');
-            // Pre-fill the recipient field
             const clientEmail = Array.isArray(client?.email) ? client.email[0] : client?.email;
             setSendToEmail(clientEmail || '');
           }
         } else {
-          // New draft — auto-version + default 12-month effective window.
+          // New draft — pre-fill from firm defaults.
           const nextV = await api.getNextEngagementLetterVersion(clientId);
           setVersion(nextV);
           const today = new Date();
@@ -99,6 +120,15 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
           oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
           setEffectiveFrom(todayIso);
           setEffectiveTo(oneYearLater.toISOString().slice(0, 10));
+          setEngagementLeader(settings?.engagement_leader_default || '');
+          setHourlyDirector(settings?.hourly_rate_director ?? '');
+          setHourlyManager(settings?.hourly_rate_manager ?? '');
+          setHourlySupport(settings?.hourly_rate_support ?? '');
+          setDiscountPct(settings?.default_discount_percent ?? '');
+          setMinMonthlyFee(settings?.default_min_monthly_fee ?? '');
+          setCoverLetterText(settings?.default_cover_letter_text || DEFAULT_COVER);
+          setIntroText(settings?.default_sow_intro_text || DEFAULT_INTRO);
+          setTermsText(settings?.default_terms_text || DEFAULT_TERMS);
           const clientEmail = Array.isArray(client?.email) ? client.email[0] : client?.email;
           setSendToEmail(clientEmail || '');
         }
@@ -129,7 +159,6 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     setChosen(prev => prev.map((s, i) => i === idx ? { ...s, ...patch } : s));
   };
 
-  // PDF data — built fresh for every preview / send.
   const buildPdfData = () => ({
     client: {
       name: client?.name || '',
@@ -142,13 +171,22 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
       registration_number: client?.registration_number || null,
       id_number: client?.id_number || null,
     },
-    firm,
+    firm: { ...firm, logo_data_url: logoDataUrl },
     version,
     effective_from: effectiveFrom || null,
     effective_to: effectiveTo || null,
+    fee_mode: feeMode,
+    annual_estimate: feeMode === 'flat' ? (Number(annualEstimate) || 0) : null,
     services: chosen,
-    total_annual_fee: totalFee,
+    hourly_rate_director: hourlyDirector === '' ? null : Number(hourlyDirector),
+    hourly_rate_manager:  hourlyManager === '' ? null : Number(hourlyManager),
+    hourly_rate_support:  hourlySupport === '' ? null : Number(hourlySupport),
+    discount_percent:     discountPct === '' ? null : Number(discountPct),
+    min_monthly_fee:      minMonthlyFee === '' ? null : Number(minMonthlyFee),
+    annual_review_notice_days: reviewNoticeDays === '' ? null : Number(reviewNoticeDays),
     currency,
+    engagement_leader: engagementLeader,
+    cover_letter_text: coverLetterText,
     intro_text: introText,
     terms_text: termsText,
   });
@@ -160,10 +198,20 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     effective_from: effectiveFrom || null,
     effective_to: effectiveTo || null,
     services: chosen,
-    total_annual_fee: totalFee,
+    fee_mode: feeMode,
+    annual_estimate: feeMode === 'flat' ? (Number(annualEstimate) || 0) : null,
+    total_annual_fee: totalAnnualFee,
     currency,
-    intro_text: introText,
-    terms_text: termsText,
+    engagement_leader: engagementLeader || null,
+    hourly_rate_director: hourlyDirector === '' ? null : Number(hourlyDirector),
+    hourly_rate_manager:  hourlyManager === '' ? null : Number(hourlyManager),
+    hourly_rate_support:  hourlySupport === '' ? null : Number(hourlySupport),
+    discount_percent:     discountPct === '' ? null : Number(discountPct),
+    min_monthly_fee:      minMonthlyFee === '' ? null : Number(minMonthlyFee),
+    annual_review_notice_days: reviewNoticeDays === '' ? null : Number(reviewNoticeDays),
+    cover_letter_text: coverLetterText || null,
+    intro_text: introText || null,
+    terms_text: termsText || null,
     notes: notes || null,
   });
 
@@ -190,7 +238,6 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     if (!sendToEmail.trim()) { alert('Enter a recipient email.'); return; }
     setSending(true);
     try {
-      // 1. Persist the current draft (create or update).
       let id = letterId;
       if (id == null) {
         const created = await api.createEngagementLetter(clientId, buildPayload());
@@ -198,11 +245,9 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
       } else if (editable) {
         await api.updateEngagementLetter(id, buildPayload());
       }
-      // 2. Generate the PDF as base64 for the attachment.
       const buf = generateEngagementLetterPdf(buildPdfData(), 'arraybuffer') as ArrayBuffer;
       const b64 = arrayBufferToBase64(buf);
       const filename = `engagement-letter-${(client?.name || 'client').replace(/[^\w-]+/g, '_')}-v${version}.pdf`;
-      // 3. Send via Outlook (caller's stored SMTP creds).
       await api.sendViaOutlook({
         to: sendToEmail.trim(),
         subject: `Engagement Letter — ${firm?.name || 'Our firm'} — v${version}`,
@@ -210,7 +255,6 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
         html: `<p>Dear ${client?.name || 'client'},</p><p>Please find attached our engagement letter for your acceptance. Reply with the word <strong>"ACCEPTED"</strong> to confirm and we'll proceed.</p><p>Kind regards,<br>${firm?.name || ''}</p>`,
         attachments: [{ filename, contentBase64: b64, contentType: 'application/pdf' }],
       });
-      // 4. Stamp as sent + supersede any prior sent/accepted versions.
       await api.markEngagementLetterSent(id!, sendToEmail.trim());
       await api.supersedePriorEngagementLetters(clientId, id!);
       alert('Engagement letter sent. Mark it Accepted from the list once the client confirms.');
@@ -223,13 +267,18 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     }
   };
 
+  const numInput = (v: number | '', setter: (n: number | '') => void, width = 110) => (
+    <input type="number" min={0} step={1} value={v} onChange={(e) => setter(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+      disabled={!editable} className="form-input" style={{ width, padding: '3px 6px', fontSize: 13, textAlign: 'right' }} />
+  );
+
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)', zIndex: 1100,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: '#fff', borderRadius: 8, padding: 20, width: '100%', maxWidth: 820,
+        background: '#fff', borderRadius: 8, padding: 20, width: '100%', maxWidth: 880,
         maxHeight: '92vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
@@ -246,8 +295,8 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
 
         {loading ? <p>Loading…</p> : (
           <>
-            {/* Effective dates */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            {/* Effective dates + engagement leader */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Effective from</label>
                 <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="form-input" style={{ width: '100%' }} disabled={!editable} />
@@ -256,12 +305,16 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
                 <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Effective to</label>
                 <input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} className="form-input" style={{ width: '100%' }} disabled={!editable} />
               </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Engagement Leader</label>
+                <input type="text" value={engagementLeader} onChange={(e) => setEngagementLeader(e.target.value)} className="form-input" style={{ width: '100%' }} disabled={!editable} placeholder="e.g. Mr. Panayiotis Savva" />
+              </div>
             </div>
 
-            {/* Service selection + fees */}
+            {/* Service selection */}
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                Services covered (tick + set annual fee)
+                Services covered
               </label>
               <div style={{ border: '1px solid #e2e8f0', borderRadius: 4 }}>
                 {services.map(svc => {
@@ -273,12 +326,12 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: editable ? 'pointer' : 'default' }}>
                         <input type="checkbox" checked={isChosen} onChange={(e) => toggleService(svc, e.target.checked)} disabled={!editable} />
                         <span style={{ fontWeight: 600, color: '#1a365d', flex: 1 }}>{svc.label}</span>
-                        {isChosen && (
+                        {isChosen && feeMode === 'per_service' && (
                           <>
                             <span style={{ fontSize: 11, color: '#64748b' }}>Annual fee €</span>
                             <input
                               type="number" min={0} step={1}
-                              value={item!.annual_fee}
+                              value={item!.annual_fee ?? 0}
                               onChange={(e) => updateChosen(idx, { annual_fee: parseFloat(e.target.value) || 0 })}
                               disabled={!editable}
                               className="form-input"
@@ -303,21 +356,81 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
                   );
                 })}
               </div>
-              <div style={{ marginTop: 6, textAlign: 'right', fontSize: 14, color: '#1a365d' }}>
-                <strong>Total annual fee: €{totalFee.toFixed(2)}</strong>
-              </div>
             </div>
 
-            {/* Intro */}
+            {/* Fee model — radios + relevant inputs */}
+            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#1a365d', marginBottom: 6 }}>Fee model</div>
+              <div style={{ display: 'flex', gap: 18, marginBottom: 8, fontSize: 13 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: editable ? 'pointer' : 'default' }}>
+                  <input type="radio" checked={feeMode === 'flat'} onChange={() => setFeeMode('flat')} disabled={!editable} />
+                  Flat annual fee (billed monthly)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: editable ? 'pointer' : 'default' }}>
+                  <input type="radio" checked={feeMode === 'per_service'} onChange={() => setFeeMode('per_service')} disabled={!editable} />
+                  Per-service annual fee
+                </label>
+              </div>
+              {feeMode === 'flat' ? (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                  <label style={{ fontSize: 13, color: '#475569' }}>Annual estimate €</label>
+                  {numInput(annualEstimate, (v) => setAnnualEstimate(typeof v === 'number' ? v : 0), 140)}
+                  <span style={{ fontSize: 13, color: '#64748b' }}>
+                    = {currency} {monthlyFromAnnual.toFixed(2)} / month
+                  </span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: '#475569' }}>
+                  Total per-service fees: <strong style={{ color: '#1a365d' }}>€{perServiceTotal.toFixed(2)}/year</strong> (each service has its own fee input above)
+                </div>
+              )}
+
+              <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Director €/hr</label>
+                  {numInput(hourlyDirector, setHourlyDirector, '100%' as any)}
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Manager €/hr</label>
+                  {numInput(hourlyManager, setHourlyManager, '100%' as any)}
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Support €/hr</label>
+                  {numInput(hourlySupport, setHourlySupport, '100%' as any)}
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Discount %</label>
+                  {numInput(discountPct, setDiscountPct, '100%' as any)}
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Min monthly €</label>
+                  {numInput(minMonthlyFee, setMinMonthlyFee, '100%' as any)}
+                </div>
+              </div>
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: '6px 0 0' }}>
+                Hourly rates apply to out-of-scope work. Defaults pulled from Company Settings.
+              </p>
+            </div>
+
+            {/* Cover letter body */}
             <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Introduction</label>
+              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                Cover letter body (page 1) — supports {`{{client_name}}`} and {`{{engagement_leader}}`}
+              </label>
+              <textarea value={coverLetterText} onChange={(e) => setCoverLetterText(e.target.value)} rows={6} disabled={!editable}
+                className="form-input" style={{ width: '100%', fontSize: 13 }} />
+            </div>
+
+            {/* SOW intro */}
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Statement of Work — intro</label>
               <textarea value={introText} onChange={(e) => setIntroText(e.target.value)} rows={3} disabled={!editable}
                 className="form-input" style={{ width: '100%', fontSize: 13 }} />
             </div>
 
             {/* Terms */}
             <div style={{ marginBottom: 10 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Terms (editable boilerplate)</label>
+              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Terms (full text)</label>
               <textarea value={termsText} onChange={(e) => setTermsText(e.target.value)} rows={10} disabled={!editable}
                 className="form-input" style={{ width: '100%', fontSize: 12, fontFamily: 'inherit' }} />
             </div>
