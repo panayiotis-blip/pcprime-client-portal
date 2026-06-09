@@ -43,14 +43,20 @@ export default function ClientHeader({
   const [findOpen, setFindOpen] = useState(false);
   const isActive = client.is_active !== false;
 
+  // Header now shows ONLY one line: the legal name for companies, or
+  // "First Surname" for individuals. The tax-office name + every other
+  // detail lives on the tabs below — keep the header read-cleanly.
+  const data = { ...client, ...form };
+  const isIndividual = (data.client_type || 'company') === 'individual';
+  const displayName = isIndividual
+    ? [data.first_name, data.surname].filter(Boolean).join(' ').trim() || data.name || '—'
+    : (data.legal_name || data.name || '—');
+
   return (
     <div className="client-header-band">
       <div className="chb-main">
         <div className="chb-identity">
-          <div className="chb-name">{form.name || client.name || '—'}</div>
-          {(form.name_tax_office || client.name_tax_office) && (
-            <div className="chb-name-tax">{form.name_tax_office || client.name_tax_office}</div>
-          )}
+          <div className="chb-name">{displayName}</div>
         </div>
 
         <div className="chb-meta">
