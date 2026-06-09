@@ -25,6 +25,7 @@ type Letter = {
   // v2 fields
   fee_mode?: 'flat' | 'per_service' | null;
   annual_estimate?: number | null;
+  engagement_type?: 'annual' | 'one_off' | null;
   engagement_leader?: string | null;
   hourly_rate_director?: number | null;
   hourly_rate_manager?: number | null;
@@ -91,6 +92,7 @@ export default function EngagementLettersList({ clientId, client }: { clientId: 
       version: l.version,
       effective_from: l.effective_from,
       effective_to: l.effective_to,
+      engagement_type: (l.engagement_type || 'annual') as 'annual' | 'one_off',
       fee_mode: (l.fee_mode || 'flat') as 'flat' | 'per_service',
       annual_estimate: l.annual_estimate ?? null,
       services: Array.isArray(l.services) ? l.services : [],
@@ -175,6 +177,9 @@ export default function EngagementLettersList({ clientId, client }: { clientId: 
                     <td style={{ padding: '6px 10px', fontWeight: 600, color: '#1a365d' }}>v{l.version}</td>
                     <td style={{ padding: '6px 10px' }}>
                       <span style={{ background: st.bg, color: st.fg, padding: '1px 8px', borderRadius: 3, fontSize: 11, fontWeight: 600 }}>{st.label}</span>
+                      {l.engagement_type === 'one_off' && (
+                        <span style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, marginLeft: 4 }} title="One-off engagement (not a recurring retainer)">one-off</span>
+                      )}
                     </td>
                     <td style={{ padding: '6px 10px', color: '#64748b' }}>
                       {fmtDate(l.effective_from)} — {fmtDate(l.effective_to)}

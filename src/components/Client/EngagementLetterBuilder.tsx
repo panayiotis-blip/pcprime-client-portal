@@ -46,6 +46,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
   const [status, setStatus] = useState<string>('draft');
   const [effectiveFrom, setEffectiveFrom] = useState('');
   const [effectiveTo, setEffectiveTo] = useState('');
+  const [engagementType, setEngagementType] = useState<'annual' | 'one_off'>('annual');
   const [chosen, setChosen] = useState<LetterService[]>([]);
   const [feeMode, setFeeMode] = useState<'flat' | 'per_service'>('flat');
   const [annualEstimate, setAnnualEstimate] = useState<number>(0);
@@ -98,6 +99,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
             setEffectiveFrom(row.effective_from || '');
             setEffectiveTo(row.effective_to || '');
             setChosen(Array.isArray(row.services) ? row.services : []);
+            setEngagementType((row.engagement_type || 'annual') as 'annual' | 'one_off');
             setFeeMode((row.fee_mode || 'flat') as 'flat' | 'per_service');
             setAnnualEstimate(Number(row.annual_estimate) || 0);
             setEngagementLeader(row.engagement_leader || settings?.engagement_leader_default || '');
@@ -198,6 +200,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     version,
     effective_from: effectiveFrom || null,
     effective_to: effectiveTo || null,
+    engagement_type: engagementType,
     fee_mode: feeMode,
     annual_estimate: feeMode === 'flat' ? (Number(annualEstimate) || 0) : null,
     services: chosen,
@@ -220,6 +223,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     version,
     effective_from: effectiveFrom || null,
     effective_to: effectiveTo || null,
+    engagement_type: engagementType,
     services: chosen,
     fee_mode: feeMode,
     annual_estimate: feeMode === 'flat' ? (Number(annualEstimate) || 0) : null,
@@ -318,14 +322,38 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
 
         {loading ? <p>Loading…</p> : (
           <>
+            {/* Engagement type — controls fee wording + monthly-billing language */}
+            <div style={{ marginBottom: 10, padding: '8px 12px', background: engagementType === 'one_off' ? '#fef3c7' : '#eef2ff', border: '1px solid ' + (engagementType === 'one_off' ? '#fbbf24' : '#a5b4fc'), borderRadius: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#1a365d', marginBottom: 4 }}>Engagement type</div>
+              <div style={{ display: 'flex', gap: 18, fontSize: 13 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: editable ? 'pointer' : 'default' }}>
+                  <input type="radio" checked={engagementType === 'annual'} onChange={() => setEngagementType('annual')} disabled={!editable} />
+                  Annual / recurring (billed monthly)
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: editable ? 'pointer' : 'default' }}>
+                  <input type="radio" checked={engagementType === 'one_off'} onChange={() => setEngagementType('one_off')} disabled={!editable} />
+                  One-off project / brief
+                </label>
+              </div>
+              <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+                {engagementType === 'one_off'
+                  ? 'A defined piece of work. The letter speaks of a "Project fee" invoiced on completion, with no monthly billing or annual rate-review language.'
+                  : 'A recurring retainer. The letter speaks of an "Annual estimate" billed monthly, with the standard annual rate-review notice.'}
+              </p>
+            </div>
+
             {/* Effective dates + engagement leader */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr', gap: 10, marginBottom: 10 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Effective from</label>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                  {engagementType === 'one_off' ? 'Project start' : 'Effective from'}
+                </label>
                 <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} className="form-input" style={{ width: '100%' }} disabled={!editable} />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Effective to</label>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                  {engagementType === 'one_off' ? 'Expected completion' : 'Effective to'}
+                </label>
                 <input type="date" value={effectiveTo} onChange={(e) => setEffectiveTo(e.target.value)} className="form-input" style={{ width: '100%' }} disabled={!editable} />
               </div>
               <div>
@@ -420,11 +448,18 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
               </div>
               {feeMode === 'flat' ? (
                 <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-                  <label style={{ fontSize: 13, color: '#475569' }}>Annual estimate €</label>
+                  <label style={{ fontSize: 13, color: '#475569' }}>
+                    {engagementType === 'one_off' ? 'Project fee €' : 'Annual estimate €'}
+                  </label>
                   {numInput(annualEstimate, (v) => setAnnualEstimate(typeof v === 'number' ? v : 0), 140)}
-                  <span style={{ fontSize: 13, color: '#64748b' }}>
-                    = {currency} {monthlyFromAnnual.toFixed(2)} / month
-                  </span>
+                  {engagementType === 'annual' && (
+                    <span style={{ fontSize: 13, color: '#64748b' }}>
+                      = {currency} {monthlyFromAnnual.toFixed(2)} / month
+                    </span>
+                  )}
+                  {engagementType === 'one_off' && (
+                    <span style={{ fontSize: 13, color: '#64748b' }}>invoiced on completion</span>
+                  )}
                 </div>
               ) : (
                 <div style={{ fontSize: 13, color: '#475569' }}>

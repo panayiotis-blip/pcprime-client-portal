@@ -58,6 +58,12 @@ export type EngagementLetterData = {
   effective_from?: string | null;
   effective_to?: string | null;
 
+  // Engagement type — 'annual' = recurring retainer, 'one_off' = single
+  // project. Changes the fee wording (Project fee vs Annual estimate),
+  // hides the annual-rate-review notice, and adjusts the cover-letter
+  // boilerplate accordingly.
+  engagement_type?: 'annual' | 'one_off';
+
   // Fee structure
   fee_mode: 'flat' | 'per_service';
   annual_estimate?: number | null;  // flat mode
@@ -455,25 +461,39 @@ export function generateEngagementLetterPdf(
   // Generous gap between sub-section A and B so they read as distinct blocks.
   y += 10;
 
-  // B. Fee model — flat vs per_service
+  // B. Fee model — flat vs per_service (and annual vs one_off wording)
+  const isOneOff = data.engagement_type === 'one_off';
   if (data.fee_mode === 'flat') {
     y = ensureRoom(20, y);
     doc.setFont('Roboto', 'bold');
-    doc.text('B. Engagement fee', M, y);
+    doc.text(isOneOff ? 'B. Project fee' : 'B. Engagement fee', M, y);
     doc.setFont('Roboto', 'normal');
     y += 6;
-    const annual = Number(data.annual_estimate || 0);
-    const monthly = annual / 12;
-    if (data.min_monthly_fee && data.min_monthly_fee > 0) {
-      y = writeWrapped(`Minimum monthly fee: ${fmtMoney(data.min_monthly_fee, data.currency)} regardless of service volume.`, M, y, W - 2 * M);
-      y += 1;
-    }
-    if (annual > 0) {
-      y = writeWrapped(
-        `Estimated annual fee: ${fmtMoney(annual, data.currency)} (i.e. ${fmtMoney(monthly, data.currency)} per month) plus necessary out-of-pocket expenses and VAT at the applicable rate. Invoices raised monthly.`,
-        M, y, W - 2 * M,
-      );
-      y += 2;
+    const fee = Number(data.annual_estimate || 0);
+    if (isOneOff) {
+      // One-off: single project fee, single invoice on completion (or
+      // milestone, but we keep it simple). No monthly cadence, no minimum.
+      if (fee > 0) {
+        y = writeWrapped(
+          `Project fee: ${fmtMoney(fee, data.currency)} plus necessary out-of-pocket expenses and VAT at the applicable rate. Invoiced on completion of the engagement (or as agreed in writing for staged delivery).`,
+          M, y, W - 2 * M,
+        );
+        y += 2;
+      }
+    } else {
+      // Annual retainer.
+      const monthly = fee / 12;
+      if (data.min_monthly_fee && data.min_monthly_fee > 0) {
+        y = writeWrapped(`Minimum monthly fee: ${fmtMoney(data.min_monthly_fee, data.currency)} regardless of service volume.`, M, y, W - 2 * M);
+        y += 1;
+      }
+      if (fee > 0) {
+        y = writeWrapped(
+          `Estimated annual fee: ${fmtMoney(fee, data.currency)} (i.e. ${fmtMoney(monthly, data.currency)} per month) plus necessary out-of-pocket expenses and VAT at the applicable rate. Invoices raised monthly.`,
+          M, y, W - 2 * M,
+        );
+        y += 2;
+      }
     }
   } else {
     // per_service total
@@ -499,7 +519,8 @@ export function generateEngagementLetterPdf(
       y += 2;
     }
   }
-  if (data.annual_review_notice_days) {
+  // Annual rate-review notice only makes sense on a recurring engagement.
+  if (!isOneOff && data.annual_review_notice_days) {
     setColor(GREY);
     doc.setFontSize(9);
     y = writeWrapped(`We reserve the right to adjust our rates annually with ${data.annual_review_notice_days} days prior notice.`, M, y, W - 2 * M, 4);
@@ -509,14 +530,16 @@ export function generateEngagementLetterPdf(
   // Spacer between fee sub-sections.
   y += 10;
 
-  // C. Invoices and payment
+  // C. Invoices and payment (wording differs for one-off vs recurring).
   y = ensureRoom(15, y);
   doc.setFont('Roboto', 'bold');
   doc.text('C. Invoices and payment', M, y);
   doc.setFont('Roboto', 'normal');
   y += 6;
   y = writeWrapped(
-    'Invoices will be raised at the end of every month and all charges will be specified in Euro. All invoices are due for payment on presentation. In the event of delay in payment, we reserve the right to suspend the provision of services.',
+    isOneOff
+      ? 'A single invoice will be issued on completion of the engagement (or per the agreed staged-delivery milestones). Charges are specified in Euro. All invoices are due for payment on presentation. In the event of delay in payment, we reserve the right to suspend the provision of services.'
+      : 'Invoices will be raised at the end of every month and all charges will be specified in Euro. All invoices are due for payment on presentation. In the event of delay in payment, we reserve the right to suspend the provision of services.',
     M, y, W - 2 * M,
   );
   // Bigger gap before the next top-level section.

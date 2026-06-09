@@ -41,7 +41,7 @@ create policy "service_deliverables write" on public.service_deliverables
 
 -- ---------- 3. Seed deliverables per service (idempotent) ----------
 -- Each block guards on the service having no deliverables yet, so re-running
--- this migration doesn't duplicate.
+-- this migration does not duplicate.
 
 -- Payroll
 insert into public.service_deliverables (service_id, ordinal, label, description)
