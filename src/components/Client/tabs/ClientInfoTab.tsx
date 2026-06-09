@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Field, useFieldCtx } from '../fieldContext';
 import { api } from '../../../services/api';
+import EngagementLettersList from '../EngagementLettersList';
 
 const BUSINESS_TYPES = [
   'Limited Company', 'Sole Trader', 'Partnership', 'Self-Employed',
@@ -109,6 +110,25 @@ function NameFields() {
   return <Field label="Legal Name" field="legal_name" />;
 }
 
+// Engagement letters list section — pulled out so it can sit in its own
+// form-section, with the client_id taken from FieldCtx.client.id.
+function EngagementSection() {
+  const { client } = useFieldCtx();
+  if (!client?.id) return null;
+  return (
+    <div className="form-section">
+      <h3>Engagement</h3>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
+        Draft, send, and track engagement letters with the client. Each letter pulls
+        the services from the <strong>Services</strong> tab and lets you set an annual fee per
+        service. Letters are versioned — re-issue annually or whenever the scope changes,
+        and prior versions stay on file for the audit trail.
+      </p>
+      <EngagementLettersList clientId={client.id} client={client} />
+    </div>
+  );
+}
+
 // "Personal Details" section — only renders for individuals. The full set
 // (passport, nationality, etc.) still lives on the Tax Registration tab; the
 // two TD1-required fields surface here so they're not buried.
@@ -168,14 +188,13 @@ export default function ClientInfoTab() {
         </div>
       </div>
 
+      <EngagementSection />
+
       <div className="form-section">
-        <h3>Engagement</h3>
-        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 10px' }}>
-          A short summary of what we do for this client and the terms of the engagement.
-          Structured service workflows (Payroll, VAT, Tax Returns, etc.) are managed on the{' '}
-          <strong>Services</strong> tab. Invoicing and fees are managed via{' '}
-          <strong>Billing</strong> — fees change with scope and shouldn't live on the client record.
-          Filing deadlines and year-end live on <strong>Registrations</strong>.
+        <h3>Engagement notes (quick reference)</h3>
+        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+          A one-line summary of what we do for this client. Use the engagement letters above
+          for the formal document; this field is just a quick reference shown on the client list.
         </p>
         <div className="form-grid">
           <Field

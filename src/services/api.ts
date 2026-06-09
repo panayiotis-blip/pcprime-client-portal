@@ -938,6 +938,86 @@ export const api = {
     if (e) throw new Error(e.message);
   },
 
+  // --------- Engagement Letters (migration 104) ---------
+  async getEngagementLetters(clientId: number) {
+    const { data, error } = await supabase.from('engagement_letters')
+      .select('*').eq('client_id', clientId).order('version', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async getEngagementLetter(id: number) {
+    const { data, error } = await supabase.from('engagement_letters')
+      .select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async getNextEngagementLetterVersion(clientId: number): Promise<number> {
+    const { data, error } = await supabase.rpc('next_engagement_letter_version', { p_client_id: clientId });
+    if (error) throw new Error(error.message);
+    return (typeof data === 'number' ? data : (data?.[0] ?? 1));
+  },
+  async createEngagementLetter(clientId: number, body: {
+    version: number;
+    effective_from?: string | null;
+    effective_to?: string | null;
+    services: any[];
+    total_annual_fee: number;
+    currency?: string;
+    intro_text?: string | null;
+    terms_text?: string | null;
+    notes?: string | null;
+  }) {
+    const { data: row, error } = await supabase.from('engagement_letters')
+      .insert({ client_id: clientId, status: 'draft', currency: 'EUR', ...body })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+  async updateEngagementLetter(id: number, patch: any) {
+    const { error } = await supabase.from('engagement_letters')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteEngagementLetter(id: number) {
+    const { error } = await supabase.from('engagement_letters').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Stamp the letter as sent + record who/when/where. The PDF goes out via
+  // sendViaOutlook (caller passes the prepared base64 attachment).
+  async markEngagementLetterSent(id: number, toEmail: string) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('engagement_letters').update({
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      sent_to_email: toEmail,
+      sent_by: session?.user?.id || null,
+    }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async markEngagementLetterAccepted(id: number, opts: {
+    method: 'email_reply' | 'portal_click';
+    signature?: string;
+    ip?: string;
+    notes?: string;
+  }) {
+    const { error } = await supabase.from('engagement_letters').update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString(),
+      accepted_method: opts.method,
+      accepted_signature: opts.signature || null,
+      accepted_ip: opts.ip || null,
+      accepted_notes: opts.notes || null,
+    }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Mark older sent/accepted letters as superseded when a new one is issued.
+  async supersedePriorEngagementLetters(clientId: number, newLetterId: number) {
+    const { data, error } = await supabase.rpc('supersede_prior_engagement_letters',
+      { p_client_id: clientId, p_new_id: newLetterId });
+    if (error) throw new Error(error.message);
+    return (typeof data === 'number' ? data : (data?.[0] ?? 0));
+  },
+
   // --------- Platform Credentials ---------
   // Passwords are encrypted at rest via migration 011. They never appear in the
   // table response — use getCredentialPassword(id) to decrypt (and audit-log).
