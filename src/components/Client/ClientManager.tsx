@@ -571,26 +571,75 @@ export default function ClientManager() {
     }
   };
 
+  // Comprehensive column set for the full export — covers every field a
+  // sane user would want without needing to query Supabase directly.
+  // Used by both the bulk-selected exports and the "Export All" buttons.
+  const rowFromClient = (c: any) => ({
+    'Code':         c.client_code || '',
+    'Name':         c.name || '',
+    'Client Name':  c.client_name || '',
+    'Trading Name': c.trading_name || '',
+    'Type':         c.client_type || '',
+    'Category':     c.client_category || '',
+    'Status':       c.client_status || '',
+    'Active':       c.is_active === false ? 'No' : 'Yes',
+    // Individual-specific identification
+    'First Name':   c.first_name || '',
+    'Surname':      c.surname || '',
+    'ID Number':    c.id_number || '',
+    'Passport No':  c.passport_number || '',
+    'DOB':          c.date_of_birth || '',
+    'Nationality':  c.nationality || '',
+    // Company-specific
+    'Legal Name':       c.legal_name || '',
+    'HE Number':        c.registration_number || '',
+    'Incorporation':    c.incorporation_date || '',
+    'Year End (DD/MM)': c.year_end_date || '',
+    'Financial Year End': c.financial_year_end || '',
+    // Tax / VAT
+    'TIC':              c.tax_number || '',
+    'Name (Tax Office)': c.name_tax_office || '',
+    'VAT Number':       c.vat_number || '',
+    'VAT Status':       c.vat_status || '',
+    'VAT Registered':   c.vat_registration_date || '',
+    'VAT Category':     c.vat_category || '',
+    'VAT Start Month':  c.vat_start_month || '',
+    'OSS VAT Category': c.oss_vat_category || '',
+    'OSS Start Month':  c.oss_vat_start_month || '',
+    // Social Insurance / Employer
+    'SI Number':         c.social_insurance_number || '',
+    'Employer Number':   c.employer_number || '',
+    'Ergani Number':     c.ergani_number || '',
+    'SI Registration':   c.si_registration_date || '',
+    // Tax return
+    'Tax Return Type':   c.tax_return_type || '',
+    // Contact
+    'Email':        Array.isArray(c.email) ? c.email.join('; ') : (c.email || ''),
+    'Phone':        c.phone || '',
+    'Mobile':       c.mobile || '',
+    'Fax':          c.fax || '',
+    'Contact Person': c.contact_person || '',
+    // Address
+    'Address':      c.address || '',
+    'City':         c.city || '',
+    'Country':      c.country || '',
+    // Business
+    'Business Type': c.business_type || '',
+    'Services':      c.services || '',
+    'Monthly Fee':   c.monthly_fee ?? '',
+    'Vendor':        c.is_vendor ? 'Yes' : 'No',
+    'Tags':          Array.isArray(c.tags) ? c.tags.join(', ') : '',
+    'Notes':         c.notes || '',
+    // Timestamps
+    'Created':       c.created_at ? new Date(c.created_at).toISOString().slice(0,10) : '',
+    'Last Updated':  c.updated_at ? new Date(c.updated_at).toISOString().slice(0,10) : '',
+  });
+
+  // Used by the bulk-selected exports (the yellow action bar).
   const buildExportRows = () => {
     return (clients as any[])
       .filter(c => selectedIds.has(c.id))
-      .map(c => ({
-        'Code':         c.client_code || '',
-        'Name':         c.name || '',
-        'Category':     c.client_category || '',
-        'Status':       c.client_status || '',
-        'Active':       c.is_active === false ? 'No' : 'Yes',
-        'TIC':          c.tax_number || '',
-        'VAT':          c.vat_number || '',
-        'HE Number':    c.registration_number || '',
-        'Email':        Array.isArray(c.email) ? c.email.join('; ') : (c.email || ''),
-        'Phone':        c.phone || '',
-        'Mobile':       c.mobile || '',
-        'City':         c.city || '',
-        'Country':      c.country || '',
-        'Tags':         Array.isArray(c.tags) ? c.tags.join(', ') : '',
-        'Last Updated': c.updated_at ? new Date(c.updated_at).toISOString().slice(0,10) : '',
-      }));
+      .map(rowFromClient);
   };
 
   const handleBulkExportExcel = () => {
@@ -600,6 +649,38 @@ export default function ClientManager() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Clients');
     XLSX.writeFile(wb, `clients-${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  // Full-list exports — use the currently-filtered + sorted list so the
+  // user gets exactly what they see on screen (minus vendor-only rows
+  // which aren't real clients). Every column from rowFromClient.
+  const handleExportAllExcel = () => {
+    const source = (sortedFiltered as any[]).filter(c => c.client_category !== 'vendor_only');
+    if (source.length === 0) { alert('No clients in the current filter.'); return; }
+    const rows = source.map(rowFromClient);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clients');
+    XLSX.writeFile(wb, `clients-${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const handleExportAllCsv = () => {
+    const source = (sortedFiltered as any[]).filter(c => c.client_category !== 'vendor_only');
+    if (source.length === 0) { alert('No clients in the current filter.'); return; }
+    const rows = source.map(rowFromClient);
+    const cols = Object.keys(rows[0]);
+    const esc = (v: any) => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc((r as any)[c])).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clients-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Build the rows + selected field defs for the printed list. Uses the
@@ -891,6 +972,12 @@ export default function ClientManager() {
           )}
           <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print the current filtered client list to PDF">
             🖨 Print List
+          </button>
+          <button className="btn btn-secondary" onClick={handleExportAllExcel} title="Export the currently filtered list to Excel (all fields)">
+            ⬇ Excel
+          </button>
+          <button className="btn btn-secondary" onClick={handleExportAllCsv} title="Export the currently filtered list to CSV (all fields)">
+            ⬇ CSV
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Add Client'}
