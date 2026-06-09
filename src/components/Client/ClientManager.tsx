@@ -635,37 +635,24 @@ export default function ClientManager() {
     'Last Updated':  c.updated_at ? new Date(c.updated_at).toISOString().slice(0,10) : '',
   });
 
-  // Used by the bulk-selected exports (the yellow action bar).
-  const buildExportRows = () => {
-    return (clients as any[])
-      .filter(c => selectedIds.has(c.id))
-      .map(rowFromClient);
-  };
-
-  const handleBulkExportExcel = () => {
-    const rows = buildExportRows();
-    if (rows.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Clients');
-    XLSX.writeFile(wb, `clients-${new Date().toISOString().slice(0,10)}.xlsx`);
-  };
-
-  // Full-list exports — use the currently-filtered + sorted list so the
-  // user gets exactly what they see on screen (minus vendor-only rows
-  // which aren't real clients). Every column from rowFromClient.
+  // Full-list exports — driven from the Print / Export modal so they
+  // honour the same scope (selected vs all), type filter, and from/to
+  // range the user picks for the PDF. Always emits every column from
+  // rowFromClient (the field checkboxes only apply to the PDF, since
+  // Excel has no column-width concern).
   const handleExportAllExcel = () => {
-    const source = (sortedFiltered as any[]).filter(c => c.client_category !== 'vendor_only');
+    const source = buildPrintRows().visibleClients;
     if (source.length === 0) { alert('No clients in the current filter.'); return; }
     const rows = source.map(rowFromClient);
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Clients');
     XLSX.writeFile(wb, `clients-${new Date().toISOString().slice(0,10)}.xlsx`);
+    setShowPrintModal(false);
   };
 
   const handleExportAllCsv = () => {
-    const source = (sortedFiltered as any[]).filter(c => c.client_category !== 'vendor_only');
+    const source = buildPrintRows().visibleClients;
     if (source.length === 0) { alert('No clients in the current filter.'); return; }
     const rows = source.map(rowFromClient);
     const cols = Object.keys(rows[0]);
@@ -681,6 +668,7 @@ export default function ClientManager() {
     a.download = `clients-${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    setShowPrintModal(false);
   };
 
   // Build the rows + selected field defs for the printed list. Uses the
@@ -904,22 +892,6 @@ export default function ClientManager() {
     });
   };
 
-  const handleBulkExportCsv = () => {
-    const rows = buildExportRows();
-    if (rows.length === 0) return;
-    const cols = Object.keys(rows[0]);
-    const esc = (v: any) => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const csv = [cols.join(','), ...rows.map(r => cols.map(c => esc((r as any)[c])).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `clients-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  };
-
   // Sort the filtered list — applied to the List view, also to Compact for stability.
   const sortedFiltered = [...filtered].sort((a: any, b: any) => {
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -970,14 +942,8 @@ export default function ClientManager() {
               {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
             </button>
           )}
-          <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print the current filtered client list to PDF">
-            🖨 Print List
-          </button>
-          <button className="btn btn-secondary" onClick={handleExportAllExcel} title="Export the currently filtered list to Excel (all fields)">
-            ⬇ Excel
-          </button>
-          <button className="btn btn-secondary" onClick={handleExportAllCsv} title="Export the currently filtered list to CSV (all fields)">
-            ⬇ CSV
+          <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print, Excel or CSV export of the current filtered client list">
+            🖨 Print / Export
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Add Client'}
@@ -1415,8 +1381,24 @@ export default function ClientManager() {
                 {emailStatus.text}
               </div>
             )}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
               <button className="btn btn-secondary" onClick={() => { setShowPrintModal(false); setEmailStatus({ kind: 'idle' }); }} disabled={emailStatus.kind === 'sending'}>Cancel</button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleExportAllExcel}
+                disabled={emailStatus.kind === 'sending'}
+                title="Excel export — every column (the field checkboxes above only affect the PDF)"
+              >
+                ⬇ Excel
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleExportAllCsv}
+                disabled={emailStatus.kind === 'sending'}
+                title="CSV export — every column (the field checkboxes above only affect the PDF)"
+              >
+                ⬇ CSV
+              </button>
               <button
                 className="btn btn-secondary"
                 onClick={() => handlePrintPdf(true)}
@@ -1429,6 +1411,9 @@ export default function ClientManager() {
                 Generate PDF
               </button>
             </div>
+            <p style={{ fontSize: '0.72em', color: '#94a3b8', marginTop: 6, marginBottom: 0, textAlign: 'right' }}>
+              Excel / CSV exports always include every column. The field checkboxes above only affect the PDF.
+            </p>
           </div>
         </div>
       )}
@@ -1445,10 +1430,8 @@ export default function ClientManager() {
           <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkInactive(true)} disabled={bulkBusy}>Mark Inactive…</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowBulkTag(true)} disabled={bulkBusy}>Add Tag…</button>
           <button className="btn btn-secondary btn-sm" onClick={handleBulkMarkVendor} disabled={bulkBusy}>Mark as Vendor</button>
-          <button className="btn btn-secondary btn-sm" onClick={handleBulkExportExcel} disabled={bulkBusy}>⬇ Excel</button>
-          <button className="btn btn-secondary btn-sm" onClick={handleBulkExportCsv} disabled={bulkBusy}>⬇ CSV</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setPrintScope('selected'); setShowPrintModal(true); }} disabled={bulkBusy} title="Print only the selected clients to PDF">
-            🖨 Print Selected
+          <button className="btn btn-secondary btn-sm" onClick={() => { setPrintScope('selected'); setShowPrintModal(true); }} disabled={bulkBusy} title="Open the print/export panel scoped to selected clients (PDF, Excel or CSV)">
+            🖨 Print / Export Selected
           </button>
           <button
             className="btn btn-secondary btn-sm"
