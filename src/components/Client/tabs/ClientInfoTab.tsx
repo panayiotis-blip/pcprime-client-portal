@@ -170,18 +170,31 @@ export default function ClientInfoTab() {
 
       <div className="form-section">
         <h3>Engagement</h3>
-        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
-          Incorporation date, year-end, VAT period and personal dates live in the <strong>Registrations</strong> tab.
+        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 10px' }}>
+          A short summary of what we do for this client and the terms of the engagement.
+          Structured service workflows (Payroll, VAT, Tax Returns, etc.) are managed on the{' '}
+          <strong>Services</strong> tab. Invoicing and fees are managed via{' '}
+          <strong>Billing</strong> — fees change with scope and shouldn't live on the client record.
+          Filing deadlines and year-end live on <strong>Registrations</strong>.
         </p>
         <div className="form-grid">
-          <Field label="Financial Year End" field="financial_year_end" placeholder="(legacy free-text)" />
-          <Field label="Services" field="services" />
-          <Field label="Monthly Fee" field="monthly_fee" type="number" />
+          <Field
+            label="Engagement scope"
+            field="services"
+            placeholder="e.g. Monthly bookkeeping, payroll for 5 employees, annual accounts & TD1"
+            fullWidth
+          />
         </div>
       </div>
 
       <div className="form-section">
         <h3>Tags</h3>
+        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+          Short labels for filtering and segmenting the client list. Anything you'd want to
+          slice clients by — e.g. <em>VIP</em>, <em>Audit Client</em>, <em>Late Payer</em>,{' '}
+          <em>Foreign National</em>, <em>Pending Onboarding</em>, <em>EU VAT</em>. Tags appear
+          as chips on the client list and can be used to bulk-filter from the Clients page.
+        </p>
         <div className="form-grid">
           <TagsField />
         </div>
