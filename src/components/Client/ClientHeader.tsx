@@ -23,7 +23,6 @@ const CLIENT_STATUSES: { value: string; label: string }[] = [
   { value: 'liquidated_dormant', label: 'Liquidated / Dormant' },
   { value: 'deceased',           label: 'Deceased' },
   { value: 'old_client',         label: 'Old Client' },
-  { value: 'defence_tax_only',   label: 'Defence Tax Only' },
   { value: 'internal',           label: 'Internal' },
 ];
 
