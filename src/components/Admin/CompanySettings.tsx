@@ -6,6 +6,7 @@ import FolderTemplates from './FolderTemplates';
 import ClientCategories from './ClientCategories';
 import Cities from './Cities';
 import Maintenance from './Maintenance';
+import { Link } from 'react-router-dom';
 import CollapsibleSection from './CollapsibleSection';
 import PlatformSitesSection from './PlatformSitesSection';
 
@@ -407,6 +408,34 @@ export default function CompanySettings() {
 
       <CollapsibleSection title="Platform Sites (TaxisNet, Ergani, JCC, banks…)">
         <PlatformSitesSection canEdit={canEdit} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Outlook email — outbound from the app">
+        <p style={{ fontSize: 13, color: '#5a6478', marginTop: 0 }}>
+          The app sends outbound email (engagement letters, payment / filing
+          reminders, PDF-by-email from the client list, test sends) through the
+          signed-in user's own Outlook account. Each staff member configures
+          their own credentials — emails go FROM that individual so replies
+          land in their inbox.
+        </p>
+        <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, padding: 12 }}>
+          <strong style={{ fontSize: 13, color: '#1a365d' }}>Where to set it up</strong>
+          <p style={{ margin: '4px 0 8px', fontSize: 13, color: '#475569' }}>
+            Each user goes to <strong>Settings → Email</strong> and enters their Outlook
+            host (<code>smtp.office365.com</code>), port (587), username and an
+            app-password. There's a "Send test email" button there to verify
+            it's working before relying on it for real sends.
+          </p>
+          <Link to="/settings/email" className="btn btn-secondary btn-sm">
+            ✉ Open my Email Settings
+          </Link>
+        </div>
+        <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 10, marginBottom: 0 }}>
+          The Edge Function <code>send-via-outlook</code> must be deployed to your
+          Supabase project for any outbound email to work. If sends start failing
+          with "Edge Function not found", redeploy it from
+          <code> supabase/functions/send-via-outlook/index.ts</code>.
+        </p>
       </CollapsibleSection>
 
       <CollapsibleSection title="Engagement Letter defaults">
