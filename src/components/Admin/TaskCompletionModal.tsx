@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 // payment tasks ask for payment details; TD7 filing asks for filing
 // date + TaxisNet reference; the rest get a notes field only.
 
-type FieldType = 'date' | 'number' | 'text' | 'textarea';
+type FieldType = 'date' | 'number' | 'text' | 'textarea' | 'select';
 export type CompletionField = {
   key: string;
   label: string;
@@ -14,26 +14,45 @@ export type CompletionField = {
   required?: boolean;
   placeholder?: string;
   currency?: boolean;
+  options?: string[];           // for type='select'
+  section?: string;             // visual sub-heading inside the modal
 };
+
+// Common confirmation block reused by every payment/filing template. The
+// fields capture who at the client confirmed the payment, how, and when —
+// so an auditor (or our future selves) can reconstruct the trail without
+// digging through emails.
+const CONFIRMATION_FIELDS: CompletionField[] = [
+  { key: 'confirmed_by',          label: 'Confirmed by',           type: 'text',
+    placeholder: 'Name of client contact', section: 'Confirmation' },
+  { key: 'confirmation_method',   label: 'Confirmation method',    type: 'select',
+    options: ['Email', 'Phone', 'WhatsApp', 'Bank statement', 'Receipt copy', 'Portal message', 'In person', 'Other'],
+    section: 'Confirmation' },
+  { key: 'confirmation_received_at', label: 'Confirmation received', type: 'date',
+    section: 'Confirmation' },
+];
 
 // Stage key → field list. Hardcoded so it stays easy to read. Add new
 // templates here when a new stage type needs structured completion data.
 const PAYMENT_FIELDS: CompletionField[] = [
-  { key: 'payment_date', label: 'Payment date',         type: 'date',     required: true },
-  { key: 'amount',       label: 'Amount paid',          type: 'number',   currency: true },
-  { key: 'reference',    label: 'Receipt / reference #', type: 'text' },
+  { key: 'payment_date', label: 'Payment date',         type: 'date',     required: true, section: 'Payment' },
+  { key: 'amount',       label: 'Amount paid',          type: 'number',   currency: true, section: 'Payment' },
+  { key: 'reference',    label: 'Receipt / reference #', type: 'text',                    section: 'Payment' },
+  ...CONFIRMATION_FIELDS,
   { key: 'notes',        label: 'Notes',                type: 'textarea' },
 ];
 
 const FILING_FIELDS: CompletionField[] = [
-  { key: 'filing_date',   label: 'Filing date',           type: 'date',     required: true },
-  { key: 'taxisnet_ref',  label: 'TaxisNet reference',    type: 'text' },
+  { key: 'filing_date',   label: 'Filing date',           type: 'date',     required: true, section: 'Filing' },
+  { key: 'taxisnet_ref',  label: 'TaxisNet reference',    type: 'text',                     section: 'Filing' },
+  ...CONFIRMATION_FIELDS,
   { key: 'notes',         label: 'Notes',                 type: 'textarea' },
 ];
 
 const PAYROLL_RUN_FIELDS: CompletionField[] = [
-  { key: 'payment_date',  label: 'Payment date',         type: 'date',     required: true },
-  { key: 'total_paid',    label: 'Total payroll paid',   type: 'number',   currency: true },
+  { key: 'payment_date',  label: 'Payment date',         type: 'date',     required: true, section: 'Payment' },
+  { key: 'total_paid',    label: 'Total payroll paid',   type: 'number',   currency: true, section: 'Payment' },
+  ...CONFIRMATION_FIELDS,
   { key: 'notes',         label: 'Notes',                type: 'textarea' },
 ];
 
@@ -143,36 +162,64 @@ export default function TaskCompletionModal({ taskTitle, stageKey, initialData, 
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-          {fields.map(f => (
-            <div key={f.key}>
-              <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
-                {f.label}{f.required && <span style={{ color: '#b91c1c' }}> *</span>}
-              </label>
-              {f.type === 'textarea' ? (
-                <textarea
-                  value={values[f.key] || ''}
-                  onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  rows={3}
-                  className="form-input"
-                  style={{ width: '100%', fontSize: 13 }}
-                  placeholder={f.placeholder}
-                />
-              ) : (
-                <input
-                  type={f.type}
-                  value={values[f.key] || ''}
-                  onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  className="form-input"
-                  style={{ width: '100%' }}
-                  placeholder={f.placeholder}
-                  step={f.type === 'number' ? '0.01' : undefined}
-                />
-              )}
-              {f.currency && (
-                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Euro amount</p>
-              )}
-            </div>
-          ))}
+          {(() => {
+            // Group fields by section so the modal reads as Payment / Confirmation
+            // / Notes blocks instead of a flat list.
+            let lastSection: string | undefined = undefined;
+            return fields.map((f, i) => {
+              const sectionHeader = f.section && f.section !== lastSection ? (
+                <div key={`sec-${i}`} style={{
+                  fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#1a365d',
+                  letterSpacing: '0.04em',
+                  marginTop: lastSection === undefined ? 0 : 6,
+                  paddingTop: lastSection === undefined ? 0 : 4,
+                  borderTop: lastSection === undefined ? 'none' : '1px solid #f1f5f9',
+                }}>{f.section}</div>
+              ) : null;
+              if (f.section) lastSection = f.section;
+              return (
+                <div key={f.key}>
+                  {sectionHeader}
+                  <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>
+                    {f.label}{f.required && <span style={{ color: '#b91c1c' }}> *</span>}
+                  </label>
+                  {f.type === 'textarea' ? (
+                    <textarea
+                      value={values[f.key] || ''}
+                      onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      rows={3}
+                      className="form-input"
+                      style={{ width: '100%', fontSize: 13 }}
+                      placeholder={f.placeholder}
+                    />
+                  ) : f.type === 'select' ? (
+                    <select
+                      value={values[f.key] || ''}
+                      onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      className="form-input"
+                      style={{ width: '100%' }}
+                    >
+                      <option value=""></option>
+                      {(f.options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type={f.type}
+                      value={values[f.key] || ''}
+                      onChange={(e) => setValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      className="form-input"
+                      style={{ width: '100%' }}
+                      placeholder={f.placeholder}
+                      step={f.type === 'number' ? '0.01' : undefined}
+                    />
+                  )}
+                  {f.currency && (
+                    <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Euro amount</p>
+                  )}
+                </div>
+              );
+            });
+          })()}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
