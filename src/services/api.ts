@@ -872,6 +872,86 @@ export const api = {
     const { error } = await supabase.from('platform_sites').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
+
+  // ---------- Client notes feed (migration 111) ----------
+  // Returns notes newest-first, plus any tasks born from each note so the
+  // UI can display the link inline. created_by is joined to profiles for
+  // the author label.
+  async getClientNotes(clientId: number) {
+    const { data, error } = await supabase
+      .from('client_notes')
+      .select('*, author:profiles!client_notes_created_by_fkey(display_name, username)')
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .order('pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    const notes = (data || []).map((n: any) => ({
+      ...n,
+      author_name: n.author?.display_name || n.author?.username || null,
+    }));
+    if (notes.length === 0) return notes;
+    // Pull any staff_tasks linked to these notes so we can render the chip
+    // without a per-row round trip.
+    const ids = notes.map((n: any) => n.id);
+    const { data: tasks } = await supabase
+      .from('staff_tasks')
+      .select('id, title, status, source_note_id')
+      .in('source_note_id', ids);
+    const byNote = new Map<number, any[]>();
+    for (const t of (tasks || [])) {
+      if (!byNote.has(t.source_note_id)) byNote.set(t.source_note_id, []);
+      byNote.get(t.source_note_id)!.push(t);
+    }
+    return notes.map((n: any) => ({ ...n, linked_tasks: byNote.get(n.id) || [] }));
+  },
+  async createClientNote(clientId: number, data: { body: string; needs_attention?: boolean; pinned?: boolean }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('client_notes').insert({
+      client_id: clientId,
+      body: data.body,
+      needs_attention: data.needs_attention || false,
+      pinned: data.pinned || false,
+      created_by: session?.user?.id || null,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+  async updateClientNote(id: number, patch: { body?: string; needs_attention?: boolean; pinned?: boolean }) {
+    const { error } = await supabase.from('client_notes').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteClientNote(id: number) {
+    // Soft delete — restore by clearing deleted_at, not wired into the UI yet.
+    const { error } = await supabase.from('client_notes')
+      .update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Promote a note to a staff task. The new task remembers source_note_id
+  // so the note's UI can render the chip "→ Task #N".
+  async createTaskFromNote(noteId: number, data: {
+    title: string;
+    client_id: number;
+    description?: string;
+    assigned_to?: string | null;
+    due_date?: string | null;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+  }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: row, error } = await supabase.from('staff_tasks').insert({
+      title: data.title,
+      description: data.description || null,
+      client_id: data.client_id,
+      assigned_to: data.assigned_to || null,
+      due_date: data.due_date || null,
+      priority: data.priority || 'medium',
+      status: 'open',
+      created_by: session?.user?.id || null,
+      source_note_id: noteId,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
   async updateServiceStage(id: number, patch: any) {
     const { error } = await supabase.from('service_stages')
       .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);

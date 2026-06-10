@@ -1,36 +1,51 @@
 import { useFieldCtx } from '../fieldContext';
+import ClientNotesFeed from '../ClientNotesFeed';
 
-// Tab 10: Notes — single big textarea surface for the existing `notes`
-// column. The form-context handles dirty-tracking + save.
+// Notes tab — timestamped feed (each note its own row with author, time,
+// optional attention flag, promote-to-task). The legacy single textarea
+// is shown collapsed below for clients with old free-text notes that
+// haven't been migrated into the feed.
 export default function NotesTab() {
   const { editing, form, client, onChange } = useFieldCtx();
+  const legacy = (form.notes || client.notes || '').trim();
+
   return (
     <div className="client-tab-content">
       <div className="form-section">
-        <h3>Internal notes</h3>
-        <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
-          Anything important to know about this client — special arrangements, cash-basis flags,
-          billing quirks, history. Visible to staff only.
+        <h3>Notes</h3>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 0, marginBottom: 12 }}>
+          Timestamped notes about this client — what happened, what to remember, what to follow up on.
+          Tick <strong>⚠ Needs attention</strong> on anything important, or use <strong>→ Task</strong> to
+          promote a note to a staff task that lives on the Tasks page.
         </p>
-        {editing ? (
-          <textarea
-            value={form.notes || ''}
-            onChange={(e) => onChange('notes', e.target.value)}
-            className="form-input"
-            rows={20}
-            style={{ width: '100%', fontFamily: 'inherit' }}
-            placeholder="Type freely…"
-          />
-        ) : (
-          <pre style={{
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit',
-            margin: 0, padding: '12px 16px', background: '#f8fafc', borderRadius: 6,
-            minHeight: 200, color: client.notes ? '#0f172a' : '#94a3b8',
-          }}>
-            {client.notes || '(empty)'}
-          </pre>
-        )}
+        {client?.id ? <ClientNotesFeed clientId={client.id} /> : null}
       </div>
+
+      {/* Legacy free-text notes — only shown if the client has content in
+          the old clients.notes column. Edit here to update it; once empty
+          this section disappears. */}
+      {(legacy || editing) && (
+        <div className="form-section" style={{ marginTop: 16 }}>
+          <h3 style={{ fontSize: 13, color: '#64748b' }}>Legacy notes (free-text)</h3>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 0 }}>
+            Older notes captured before the timestamped feed existed. New notes should go in the feed above.
+          </p>
+          {editing ? (
+            <textarea
+              value={form.notes || ''}
+              onChange={(e) => onChange('notes', e.target.value)}
+              className="form-input"
+              rows={8}
+              style={{ width: '100%', fontFamily: 'inherit' }}
+            />
+          ) : legacy ? (
+            <pre style={{
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit',
+              margin: 0, padding: '10px 14px', background: '#f8fafc', borderRadius: 6,
+            }}>{legacy}</pre>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
