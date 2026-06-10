@@ -120,12 +120,14 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: 'No app password on file. Add one in /settings/email.' }, 400);
   }
 
-  // ----- Build attachments (base64 → Uint8Array) -----
+  // ----- Build attachments — keep as base64 string + encoding: 'base64' so
+  // denomailer wraps the binary correctly in the MIME message. The earlier
+  // Uint8Array+'binary' shape was silently dropping the PDF on Gmail.
   const attachments = (payload.attachments || []).map(a => ({
     filename: a.filename,
-    content: Uint8Array.from(atob(a.contentBase64), c => c.charCodeAt(0)),
+    content: a.contentBase64,
     contentType: a.contentType || 'application/pdf',
-    encoding: 'binary' as const,
+    encoding: 'base64' as const,
   }));
 
   // ----- Send via SMTP -----
