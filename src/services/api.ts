@@ -875,24 +875,29 @@ export const api = {
 
   // ---------- Client notes feed (migration 111) ----------
   // Returns notes newest-first, plus any tasks born from each note so the
-  // UI can display the link inline. created_by is joined to profiles for
-  // the author label.
+  // UI can display the link inline. The author label is resolved with a
+  // second query against profiles — PostgREST can't auto-embed because
+  // created_by is FK'd to auth.users, not the public profiles view.
   async getClientNotes(clientId: number) {
-    const { data, error } = await supabase
-      .from('client_notes')
-      .select('*, author:profiles!client_notes_created_by_fkey(display_name, username)')
+    const { data: raw, error } = await supabase
+      .from('client_notes').select('*')
       .eq('client_id', clientId)
       .is('deleted_at', null)
       .order('pinned', { ascending: false })
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
-    const notes = (data || []).map((n: any) => ({
-      ...n,
-      author_name: n.author?.display_name || n.author?.username || null,
-    }));
+    const notes = raw || [];
     if (notes.length === 0) return notes;
-    // Pull any staff_tasks linked to these notes so we can render the chip
-    // without a per-row round trip.
+    // Authors — one lookup for all the distinct user ids on the page.
+    const userIds = Array.from(new Set(notes.map((n: any) => n.created_by).filter(Boolean)));
+    let profileMap = new Map<string, any>();
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from('profiles').select('id, display_name, username')
+        .in('id', userIds);
+      for (const p of (profs || [])) profileMap.set(p.id, p);
+    }
+    // Linked tasks — single query so the chip strip renders inline.
     const ids = notes.map((n: any) => n.id);
     const { data: tasks } = await supabase
       .from('staff_tasks')
@@ -903,7 +908,14 @@ export const api = {
       if (!byNote.has(t.source_note_id)) byNote.set(t.source_note_id, []);
       byNote.get(t.source_note_id)!.push(t);
     }
-    return notes.map((n: any) => ({ ...n, linked_tasks: byNote.get(n.id) || [] }));
+    return notes.map((n: any) => {
+      const prof = n.created_by ? profileMap.get(n.created_by) : null;
+      return {
+        ...n,
+        author_name: prof?.display_name || prof?.username || null,
+        linked_tasks: byNote.get(n.id) || [],
+      };
+    });
   },
   async createClientNote(clientId: number, data: { body: string; needs_attention?: boolean; pinned?: boolean }) {
     const { data: { session } } = await supabase.auth.getSession();
