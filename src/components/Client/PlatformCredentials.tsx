@@ -3,35 +3,39 @@ import { api, hasPermission } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 
-const DEFAULT_PLATFORMS = [
-  'TFA (Tax For All)',
-  'Social Insurance',
-  'Ergani',
-  'CY Login',
-  'JCC',
-  'VAT (VIES)',
-  'General Healthcare System (GESY)',
-  'Bank Portal',
-  'Other',
-];
+type PlatformSite = {
+  id: number;
+  name: string;
+  url: string | null;
+  notes: string | null;
+  ordinal: number;
+  enabled: boolean;
+};
 
 type Cred = {
   id: number;
   client_id: number;
   platform: string;
+  platform_site_id: number | null;
+  url: string | null;
   username: string;
   notes: string;
   has_password: boolean;
+  site_name: string | null;
+  site_url: string | null;
+  effective_url: string | null;
 };
 
 type FormState = {
+  platform_site_id: number | null;  // when null, use free-text platform + url
   platform: string;
+  url: string;
   username: string;
   password: string; // empty when editing means "do not change"
   notes: string;
 };
 
-const blankForm: FormState = { platform: '', username: '', password: '', notes: '' };
+const blankForm: FormState = { platform_site_id: null, platform: '', url: '', username: '', password: '', notes: '' };
 
 export default function PlatformCredentials({ clientId }: { clientId: number }) {
   const { user } = useAuth();
@@ -39,6 +43,7 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
   const canReveal = hasPermission(user, 'credentials.reveal');
   const canWrite  = hasPermission(user, 'credentials.write');
   const [credentials, setCredentials] = useState<Cred[]>([]);
+  const [sites, setSites] = useState<PlatformSite[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(blankForm);
@@ -50,7 +55,14 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
 
   const load = async () => {
     setLoading(true);
-    try { setCredentials(await api.getCredentials(clientId) as Cred[]); }
+    try {
+      const [creds, siteList] = await Promise.all([
+        api.getCredentials(clientId),
+        api.getPlatformSites().catch(() => []),
+      ]);
+      setCredentials(creds as Cred[]);
+      setSites((siteList as PlatformSite[]).filter(s => s.enabled));
+    }
     catch (err: any) { alert('Failed to load credentials: ' + err.message); }
     finally { setLoading(false); }
   };
@@ -67,22 +79,37 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
 
   const startEdit = (cred: Cred) => {
     setEditId(cred.id);
-    // Note: password is intentionally blank — we never load the cleartext into the form.
-    setForm({ platform: cred.platform, username: cred.username, password: '', notes: cred.notes });
+    setForm({
+      platform_site_id: cred.platform_site_id,
+      platform: cred.platform,
+      url: cred.url || '',
+      username: cred.username,
+      password: '',
+      notes: cred.notes,
+    });
     setShowAdd(true);
   };
 
   const handleSave = async () => {
-    if (!form.platform.trim()) { alert('Platform is required'); return; }
+    const platformName = form.platform_site_id != null
+      ? (sites.find(s => s.id === form.platform_site_id)?.name || form.platform)
+      : form.platform;
+    if (!platformName.trim()) { alert('Platform is required'); return; }
     setSaving(true);
     try {
+      const payload: any = {
+        platform: platformName,
+        platform_site_id: form.platform_site_id,
+        url: form.url || null,
+        username: form.username,
+        notes: form.notes,
+      };
       if (editId) {
-        // Only send the password if the user actually typed one.
-        const patch: any = { platform: form.platform, username: form.username, notes: form.notes };
-        if (form.password) patch.password = form.password;
-        await api.updateCredential(clientId, editId, patch);
+        if (form.password) payload.password = form.password;
+        await api.updateCredential(clientId, editId, payload);
       } else {
-        await api.createCredential(clientId, form);
+        if (form.password) payload.password = form.password;
+        await api.createCredential(clientId, payload);
       }
       setForm(blankForm);
       setShowAdd(false);
@@ -129,6 +156,32 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
     catch { /* ignore */ }
   };
 
+  // One-click "quick login" — opens the platform URL in a new tab AND
+  // copies the (decrypted) password to the clipboard so the user just
+  // pastes into the platform's password field. The reveal still goes
+  // through MFA step-up + audit log just like the manual Reveal button.
+  const quickLogin = async (cred: Cred) => {
+    if (!cred.effective_url) { alert('No URL set for this platform. Add one in Company Settings → Platform Sites, or in this credential.'); return; }
+    if (!canReveal) { alert('You do not have permission to reveal passwords.'); return; }
+    if (!cred.has_password) { alert('No password stored for this credential.'); return; }
+    setRevealing(r => ({ ...r, [cred.id]: true }));
+    try {
+      const pwd = await runWith(() => api.getCredentialPassword(cred.id));
+      await copy(pwd);
+      // Open the platform AFTER the password is on the clipboard so the
+      // new tab takes focus and the user can paste straight away.
+      window.open(cred.effective_url, '_blank', 'noopener,noreferrer');
+      // Brief toast-style notification — alert is heavy-handed but reliable
+      // across browsers. Could be swapped for a non-blocking toast later.
+      // Use setTimeout so the new tab opens before the alert blocks.
+      setTimeout(() => alert(`Password copied to clipboard.\nPaste with Ctrl+V (or ⌘+V) in the password field${cred.username ? `.\nUsername: ${cred.username}` : ''}`), 200);
+    } catch (err: any) {
+      if (err.message !== MFA_CANCELLED) alert('Quick login failed: ' + err.message);
+    } finally {
+      setRevealing(r => ({ ...r, [cred.id]: false }));
+    }
+  };
+
   return (
     <div className="platform-credentials">
       <div className="list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -153,17 +206,47 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
           <div className="form-grid">
             <div className="form-group">
               <label>Platform</label>
-              <select value={DEFAULT_PLATFORMS.includes(form.platform) ? form.platform : (form.platform ? 'Other' : '')}
-                onChange={(e) => handleChange('platform', e.target.value === 'Other' ? '' : e.target.value)}
-                className="form-input">
-                <option value="">-- Select --</option>
-                {DEFAULT_PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
+              <select
+                value={form.platform_site_id ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '') {
+                    setForm(prev => ({ ...prev, platform_site_id: null, platform: '', url: '' }));
+                  } else {
+                    const id = parseInt(v);
+                    const s = sites.find(x => x.id === id);
+                    setForm(prev => ({
+                      ...prev,
+                      platform_site_id: id,
+                      platform: s?.name || '',
+                      // Pre-fill URL from the site, but the field remains editable
+                      // so banks (where the URL varies per client) can be overridden.
+                      url: s?.url || prev.url,
+                    }));
+                  }
+                }}
+                className="form-input"
+              >
+                <option value="">-- Select platform --</option>
+                {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              {(!DEFAULT_PLATFORMS.includes(form.platform) || form.platform === '') && (
-                <input type="text" placeholder="Platform name" value={form.platform}
+              {form.platform_site_id == null && (
+                <input type="text" placeholder="Or type a custom name…" value={form.platform}
                   onChange={(e) => handleChange('platform', e.target.value)}
                   className="form-input" style={{ marginTop: 6 }} />
               )}
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 0' }}>
+                Manage the platform list in <strong>Company Settings → Platform Sites</strong>.
+              </p>
+            </div>
+            <div className="form-group">
+              <label>URL</label>
+              <input type="url" value={form.url}
+                onChange={(e) => handleChange('url' as any, e.target.value)}
+                className="form-input" placeholder="https://…" />
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 0' }}>
+                Pre-filled from the platform when picked. Override for per-client portals (e.g. specific bank branches).
+              </p>
             </div>
             <div className="form-group">
               <label>Username / Login ID</label>
@@ -195,14 +278,45 @@ export default function PlatformCredentials({ clientId }: { clientId: number }) 
         <div className="cred-list" style={{ marginTop: 12 }}>
           {credentials.map(cred => (
             <div key={cred.id} className="cred-card card" style={{ padding: 12, marginBottom: 10 }}>
-              <div className="cred-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <h4 style={{ margin: 0 }}>{cred.platform}</h4>
-                {canWrite && (
-                  <div className="cred-card-actions">
-                    <button className="btn btn-secondary btn-sm" onClick={() => startEdit(cred)}>Edit</button>
-                    <button className="btn btn-danger btn-sm" onClick={() => handleDelete(cred.id)} style={{ marginLeft: 6 }}>Delete</button>
-                  </div>
-                )}
+              <div className="cred-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <h4 style={{ margin: 0 }}>{cred.platform}</h4>
+                  {cred.effective_url && (
+                    <a href={cred.effective_url} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 12, color: '#1e40af' }}
+                      title={cred.effective_url}>
+                      {(() => { try { return new URL(cred.effective_url).hostname; } catch { return cred.effective_url; } })()}
+                    </a>
+                  )}
+                </div>
+                <div className="cred-card-actions">
+                  {cred.effective_url && cred.has_password && canReveal && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => quickLogin(cred)}
+                      disabled={!!revealing[cred.id]}
+                      title="Opens the platform in a new tab AND copies the password to your clipboard"
+                    >
+                      🔑 {revealing[cred.id] ? 'Working…' : 'Quick login'}
+                    </button>
+                  )}
+                  {cred.effective_url && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => window.open(cred.effective_url!, '_blank', 'noopener,noreferrer')}
+                      style={{ marginLeft: 6 }}
+                      title="Just open the URL, no password copy"
+                    >
+                      🌐 Open
+                    </button>
+                  )}
+                  {canWrite && (
+                    <>
+                      <button className="btn btn-secondary btn-sm" onClick={() => startEdit(cred)} style={{ marginLeft: 6 }}>Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDelete(cred.id)} style={{ marginLeft: 6 }}>Delete</button>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="cred-fields">
                 <div className="cred-field" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>

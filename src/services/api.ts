@@ -843,6 +843,35 @@ export const api = {
     if (error) throw new Error(error.message);
     return data || [];
   },
+
+  // ---------- Platform Sites (migration 110) ----------
+  // Firm-level catalogue of the platforms (TFA, Ergani, JCC, etc.) that
+  // we hold credentials for. Per-client credentials reference one of
+  // these so the URL lives in one place.
+  async getPlatformSites() {
+    const { data, error } = await supabase
+      .from('platform_sites').select('*')
+      .order('ordinal').order('name');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async createPlatformSite(data: { name: string; url?: string | null; notes?: string | null; ordinal?: number; enabled?: boolean }) {
+    const { data: row, error } = await supabase.from('platform_sites')
+      .insert({ name: data.name, url: data.url || null, notes: data.notes || null,
+                ordinal: data.ordinal ?? 0, enabled: data.enabled ?? true })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+  async updatePlatformSite(id: number, patch: any) {
+    const { error } = await supabase.from('platform_sites')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deletePlatformSite(id: number) {
+    const { error } = await supabase.from('platform_sites').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
   async updateServiceStage(id: number, patch: any) {
     const { error } = await supabase.from('service_stages')
       .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
@@ -1033,21 +1062,26 @@ export const api = {
   // table response — use getCredentialPassword(id) to decrypt (and audit-log).
   async getCredentials(clientId: number) {
     const { data, error } = await supabase.from('platform_credentials')
-      .select('id, client_id, platform, username, notes, password_enc')
+      .select('id, client_id, platform, platform_site_id, url, username, notes, password_enc, site:platform_sites(name, url)')
       .eq('client_id', clientId);
     if (error) throw new Error(error.message);
     return (data || []).map((r: any) => ({
       ...r,
-      // Convenience flag for the UI: was a password ever set?
       has_password: !!r.password_enc,
-      password_enc: undefined, // strip raw bytea from the response
+      password_enc: undefined,
+      site_name: r.site?.name || null,
+      site_url:  r.site?.url || null,
+      // Effective URL: per-credential override beats the site default.
+      effective_url: r.url || r.site?.url || null,
     }));
   },
 
-  async createCredential(clientId: number, data: { platform: string; username?: string; notes?: string; password?: string }) {
+  async createCredential(clientId: number, data: { platform: string; platform_site_id?: number | null; url?: string | null; username?: string; notes?: string; password?: string }) {
     const { data: row, error } = await supabase.from('platform_credentials').insert({
       client_id: clientId,
       platform: data.platform,
+      platform_site_id: data.platform_site_id ?? null,
+      url:      data.url      || null,
       username: data.username || '',
       notes:    data.notes    || '',
     }).select().single();
@@ -1059,11 +1093,13 @@ export const api = {
     return { id: row.id };
   },
 
-  async updateCredential(_clientId: number, credId: number, data: { platform?: string; username?: string; notes?: string; password?: string }) {
+  async updateCredential(_clientId: number, credId: number, data: { platform?: string; platform_site_id?: number | null; url?: string | null; username?: string; notes?: string; password?: string }) {
     const patch: any = {};
-    if (data.platform !== undefined) patch.platform = data.platform;
-    if (data.username !== undefined) patch.username = data.username;
-    if (data.notes    !== undefined) patch.notes    = data.notes;
+    if (data.platform !== undefined)         patch.platform = data.platform;
+    if (data.platform_site_id !== undefined) patch.platform_site_id = data.platform_site_id;
+    if (data.url !== undefined)              patch.url = data.url || null;
+    if (data.username !== undefined)         patch.username = data.username;
+    if (data.notes    !== undefined)         patch.notes    = data.notes;
     if (Object.keys(patch).length > 0) {
       const { error } = await supabase.from('platform_credentials').update(patch).eq('id', credId);
       if (error) throw new Error(error.message);

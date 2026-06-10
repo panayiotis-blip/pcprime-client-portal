@@ -7,6 +7,7 @@ import ClientCategories from './ClientCategories';
 import Cities from './Cities';
 import Maintenance from './Maintenance';
 import CollapsibleSection from './CollapsibleSection';
+import PlatformSitesSection from './PlatformSitesSection';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
 // migration 045 / Timesheet.tsx.
@@ -392,6 +393,10 @@ export default function CompanySettings() {
             </div>
           ))}
         </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Platform Sites (TaxisNet, Ergani, JCC, banks…)">
+        <PlatformSitesSection canEdit={canEdit} />
       </CollapsibleSection>
 
       {/* Footer text */}
