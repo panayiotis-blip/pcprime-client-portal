@@ -102,6 +102,16 @@ export default function CompanySettings() {
         office_days:       Array.isArray(form.office_days) ? form.office_days : [1, 2, 3, 4, 5],
         office_timezone:   form.office_timezone || 'Europe/Nicosia',
         autoreply_message: form.autoreply_message || null,
+        // Engagement letter defaults (migration 105)
+        engagement_leader_default: form.engagement_leader_default || null,
+        hourly_rate_director:      form.hourly_rate_director === '' || form.hourly_rate_director == null ? null : Number(form.hourly_rate_director),
+        hourly_rate_manager:       form.hourly_rate_manager  === '' || form.hourly_rate_manager  == null ? null : Number(form.hourly_rate_manager),
+        hourly_rate_support:       form.hourly_rate_support  === '' || form.hourly_rate_support  == null ? null : Number(form.hourly_rate_support),
+        default_discount_percent:  form.default_discount_percent === '' || form.default_discount_percent == null ? null : Number(form.default_discount_percent),
+        default_min_monthly_fee:   form.default_min_monthly_fee  === '' || form.default_min_monthly_fee  == null ? null : Number(form.default_min_monthly_fee),
+        default_cover_letter_text: form.default_cover_letter_text || null,
+        default_sow_intro_text:    form.default_sow_intro_text || null,
+        default_terms_text:        form.default_terms_text || null,
       });
       await load();
       setEditing(false);
@@ -397,6 +407,113 @@ export default function CompanySettings() {
 
       <CollapsibleSection title="Platform Sites (TaxisNet, Ergani, JCC, banks…)">
         <PlatformSitesSection canEdit={canEdit} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Engagement Letter defaults">
+        <p style={{ fontSize: 13, color: '#5a6478', marginTop: 0 }}>
+          Pre-filled on every new engagement letter so the per-client form only needs the bits
+          that actually change. Edit a letter to override any of these for one client.
+          Cover letter and terms support <code>{`{{client_name}}`}</code> and{' '}
+          <code>{`{{engagement_leader}}`}</code> merge fields.
+        </p>
+
+        <div className="form-grid" style={{ marginBottom: 12 }}>
+          <div className="form-group">
+            <label>Engagement Leader name</label>
+            <input
+              type="text"
+              className="form-input"
+              value={form.engagement_leader_default || ''}
+              onChange={(e) => handleChange('engagement_leader_default', e.target.value)}
+              disabled={!editing || !canEdit}
+              placeholder="e.g. Mr. Panayiotis Savva"
+            />
+          </div>
+        </div>
+
+        <h4 style={{ fontSize: 13, color: '#1a365d', margin: '12px 0 6px' }}>Standard hourly rates (€)</h4>
+        <div className="form-grid" style={{ marginBottom: 12 }}>
+          <div className="form-group">
+            <label>Director / hr</label>
+            <input
+              type="number" min={0} step={1}
+              className="form-input"
+              value={form.hourly_rate_director ?? ''}
+              onChange={(e) => handleChange('hourly_rate_director', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editing || !canEdit}
+            />
+          </div>
+          <div className="form-group">
+            <label>Manager / hr</label>
+            <input
+              type="number" min={0} step={1}
+              className="form-input"
+              value={form.hourly_rate_manager ?? ''}
+              onChange={(e) => handleChange('hourly_rate_manager', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editing || !canEdit}
+            />
+          </div>
+          <div className="form-group">
+            <label>Support Staff / hr</label>
+            <input
+              type="number" min={0} step={1}
+              className="form-input"
+              value={form.hourly_rate_support ?? ''}
+              onChange={(e) => handleChange('hourly_rate_support', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editing || !canEdit}
+            />
+          </div>
+          <div className="form-group">
+            <label>Default discount %</label>
+            <input
+              type="number" min={0} max={100} step={1}
+              className="form-input"
+              value={form.default_discount_percent ?? ''}
+              onChange={(e) => handleChange('default_discount_percent', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editing || !canEdit}
+            />
+          </div>
+          <div className="form-group">
+            <label>Minimum monthly fee (€)</label>
+            <input
+              type="number" min={0} step={1}
+              className="form-input"
+              value={form.default_min_monthly_fee ?? ''}
+              onChange={(e) => handleChange('default_min_monthly_fee', e.target.value === '' ? '' : Number(e.target.value))}
+              disabled={!editing || !canEdit}
+            />
+          </div>
+        </div>
+
+        <h4 style={{ fontSize: 13, color: '#1a365d', margin: '16px 0 6px' }}>Cover letter body (page 1)</h4>
+        <textarea
+          className="form-input"
+          rows={6}
+          style={{ width: '100%', fontFamily: 'inherit', fontSize: 13 }}
+          value={form.default_cover_letter_text || ''}
+          onChange={(e) => handleChange('default_cover_letter_text', e.target.value)}
+          disabled={!editing || !canEdit}
+        />
+
+        <h4 style={{ fontSize: 13, color: '#1a365d', margin: '16px 0 6px' }}>Statement of Work intro (page 2)</h4>
+        <textarea
+          className="form-input"
+          rows={4}
+          style={{ width: '100%', fontFamily: 'inherit', fontSize: 13 }}
+          value={form.default_sow_intro_text || ''}
+          onChange={(e) => handleChange('default_sow_intro_text', e.target.value)}
+          disabled={!editing || !canEdit}
+        />
+
+        <h4 style={{ fontSize: 13, color: '#1a365d', margin: '16px 0 6px' }}>Terms text (page 2)</h4>
+        <textarea
+          className="form-input"
+          rows={12}
+          style={{ width: '100%', fontFamily: 'inherit', fontSize: 12 }}
+          value={form.default_terms_text || ''}
+          onChange={(e) => handleChange('default_terms_text', e.target.value)}
+          disabled={!editing || !canEdit}
+        />
       </CollapsibleSection>
 
       {/* Footer text */}
