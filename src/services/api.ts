@@ -1204,6 +1204,39 @@ export const api = {
     }).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  // Generate and store an accept_token if the letter doesn't have one yet.
+  // Called right before send so the email link is ready.
+  async ensureEngagementLetterToken(id: number): Promise<string> {
+    const { data: existing } = await supabase.from('engagement_letters')
+      .select('accept_token').eq('id', id).maybeSingle();
+    if (existing?.accept_token) return existing.accept_token;
+    const token = (crypto as any).randomUUID
+      ? (crypto as any).randomUUID().replace(/-/g, '')
+      : Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const { error } = await supabase.from('engagement_letters')
+      .update({ accept_token: token }).eq('id', id);
+    if (error) throw new Error(error.message);
+    return token;
+  },
+
+  // Public-facing fetch used by the /accept-engagement/:token page.
+  async getEngagementLetterByToken(token: string) {
+    const { data, error } = await supabase.rpc('get_engagement_letter_for_acceptance', { p_token: token });
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return row || null;
+  },
+
+  // Public-facing accept — typed signature only (IP capture would need
+  // a server-side hop we're not building now).
+  async acceptEngagementLetterByToken(token: string, signature: string): Promise<{ ok: boolean; already_accepted?: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('accept_engagement_letter_by_token', {
+      p_token: token, p_signature: signature,
+    });
+    if (error) throw new Error(error.message);
+    return data as any;
+  },
+
   // Mark older sent/accepted letters as superseded when a new one is issued.
   async supersedePriorEngagementLetters(clientId: number, newLetterId: number) {
     const { data, error } = await supabase.rpc('supersede_prior_engagement_letters',

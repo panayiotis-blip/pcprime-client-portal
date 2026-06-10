@@ -67,6 +67,7 @@ import LandingPage from './components/Public/LandingPage';
 import TaxCalculator from './components/Public/TaxCalculator';
 import PrivacyNotice from './components/Public/PrivacyNotice';
 import SignupApplication from './components/Public/SignupApplication';
+import EngagementAcceptPage from './components/Public/EngagementAcceptPage';
 import Applications from './components/Admin/Applications';
 import MFAChallenge from './components/Auth/MFAChallenge';
 import ForcedMfaSetup from './components/Auth/ForcedMfaSetup';
@@ -189,6 +190,7 @@ function AppRoutes() {
       <Route path="/tax-calculator" element={<Navigate to="/tax" replace />} />
       <Route path="/privacy" element={<PrivacyNotice />} />
       <Route path="/signup" element={<SignupApplication />} />
+      <Route path="/accept-engagement/:token" element={<EngagementAcceptPage />} />
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
 
       {/* Everything else: authed → real app, anonymous → landing */}
