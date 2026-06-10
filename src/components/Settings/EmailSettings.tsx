@@ -15,18 +15,30 @@ type SmtpRow = {
   updated_at: string;
 };
 
-const PRESET_OUTLOOK = {
-  smtp_host: 'smtp.office365.com',
-  smtp_port: 587,
-  smtp_secure: false, // STARTTLS on 587
+// Provider presets — host / port / SSL pre-fills. The send-via-outlook
+// Edge Function is generic SMTP under the hood; the legacy function name
+// is kept (renaming it would require redeployment) but the UI now speaks
+// in terms of the underlying provider you actually have.
+type Provider = 'outlook' | 'gmail' | 'custom';
+const PRESETS: Record<Exclude<Provider, 'custom'>, { host: string; port: number; secure: boolean }> = {
+  outlook: { host: 'smtp.office365.com', port: 587, secure: false },
+  gmail:   { host: 'smtp.gmail.com',     port: 587, secure: false },
 };
+
+function detectProvider(host: string): Provider {
+  const h = (host || '').toLowerCase();
+  if (h.includes('office365') || h.includes('outlook.com')) return 'outlook';
+  if (h.includes('gmail') || h.includes('googlemail')) return 'gmail';
+  return 'custom';
+}
 
 export default function EmailSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [smtpHost, setSmtpHost] = useState(PRESET_OUTLOOK.smtp_host);
-  const [smtpPort, setSmtpPort] = useState<number>(PRESET_OUTLOOK.smtp_port);
-  const [smtpSecure, setSmtpSecure] = useState(PRESET_OUTLOOK.smtp_secure);
+  const [provider, setProvider] = useState<Provider>('outlook');
+  const [smtpHost, setSmtpHost] = useState(PRESETS.outlook.host);
+  const [smtpPort, setSmtpPort] = useState<number>(PRESETS.outlook.port);
+  const [smtpSecure, setSmtpSecure] = useState(PRESETS.outlook.secure);
   const [smtpUser, setSmtpUser] = useState('');
   const [fromName, setFromName] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -51,6 +63,8 @@ export default function EmailSettings() {
         setHasPassword(row.has_password);
         setLastUsedAt(row.last_used_at);
         setLastError(row.last_error);
+        // Pick the right provider radio based on host so the instructions match.
+        setProvider(detectProvider(row.smtp_host));
       }
     } catch (e: any) {
       setStatusMsg({ kind: 'err', text: 'Could not load settings: ' + e.message });
@@ -60,17 +74,24 @@ export default function EmailSettings() {
   };
   useEffect(() => { load(); }, []);
 
+  const handlePickProvider = (p: Provider) => {
+    setProvider(p);
+    if (p !== 'custom') {
+      const preset = PRESETS[p];
+      setSmtpHost(preset.host);
+      setSmtpPort(preset.port);
+      setSmtpSecure(preset.secure);
+    }
+  };
+
   const handleSave = async () => {
     if (!smtpUser.trim()) {
-      setStatusMsg({ kind: 'err', text: 'Outlook email is required.' });
+      setStatusMsg({ kind: 'err', text: 'Email address is required.' });
       return;
     }
     setSaving(true);
     setStatusMsg(null);
     try {
-      // First upsert the non-secret fields. This also creates the row if it
-      // doesn't exist yet — required before setMySmtpPassword can update
-      // the password_enc column.
       await api.saveMySmtpSettings({
         smtp_host: smtpHost,
         smtp_port: smtpPort,
@@ -79,9 +100,6 @@ export default function EmailSettings() {
         from_name: fromName.trim() || null,
         is_active: isActive,
       });
-      // Only update the password if the user typed a new one. Leaving it
-      // blank keeps the existing encrypted value (useful when editing other
-      // fields without re-entering the app password).
       if (password) {
         await api.setMySmtpPassword(password);
         setHasPassword(true);
@@ -97,14 +115,16 @@ export default function EmailSettings() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Remove your Outlook SMTP settings? You will need to re-enter them to send email from the app again.')) return;
+    if (!confirm('Remove your email SMTP settings? You will need to re-enter them to send email from the app again.')) return;
     setSaving(true);
     setStatusMsg(null);
     try {
       await api.deleteMySmtpSettings();
-      setSmtpHost(PRESET_OUTLOOK.smtp_host);
-      setSmtpPort(PRESET_OUTLOOK.smtp_port);
-      setSmtpSecure(PRESET_OUTLOOK.smtp_secure);
+      const preset = PRESETS.outlook;
+      setProvider('outlook');
+      setSmtpHost(preset.host);
+      setSmtpPort(preset.port);
+      setSmtpSecure(preset.secure);
       setSmtpUser('');
       setFromName('');
       setIsActive(true);
@@ -117,12 +137,6 @@ export default function EmailSettings() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const usePreset = () => {
-    setSmtpHost(PRESET_OUTLOOK.smtp_host);
-    setSmtpPort(PRESET_OUTLOOK.smtp_port);
-    setSmtpSecure(PRESET_OUTLOOK.smtp_secure);
   };
 
   const handleSendTest = async () => {
@@ -138,7 +152,7 @@ export default function EmailSettings() {
         subject: 'Test email from PC Prime portal',
         body:
           'Hello,\n\n' +
-          'This is a test message sent from the PC Prime client portal through your Outlook account.\n' +
+          'This is a test message sent from the PC Prime client portal through your email account.\n' +
           'If you can read this, the SMTP connection is working.\n\n' +
           'Sent: ' + new Date().toLocaleString('en-GB') + '\n',
       });
@@ -151,41 +165,85 @@ export default function EmailSettings() {
     }
   };
 
+  const providerLabels: Record<Provider, string> = {
+    outlook: 'Microsoft 365 / Outlook',
+    gmail:   'Google Workspace / Gmail',
+    custom:  'Custom SMTP',
+  };
+
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '1.5rem 1rem' }}>
       <div style={{ marginBottom: 16 }}>
         <Link to="/" className="btn btn-link btn-sm" style={{ padding: 0 }}>← Back to dashboard</Link>
       </div>
-      <h2 style={{ marginTop: 0, color: '#1a365d' }}>Email Settings — Outlook SMTP</h2>
+      <h2 style={{ marginTop: 0, color: '#1a365d' }}>Email Settings — SMTP</h2>
       <p style={{ color: '#64748b', fontSize: '0.92em' }}>
-        Connect your Outlook (Microsoft 365 or outlook.com) account so the app can send emails on your behalf —
-        including the printed client lists and tax computations. Credentials are encrypted at rest with a Vault-stored key.
+        Connect your email account so the app can send messages on your behalf —
+        engagement letters, scheduler reminders, printed client lists, tax computations and more.
+        Credentials are encrypted at rest with a Vault-stored key.
       </p>
 
-      {/* App-password instructions */}
-      <details style={{ background: '#fffbeb', border: '1px solid #f5e8b8', borderRadius: 4, padding: '10px 12px', marginBottom: 16 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#92670e' }}>📘 How to get an Outlook app password</summary>
-        <ol style={{ fontSize: '0.88em', color: '#5a6478', marginTop: 8, paddingLeft: 22, lineHeight: 1.55 }}>
-          <li>Sign in to <a href="https://account.microsoft.com/security" target="_blank" rel="noreferrer">account.microsoft.com/security</a> with your Outlook account.</li>
-          <li>Enable two-step verification if it's not already on (Microsoft requires this for app passwords).</li>
-          <li>Go to <strong>Advanced security options</strong> → <strong>App passwords</strong> → <strong>Create a new app password</strong>.</li>
-          <li>Microsoft generates a 16-character password. Copy it into the field below — you won't see it again.</li>
-          <li><strong>Microsoft 365 admins:</strong> SMTP AUTH must be enabled at the tenant level
-            (Exchange admin → Mail flow → Authenticated SMTP). Some tenants disable it by default.</li>
-        </ol>
-      </details>
+      {/* Provider picker */}
+      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: 12, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: '#1a365d', marginBottom: 8 }}>Email provider</div>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          {(['outlook', 'gmail', 'custom'] as Provider[]).map(p => (
+            <label key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input type="radio" checked={provider === p} onChange={() => handlePickProvider(p)} />
+              {providerLabels[p]}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Provider-specific app-password instructions */}
+      {provider === 'outlook' && (
+        <details style={{ background: '#fffbeb', border: '1px solid #f5e8b8', borderRadius: 4, padding: '10px 12px', marginBottom: 16 }} open>
+          <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#92670e' }}>📘 How to get a Microsoft app password</summary>
+          <ol style={{ fontSize: '0.88em', color: '#5a6478', marginTop: 8, paddingLeft: 22, lineHeight: 1.55 }}>
+            <li>Sign in to <a href="https://account.microsoft.com/security" target="_blank" rel="noreferrer">account.microsoft.com/security</a> with your Outlook account.</li>
+            <li>Enable two-step verification if it's not already on (Microsoft requires this for app passwords).</li>
+            <li>Go to <strong>Advanced security options</strong> → <strong>App passwords</strong> → <strong>Create a new app password</strong>.</li>
+            <li>Microsoft generates a 16-character password. Paste it into the field below — you won't see it again.</li>
+            <li><strong>Microsoft 365 tenant admins:</strong> SMTP AUTH must be enabled at the tenant level
+              (Exchange admin → Mail flow → Authenticated SMTP). Some tenants disable it by default.</li>
+          </ol>
+        </details>
+      )}
+      {provider === 'gmail' && (
+        <details style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 4, padding: '10px 12px', marginBottom: 16 }} open>
+          <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#1e40af' }}>📘 How to get a Google app password</summary>
+          <ol style={{ fontSize: '0.88em', color: '#5a6478', marginTop: 8, paddingLeft: 22, lineHeight: 1.55 }}>
+            <li>Sign in to your Google account at <a href="https://myaccount.google.com" target="_blank" rel="noreferrer">myaccount.google.com</a>.</li>
+            <li>Go to <strong>Security</strong> and ensure <strong>2-Step Verification</strong> is ON. Google requires this before app passwords can be created.</li>
+            <li>Open <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">myaccount.google.com/apppasswords</a>.</li>
+            <li>Name it (e.g. <em>"PC Prime portal"</em>) and click <strong>Create</strong>. Google generates a 16-character code — paste it into the field below (no spaces).</li>
+            <li><strong>Google Workspace admins:</strong> "Less secure app access" is gone — only app passwords with 2FA work for SMTP. If 2-Step Verification isn't allowed for your account by the admin, ask them to enable it.</li>
+          </ol>
+        </details>
+      )}
+      {provider === 'custom' && (
+        <details style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 4, padding: '10px 12px', marginBottom: 16 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#475569' }}>📘 Custom SMTP server</summary>
+          <p style={{ fontSize: '0.88em', color: '#5a6478', marginTop: 8, lineHeight: 1.55 }}>
+            Enter the host, port and security mode for your SMTP server in the Advanced section below.
+            Common ports: <strong>587</strong> with STARTTLS, or <strong>465</strong> with SSL/TLS. Username is usually the
+            full email address; password is whatever credential your SMTP server expects (often an app password).
+          </p>
+        </details>
+      )}
 
       {loading ? <p>Loading…</p> : (
         <div className="card" style={{ padding: 16 }}>
           <div className="form-grid">
             <div className="form-group full-width">
-              <label>Outlook email *</label>
+              <label>Email address *</label>
               <input
                 type="email"
                 className="form-input"
                 value={smtpUser}
                 onChange={e => setSmtpUser(e.target.value)}
-                placeholder="you@outlook.com or you@yourdomain.com"
+                placeholder={provider === 'gmail' ? 'you@gmail.com or you@firm.com' : 'you@outlook.com or you@yourdomain.com'}
                 autoComplete="username"
               />
               <small style={{ color: '#64748b', fontSize: '0.78em' }}>
@@ -200,7 +258,7 @@ export default function EmailSettings() {
                 className="form-input"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder={hasPassword ? '••••••••••••••••  (leave blank to keep current)' : 'Paste the 16-character app password from Microsoft'}
+                placeholder={hasPassword ? '••••••••••••••••  (leave blank to keep current)' : 'Paste the 16-character app password'}
                 autoComplete="new-password"
               />
               <small style={{ color: '#64748b', fontSize: '0.78em' }}>
@@ -227,7 +285,7 @@ export default function EmailSettings() {
             </div>
 
             <div className="form-group full-width">
-              <details>
+              <details open={provider === 'custom'}>
                 <summary style={{ cursor: 'pointer', color: '#64748b', fontSize: '0.85em' }}>Advanced — SMTP server settings</summary>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, marginTop: 8 }}>
                   <div>
@@ -246,9 +304,9 @@ export default function EmailSettings() {
                     </select>
                   </div>
                 </div>
-                <button type="button" className="btn btn-link btn-sm" onClick={usePreset} style={{ padding: 0, marginTop: 4 }}>
-                  Use Microsoft 365 defaults
-                </button>
+                <p style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 0' }}>
+                  Provider radio above auto-fills these. Pick "Custom SMTP" to edit freely.
+                </p>
               </details>
             </div>
           </div>
@@ -262,6 +320,7 @@ export default function EmailSettings() {
               background: statusMsg.kind === 'ok' ? '#dcfce7' : '#fee2e2',
               color: statusMsg.kind === 'ok' ? '#15803d' : '#b91c1c',
               border: `1px solid ${statusMsg.kind === 'ok' ? '#86efac' : '#fca5a5'}`,
+              whiteSpace: 'pre-wrap',
             }}>
               {statusMsg.text}
             </div>
@@ -300,9 +359,9 @@ export default function EmailSettings() {
 
           <div style={{ marginTop: 16, padding: '8px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: '0.78em', color: '#64748b' }}>
             <strong>How sending works:</strong> click "✉ Send test email" to verify your settings — the portal calls
-            the send-via-outlook Edge Function, which connects to <code>{smtpHost}:{smtpPort}</code> using these
-            credentials and relays a message back to you. Once that round-trip works, the Email PDF buttons across
-            the portal (Clients → Print List, Tax Returns, etc.) will go out the same way with attachments included.
+            the <code>send-via-outlook</code> Edge Function (legacy name, works with any SMTP), which connects to{' '}
+            <code>{smtpHost}:{smtpPort}</code> using these credentials and relays a message back to you.
+            Once that round-trip works, the Email PDF and engagement-letter sends across the portal will go out the same way.
           </div>
         </div>
       )}

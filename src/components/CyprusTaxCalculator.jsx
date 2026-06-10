@@ -1546,7 +1546,7 @@ e: panayiotis@primeandcalculate.com
 CONFIDENTIALITY NOTICE: This email and any attachments are confidential and may be privileged. If you are not the intended recipient, please notify the sender immediately and delete this message and any attachments from your system. Any unauthorized use, disclosure, or distribution is prohibited.
 
 ---
-Sent via the PC Prime client portal — connected to my Outlook account.`;
+Sent via the PC Prime client portal — connected to my email account.`;
 
     setShowExportDialog(false);
     try {
@@ -1563,7 +1563,7 @@ Sent via the PC Prime client portal — connected to my Outlook account.`;
       });
       alert(`Tax computation sent to ${recipient}.`);
     } catch (err) {
-      alert('Email failed: ' + (err.message || String(err)) + '\n\nCheck your settings at /settings/email — make sure your Outlook account is connected.');
+      alert('Email failed: ' + (err.message || String(err)) + '\n\nCheck your settings at /settings/email — make sure your email account is connected.');
     }
   };
 

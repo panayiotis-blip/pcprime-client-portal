@@ -579,7 +579,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
                 <input type="email" value={sendToEmail} onChange={(e) => setSendToEmail(e.target.value)}
                   className="form-input" style={{ width: '100%' }} />
                 <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
-                  Sent via your Outlook account (configure in Settings → Email). PDF attached.
+                  Sent via your email account (configure in Settings → Email). PDF attached.
                 </p>
               </div>
             )}

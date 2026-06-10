@@ -863,7 +863,7 @@ export default function ClientManager() {
         `PC Prime & Calculate Consultants Ltd`,
       ].join('\n');
 
-      setEmailStatus({ kind: 'sending', text: 'Sending via Outlook…' });
+      setEmailStatus({ kind: 'sending', text: 'Sending email…' });
       try {
         await api.sendViaOutlook({
           to: printEmailTo.trim(),
@@ -1350,7 +1350,7 @@ export default function ClientManager() {
                   target="_blank"
                   rel="noreferrer"
                   style={{ fontSize: '0.72em', color: '#9b861f' }}
-                  title="Connect your Outlook account so the app can send mail on your behalf"
+                  title="Connect your email account (Outlook / Gmail / custom) so the app can send mail on your behalf"
                 >
                   ⚙ Email settings
                 </Link>
@@ -1402,7 +1402,7 @@ export default function ClientManager() {
                 className="btn btn-secondary"
                 onClick={() => handlePrintPdf(true)}
                 disabled={printFields.size === 0 || emailStatus.kind === 'sending'}
-                title="Generates the PDF, attaches it, and sends through your Outlook account (configure in /settings/email)"
+                title="Generates the PDF, attaches it, and sends through your email account (configure in /settings/email)"
               >
                 📧 Email PDF
               </button>

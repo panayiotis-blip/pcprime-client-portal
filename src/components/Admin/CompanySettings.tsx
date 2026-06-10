@@ -410,21 +410,22 @@ export default function CompanySettings() {
         <PlatformSitesSection canEdit={canEdit} />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Outlook email — outbound from the app">
+      <CollapsibleSection title="Email — outbound from the app">
         <p style={{ fontSize: 13, color: '#5a6478', marginTop: 0 }}>
           The app sends outbound email (engagement letters, payment / filing
-          reminders, PDF-by-email from the client list, test sends) through the
-          signed-in user's own Outlook account. Each staff member configures
-          their own credentials — emails go FROM that individual so replies
-          land in their inbox.
+          reminders, PDF-by-email from the client list, test sends) through
+          each user's own email account. Supports Microsoft 365 / Outlook,
+          Google Workspace / Gmail, and any custom SMTP server. Emails go
+          FROM that individual so replies land in their inbox.
         </p>
         <div style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 4, padding: 12 }}>
           <strong style={{ fontSize: 13, color: '#1a365d' }}>Where to set it up</strong>
           <p style={{ margin: '4px 0 8px', fontSize: 13, color: '#475569' }}>
-            Each user goes to <strong>Settings → Email</strong> and enters their Outlook
-            host (<code>smtp.office365.com</code>), port (587), username and an
-            app-password. There's a "Send test email" button there to verify
-            it's working before relying on it for real sends.
+            Each user goes to <strong>Settings → Email</strong>, picks their provider
+            (Outlook / Gmail / Custom), enters their email address and an app password.
+            Provider-specific app-password setup instructions are shown on that page.
+            There's a "Send test email" button to verify it's working before relying on
+            it for real sends.
           </p>
           <Link to="/settings/email" className="btn btn-secondary btn-sm">
             ✉ Open my Email Settings

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
 // Walks v_pending_service_emails, renders the template with merge fields
-// substituted, and sends each via the firm's Outlook SMTP. Per-row result
+// substituted, and sends each via the staff member's own SMTP (any provider).
+// Per-row result
 // shown so partial failures are visible. service_runs.email_sent is
 // stamped true (or with email_error) per row by markServiceEmailSent.
 
@@ -170,7 +171,7 @@ export default function SendPendingEmailsModal({ onClose, onDone }: { onClose: (
       }}>
         <h3 style={{ marginTop: 0, color: '#1a365d' }}>Send pending automated emails</h3>
         <p style={{ color: '#5a6478', fontSize: 13, marginTop: 0 }}>
-          Sends via your Outlook SMTP credentials (configure in <strong>Settings → Email</strong>).
+          Sends via your SMTP credentials (configure in <strong>Settings → Email</strong> — supports Outlook / Gmail / custom).
           Each row stamps <code>service_runs.email_sent=true</code> when successful, or stores the
           error message for follow-up.
         </p>
