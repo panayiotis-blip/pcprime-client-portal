@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 import LogMessageModal from './LogMessageModal';
 import RunSchedulesModal from './RunSchedulesModal';
+import TaskCompletionModal, { templateFor } from './TaskCompletionModal';
 import { formatDateTime } from '../../services/dates';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
@@ -26,6 +27,13 @@ type Task = {
   category: 'general' | 'return_call' | 'message' | string;
   completed_at: string | null;
   created_at: string;
+  // Migration 108 — linked service stage + completion payload.
+  service_stage_id: number | null;
+  stage_key: string | null;
+  stage_label: string | null;
+  service_key: string | null;
+  service_label: string | null;
+  completion_data: Record<string, any> | null;
 };
 
 const STATUS_OPTIONS: Status[] = ['open', 'in_progress', 'blocked', 'done', 'cancelled'];
@@ -75,6 +83,7 @@ export default function StaffTasks() {
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showLogMessage,    setShowLogMessage]    = useState(false);
   const [showRunSchedules,  setShowRunSchedules]  = useState(false);
+  const [completingTask,    setCompletingTask]    = useState<Task | null>(null);
 
   // Filters — default to showing only MY tasks (changeable to "All" any time)
   const [fAssignee, setFAssignee] = useState<string>(user?.id || '');
@@ -600,7 +609,18 @@ export default function StaffTasks() {
                     <select
                       className="form-input form-input-sm no-print"
                       value={t.status}
-                      onChange={e => patchTask(t.id, { status: e.target.value as Status } as any)}
+                      onChange={e => {
+                        const next = e.target.value as Status;
+                        // Intercept the move to 'done' so we can capture
+                        // payment dates / references for payment-type stages.
+                        // Tasks without a stage link, and all non-'done'
+                        // transitions, fall through to the existing path.
+                        if (next === 'done' && t.status !== 'done' && templateFor(t.stage_key)) {
+                          setCompletingTask(t);
+                          return;
+                        }
+                        patchTask(t.id, { status: next } as any);
+                      }}
                     >
                       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                     </select>
@@ -636,6 +656,24 @@ export default function StaffTasks() {
         <RunSchedulesModal
           onClose={() => setShowRunSchedules(false)}
           onRan={(r) => { alert(`Done. Created ${r.created_runs} run(s) and ${r.created_tasks} task(s).`); reload(); }}
+        />
+      )}
+
+      {completingTask && (
+        <TaskCompletionModal
+          taskTitle={completingTask.title}
+          stageKey={completingTask.stage_key}
+          initialData={completingTask.completion_data || undefined}
+          onClose={() => setCompletingTask(null)}
+          onConfirm={async (data) => {
+            try {
+              await api.updateStaffTask(completingTask.id, { status: 'done', completion_data: data } as any);
+              setCompletingTask(null);
+              await reload();
+            } catch (err: any) {
+              alert('Save failed: ' + (err?.message || String(err)));
+            }
+          }}
         />
       )}
 

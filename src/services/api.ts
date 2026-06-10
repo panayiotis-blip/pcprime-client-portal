@@ -2885,7 +2885,7 @@ export const api = {
     deleted?: 'live' | 'deleted' | 'all';
   }) {
     let q = supabase.from('staff_tasks')
-      .select('*, client:clients(name, client_code)')
+      .select('*, client:clients(name, client_code), stage:service_stages(key, label, service:service_definitions(key, label))')
       .order('due_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
     if (params?.assignee)  q = q.eq('assigned_to', params.assignee);
@@ -2904,6 +2904,10 @@ export const api = {
       ...t,
       client_name: t.client?.name || null,
       client_code: t.client?.client_code || null,
+      stage_key:     t.stage?.key || null,
+      stage_label:   t.stage?.label || null,
+      service_key:   t.stage?.service?.key || null,
+      service_label: t.stage?.service?.label || null,
     }));
   },
 
