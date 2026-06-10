@@ -969,6 +969,69 @@ export const api = {
       .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  // ---- Services (catalogue) ----
+  async createServiceDefinition(data: { key: string; label: string; description?: string | null; ordinal?: number }) {
+    const { data: row, error } = await supabase.from('service_definitions').insert({
+      key: data.key, label: data.label, description: data.description || null,
+      ordinal: data.ordinal ?? 99, enabled: true,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+  async updateServiceDefinition(id: number, patch: any) {
+    const { error } = await supabase.from('service_definitions')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteServiceDefinition(id: number) {
+    const { error } = await supabase.from('service_definitions').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // ---- Stages ----
+  async createServiceStage(data: {
+    service_id: number; key: string; label: string;
+    cadence?: string; default_day_of_month?: number | null; default_use_last_day?: boolean;
+    active_months?: number[] | null;
+    sends_email?: boolean; creates_task?: boolean; task_priority?: string;
+    ordinal?: number;
+  }) {
+    const { data: row, error } = await supabase.from('service_stages').insert({
+      service_id: data.service_id, key: data.key, label: data.label,
+      cadence: data.cadence || 'monthly',
+      default_day_of_month: data.default_day_of_month ?? null,
+      default_use_last_day: data.default_use_last_day ?? false,
+      active_months: data.active_months ?? null,
+      sends_email: data.sends_email ?? true,
+      creates_task: data.creates_task ?? true,
+      task_priority: data.task_priority || 'medium',
+      ordinal: data.ordinal ?? 99,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+  async deleteServiceStage(id: number) {
+    const { error } = await supabase.from('service_stages').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // ---- Deliverables ----
+  async createServiceDeliverable(data: { service_id: number; label: string; description?: string | null; ordinal?: number }) {
+    const { data: row, error } = await supabase.from('service_deliverables').insert({
+      service_id: data.service_id, label: data.label,
+      description: data.description || null,
+      ordinal: data.ordinal ?? 99, enabled: true,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return row;
+  },
+  async updateServiceDeliverable(id: number, patch: any) {
+    const { error } = await supabase.from('service_deliverables')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteServiceDeliverable(id: number) {
+    const { error } = await supabase.from('service_deliverables').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
   async getServiceEmailTemplates() {
     const { data, error } = await supabase
       .from('service_email_templates').select('*');

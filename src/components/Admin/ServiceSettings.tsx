@@ -10,7 +10,8 @@ import { api } from '../../services/api';
 //   • toggle whether a stage sends email / creates a task
 
 type ServiceDef = {
-  id: number; key: string; label: string; description: string | null; enabled: boolean;
+  id: number; key: string; label: string; description: string | null;
+  enabled: boolean; ordinal: number;
 };
 type Stage = {
   id: number; service_id: number; ordinal: number; key: string; label: string;
@@ -30,6 +31,10 @@ function monthsLabel(active: number[] | null): string {
 type Template = {
   id: number; service_stage_id: number; subject: string; body: string;
 };
+type Deliverable = {
+  id: number; service_id: number; ordinal: number; label: string;
+  description: string | null; enabled: boolean;
+};
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
@@ -44,23 +49,32 @@ const MERGE_FIELDS = [
 export default function ServiceSettings() {
   const [services, setServices] = useState<ServiceDef[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
+  const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [templates, setTemplates] = useState<Record<number, Template>>({});
   const [loading, setLoading] = useState(true);
   const [editingStage, setEditingStage] = useState<number | null>(null);
   const [draftSubject, setDraftSubject] = useState('');
   const [draftBody, setDraftBody] = useState('');
   const [saving, setSaving] = useState(false);
+  // "Add stage" modal — open per service via the per-service action row.
+  const [addStageForServiceId, setAddStageForServiceId] = useState<number | null>(null);
+  const [newStage, setNewStage] = useState({
+    key: '', label: '', cadence: 'monthly', day: '', last_day: false,
+    months: '', priority: 'medium', sends_email: true, creates_task: true,
+  });
 
   const load = async () => {
     setLoading(true);
     try {
-      const [svcs, stgs, tpls] = await Promise.all([
+      const [svcs, stgs, dels, tpls] = await Promise.all([
         api.getServiceDefinitions(),
         api.getServiceStages(),
+        api.getServiceDeliverables(),
         api.getServiceEmailTemplates(),
       ]);
       setServices(svcs as ServiceDef[]);
       setStages(stgs as Stage[]);
+      setDeliverables(dels as Deliverable[]);
       const tplMap: Record<number, Template> = {};
       for (const t of tpls as Template[]) tplMap[t.service_stage_id] = t;
       setTemplates(tplMap);
@@ -106,6 +120,142 @@ export default function ServiceSettings() {
     setDraftBody(b => b + token);
   };
 
+  // ---- Catalogue management ----
+  const handleAddService = async () => {
+    const label = prompt('New service — display label (e.g. "Audit"):');
+    if (!label || !label.trim()) return;
+    const keySuggest = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const key = prompt(`Internal key (no spaces, used in code). Default:`, keySuggest);
+    if (!key || !key.trim()) return;
+    const description = prompt('Short description (optional):') || '';
+    try {
+      await api.createServiceDefinition({
+        key: key.trim(), label: label.trim(),
+        description: description.trim() || null,
+        ordinal: (services[services.length - 1]?.ordinal ?? 0) + 10,
+      });
+      await load();
+    } catch (err: any) {
+      alert('Create failed: ' + (err?.message || String(err)));
+    }
+  };
+
+  const handleRenameService = async (svc: ServiceDef) => {
+    const next = prompt('New label for service:', svc.label);
+    if (!next || !next.trim() || next.trim() === svc.label) return;
+    try {
+      await api.updateServiceDefinition(svc.id, { label: next.trim() });
+      await load();
+    } catch (err: any) {
+      alert('Rename failed: ' + (err?.message || String(err)));
+    }
+  };
+
+  const handleDeleteService = async (svc: ServiceDef) => {
+    if (!confirm(
+      `Delete service "${svc.label}"?\n\n` +
+      `This will cascade: all its stages, email templates, deliverables, ` +
+      `per-client opt-ins (client_services), date overrides, and history (service_runs) ` +
+      `will be removed. Linked staff tasks lose their service_stage_id link but stay in the list.`
+    )) return;
+    try {
+      await api.deleteServiceDefinition(svc.id);
+      await load();
+    } catch (err: any) {
+      alert('Delete failed: ' + (err?.message || String(err)));
+    }
+  };
+
+  const openAddStage = (serviceId: number) => {
+    setNewStage({
+      key: '', label: '', cadence: 'monthly', day: '', last_day: false,
+      months: '', priority: 'medium', sends_email: true, creates_task: true,
+    });
+    setAddStageForServiceId(serviceId);
+  };
+  const handleSaveNewStage = async () => {
+    if (addStageForServiceId == null) return;
+    if (!newStage.key.trim() || !newStage.label.trim()) { alert('Key and label are required.'); return; }
+    const activeMonths = newStage.months.trim()
+      ? newStage.months.split(',').map(s => parseInt(s.trim())).filter(n => n >= 1 && n <= 12)
+      : null;
+    try {
+      await api.createServiceStage({
+        service_id: addStageForServiceId,
+        key: newStage.key.trim(), label: newStage.label.trim(),
+        cadence: newStage.cadence,
+        default_day_of_month: newStage.last_day ? null : (newStage.day === '' ? null : Number(newStage.day)),
+        default_use_last_day: newStage.last_day,
+        active_months: activeMonths,
+        sends_email: newStage.sends_email,
+        creates_task: newStage.creates_task,
+        task_priority: newStage.priority,
+        ordinal: (stages.filter(s => s.service_id === addStageForServiceId).length + 1) * 10,
+      });
+      setAddStageForServiceId(null);
+      await load();
+    } catch (err: any) {
+      alert('Create stage failed: ' + (err?.message || String(err)));
+    }
+  };
+
+  const handleDeleteStage = async (stage: Stage) => {
+    if (!confirm(
+      `Delete stage "${stage.label}"?\n\n` +
+      `The stage and its email template will be removed. Any service_runs / client overrides ` +
+      `referencing it cascade out. Linked staff tasks keep their data but lose the link.`
+    )) return;
+    try {
+      await api.deleteServiceStage(stage.id);
+      await load();
+    } catch (err: any) {
+      alert('Delete failed: ' + (err?.message || String(err)));
+    }
+  };
+
+  // Deliverables
+  const handleAddDeliverable = async (serviceId: number) => {
+    const label = prompt('Deliverable label (what we do):');
+    if (!label || !label.trim()) return;
+    const description = prompt('Short description (optional):') || '';
+    try {
+      await api.createServiceDeliverable({
+        service_id: serviceId,
+        label: label.trim(),
+        description: description.trim() || null,
+        ordinal: (deliverables.filter(d => d.service_id === serviceId).length + 1) * 10,
+      });
+      await load();
+    } catch (err: any) {
+      alert('Add failed: ' + (err?.message || String(err)));
+    }
+  };
+  const handleEditDeliverable = async (d: Deliverable) => {
+    const label = prompt('Label:', d.label);
+    if (label == null) return;
+    if (!label.trim()) { alert('Label is required.'); return; }
+    const description = prompt('Description:', d.description || '');
+    if (description == null) return;
+    try {
+      await api.updateServiceDeliverable(d.id, {
+        label: label.trim(),
+        description: description.trim() || null,
+      });
+      await load();
+    } catch (err: any) {
+      alert('Update failed: ' + (err?.message || String(err)));
+    }
+  };
+  const handleDeleteDeliverable = async (d: Deliverable) => {
+    if (!confirm(`Delete deliverable "${d.label}"?`)) return;
+    try {
+      await api.deleteServiceDeliverable(d.id);
+      await load();
+    } catch (err: any) {
+      alert('Delete failed: ' + (err?.message || String(err)));
+    }
+  };
+
   return (
     <div style={{ padding: '1rem 1.5rem', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -117,13 +267,24 @@ export default function ServiceSettings() {
         Email templates use these merge fields: <code>{`{{client_name}} {{month_name}} {{period_label}} {{firm_name}} {{firm_email}}`}</code>
       </p>
 
+      <div style={{ marginBottom: 12 }}>
+        <button className="btn btn-primary btn-sm" onClick={handleAddService}>+ Add Service</button>
+      </div>
+
       {loading ? <p>Loading…</p> : services.map(svc => {
         const stagesForSvc = stages.filter(s => s.service_id === svc.id).sort((a, b) => a.ordinal - b.ordinal);
         return (
           <div key={svc.id} style={{ marginTop: 16, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
-              <strong style={{ color: '#1a365d' }}>{svc.label}</strong>
-              {svc.description && <span style={{ color: '#64748b', fontSize: 13, marginLeft: 12 }}>{svc.description}</span>}
+            <div style={{ padding: '10px 14px', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <strong style={{ color: '#1a365d' }}>{svc.label}</strong>
+                {svc.description && <span style={{ color: '#64748b', fontSize: 13, marginLeft: 12 }}>{svc.description}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => openAddStage(svc.id)}>+ Stage</button>
+                <button className="btn btn-link btn-sm" onClick={() => handleRenameService(svc)}>✎ Rename</button>
+                <button className="btn btn-link btn-sm" onClick={() => handleDeleteService(svc)} style={{ color: '#b91c1c' }}>✕ Delete</button>
+              </div>
             </div>
 
             <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
@@ -187,14 +348,108 @@ export default function ServiceSettings() {
                       <button className="btn btn-secondary btn-sm" onClick={() => startEdit(stage.id)}>
                         {templates[stage.id] ? '✎ Edit email' : '+ Add email'}
                       </button>
+                      <button className="btn btn-link btn-sm" onClick={() => handleDeleteStage(stage)} style={{ color: '#b91c1c', marginLeft: 4 }} title="Delete stage">✕</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            {/* Deliverables panel — what we do under this service, shown
+                as sub-bullets on engagement letters. */}
+            <div style={{ padding: '10px 14px', borderTop: '1px solid #f1f5f9', background: '#fafbfc' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong style={{ fontSize: 13, color: '#1a365d' }}>Deliverables</strong>
+                <button className="btn btn-secondary btn-sm" onClick={() => handleAddDeliverable(svc.id)}>+ Deliverable</button>
+              </div>
+              {(() => {
+                const delivs = deliverables.filter(d => d.service_id === svc.id);
+                if (delivs.length === 0) return <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>No deliverables. Add what we do under this service so it shows up on engagement letters.</p>;
+                return (
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                    {delivs.map(d => (
+                      <li key={d.id} style={{ marginBottom: 4 }}>
+                        <span style={{ color: '#1a365d' }}>{d.label}</span>
+                        {d.description && <span style={{ color: '#94a3b8', fontSize: 12 }}> — {d.description}</span>}
+                        <button className="btn btn-link btn-sm" onClick={() => handleEditDeliverable(d)} style={{ marginLeft: 4 }}>edit</button>
+                        <button className="btn btn-link btn-sm" onClick={() => handleDeleteDeliverable(d)} style={{ color: '#b91c1c' }}>×</button>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+            </div>
           </div>
         );
       })}
+
+      {/* Add Stage modal */}
+      {addStageForServiceId != null && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }} onClick={() => setAddStageForServiceId(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 8, padding: 20, width: '100%', maxWidth: 560,
+          }}>
+            <h3 style={{ marginTop: 0, color: '#1a365d' }}>
+              + Add stage to {services.find(s => s.id === addStageForServiceId)?.label}
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Display label</label>
+                <input type="text" value={newStage.label} onChange={(e) => setNewStage(s => ({ ...s, label: e.target.value }))} className="form-input" placeholder="e.g. Audit info request" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Key (no spaces)</label>
+                <input type="text" value={newStage.key} onChange={(e) => setNewStage(s => ({ ...s, key: e.target.value }))} className="form-input" placeholder="e.g. audit_info_request" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Cadence</label>
+                <select value={newStage.cadence} onChange={(e) => setNewStage(s => ({ ...s, cadence: e.target.value }))} className="form-input">
+                  <option value="monthly">monthly</option>
+                  <option value="quarterly">quarterly</option>
+                  <option value="annual">annual</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Active months (e.g. 7,12)</label>
+                <input type="text" value={newStage.months} onChange={(e) => setNewStage(s => ({ ...s, months: e.target.value }))} className="form-input" placeholder="blank = every month" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Default day of month</label>
+                <input type="number" min={1} max={31} value={newStage.day} onChange={(e) => setNewStage(s => ({ ...s, day: e.target.value }))} disabled={newStage.last_day} className="form-input" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 18 }}>
+                  <input type="checkbox" checked={newStage.last_day} onChange={(e) => setNewStage(s => ({ ...s, last_day: e.target.checked }))} />
+                  Use last day of month
+                </label>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Task priority</label>
+                <select value={newStage.priority} onChange={(e) => setNewStage(s => ({ ...s, priority: e.target.value }))} className="form-input">
+                  {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 18 }}>
+                  <input type="checkbox" checked={newStage.sends_email} onChange={(e) => setNewStage(s => ({ ...s, sends_email: e.target.checked }))} />
+                  Sends email
+                </label>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <input type="checkbox" checked={newStage.creates_task} onChange={(e) => setNewStage(s => ({ ...s, creates_task: e.target.checked }))} />
+                  Creates task
+                </label>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
+              <button className="btn btn-secondary" onClick={() => setAddStageForServiceId(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSaveNewStage}>Create stage</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Email template editor — modal-ish overlay */}
       {editingStage != null && (
