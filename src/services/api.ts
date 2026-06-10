@@ -2677,18 +2677,42 @@ export const api = {
     if (error) {
       // supabase-js wraps any fetch failure (function not deployed, network,
       // CORS, etc.) as the same opaque "Failed to send a request" error. Pull
-      // any context we can off the error and tell the user where to look.
-      const ctxStatus = (error as any)?.context?.status;
-      const ctxBody   = (error as any)?.context?.response;
+      // status + body off the error (when present) so the actual cause shows
+      // through.
+      const ctx = (error as any)?.context;
+      const ctxStatus: number | undefined = ctx?.status;
+      // The Response on the error is a real Response object — we have to
+      // .text()/.json() it to see what the function returned. Async hop is
+      // unavoidable here.
+      let bodyText = '';
+      try {
+        if (ctx?.response && typeof ctx.response.text === 'function') {
+          bodyText = await ctx.response.text();
+        } else if (typeof ctx?.body === 'string') {
+          bodyText = ctx.body;
+        }
+      } catch { /* swallow */ }
+      // Parse JSON body if possible so the user sees the actual error string
+      // (the function returns { ok: false, error: '...' }).
+      let parsed: any = null;
+      try { parsed = bodyText ? JSON.parse(bodyText) : null; } catch { /* not JSON */ }
+      const fnError = parsed?.error || bodyText || null;
+
       const hint = ctxStatus === 404
-        ? 'Edge Function "send-via-outlook" not found. Deploy it: supabase functions deploy send-via-outlook'
+        ? 'Edge Function "send-via-outlook" not found. Deploy it from supabase/functions/send-via-outlook/index.ts.'
         : ctxStatus === 401
         ? 'Auth missing — reload the page to refresh your session.'
+        : ctxStatus === 400 && (fnError || '').toLowerCase().includes('no outlook account')
+        ? 'Save your SMTP credentials in Settings → Email first (click "Save Settings", then "Send test email").'
+        : ctxStatus === 400 && (fnError || '').toLowerCase().includes('inactive')
+        ? 'Your SMTP settings are marked inactive in Settings → Email. Tick "Active" and save.'
         : ctxStatus
         ? `Function responded ${ctxStatus}. Check Supabase → Functions → send-via-outlook → Logs.`
         : 'Network call to Supabase Edge Functions failed. Most likely the function is not deployed, the Supabase project is paused, or there is a connectivity issue.';
-      const detail = [error.message, ctxBody ? `Response: ${typeof ctxBody === 'string' ? ctxBody : JSON.stringify(ctxBody)}` : null, hint]
-        .filter(Boolean).join('\n');
+      const detail = [
+        fnError || error.message,
+        hint,
+      ].filter(Boolean).join('\n');
       throw new Error(detail);
     }
     if (data && data.ok === false) throw new Error(data.error || 'Send failed');
