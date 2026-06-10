@@ -2674,7 +2674,23 @@ export const api = {
     attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
   }) {
     const { data, error } = await supabase.functions.invoke('send-via-outlook', { body: payload });
-    if (error) throw new Error(error.message);
+    if (error) {
+      // supabase-js wraps any fetch failure (function not deployed, network,
+      // CORS, etc.) as the same opaque "Failed to send a request" error. Pull
+      // any context we can off the error and tell the user where to look.
+      const ctxStatus = (error as any)?.context?.status;
+      const ctxBody   = (error as any)?.context?.response;
+      const hint = ctxStatus === 404
+        ? 'Edge Function "send-via-outlook" not found. Deploy it: supabase functions deploy send-via-outlook'
+        : ctxStatus === 401
+        ? 'Auth missing — reload the page to refresh your session.'
+        : ctxStatus
+        ? `Function responded ${ctxStatus}. Check Supabase → Functions → send-via-outlook → Logs.`
+        : 'Network call to Supabase Edge Functions failed. Most likely the function is not deployed, the Supabase project is paused, or there is a connectivity issue.';
+      const detail = [error.message, ctxBody ? `Response: ${typeof ctxBody === 'string' ? ctxBody : JSON.stringify(ctxBody)}` : null, hint]
+        .filter(Boolean).join('\n');
+      throw new Error(detail);
+    }
     if (data && data.ok === false) throw new Error(data.error || 'Send failed');
     return data as { ok: true };
   },
