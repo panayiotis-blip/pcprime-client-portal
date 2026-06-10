@@ -249,7 +249,24 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
       if (isEditing && letterId != null) {
         await api.updateEngagementLetter(letterId, buildPayload());
       } else {
-        await api.createEngagementLetter(clientId, buildPayload());
+        // Same anti-collision pattern as send — fetch the version fresh in case
+        // a prior failed attempt left a draft at the cached version number.
+        let attempts = 3;
+        let saved = false;
+        let lastErr: any = null;
+        while (attempts-- > 0) {
+          try {
+            const freshV = await api.getNextEngagementLetterVersion(clientId);
+            await api.createEngagementLetter(clientId, { ...buildPayload(), version: freshV });
+            setVersion(freshV);
+            saved = true;
+            break;
+          } catch (err: any) {
+            lastErr = err;
+            if (!String(err?.message || '').toLowerCase().includes('duplicate key')) break;
+          }
+        }
+        if (!saved) throw lastErr || new Error('Could not allocate a version number for this letter.');
       }
       onSaved();
       onClose();
@@ -267,8 +284,25 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
     try {
       let id = letterId;
       if (id == null) {
-        const created = await api.createEngagementLetter(clientId, buildPayload());
-        id = created.id;
+        // Re-fetch the next version right before insert — a prior failed-send
+        // attempt may have left a draft at the current `version`, which would
+        // collide with the unique(client_id, version) constraint. Up to 3
+        // tries to absorb a concurrent-create race.
+        let attempts = 3;
+        let lastErr: any = null;
+        while (attempts-- > 0) {
+          try {
+            const freshV = await api.getNextEngagementLetterVersion(clientId);
+            const created = await api.createEngagementLetter(clientId, { ...buildPayload(), version: freshV });
+            id = created.id;
+            setVersion(freshV);
+            break;
+          } catch (err: any) {
+            lastErr = err;
+            if (!String(err?.message || '').toLowerCase().includes('duplicate key')) break;
+          }
+        }
+        if (id == null) throw lastErr || new Error('Could not allocate a version number for this letter.');
       } else if (editable) {
         await api.updateEngagementLetter(id, buildPayload());
       }
