@@ -7,6 +7,7 @@ import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 import LogMessageModal from './LogMessageModal';
 import RunSchedulesModal from './RunSchedulesModal';
 import TaskCompletionModal, { templateFor } from './TaskCompletionModal';
+import SendPendingEmailsModal from './SendPendingEmailsModal';
 import { formatDateTime } from '../../services/dates';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
@@ -86,6 +87,8 @@ export default function StaffTasks() {
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showLogMessage,    setShowLogMessage]    = useState(false);
   const [showRunSchedules,  setShowRunSchedules]  = useState(false);
+  const [showPendingEmails, setShowPendingEmails] = useState(false);
+  const [pendingEmailsCount, setPendingEmailsCount] = useState(0);
   const [completingTask,    setCompletingTask]    = useState<Task | null>(null);
 
   // Filters — default to showing only MY tasks (changeable to "All" any time)
@@ -143,6 +146,21 @@ export default function StaffTasks() {
   };
 
   useEffect(() => { loadStaff(); }, []);
+
+  // Poll the count of pending automated emails so the toolbar can show
+  // a badge when there's work to send. Cheap because the view only
+  // returns rows with email_sent=false.
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const rows = await api.getPendingServiceEmails();
+        if (!cancelled) setPendingEmailsCount((rows as any[]).length);
+      } catch { /* swallow — non-critical */ }
+    };
+    refresh();
+    return () => { cancelled = true; };
+  }, [showPendingEmails, showRunSchedules]);
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fAssignee, fStatus, fPriority, fClient, fFrom, fTo, fDeleted]);
 
   // Defence: if the user isn't a supervisor but somehow has the trash
@@ -298,6 +316,23 @@ export default function StaffTasks() {
             title="Pick a date / service / clients, preview what would fire, then run"
           >
             ⟲ Run schedules
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowPendingEmails(true)}
+            style={{ marginLeft: 6, position: 'relative' }}
+            title="Send the emails queued by 'Run schedules'"
+            disabled={pendingEmailsCount === 0}
+          >
+            📧 Send pending emails
+            {pendingEmailsCount > 0 && (
+              <span style={{
+                position: 'absolute', top: -6, right: -6,
+                background: '#dc2626', color: '#fff',
+                borderRadius: 999, fontSize: 10, fontWeight: 700,
+                padding: '1px 6px',
+              }}>{pendingEmailsCount}</span>
+            )}
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(s => !s)} style={{ marginLeft: 6 }}>
             {showForm ? 'Cancel' : '+ New Task'}
@@ -672,6 +707,13 @@ export default function StaffTasks() {
         <RunSchedulesModal
           onClose={() => setShowRunSchedules(false)}
           onRan={(r) => { alert(`Done. Created ${r.created_runs} run(s) and ${r.created_tasks} task(s).`); reload(); }}
+        />
+      )}
+
+      {showPendingEmails && (
+        <SendPendingEmailsModal
+          onClose={() => setShowPendingEmails(false)}
+          onDone={() => { setShowPendingEmails(false); reload(); }}
         />
       )}
 
