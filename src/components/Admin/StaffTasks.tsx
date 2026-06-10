@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { api } from '../../services/api';
+import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
@@ -74,6 +74,9 @@ const dueClass = (t: Task) => {
 
 export default function StaffTasks() {
   const { user } = useAuth();
+  // Delete + Restore + the Deleted-tasks view are supervisor-only — keeps
+  // junior staff from removing other people's tasks.
+  const canDelete = isSupervisorOrHigher(user);
   const { clients } = useApp();
   const location = useLocation();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -141,6 +144,13 @@ export default function StaffTasks() {
 
   useEffect(() => { loadStaff(); }, []);
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fAssignee, fStatus, fPriority, fClient, fFrom, fTo, fDeleted]);
+
+  // Defence: if the user isn't a supervisor but somehow has the trash
+  // view selected (role change mid-session, stale local state), flip
+  // them back to the live list.
+  useEffect(() => {
+    if (!canDelete && fDeleted === 'deleted') setFDeleted('live');
+  }, [canDelete, fDeleted]);
 
   // Stamp the "I've now seen the Tasks page" marker, so the sidebar badge
   // resets to 0 — also fires on every visit so newly-arrived tasks get cleared.
@@ -444,19 +454,21 @@ export default function StaffTasks() {
             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
         </div>
-        <div className="form-group" style={{ minWidth: 120 }}>
-          <label>Show</label>
-          <select
-            className="form-input"
-            value={fDeleted}
-            onChange={e => setFDeleted(e.target.value as 'live' | 'deleted')}
-            title="Switch between the live list and the trash (recoverable deletes)"
-            style={fDeleted === 'deleted' ? { background: '#fef3c7', borderColor: '#f59e0b' } : undefined}
-          >
-            <option value="live">Live tasks</option>
-            <option value="deleted">🗑 Deleted (restorable)</option>
-          </select>
-        </div>
+        {canDelete && (
+          <div className="form-group" style={{ minWidth: 120 }}>
+            <label>Show</label>
+            <select
+              className="form-input"
+              value={fDeleted}
+              onChange={e => setFDeleted(e.target.value as 'live' | 'deleted')}
+              title="Switch between the live list and the trash (recoverable deletes)"
+              style={fDeleted === 'deleted' ? { background: '#fef3c7', borderColor: '#f59e0b' } : undefined}
+            >
+              <option value="live">Live tasks</option>
+              <option value="deleted">🗑 Deleted (restorable)</option>
+            </select>
+          </div>
+        )}
         <div className="form-group" style={{ minWidth: 140 }}>
           <label>Priority</label>
           <select className="form-input" value={fPriority} onChange={e => setFPriority(e.target.value)}>
@@ -628,13 +640,17 @@ export default function StaffTasks() {
                   </td>
                   <td className="no-print" style={{ whiteSpace: 'nowrap' }}>
                     {fDeleted === 'deleted' ? (
-                      <button className="btn btn-link btn-sm" onClick={() => handleRestore(t)} title="Move back to the live list">↶ Restore</button>
+                      canDelete ? (
+                        <button className="btn btn-link btn-sm" onClick={() => handleRestore(t)} title="Move back to the live list">↶ Restore</button>
+                      ) : null
                     ) : (
                       <>
                         {t.status !== 'cancelled' && (
                           <button className="btn btn-link btn-sm" onClick={() => handleNotRequired(t)} title="Mark as cancelled but keep in list">Not required</button>
                         )}
-                        <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} title="Soft delete — restorable from the Show: Deleted filter">Delete</button>
+                        {canDelete && (
+                          <button className="btn btn-link btn-sm" onClick={() => handleDelete(t)} title="Soft delete — restorable from the Show: Deleted filter">Delete</button>
+                        )}
                       </>
                     )}
                   </td>

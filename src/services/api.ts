@@ -2950,19 +2950,17 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
-  // Soft delete (migration 102). The row stays in the table — the UI's
-  // "Show deleted" filter brings it back. Use purgeStaffTask for a real
-  // delete (admin-only flow, not wired into the default UI).
+  // Soft delete (migration 102 + 109). Supervisor-only on the DB side via
+  // SECURITY DEFINER RPCs — the UI hides the button too, but this is the
+  // defence in depth. The row stays in the table; the "Show: Deleted"
+  // filter brings it back. Use purgeStaffTask for a real hard delete
+  // (admin-only flow, not wired into the default UI).
   async deleteStaffTask(id: number) {
-    const { error } = await supabase.from('staff_tasks')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id);
+    const { error } = await supabase.rpc('soft_delete_staff_task', { p_id: id });
     if (error) throw new Error(error.message);
   },
   async restoreStaffTask(id: number) {
-    const { error } = await supabase.from('staff_tasks')
-      .update({ deleted_at: null })
-      .eq('id', id);
+    const { error } = await supabase.rpc('restore_staff_task', { p_id: id });
     if (error) throw new Error(error.message);
   },
   async purgeStaffTask(id: number) {
