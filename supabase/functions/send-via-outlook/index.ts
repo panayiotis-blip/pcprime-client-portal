@@ -1,38 +1,28 @@
 // =============================================================
 // Supabase Edge Function: send-via-outlook
 // =============================================================
-// Sends outbound email through the CALLING USER'S OWN Outlook account via
-// SMTP. Each user must first configure their Outlook email + app password
-// in /settings/email — those credentials are encrypted in
-// public.user_smtp_settings (migration 096).
+// Sends outbound email through the CALLING USER'S OWN SMTP credentials
+// (Outlook / Gmail / any provider). Each user must first configure
+// their SMTP host + email + app password in /settings/email — those
+// credentials are encrypted in public.user_smtp_settings (migration
+// 096), and the signature (migration 113) is auto-appended.
 //
-// Flow:
-//   1. Verify Authorization (must be authenticated staff).
-//   2. Load the caller's SMTP settings via a user-scoped client so RLS
-//      restricts the read to their own row.
-//   3. Decrypt the password via the SECURITY DEFINER RPC
-//      get_user_smtp_password() — also user-scoped, auth.uid() match.
-//   4. Connect to smtp.office365.com (or whichever host the user saved)
-//      using denomailer with STARTTLS / SSL per their settings.
-//   5. Send the message; on success update last_used_at, on failure
-//      record last_error so the user can see what went wrong in the
-//      Email Settings page.
+// IMPORTANT (2026-06-11): rewrote from denomailer 1.6.0 to a hand-
+// rolled raw SMTP client + hand-rolled MIME builder. denomailer's
+// Q-encoded header path was producing broken =?utf-8?Q?...?= sections
+// with literal spaces (RFC 2047 violation) and its multipart/mixed
+// composer dropped attachments / rendered raw HTML tags on Gmail.
+// Owning the SMTP conversation and the MIME bytes ourselves means no
+// library quirks — Subject is B-encoded (base64) when non-ASCII to
+// dodge the Q-encoding pitfall, bodies are base64-encoded with the
+// charset on the Content-Type, and attachments are wrapped in a clean
+// multipart/mixed structure.
 //
-// Request body:
-//   {
-//     to:           string,            // recipient address
-//     subject:      string,
-//     body:         string,            // plain-text body
-//     html?:        string,            // optional HTML body
-//     attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>
-//   }
-//
-// Deploy with `supabase functions deploy send-via-outlook` (gateway
-// "Verify JWT" OFF — we handle auth in the function so OPTIONS can preflight).
+// Deploy with gateway "Verify JWT" OFF — we handle auth in the
+// function so OPTIONS can preflight.
 // =============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -59,6 +49,243 @@ type Payload = {
   attachments?: Attachment[];
 };
 
+// -----------------------------------------------------------------
+// MIME header helpers
+// -----------------------------------------------------------------
+
+// RFC 2047 B-encoded word (base64). Use this for any header value that
+// might contain non-ASCII. We never use Q-encoding (denomailer's bug
+// was specifically in its Q-encoder).
+function encodeHeader(s: string): string {
+  if (/^[\x00-\x7F]*$/.test(s)) return s;
+  const b64 = btoa(unescape(encodeURIComponent(s)));
+  return `=?UTF-8?B?${b64}?=`;
+}
+
+// Encode a "Name <addr>" From header — if the name part has non-ASCII
+// chars, base64-encode just the name and leave the addr unencoded.
+function encodeAddress(addr: string): string {
+  const m = addr.match(/^(.*?)\s*<([^>]+)>\s*$/);
+  if (!m) return addr;
+  const [, name, email] = m;
+  if (!name) return `<${email}>`;
+  return `${encodeHeader(name.trim())} <${email}>`;
+}
+
+// Wrap a long base64 string in 76-char lines per RFC 2045.
+function wrapBase64(b64: string): string {
+  const out: string[] = [];
+  for (let i = 0; i < b64.length; i += 76) out.push(b64.substring(i, i + 76));
+  return out.join('\r\n');
+}
+
+// UTF-8 base64 encode a string for use as a body part.
+function encodeBodyBase64(s: string): string {
+  const utf8 = new TextEncoder().encode(s);
+  let binary = '';
+  for (let i = 0; i < utf8.length; i++) binary += String.fromCharCode(utf8[i]);
+  return wrapBase64(btoa(binary));
+}
+
+// Build the full MIME message for the SMTP DATA command. The structure
+// chosen depends on whether there are attachments:
+//   • No attachments  → single part (text/html or text/plain)
+//   • With attachments → multipart/mixed wrapping [body, ...attachments]
+// Plain-text fallback (multipart/alternative) is omitted on purpose —
+// every modern client renders HTML, and the previous attempt to use
+// multipart/alternative was where denomailer's bugs lived.
+function buildMimeMessage(opts: {
+  from: string;
+  to: string;
+  subject: string;
+  html?: string;
+  text?: string;
+  attachments?: Array<{ filename: string; contentType: string; contentBase64: string }>;
+}): string {
+  const CRLF = '\r\n';
+  const out: string[] = [];
+  const boundary = `_b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}_`;
+
+  // Headers (always)
+  out.push(`From: ${encodeAddress(opts.from)}`);
+  out.push(`To: ${encodeAddress(opts.to)}`);
+  out.push(`Subject: ${encodeHeader(opts.subject)}`);
+  out.push(`Date: ${new Date().toUTCString()}`);
+  out.push(`MIME-Version: 1.0`);
+
+  const atts = opts.attachments || [];
+  const useHtml = !!opts.html;
+
+  if (atts.length > 0) {
+    out.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    out.push(''); // header/body separator
+    out.push(`This is a multi-part message in MIME format.`);
+    out.push('');
+
+    // Body part
+    out.push(`--${boundary}`);
+    if (useHtml) {
+      out.push(`Content-Type: text/html; charset="UTF-8"`);
+      out.push(`Content-Transfer-Encoding: base64`);
+      out.push('');
+      out.push(encodeBodyBase64(opts.html!));
+    } else {
+      out.push(`Content-Type: text/plain; charset="UTF-8"`);
+      out.push(`Content-Transfer-Encoding: base64`);
+      out.push('');
+      out.push(encodeBodyBase64(opts.text || ''));
+    }
+
+    // Attachment parts
+    for (const att of atts) {
+      out.push('');
+      out.push(`--${boundary}`);
+      const safeName = att.filename.replace(/[\r\n"]/g, '');
+      out.push(`Content-Type: ${att.contentType}; name="${safeName}"`);
+      out.push(`Content-Disposition: attachment; filename="${safeName}"`);
+      out.push(`Content-Transfer-Encoding: base64`);
+      out.push('');
+      out.push(wrapBase64(att.contentBase64));
+    }
+
+    out.push('');
+    out.push(`--${boundary}--`);
+  } else if (useHtml) {
+    out.push(`Content-Type: text/html; charset="UTF-8"`);
+    out.push(`Content-Transfer-Encoding: base64`);
+    out.push('');
+    out.push(encodeBodyBase64(opts.html!));
+  } else {
+    out.push(`Content-Type: text/plain; charset="UTF-8"`);
+    out.push(`Content-Transfer-Encoding: base64`);
+    out.push('');
+    out.push(encodeBodyBase64(opts.text || ''));
+  }
+
+  return out.join(CRLF);
+}
+
+// -----------------------------------------------------------------
+// Raw SMTP client
+// -----------------------------------------------------------------
+
+// Read until we have a complete multi-line SMTP response. SMTP replies
+// look like "250-EHLO line 1\r\n250-line 2\r\n250 last line\r\n". Lines
+// 2..N start with "XXX-" while the final line uses "XXX " (space). We
+// keep reading until we find a line matching "^\d{3} ".
+async function readResponse(reader: ReadableStreamDefaultReader<Uint8Array>, decoder: TextDecoder): Promise<string> {
+  let buf = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (value) buf += decoder.decode(value, { stream: true });
+    if (done) break;
+    const lines = buf.split('\r\n');
+    // last non-empty line
+    const last = lines.filter(l => l.length > 0).pop() || '';
+    if (/^\d{3} /.test(last)) break;
+  }
+  return buf;
+}
+
+async function writeLine(writer: WritableStreamDefaultWriter<Uint8Array>, encoder: TextEncoder, s: string) {
+  await writer.write(encoder.encode(s + '\r\n'));
+}
+
+function smtpCode(resp: string): number {
+  const first = resp.split('\r\n').find(l => /^\d{3}/.test(l)) || '';
+  return parseInt(first.substring(0, 3) || '0', 10);
+}
+
+function expect(resp: string, want: number, where: string) {
+  const got = smtpCode(resp);
+  if (got !== want) {
+    throw new Error(`SMTP ${where} expected ${want}, got ${got}: ${resp.trim()}`);
+  }
+}
+
+// Talk SMTP to the host. Handles STARTTLS upgrade for port 587, direct
+// TLS for port 465, AUTH LOGIN (base64 user/pass), and a full DATA
+// payload terminated with "\r\n.\r\n".
+async function sendRawSmtp(opts: {
+  host: string;
+  port: number;
+  secure: boolean;          // true = direct TLS (465); false = STARTTLS (587)
+  user: string;
+  password: string;
+  from: string;             // envelope (Return-Path)
+  to: string;               // envelope recipient
+  mimeMessage: string;      // already-built MIME body for DATA
+}): Promise<void> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder('utf-8');
+
+  let conn: Deno.Conn | Deno.TlsConn;
+  if (opts.secure) {
+    conn = await Deno.connectTls({ hostname: opts.host, port: opts.port });
+  } else {
+    conn = await Deno.connect({ hostname: opts.host, port: opts.port });
+  }
+
+  let reader = conn.readable.getReader();
+  let writer = conn.writable.getWriter();
+
+  const greet = await readResponse(reader, decoder);
+  expect(greet, 220, 'greeting');
+
+  await writeLine(writer, encoder, 'EHLO localhost');
+  expect(await readResponse(reader, decoder), 250, 'EHLO');
+
+  if (!opts.secure) {
+    await writeLine(writer, encoder, 'STARTTLS');
+    expect(await readResponse(reader, decoder), 220, 'STARTTLS');
+
+    // Release the locks on the streams so we can upgrade the conn.
+    reader.releaseLock();
+    writer.releaseLock();
+    // Upgrade. Deno.startTls returns a fresh Deno.TlsConn whose
+    // readable/writable are TLS-wrapped versions of the old conn.
+    conn = await Deno.startTls(conn as Deno.TcpConn, { hostname: opts.host });
+    reader = conn.readable.getReader();
+    writer = conn.writable.getWriter();
+
+    await writeLine(writer, encoder, 'EHLO localhost');
+    expect(await readResponse(reader, decoder), 250, 'EHLO (post-TLS)');
+  }
+
+  await writeLine(writer, encoder, 'AUTH LOGIN');
+  expect(await readResponse(reader, decoder), 334, 'AUTH LOGIN');
+  await writeLine(writer, encoder, btoa(opts.user));
+  expect(await readResponse(reader, decoder), 334, 'AUTH user');
+  await writeLine(writer, encoder, btoa(opts.password));
+  expect(await readResponse(reader, decoder), 235, 'AUTH password');
+
+  await writeLine(writer, encoder, `MAIL FROM:<${opts.from}>`);
+  expect(await readResponse(reader, decoder), 250, 'MAIL FROM');
+
+  await writeLine(writer, encoder, `RCPT TO:<${opts.to}>`);
+  expect(await readResponse(reader, decoder), 250, 'RCPT TO');
+
+  await writeLine(writer, encoder, 'DATA');
+  expect(await readResponse(reader, decoder), 354, 'DATA');
+
+  // Per RFC, any line starting with "." inside DATA must be doubled
+  // (transparency). Then end the payload with CRLF.CRLF.
+  const safeMessage = opts.mimeMessage.replace(/\r\n\./g, '\r\n..');
+  await writer.write(encoder.encode(safeMessage + '\r\n.\r\n'));
+  expect(await readResponse(reader, decoder), 250, 'DATA end');
+
+  await writeLine(writer, encoder, 'QUIT');
+  // Don't strictly need to read 221 — best-effort cleanup.
+
+  try { reader.releaseLock(); } catch { /* */ }
+  try { writer.releaseLock(); } catch { /* */ }
+  try { conn.close(); } catch { /* */ }
+}
+
+// -----------------------------------------------------------------
+// Function entry point
+// -----------------------------------------------------------------
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ ok: false, error: 'POST required' }, 405);
@@ -70,14 +297,12 @@ Deno.serve(async (req) => {
 
   const supaUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-  // User-scoped client (RLS + auth.uid() match the caller).
   const userClient = createClient(supaUrl, anonKey, {
     global: { headers: { Authorization: `Bearer ${authToken}` } },
   });
   const { data: { user }, error: uErr } = await userClient.auth.getUser();
   if (uErr || !user) return json({ ok: false, error: 'Unauthorized.' }, 401);
 
-  // Staff-only gate (mirrors send-email).
   const admin = createClient(supaUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   const { data: prof } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
   if (!prof || !['owner', 'supervisor', 'admin', 'staff'].includes(prof.role)) {
@@ -106,7 +331,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (sErr) return json({ ok: false, error: 'Could not read SMTP settings: ' + sErr.message }, 500);
   if (!settings) {
-    return json({ ok: false, error: 'No Outlook account is configured. Set one up in /settings/email first.' }, 400);
+    return json({ ok: false, error: 'No email account is configured. Set one up in /settings/email first.' }, 400);
   }
   if (!settings.is_active) {
     return json({ ok: false, error: 'Your SMTP settings are marked inactive. Toggle "Active" in /settings/email.' }, 400);
@@ -120,46 +345,15 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: 'No app password on file. Add one in /settings/email.' }, 400);
   }
 
-  // ----- Build attachments — keep as base64 string + encoding: 'base64' so
-  // denomailer wraps the binary correctly in the MIME message. The earlier
-  // Uint8Array+'binary' shape was silently dropping the PDF on Gmail.
-  const attachments = (payload.attachments || []).map(a => ({
-    filename: a.filename,
-    content: a.contentBase64,
-    contentType: a.contentType || 'application/pdf',
-    encoding: 'base64' as const,
-  }));
-
-  // ----- Sanitise the subject to ASCII -----
-  // denomailer 1.6.0 has a broken Q-encoder that emits literal spaces inside
-  // =?utf-8?Q?...?= sections. Gmail rejects those and the whole subject /
-  // related parts come through as raw quoted-printable. Replace the common
-  // non-ASCII typographic characters (em-dash, en-dash, curly quotes, ellipsis)
-  // with their ASCII equivalents — the resulting subject is pure ASCII so no
-  // MIME header encoding is needed at all.
-  const toAscii = (s: string) => (s || '')
-    .replace(/[–—]/g, '-')   // – —
-    .replace(/[‘’]/g, "'")    // ‘ ’
-    .replace(/[“”]/g, '"')    // “ ”
-    .replace(/…/g, '...')           // …
-    .replace(/ /g, ' ');            // non-breaking space
-  payload.subject = toAscii(payload.subject);
-
-  // ----- Compose body + html, append signature, ensure HTML is a full doc -----
-  // Gmail (and some other clients) render partial HTML fragments as raw tags
-  // when the message is multipart/alternative + attachments. Wrapping the
-  // body in a complete <!doctype html>...<html>...</html> document with an
-  // explicit UTF-8 charset is the reliable fix.
+  // ----- Compose body + html + signature -----
   let finalBody = payload.body;
   if (settings.signature_text) {
-    finalBody = (finalBody || '') + '\n\n--\n' + settings.signature_text;
+    finalBody = (finalBody || '') + '\r\n\r\n--\r\n' + settings.signature_text;
   }
   let finalHtml = payload.html;
   if (finalHtml) {
-    // If the caller already passed a full document, leave it. Otherwise wrap.
     const looksLikeFullDoc = /<!doctype\s+html|<html[\s>]/i.test(finalHtml);
     if (settings.signature_html) {
-      // Insert before </body> if there is one, else append.
       finalHtml = looksLikeFullDoc
         ? finalHtml.replace(/<\/body>/i, `<hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">${settings.signature_html}</body>`)
         : finalHtml + `<hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">${settings.signature_html}`;
@@ -177,51 +371,37 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ----- Send via SMTP -----
   const fromAddress = settings.from_name
     ? `${settings.from_name} <${settings.smtp_user}>`
     : settings.smtp_user;
 
-  const client = new SMTPClient({
-    connection: {
-      hostname: settings.smtp_host,
-      port: settings.smtp_port,
-      tls: !!settings.smtp_secure, // true = direct SSL (465); false = STARTTLS (587)
-      auth: {
-        username: settings.smtp_user,
-        password,
-      },
-    },
+  // ----- Build MIME message -----
+  const mimeMessage = buildMimeMessage({
+    from: fromAddress,
+    to: payload.to,
+    subject: payload.subject,
+    html: finalHtml,
+    text: finalBody,
+    attachments: (payload.attachments || []).map(a => ({
+      filename: a.filename,
+      contentType: a.contentType || 'application/pdf',
+      contentBase64: a.contentBase64,
+    })),
   });
 
-  // denomailer 1.6.0's multipart/alternative builder corrupts the message
-  // when content + html + attachments are all set: Gmail receives a broken
-  // MIME tree and renders raw tags / drops the PDF. Workaround: skip the
-  // plain-text content when an HTML body is provided — the email becomes
-  // multipart/mixed with [text/html, attachment] which denomailer handles
-  // correctly. Plain-text-only emails (test send, simple notifications)
-  // still go through the content path.
+  // ----- Send via raw SMTP -----
   try {
-    if (finalHtml) {
-      await client.send({
-        from: fromAddress,
-        to: payload.to,
-        subject: payload.subject,
-        html: finalHtml,
-        attachments: attachments.length ? attachments : undefined,
-      });
-    } else {
-      await client.send({
-        from: fromAddress,
-        to: payload.to,
-        subject: payload.subject,
-        content: finalBody,
-        attachments: attachments.length ? attachments : undefined,
-      });
-    }
-    await client.close();
+    await sendRawSmtp({
+      host: settings.smtp_host,
+      port: settings.smtp_port,
+      secure: !!settings.smtp_secure,
+      user: settings.smtp_user,
+      password,
+      from: settings.smtp_user,  // envelope sender (must match auth user for most providers)
+      to: payload.to,
+      mimeMessage,
+    });
 
-    // Stamp success on the user_smtp_settings row.
     await userClient
       .from('user_smtp_settings')
       .update({ last_used_at: new Date().toISOString(), last_error: null })
@@ -229,19 +409,16 @@ Deno.serve(async (req) => {
 
     return json({ ok: true });
   } catch (err) {
-    try { await client.close(); } catch { /* ignore */ }
     const msg = err instanceof Error ? err.message : String(err);
-    // Stamp failure so the user can see it on the settings page.
     await userClient
       .from('user_smtp_settings')
       .update({ last_error: msg })
       .eq('user_id', user.id);
-    // Common Microsoft 365 misconfig — surface a helpful hint when we can.
     let friendly = msg;
-    if (/SmtpClientAuthentication is disabled|disabled for the tenant/i.test(msg)) {
-      friendly = msg + ' — your Microsoft 365 tenant has SMTP AUTH disabled. An admin needs to enable it in Exchange admin → Mail flow → Authenticated SMTP, OR enable it on your mailbox specifically.';
-    } else if (/535|authentication failed/i.test(msg)) {
-      friendly = msg + ' — login was rejected. Double-check the email address and the 16-character app password.';
+    if (/535|authentication failed|invalid login/i.test(msg)) {
+      friendly = msg + ' — login was rejected. Double-check the email address and the 16-character app password (no spaces).';
+    } else if (/SmtpClientAuthentication is disabled|disabled for the tenant/i.test(msg)) {
+      friendly = msg + ' — your Microsoft 365 tenant has SMTP AUTH disabled. An admin needs to enable it in Exchange admin → Mail flow → Authenticated SMTP.';
     }
     return json({ ok: false, error: 'Send failed: ' + friendly }, 502);
   }
