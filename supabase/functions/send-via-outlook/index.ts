@@ -194,15 +194,31 @@ Deno.serve(async (req) => {
     },
   });
 
+  // denomailer 1.6.0's multipart/alternative builder corrupts the message
+  // when content + html + attachments are all set: Gmail receives a broken
+  // MIME tree and renders raw tags / drops the PDF. Workaround: skip the
+  // plain-text content when an HTML body is provided — the email becomes
+  // multipart/mixed with [text/html, attachment] which denomailer handles
+  // correctly. Plain-text-only emails (test send, simple notifications)
+  // still go through the content path.
   try {
-    await client.send({
-      from: fromAddress,
-      to: payload.to,
-      subject: payload.subject,
-      content: finalBody,
-      html: finalHtml,
-      attachments: attachments.length ? attachments : undefined,
-    });
+    if (finalHtml) {
+      await client.send({
+        from: fromAddress,
+        to: payload.to,
+        subject: payload.subject,
+        html: finalHtml,
+        attachments: attachments.length ? attachments : undefined,
+      });
+    } else {
+      await client.send({
+        from: fromAddress,
+        to: payload.to,
+        subject: payload.subject,
+        content: finalBody,
+        attachments: attachments.length ? attachments : undefined,
+      });
+    }
     await client.close();
 
     // Stamp success on the user_smtp_settings row.
