@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
   // ----- Load the user's SMTP settings -----
   const { data: settings, error: sErr } = await userClient
     .from('user_smtp_settings')
-    .select('smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active')
+    .select('smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, signature_html, signature_text')
     .eq('user_id', user.id)
     .maybeSingle();
   if (sErr) return json({ ok: false, error: 'Could not read SMTP settings: ' + sErr.message }, 500);
@@ -130,6 +130,53 @@ Deno.serve(async (req) => {
     encoding: 'base64' as const,
   }));
 
+  // ----- Sanitise the subject to ASCII -----
+  // denomailer 1.6.0 has a broken Q-encoder that emits literal spaces inside
+  // =?utf-8?Q?...?= sections. Gmail rejects those and the whole subject /
+  // related parts come through as raw quoted-printable. Replace the common
+  // non-ASCII typographic characters (em-dash, en-dash, curly quotes, ellipsis)
+  // with their ASCII equivalents — the resulting subject is pure ASCII so no
+  // MIME header encoding is needed at all.
+  const toAscii = (s: string) => (s || '')
+    .replace(/[–—]/g, '-')   // – —
+    .replace(/[‘’]/g, "'")    // ‘ ’
+    .replace(/[“”]/g, '"')    // “ ”
+    .replace(/…/g, '...')           // …
+    .replace(/ /g, ' ');            // non-breaking space
+  payload.subject = toAscii(payload.subject);
+
+  // ----- Compose body + html, append signature, ensure HTML is a full doc -----
+  // Gmail (and some other clients) render partial HTML fragments as raw tags
+  // when the message is multipart/alternative + attachments. Wrapping the
+  // body in a complete <!doctype html>...<html>...</html> document with an
+  // explicit UTF-8 charset is the reliable fix.
+  let finalBody = payload.body;
+  if (settings.signature_text) {
+    finalBody = (finalBody || '') + '\n\n--\n' + settings.signature_text;
+  }
+  let finalHtml = payload.html;
+  if (finalHtml) {
+    // If the caller already passed a full document, leave it. Otherwise wrap.
+    const looksLikeFullDoc = /<!doctype\s+html|<html[\s>]/i.test(finalHtml);
+    if (settings.signature_html) {
+      // Insert before </body> if there is one, else append.
+      finalHtml = looksLikeFullDoc
+        ? finalHtml.replace(/<\/body>/i, `<hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">${settings.signature_html}</body>`)
+        : finalHtml + `<hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">${settings.signature_html}`;
+    }
+    if (!looksLikeFullDoc) {
+      finalHtml =
+        `<!DOCTYPE html>\n` +
+        `<html><head>` +
+        `<meta charset="UTF-8">` +
+        `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+        `</head>` +
+        `<body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#1a365d;line-height:1.5;margin:0;padding:18px;background:#ffffff;">` +
+        finalHtml +
+        `</body></html>`;
+    }
+  }
+
   // ----- Send via SMTP -----
   const fromAddress = settings.from_name
     ? `${settings.from_name} <${settings.smtp_user}>`
@@ -152,8 +199,8 @@ Deno.serve(async (req) => {
       from: fromAddress,
       to: payload.to,
       subject: payload.subject,
-      content: payload.body,
-      html: payload.html,
+      content: finalBody,
+      html: finalHtml,
       attachments: attachments.length ? attachments : undefined,
     });
     await client.close();

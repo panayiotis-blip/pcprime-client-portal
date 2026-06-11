@@ -2624,19 +2624,21 @@ export const api = {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return null;
     const { data, error } = await supabase.from('user_smtp_settings')
-      .select('user_id, smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, last_used_at, last_error, smtp_password_enc, updated_at')
+      .select('user_id, smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, last_used_at, last_error, smtp_password_enc, signature_html, signature_text, updated_at')
       .eq('user_id', session.user.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) return null;
-    // The encrypted password is bytea — surface a simple "has password set" flag
-    // so the UI can show "Password configured" without ever touching the cipher.
     const hasPassword = !!data.smtp_password_enc;
     const { smtp_password_enc, ...rest } = data as any;
     void smtp_password_enc;
     return { ...rest, has_password: hasPassword };
   },
-  async saveMySmtpSettings(row: { smtp_host?: string; smtp_port?: number; smtp_secure?: boolean; smtp_user: string; from_name?: string | null; is_active?: boolean }) {
+  async saveMySmtpSettings(row: {
+    smtp_host?: string; smtp_port?: number; smtp_secure?: boolean;
+    smtp_user: string; from_name?: string | null; is_active?: boolean;
+    signature_html?: string | null; signature_text?: string | null;
+  }) {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) throw new Error('Not authenticated');
     const payload = {
@@ -2647,6 +2649,8 @@ export const api = {
       smtp_user: row.smtp_user,
       from_name: row.from_name ?? null,
       is_active: row.is_active ?? true,
+      signature_html: row.signature_html ?? null,
+      signature_text: row.signature_text ?? null,
     };
     const { error } = await supabase.from('user_smtp_settings').upsert(payload, { onConflict: 'user_id' });
     if (error) throw new Error(error.message);

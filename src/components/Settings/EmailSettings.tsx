@@ -12,6 +12,8 @@ type SmtpRow = {
   has_password: boolean;
   last_used_at: string | null;
   last_error: string | null;
+  signature_html: string | null;
+  signature_text: string | null;
   updated_at: string;
 };
 
@@ -48,6 +50,9 @@ export default function EmailSettings() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  // Signature — what gets appended to every outgoing email.
+  const [signatureHtml, setSignatureHtml] = useState('');
+  const [signatureText, setSignatureText] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +68,8 @@ export default function EmailSettings() {
         setHasPassword(row.has_password);
         setLastUsedAt(row.last_used_at);
         setLastError(row.last_error);
+        setSignatureHtml(row.signature_html || '');
+        setSignatureText(row.signature_text || '');
         // Pick the right provider radio based on host so the instructions match.
         setProvider(detectProvider(row.smtp_host));
       }
@@ -99,6 +106,8 @@ export default function EmailSettings() {
         smtp_user: smtpUser.trim(),
         from_name: fromName.trim() || null,
         is_active: isActive,
+        signature_html: signatureHtml.trim() || null,
+        signature_text: signatureText.trim() || null,
       });
       if (password) {
         await api.setMySmtpPassword(password);
@@ -308,6 +317,55 @@ export default function EmailSettings() {
                   Provider radio above auto-fills these. Pick "Custom SMTP" to edit freely.
                 </p>
               </details>
+            </div>
+          </div>
+
+          {/* Email signature — auto-appended by send-via-outlook to every
+              outbound message. HTML version goes on rich-text emails (e.g.
+              engagement letters); plain-text version goes on text-only
+              messages and as the fallback for HTML-disabled clients. */}
+          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: 14, color: '#1a365d', margin: '0 0 4px' }}>Email signature</h3>
+            <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 10px' }}>
+              Appended to every email you send through the app. Leave blank to send without a signature.
+            </p>
+            <div className="form-grid">
+              <div className="form-group full-width">
+                <label>HTML signature (rich)</label>
+                <textarea
+                  className="form-input"
+                  rows={6}
+                  value={signatureHtml}
+                  onChange={e => setSignatureHtml(e.target.value)}
+                  placeholder={`<div style="color:#1a365d;">
+  <strong>Your Name</strong><br>
+  PC Prime & Calculate Consultants Ltd<br>
+  +357 22 000 000 · you@firm.com<br>
+  www.firm.com
+</div>`}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+                />
+                <small style={{ color: '#64748b', fontSize: '0.78em' }}>
+                  HTML allowed. The function inserts a thin grey rule above it on outbound mail.
+                </small>
+              </div>
+              <div className="form-group full-width">
+                <label>Plain-text fallback</label>
+                <textarea
+                  className="form-input"
+                  rows={4}
+                  value={signatureText}
+                  onChange={e => setSignatureText(e.target.value)}
+                  placeholder={`Your Name
+PC Prime & Calculate Consultants Ltd
++357 22 000 000 | you@firm.com
+www.firm.com`}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+                />
+                <small style={{ color: '#64748b', fontSize: '0.78em' }}>
+                  Used by clients that don't render HTML, and as the bottom of plain-text emails.
+                </small>
+              </div>
             </div>
           </div>
 
