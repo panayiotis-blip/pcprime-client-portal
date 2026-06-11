@@ -313,22 +313,32 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
       // the client can click to accept without reading attachments.
       const token = await api.ensureEngagementLetterToken(id!);
       const acceptUrl = `${window.location.origin}/accept-engagement/${token}`;
+      // Address the right person: for an individual the client themselves
+      // (first name), for a company the named contact person. Falls back to
+      // "Sir/Madam" when we don't have a person on file. The sign-off is
+      // intentionally left as "Kind regards," — the sender's own signature
+      // (Settings → Email) is auto-appended by the send-via-outlook function.
+      const isIndividual = (client?.client_type || 'company') === 'individual';
+      const greetingName = isIndividual
+        ? (client?.first_name?.trim() || client?.name?.trim() || 'Sir/Madam')
+        : (client?.contact_person?.trim() || 'Sir/Madam');
       await api.sendViaOutlook({
         to: sendToEmail.trim(),
         subject: `Engagement Letter — ${firm?.name || 'Our firm'} — v${version}`,
         body:
+          `Dear ${greetingName},\n\n` +
           `Please find attached our engagement letter for your acceptance.\n\n` +
           `To accept online, click here:\n${acceptUrl}\n\n` +
           `Or reply to this email with the word "ACCEPTED" to confirm.\n\n` +
-          `Kind regards,\n${firm?.name || ''}`,
+          `Kind regards,`,
         html:
-          `<p>Dear ${client?.name || 'client'},</p>` +
+          `<p>Dear ${greetingName},</p>` +
           `<p>Please find attached our engagement letter for your acceptance.</p>` +
           `<p style="margin: 18px 0;">` +
           `<a href="${acceptUrl}" style="background:#1a365d;color:#fff;padding:10px 18px;text-decoration:none;border-radius:4px;font-weight:600;">View and accept online</a>` +
           `</p>` +
           `<p style="color:#64748b;font-size:13px;">Alternatively, reply to this email with the word <strong>"ACCEPTED"</strong>.</p>` +
-          `<p>Kind regards,<br>${firm?.name || ''}</p>`,
+          `<p>Kind regards,</p>`,
         attachments: [{ filename, contentBase64: b64, contentType: 'application/pdf' }],
       });
       await api.markEngagementLetterSent(id!, sendToEmail.trim());
