@@ -1740,16 +1740,10 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
-  // --------- Outbound email (via the send-email Edge Function → CloudMailin) ---------
-  async sendEmail(msg: {
-    to: string[]; subject: string; html?: string; text?: string;
-    attachments?: { file_name: string; content: string; content_type?: string }[];
-  }) {
-    const { data, error } = await supabase.functions.invoke('send-email', { body: msg });
-    if (error) throw new Error(error.message);
-    if (!data?.ok) throw new Error(data?.error || 'The email could not be sent.');
-    return data;
-  },
+  // Outbound email is sent exclusively through each staff member's own
+  // Outlook/SMTP account — see sendViaOutlook below. (The legacy CloudMailin
+  // path, api.sendEmail → send-email Edge Function, was removed when CloudMailin
+  // was cancelled.)
 
   // --------- AI document extraction (extract-document Edge Function → Claude) ---------
   // Sends base64 page image(s) and gets back structured invoice fields.
@@ -2403,12 +2397,6 @@ export const api = {
     if (error) throw new Error(error.message);
     return data || [];
   },
-  // Best-effort: email the firm that a client posted a message. Never throws —
-  // a failed notification must not affect sending the message itself.
-  async notifyNewMessage(clientId: number) {
-    try { await supabase.functions.invoke('notify-new-message', { body: { client_id: clientId } }); }
-    catch { /* ignore */ }
-  },
   async sendClientMessage(threadId: number, body: string) {
     const { data, error } = await supabase.rpc('send_client_message', { p_thread_id: threadId, p_body: body });
     if (error) throw new Error(error.message);
@@ -2667,6 +2655,48 @@ export const api = {
     const { error } = await supabase.from('user_smtp_settings').delete().eq('user_id', session.user.id);
     if (error) throw new Error(error.message);
   },
+
+  // --------- Admin: manage ANOTHER staff user's SMTP settings ---------
+  // Backed by the SECURITY DEFINER RPCs in migration 115, each gated on the
+  // caller holding users.write. Lets the firm owner set up email per user from
+  // User Management. The plaintext password is never returned here.
+  async adminGetUserSmtpSettings(userId: string) {
+    const { data, error } = await supabase.rpc('admin_get_user_smtp_settings', { p_user_id: userId });
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? null) as null | {
+      smtp_host: string; smtp_port: number; smtp_secure: boolean; smtp_user: string;
+      from_name: string | null; is_active: boolean; has_password: boolean;
+      last_used_at: string | null; last_error: string | null;
+      signature_html: string | null; signature_text: string | null; updated_at: string;
+    };
+  },
+  async adminSaveUserSmtpSettings(userId: string, row: {
+    smtp_host?: string; smtp_port?: number; smtp_secure?: boolean;
+    smtp_user: string; from_name?: string | null; is_active?: boolean;
+    signature_html?: string | null; signature_text?: string | null;
+  }) {
+    const { error } = await supabase.rpc('admin_upsert_user_smtp_settings', {
+      p_user_id: userId,
+      p_smtp_host: row.smtp_host || 'smtp.office365.com',
+      p_smtp_port: row.smtp_port ?? 587,
+      p_smtp_secure: row.smtp_secure ?? false,
+      p_smtp_user: row.smtp_user,
+      p_from_name: row.from_name ?? null,
+      p_is_active: row.is_active ?? true,
+      p_signature_html: row.signature_html ?? null,
+      p_signature_text: row.signature_text ?? null,
+    });
+    if (error) throw new Error(error.message);
+  },
+  async adminSetUserSmtpPassword(userId: string, password: string) {
+    const { error } = await supabase.rpc('admin_set_user_smtp_password', { p_user_id: userId, p_password: password });
+    if (error) throw new Error(error.message);
+  },
+  async adminDeleteUserSmtpSettings(userId: string) {
+    const { error } = await supabase.rpc('admin_delete_user_smtp_settings', { p_user_id: userId });
+    if (error) throw new Error(error.message);
+  },
   // Invokes the send-via-outlook Edge Function which relays mail through the
   // caller's own Outlook account. Attachments arrive base64-encoded so PDFs
   // generated client-side travel inline.
@@ -2676,6 +2706,8 @@ export const api = {
     body: string;
     html?: string;
     attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
+    // Admin only (users.write): send the test through another user's SMTP account.
+    as_user_id?: string;
   }) {
     const { data, error } = await supabase.functions.invoke('send-via-outlook', { body: payload });
     if (error) {

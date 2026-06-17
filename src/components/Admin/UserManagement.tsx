@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import UserPermissionsEditor from './UserPermissionsEditor';
 import StaffServiceRatesEditor from './StaffServiceRatesEditor';
+import UserEmailEditor from './UserEmailEditor';
 import SearchableSelect from '../common/SearchableSelect';
 
 export default function UserManagement() {
@@ -42,6 +43,11 @@ export default function UserManagement() {
   const [changePasswordId, setChangePasswordId] = useState<string | null>(null);
   const [permsForUser, setPermsForUser] = useState<{ id: string; name: string } | null>(null);
   const [ratesForUser, setRatesForUser] = useState<{ id: string; name: string } | null>(null);
+  // Email (SMTP) setup editor target. pendingRates chains the rates editor open
+  // after the email editor is closed, so creating a new staff member walks
+  // through email → rates without the two modals overlapping.
+  const [emailForUser, setEmailForUser] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [pendingRates, setPendingRates] = useState<{ id: string; name: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const canEditRoles = hasPermission(currentUser, 'roles.write');
   const [myPassword, setMyPassword] = useState('');
@@ -126,10 +132,12 @@ export default function UserManagement() {
         await load();
       }
 
-      // Step 2 — auto-open the service-rates editor for newly-added staff so
-      // the user can review/adjust charge-out rates immediately. Skip clients.
+      // Step 2 — for newly-added staff, auto-open the email setup first (so you
+      // can configure their SMTP straight away), then chain to the service-rates
+      // editor when it closes. Skip clients (no email setup / no charge rates).
       if (newRow && wasStaff) {
-        setRatesForUser({ id: newRow.id, name: newRow.display_name || newRow.username });
+        setEmailForUser({ id: newRow.id, name: newRow.display_name || newRow.username, email: newEmail });
+        setPendingRates({ id: newRow.id, name: newRow.display_name || newRow.username });
       }
     } catch (err: any) {
       if (err.message !== MFA_CANCELLED) alert(err.message);
@@ -332,6 +340,19 @@ export default function UserManagement() {
         />
       )}
 
+      {emailForUser && (
+        <UserEmailEditor
+          userId={emailForUser.id}
+          userName={emailForUser.name}
+          defaultEmail={emailForUser.email}
+          onClose={() => {
+            setEmailForUser(null);
+            // Chain into the rates editor if we just created a staff member.
+            if (pendingRates) { setRatesForUser(pendingRates); setPendingRates(null); }
+          }}
+        />
+      )}
+
       {/* User list */}
       <div className="export-table-wrapper">
         <table className="export-table">
@@ -438,6 +459,9 @@ export default function UserManagement() {
                         <button className="btn btn-secondary btn-sm" onClick={() => setChangePasswordId(u.id)}>🔑</button>
                         {u.role !== 'client' && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setRatesForUser({ id: u.id, name: u.display_name || u.username })}>Rates</button>
+                        )}
+                        {u.role !== 'client' && (
+                          <button className="btn btn-secondary btn-sm" onClick={() => setEmailForUser({ id: u.id, name: u.display_name || u.username, email: '' })}>Email</button>
                         )}
                         {canEditRoles && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setPermsForUser({ id: u.id, name: u.display_name || u.username })}>Perms</button>

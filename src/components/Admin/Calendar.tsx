@@ -279,15 +279,28 @@ export default function Calendar() {
       + (form.location ? `\nWhere: ${form.location}` : '')
       + (form.description ? `\n\n${form.description}` : '');
     setNotifySending(true);
-    try {
-      await api.sendEmail({ to, subject, html, text });
-      alert(`Notification sent to ${to.join(', ')}.`);
+    // send-via-outlook sends one recipient per call, so fan out and collect
+    // any per-recipient failures rather than aborting the whole batch.
+    const sent: string[] = [];
+    const fails: string[] = [];
+    for (const recipient of to) {
+      try {
+        await api.sendViaOutlook({ to: recipient, subject, body: text, html });
+        sent.push(recipient);
+      } catch (err: any) {
+        fails.push(`${recipient}: ${err.message}`);
+      }
+    }
+    setNotifySending(false);
+    if (sent.length) {
+      alert(
+        `Notification sent to ${sent.join(', ')}.` +
+        (fails.length ? `\n\nFailed:\n${fails.join('\n')}` : ''),
+      );
       setNotifyOpen(false);
       setNotifyExtra('');
-    } catch (err: any) {
-      alert('Send failed: ' + err.message);
-    } finally {
-      setNotifySending(false);
+    } else {
+      alert('Send failed:\n' + fails.join('\n'));
     }
   };
 

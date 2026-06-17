@@ -47,6 +47,10 @@ type Payload = {
   body: string;
   html?: string;
   attachments?: Attachment[];
+  // Optional: send using ANOTHER user's SMTP account instead of the caller's.
+  // Only honoured when the caller holds users.write — used by admins to send a
+  // test email while setting up a staff member's email in User Management.
+  as_user_id?: string;
 };
 
 // -----------------------------------------------------------------
@@ -323,11 +327,23 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: 'Too many attachments (max 10).' }, 400);
   }
 
-  // ----- Load the user's SMTP settings -----
-  const { data: settings, error: sErr } = await userClient
+  // ----- Resolve which user's SMTP account to send through -----
+  // Default: the caller's own. An admin (users.write) may send as another user
+  // via as_user_id — used to test a staff member's email setup.
+  let targetUserId = user.id;
+  if (payload.as_user_id && payload.as_user_id !== user.id) {
+    const { data: canManage } = await userClient.rpc('has_permission', { p_perm: 'users.write' });
+    if (!canManage) {
+      return json({ ok: false, error: 'users.write permission required to send as another user.' }, 403);
+    }
+    targetUserId = payload.as_user_id;
+  }
+
+  // ----- Load the target user's SMTP settings (admin client bypasses own-row RLS) -----
+  const { data: settings, error: sErr } = await admin
     .from('user_smtp_settings')
     .select('smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, signature_html, signature_text')
-    .eq('user_id', user.id)
+    .eq('user_id', targetUserId)
     .maybeSingle();
   if (sErr) return json({ ok: false, error: 'Could not read SMTP settings: ' + sErr.message }, 500);
   if (!settings) {
@@ -338,7 +354,11 @@ Deno.serve(async (req) => {
   }
 
   // ----- Decrypt the password via the SECURITY DEFINER RPC -----
-  const { data: passwordResp, error: pErr } = await userClient.rpc('get_user_smtp_password');
+  // Own mail uses the self-scoped RPC; an admin sending as another user uses the
+  // permission-gated admin RPC. Both run as the caller's JWT identity.
+  const { data: passwordResp, error: pErr } = targetUserId === user.id
+    ? await userClient.rpc('get_user_smtp_password')
+    : await userClient.rpc('admin_get_user_smtp_password', { p_user_id: targetUserId });
   if (pErr) return json({ ok: false, error: 'Could not decrypt SMTP password: ' + pErr.message }, 500);
   const password = (passwordResp as string | null) || '';
   if (!password) {
@@ -402,18 +422,18 @@ Deno.serve(async (req) => {
       mimeMessage,
     });
 
-    await userClient
+    await admin
       .from('user_smtp_settings')
       .update({ last_used_at: new Date().toISOString(), last_error: null })
-      .eq('user_id', user.id);
+      .eq('user_id', targetUserId);
 
     return json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await userClient
+    await admin
       .from('user_smtp_settings')
       .update({ last_error: msg })
-      .eq('user_id', user.id);
+      .eq('user_id', targetUserId);
     let friendly = msg;
     if (/535|authentication failed|invalid login/i.test(msg)) {
       friendly = msg + ' — login was rejected. Double-check the email address and the 16-character app password (no spaces).';

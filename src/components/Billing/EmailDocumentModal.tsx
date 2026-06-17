@@ -48,17 +48,17 @@ export default function EmailDocumentModal({
       setStatus('Preparing the PDF…');
       const content = await generateDocumentPdf(routePath);
       setStatus('Sending…');
-      await api.sendEmail({
-        to: [recipient],
+      await api.sendViaOutlook({
+        to: recipient,
         subject: subject.trim(),
-        text: message,
+        body: message || 'Please find the attached document.',
         html: message
           ? message.split('\n').map(l => `<p>${escapeHtml(l) || '&nbsp;'}</p>`).join('')
           : undefined,
         attachments: [{
-          file_name: fileName,
-          content,
-          content_type: 'application/pdf',
+          filename: fileName,
+          contentBase64: content,
+          contentType: 'application/pdf',
         }],
       });
       setStatus('');

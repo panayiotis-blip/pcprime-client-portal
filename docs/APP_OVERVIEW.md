@@ -27,7 +27,7 @@ Repository: **https://github.com/panayiotis-blip/pcprime-client-portal** (branch
 | Charts | recharts |
 | Backend / DB / Auth | Supabase (Postgres + Row-Level Security + Edge Functions + Storage) |
 | Hosting | Vercel (frontend) + Supabase (backend) |
-| Email | CloudMailin (outbound active; inbound paused on paid plan) |
+| Email | Firm runs Google Workspace (Gmail). Outbound via each staff member's own Gmail/SMTP (`send-via-outlook`). Inbound capture pending a Gmail API rebuild. CloudMailin removed. |
 | AI | Anthropic Claude `claude-haiku-4-5-20251001` for document extraction |
 | Error tracking | Sentry (scaffolded; activate via `VITE_SENTRY_DSN`) |
 | MFA | TOTP via Supabase Auth, enforced for staff |
@@ -69,9 +69,8 @@ Repository: **https://github.com/panayiotis-blip/pcprime-client-portal** (branch
 │   └── functions/                     ← Edge Functions (Deno)
 │       ├── admin-users/               ← create/reset/delete users (staff)
 │       ├── extract-document/          ← AI extraction (Claude vision)
-│       ├── inbound-email/             ← CloudMailin → portal Emails tab (deployed when paid plan active)
-│       ├── notify-new-message/        ← Emails firm on a new client message
-│       ├── send-email/                ← Outbound mail via CloudMailin (staff-only)
+│       ├── inbound-email/             ← LEGACY CloudMailin webhook; being rebuilt on the Gmail API
+│       ├── send-via-outlook/          ← Outbound mail via the staff member's own Outlook/SMTP
 │       └── submit-application/        ← Public /signup form (Turnstile-gated)
 ├── vercel.json
 ├── package.json
@@ -138,7 +137,7 @@ Repository: **https://github.com/panayiotis-blip/pcprime-client-portal** (branch
 | `client_expense` | Client-uploaded expenses (with `invoice_id` link when allocated) |
 | `advisor_report` | Firm-uploaded finished reports for clients |
 | `client_messages`, `message_thread` | Messaging (topics + thread) |
-| `client_emails`, `client_email_attachments` | Inbound email (when CloudMailin live) |
+| `client_emails`, `client_email_attachments` | Inbound email capture (populated by the pending Microsoft 365 Graph rebuild; existing rows retained) |
 | `staff_tasks`, `task_templates` | Internal task board |
 | `compliance_tasks`, `client_tax_filings` | Deadlines |
 | `time_entries`, `staff_service_rates` | Timesheet |
@@ -162,9 +161,9 @@ Repository: **https://github.com/panayiotis-blip/pcprime-client-portal** (branch
 |---|---|---|
 | `admin-users` | Staff | Create / reset password / delete auth users (MFA step-up required for the caller). |
 | `extract-document` | Any authenticated | Claude vision extraction for scanned invoices/receipts. Cyprus + Greek aware. |
-| `inbound-email` | HTTP Basic Auth from CloudMailin (Verify JWT OFF) | Files inbound email against the matching client. **Deployed when CloudMailin paid plan is active.** |
-| `notify-new-message` | Authenticated client | Emails the firm's contact address when a client posts a message. |
-| `send-email` | Staff only | Outbound mail via CloudMailin. |
+| `send-via-outlook` | Staff only | Outbound mail through the calling staff member's own Gmail/SMTP account (per-user credentials in `user_smtp_settings`). The single outbound path. |
+| `poll-gmail` | `x-cron-secret` header (Verify JWT OFF) | Inbound capture: polls the Google Workspace capture mailbox via the Gmail API and files mail into `client_emails`. Scheduled (pg_cron, ~5 min). Cursor in `email_sync_state`. See `docs/PHASE2_INBOUND_GMAIL.md`. |
+| `inbound-email` | HTTP Basic Auth (Verify JWT OFF) | LEGACY CloudMailin webhook — superseded by `poll-gmail`; delete after Gmail capture is verified live. |
 | `submit-application` | Public (Verify JWT OFF) | Public signup form; Turnstile-verified. |
 
 ---
@@ -193,10 +192,10 @@ The schema is built by running `supabase/migrations/NNN_*.sql` in order. **91 mi
 
 **Supabase Edge Function secrets:**
 - `ANTHROPIC_API_KEY` — for `extract-document`
-- `CLOUDMAILIN_OUTBOUND_USERNAME` + `CLOUDMAILIN_OUTBOUND_TOKEN` + `CLOUDMAILIN_FROM` — for `send-email` and `notify-new-message`
-- `CLOUDMAILIN_AUTH_USER` + `CLOUDMAILIN_AUTH_PASS` — for `inbound-email`
+- `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` + `GOOGLE_REFRESH_TOKEN` + `GMAIL_ADDRESS` + `CRON_SECRET` — for `poll-gmail` inbound capture (see `docs/PHASE2_INBOUND_GMAIL.md`)
 - `TURNSTILE_SECRET_KEY` (optional) — enables /signup captcha verification
-- `PORTAL_URL` (optional) — link target in `notify-new-message`
+- (Outbound email needs no shared secret — each staff member stores their own Outlook/SMTP credentials in `user_smtp_settings` via Settings → Email.)
+- The `CLOUDMAILIN_*` secrets are obsolete and can be deleted from the Supabase dashboard once CloudMailin is cancelled.
 
 ---
 
@@ -223,7 +222,7 @@ These are documented in `~/.claude/projects/.../memory/project_backlog.md` (work
 
 - **iOS Chrome hamburger bug on the client dashboard** — defer until we can connect Safari Web Inspector from a Mac (every CSS guess has failed).
 - **AI prefill tuning v2** — iterate the prompt if specific document types still misread (currently calibrated for Cyprus EN/EL invoices and receipts).
-- **Inbound email activation** — code ready, awaiting CloudMailin paid plan + MX records.
+- **Inbound email rebuild (Gmail API)** — CloudMailin cancelled. The per-client Emails tab still shows previously captured rows but no longer receives new mail. Rebuild `inbound-email` to read a Google Workspace capture mailbox via the Gmail API (Google Cloud project + OAuth refresh token + polling via historyId), keeping existing `client-…@inbox.primeandcalculate.com` addresses via a Workspace catch-all route. **Full scope + setup guide: `docs/PHASE2_INBOUND_GMAIL.md`.**
 - **Activation switches** — Turnstile keys, Sentry DSN, Anthropic spend cap. None essential for normal operation.
 - **Future Terms text** — current text in `src/components/Auth/terms.tsx` is a DRAFT placeholder; replace with the lawyer-approved wording and bump `CURRENT_TOS_VERSION` to re-prompt everyone.
 

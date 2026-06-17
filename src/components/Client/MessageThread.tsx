@@ -3,11 +3,12 @@ import { api } from '../../services/api';
 import { formatDateTime } from '../../services/dates';
 
 // Shared chat thread for one TOPIC. Used by the client "Messages" screen
-// (viewerIsStaff=false) and the staff inbox (=true). clientId is passed so the
-// client→firm email notification can fire.
+// (viewerIsStaff=false) and the staff inbox (=true). Staff are alerted to new
+// client messages via the in-app inbox/badge (the email alert was dropped with
+// CloudMailin); clientId stays in the props for callers' convenience.
 export default function MessageThread({
-  threadId, clientId, viewerIsStaff, onActivity,
-}: { threadId: number; clientId: number; viewerIsStaff: boolean; onActivity?: () => void }) {
+  threadId, viewerIsStaff, onActivity,
+}: { threadId: number; clientId?: number; viewerIsStaff: boolean; onActivity?: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading]   = useState(true);
   const [body, setBody]         = useState('');
@@ -36,8 +37,6 @@ export default function MessageThread({
     setSending(true);
     try {
       await api.sendClientMessage(threadId, text);
-      // Notify the firm by email when a CLIENT posts (best-effort, non-blocking).
-      if (!viewerIsStaff) void api.notifyNewMessage(clientId);
       setBody('');
       await load();
     } catch (err: any) {

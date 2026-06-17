@@ -186,10 +186,9 @@ In `supabase/functions/`:
 |---|---|
 | `admin-users` | Create / edit users with service-role key |
 | `extract-document` | Claude vision OCR for invoice scanning |
-| `inbound-email` | CloudMailin webhook (incoming client mail) |
-| `notify-new-message` | Email notification when client sends a portal message |
-| `send-email` | Legacy outbound via CloudMailin (still used by older billing flows) |
-| `send-via-outlook` | New outbound via the user's own SMTP credentials. Generic — works with Outlook / Gmail / custom SMTP. |
+| `poll-gmail` | Inbound capture via the Gmail API. Scheduled poll of the Google Workspace capture mailbox → files into `client_emails`. Cursor in `email_sync_state` (migration 114). See `docs/PHASE2_INBOUND_GMAIL.md`. |
+| `inbound-email` | LEGACY CloudMailin webhook (incoming client mail), superseded by `poll-gmail`. Delete after Gmail capture is verified live. |
+| `send-via-outlook` | The single outbound path: sends via the staff member's own SMTP credentials. Generic — works with Outlook / Gmail / custom SMTP. |
 | `submit-application` | Public sign-up endpoint |
 
 **Deploy** via Supabase Dashboard → Edge Functions → Edit/Create. Most

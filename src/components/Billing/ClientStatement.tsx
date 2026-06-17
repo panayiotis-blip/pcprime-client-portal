@@ -178,14 +178,14 @@ export default function ClientStatement() {
       setEmailing(`Sending ${i + 1} of ${sendable.length}…`);
       try {
         const content = await generateDocumentPdf(`/billing/statement/${t.id}/print${rangeQuery()}`);
-        await api.sendEmail({
-          to: [t.email!],
+        await api.sendViaOutlook({
+          to: t.email!,
           subject: 'Statement of account',
-          text: `Dear ${t.name || 'Sir/Madam'},\n\nPlease find attached your statement of account.\n\nKind regards`,
+          body: `Dear ${t.name || 'Sir/Madam'},\n\nPlease find attached your statement of account.\n\nKind regards`,
           attachments: [{
-            file_name: `Statement-${String(t.name || t.id).replace(/[^\w-]+/g, '_')}.pdf`,
-            content,
-            content_type: 'application/pdf',
+            filename: `Statement-${String(t.name || t.id).replace(/[^\w-]+/g, '_')}.pdf`,
+            contentBase64: content,
+            contentType: 'application/pdf',
           }],
         });
         ok++;
