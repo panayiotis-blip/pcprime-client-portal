@@ -33,6 +33,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/tasks',     label: 'Tasks',         icon: '☑' },
       { path: '/phone-log', label: 'Phone Log',    icon: '☎' },
       { path: '/messages',  label: 'Messages',     icon: '✉' },
+      { path: '/inbox',     label: 'Inbox',        icon: '📬' },
       { path: '/client-expenses', label: 'Client Expenses', icon: '📥' },
       { path: '/timesheet', label: 'Timesheet',    icon: '⏱' },
       { path: '/calendar',  label: 'Calendar',     icon: '◷' },

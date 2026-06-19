@@ -2697,6 +2697,43 @@ export const api = {
     const { error } = await supabase.rpc('admin_delete_user_smtp_settings', { p_user_id: userId });
     if (error) throw new Error(error.message);
   },
+
+  // --------- Shared firm inbox (info@) — populated by poll-inbox Edge Function ---------
+  // Read-only in the app: staff view incoming mail; replies happen in Outlook.
+  async getInboxEmails(opts?: { limit?: number; unreadOnly?: boolean }) {
+    let q = supabase.from('inbox_emails')
+      .select('id, gmail_thread_id, from_email, from_name, subject, snippet, received_at, has_attachments, is_read')
+      .order('received_at', { ascending: false })
+      .limit(opts?.limit ?? 100);
+    if (opts?.unreadOnly) q = q.eq('is_read', false);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async getInboxEmail(id: number) {
+    const { data, error } = await supabase.from('inbox_emails')
+      .select('*, attachments:inbox_email_attachments(id, filename, mime_type, size_bytes, storage_path)')
+      .eq('id', id)
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async markInboxRead(id: number, read = true) {
+    const { error } = await supabase.from('inbox_emails').update({ is_read: read }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async getInboxAttachmentUrl(storagePath: string) {
+    const { data, error } = await supabase.storage
+      .from('inbox-attachments').createSignedUrl(storagePath, 120);
+    if (error) throw new Error(error.message);
+    return data.signedUrl;
+  },
+  async getInboxUnreadCount() {
+    const { count, error } = await supabase.from('inbox_emails')
+      .select('id', { count: 'exact', head: true }).eq('is_read', false);
+    if (error) throw new Error(error.message);
+    return count || 0;
+  },
   // Invokes the send-via-outlook Edge Function which relays mail through the
   // caller's own Outlook account. Attachments arrive base64-encoded so PDFs
   // generated client-side travel inline.
