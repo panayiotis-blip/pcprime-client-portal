@@ -49,6 +49,7 @@ import MyMessages from './components/Client/MyMessages';
 import MessagesInbox from './components/Admin/MessagesInbox';
 import Inbox from './components/Admin/Inbox';
 import FirmEmailSettings from './components/Admin/FirmEmailSettings';
+import BulkEmail from './components/Admin/BulkEmail';
 import MyCompany from './components/Client/MyCompany';
 import MyCustomers from './components/Client/MyCustomers';
 import SalesInvoices from './components/Client/SalesInvoices';
@@ -143,6 +144,7 @@ function AuthedApp() {
             <Route path="/messages" element={<MessagesInbox />} />
             <Route path="/inbox" element={<Inbox />} />
             <Route path="/settings/firm-email" element={<FirmEmailSettings />} />
+            <Route path="/bulk-email" element={<BulkEmail />} />
             <Route path="/billing" element={<InvoicesList />} />
             <Route path="/billing/recurring" element={<RecurringInvoices />} />
             <Route path="/billing/age-analysis" element={<AgeAnalysis />} />

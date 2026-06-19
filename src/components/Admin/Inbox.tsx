@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../../services/api';
 import { formatDateTime } from '../../services/dates';
+import { useApp } from '../../context/AppContext';
+import SearchableSelect from '../common/SearchableSelect';
 
 // Shared firm inbox (info@primeandcalculate.com). Read-only: staff view
 // incoming mail captured by the poll-inbox Edge Function; replies happen in
@@ -43,12 +45,37 @@ const fmtSize = (bytes: number | null) => {
 };
 
 export default function Inbox() {
+  const { clients } = useApp();
   const [emails, setEmails] = useState<InboxRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<InboxDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [assignClientId, setAssignClientId] = useState<number | ''>('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignMsg, setAssignMsg] = useState<string | null>(null);
+
+  const clientOptions = useMemo(
+    () => (clients as any[]).map(c => ({ value: c.id, label: c.name, sublabel: c.client_code || '' })),
+    [clients],
+  );
+
+  const handleAssign = async () => {
+    if (!open || !assignClientId) return;
+    setAssigning(true);
+    setAssignMsg(null);
+    try {
+      const res = await api.assignInboxEmailToClient(open.id, Number(assignClientId));
+      const name = (clients as any[]).find(c => c.id === Number(assignClientId))?.name || 'client';
+      setAssignMsg(res.already ? `Already filed to ${name}.` : `Filed to ${name} (Emails tab + Documents${res.attachments_copied ? `, ${res.attachments_copied} attachment(s)` : ''}).`);
+      setAssignClientId('');
+    } catch (e: any) {
+      setAssignMsg('Assign failed: ' + e.message);
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true); setError(null);
@@ -78,6 +105,8 @@ export default function Inbox() {
 
   const openDetail = async (row: InboxRow) => {
     setLoadingDetail(true);
+    setAssignClientId('');
+    setAssignMsg(null);
     try {
       const detail = await api.getInboxEmail(row.id) as InboxDetail;
       setOpen(detail);
@@ -207,6 +236,26 @@ export default function Inbox() {
                   {open.cc_emails && open.cc_emails.length > 0 && <div><strong>Cc:</strong> {open.cc_emails.join(', ')}</div>}
                   <div><strong>Received:</strong> {fmtDateTime(open.received_at)}</div>
                 </div>
+
+                {/* Save to a client folder (Emails tab + Documents) */}
+                <div style={{ marginTop: 10, padding: 10, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: 13 }}>Save to client:</strong>
+                  <div style={{ minWidth: 240, flex: 1 }}>
+                    <SearchableSelect
+                      value={assignClientId === '' ? '' : String(assignClientId)}
+                      options={clientOptions}
+                      onChange={(v) => setAssignClientId(v ? Number(v) : '')}
+                      placeholder="Search and pick a client…"
+                      allowClear
+                    />
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={handleAssign} disabled={assigning || !assignClientId}>
+                    {assigning ? 'Filing…' : 'Assign to client'}
+                  </button>
+                </div>
+                {assignMsg && (
+                  <div style={{ marginTop: 6, fontSize: 12.5, color: assignMsg.startsWith('Assign failed') ? '#b91c1c' : '#15803d' }}>{assignMsg}</div>
+                )}
 
                 {open.attachments && open.attachments.length > 0 && (
                   <div style={{ marginTop: 12 }}>

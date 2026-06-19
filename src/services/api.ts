@@ -2767,6 +2767,16 @@ export const api = {
     if (error) throw new Error(error.message);
     return count || 0;
   },
+  // File a shared-inbox email against a client (Emails tab + Documents). The
+  // copy/cross-bucket work happens server-side in the assign-inbox-email fn.
+  async assignInboxEmailToClient(inboxEmailId: number, clientId: number) {
+    const { data, error } = await supabase.functions.invoke('assign-inbox-email', {
+      body: { inbox_email_id: inboxEmailId, client_id: clientId },
+    });
+    if (error) throw new Error(error.message);
+    if (data && data.ok === false) throw new Error(data.error || 'Assign failed');
+    return data as { ok: true; already?: boolean; attachments_copied?: number };
+  },
   // Invokes the send-via-outlook Edge Function which relays mail through the
   // caller's own Outlook account. Attachments arrive base64-encoded so PDFs
   // generated client-side travel inline.
