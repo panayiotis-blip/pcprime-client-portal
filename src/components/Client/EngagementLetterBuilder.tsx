@@ -323,6 +323,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
         ? (client?.first_name?.trim() || client?.name?.trim() || 'Sir/Madam')
         : (client?.contact_person?.trim() || 'Sir/Madam');
       await api.sendViaOutlook({
+        from_firm: true,
         to: sendToEmail.trim(),
         subject: `Engagement Letter — ${firm?.name || 'Our firm'} — v${version}`,
         body:

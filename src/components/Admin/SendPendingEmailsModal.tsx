@@ -120,6 +120,7 @@ export default function SendPendingEmailsModal({ onClose, onDone }: { onClose: (
         const subject = applyMerge(r.subject, mergeVars);
         const body    = applyMerge(r.body, mergeVars);
         await api.sendViaOutlook({
+          from_firm: true,
           to,
           subject,
           // Plain-text fallback (denomailer needs body even when html is set).

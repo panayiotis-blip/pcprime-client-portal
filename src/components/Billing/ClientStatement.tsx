@@ -179,6 +179,7 @@ export default function ClientStatement() {
       try {
         const content = await generateDocumentPdf(`/billing/statement/${t.id}/print${rangeQuery()}`);
         await api.sendViaOutlook({
+          from_firm: true,
           to: t.email!,
           subject: 'Statement of account',
           body: `Dear ${t.name || 'Sir/Madam'},\n\nPlease find attached your statement of account.\n\nKind regards`,

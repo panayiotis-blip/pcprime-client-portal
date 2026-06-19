@@ -51,6 +51,9 @@ type Payload = {
   // Only honoured when the caller holds users.write — used by admins to send a
   // test email while setting up a staff member's email in User Management.
   as_user_id?: string;
+  // Optional: send through the shared firm identity (info@) instead of the
+  // caller's own account. Any staff member may use this for client-facing mail.
+  from_firm?: boolean;
 };
 
 // -----------------------------------------------------------------
@@ -327,42 +330,71 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: 'Too many attachments (max 10).' }, 400);
   }
 
-  // ----- Resolve which user's SMTP account to send through -----
-  // Default: the caller's own. An admin (users.write) may send as another user
-  // via as_user_id — used to test a staff member's email setup.
+  // ----- Resolve which account to send through -----
+  //   • from_firm     → the shared firm identity (info@). Any staff member may
+  //                     use it for client-facing mail; the password is decrypted
+  //                     server-side via a service_role-only RPC (never exposed).
+  //   • as_user_id    → a specific user's account (admin test; needs users.write).
+  //   • default       → the caller's own account.
+  const fromFirm = payload.from_firm === true;
   let targetUserId = user.id;
-  if (payload.as_user_id && payload.as_user_id !== user.id) {
-    const { data: canManage } = await userClient.rpc('has_permission', { p_perm: 'users.write' });
-    if (!canManage) {
-      return json({ ok: false, error: 'users.write permission required to send as another user.' }, 403);
+  let settings: any = null;
+  let password = '';
+
+  if (fromFirm) {
+    const { data: fs, error: fErr } = await admin
+      .from('firm_email_settings')
+      .select('smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, signature_html, signature_text')
+      .eq('id', 1)
+      .maybeSingle();
+    if (fErr) return json({ ok: false, error: 'Could not read firm email settings: ' + fErr.message }, 500);
+    if (!fs || !fs.smtp_user) {
+      return json({ ok: false, error: 'The firm email account (info@) is not configured yet. Set it up in Settings → Firm Email.' }, 400);
     }
-    targetUserId = payload.as_user_id;
-  }
+    if (!fs.is_active) {
+      return json({ ok: false, error: 'The firm email account is marked inactive in Settings → Firm Email.' }, 400);
+    }
+    settings = fs;
+    const { data: pw, error: pErr } = await admin.rpc('get_firm_smtp_password_internal');
+    if (pErr) return json({ ok: false, error: 'Could not decrypt firm email password: ' + pErr.message }, 500);
+    password = (pw as string | null) || '';
+    if (!password) {
+      return json({ ok: false, error: 'No app password on file for the firm email account. Add one in Settings → Firm Email.' }, 400);
+    }
+  } else {
+    if (payload.as_user_id && payload.as_user_id !== user.id) {
+      const { data: canManage } = await userClient.rpc('has_permission', { p_perm: 'users.write' });
+      if (!canManage) {
+        return json({ ok: false, error: 'users.write permission required to send as another user.' }, 403);
+      }
+      targetUserId = payload.as_user_id;
+    }
 
-  // ----- Load the target user's SMTP settings (admin client bypasses own-row RLS) -----
-  const { data: settings, error: sErr } = await admin
-    .from('user_smtp_settings')
-    .select('smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, signature_html, signature_text')
-    .eq('user_id', targetUserId)
-    .maybeSingle();
-  if (sErr) return json({ ok: false, error: 'Could not read SMTP settings: ' + sErr.message }, 500);
-  if (!settings) {
-    return json({ ok: false, error: 'No email account is configured. Set one up in /settings/email first.' }, 400);
-  }
-  if (!settings.is_active) {
-    return json({ ok: false, error: 'Your SMTP settings are marked inactive. Toggle "Active" in /settings/email.' }, 400);
-  }
+    // Load the target user's SMTP settings (admin client bypasses own-row RLS).
+    const { data: us, error: sErr } = await admin
+      .from('user_smtp_settings')
+      .select('smtp_host, smtp_port, smtp_secure, smtp_user, from_name, is_active, signature_html, signature_text')
+      .eq('user_id', targetUserId)
+      .maybeSingle();
+    if (sErr) return json({ ok: false, error: 'Could not read SMTP settings: ' + sErr.message }, 500);
+    if (!us) {
+      return json({ ok: false, error: 'No email account is configured. Set one up in /settings/email first.' }, 400);
+    }
+    if (!us.is_active) {
+      return json({ ok: false, error: 'Your SMTP settings are marked inactive. Toggle "Active" in /settings/email.' }, 400);
+    }
+    settings = us;
 
-  // ----- Decrypt the password via the SECURITY DEFINER RPC -----
-  // Own mail uses the self-scoped RPC; an admin sending as another user uses the
-  // permission-gated admin RPC. Both run as the caller's JWT identity.
-  const { data: passwordResp, error: pErr } = targetUserId === user.id
-    ? await userClient.rpc('get_user_smtp_password')
-    : await userClient.rpc('admin_get_user_smtp_password', { p_user_id: targetUserId });
-  if (pErr) return json({ ok: false, error: 'Could not decrypt SMTP password: ' + pErr.message }, 500);
-  const password = (passwordResp as string | null) || '';
-  if (!password) {
-    return json({ ok: false, error: 'No app password on file. Add one in /settings/email.' }, 400);
+    // Own mail uses the self-scoped RPC; an admin sending as another user uses
+    // the permission-gated admin RPC. Both run as the caller's JWT identity.
+    const { data: passwordResp, error: pErr } = targetUserId === user.id
+      ? await userClient.rpc('get_user_smtp_password')
+      : await userClient.rpc('admin_get_user_smtp_password', { p_user_id: targetUserId });
+    if (pErr) return json({ ok: false, error: 'Could not decrypt SMTP password: ' + pErr.message }, 500);
+    password = (passwordResp as string | null) || '';
+    if (!password) {
+      return json({ ok: false, error: 'No app password on file. Add one in /settings/email.' }, 400);
+    }
   }
 
   // ----- Compose body + html + signature -----
@@ -422,18 +454,22 @@ Deno.serve(async (req) => {
       mimeMessage,
     });
 
-    await admin
-      .from('user_smtp_settings')
-      .update({ last_used_at: new Date().toISOString(), last_error: null })
-      .eq('user_id', targetUserId);
+    if (!fromFirm) {
+      await admin
+        .from('user_smtp_settings')
+        .update({ last_used_at: new Date().toISOString(), last_error: null })
+        .eq('user_id', targetUserId);
+    }
 
     return json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    await admin
-      .from('user_smtp_settings')
-      .update({ last_error: msg })
-      .eq('user_id', targetUserId);
+    if (!fromFirm) {
+      await admin
+        .from('user_smtp_settings')
+        .update({ last_error: msg })
+        .eq('user_id', targetUserId);
+    }
     let friendly = msg;
     if (/535|authentication failed|invalid login/i.test(msg)) {
       friendly = msg + ' — login was rejected. Double-check the email address and the 16-character app password (no spaces).';

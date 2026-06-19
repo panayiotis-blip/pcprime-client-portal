@@ -866,6 +866,7 @@ export default function ClientManager() {
       setEmailStatus({ kind: 'sending', text: 'Sending email…' });
       try {
         await api.sendViaOutlook({
+          from_firm: true,
           to: printEmailTo.trim(),
           subject,
           body,

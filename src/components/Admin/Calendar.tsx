@@ -285,7 +285,7 @@ export default function Calendar() {
     const fails: string[] = [];
     for (const recipient of to) {
       try {
-        await api.sendViaOutlook({ to: recipient, subject, body: text, html });
+        await api.sendViaOutlook({ from_firm: true, to: recipient, subject, body: text, html });
         sent.push(recipient);
       } catch (err: any) {
         fails.push(`${recipient}: ${err.message}`);

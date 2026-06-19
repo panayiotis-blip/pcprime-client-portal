@@ -49,6 +49,7 @@ export default function EmailDocumentModal({
       const content = await generateDocumentPdf(routePath);
       setStatus('Sending…');
       await api.sendViaOutlook({
+        from_firm: true,
         to: recipient,
         subject: subject.trim(),
         body: message || 'Please find the attached document.',

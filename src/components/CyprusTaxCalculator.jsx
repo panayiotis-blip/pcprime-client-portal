@@ -1556,6 +1556,7 @@ Sent via the PC Prime client portal — connected to my email account.`;
       // (kept consistent with how the rest of the calc loads pieces).
       const { api } = await import('../services/api');
       await api.sendViaOutlook({
+        from_firm: true,
         to: recipient,
         subject,
         body,

@@ -2698,6 +2698,39 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Firm sending identity (info@) — migration 117, users.write-gated ---------
+  async adminGetFirmEmailSettings() {
+    const { data, error } = await supabase.rpc('admin_get_firm_email_settings');
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row ?? null) as null | {
+      smtp_host: string; smtp_port: number; smtp_secure: boolean; smtp_user: string | null;
+      from_name: string | null; is_active: boolean; has_password: boolean;
+      signature_html: string | null; signature_text: string | null; updated_at: string;
+    };
+  },
+  async adminSaveFirmEmailSettings(row: {
+    smtp_host?: string; smtp_port?: number; smtp_secure?: boolean;
+    smtp_user: string; from_name?: string | null; is_active?: boolean;
+    signature_html?: string | null; signature_text?: string | null;
+  }) {
+    const { error } = await supabase.rpc('admin_upsert_firm_email_settings', {
+      p_smtp_host: row.smtp_host || 'smtp.gmail.com',
+      p_smtp_port: row.smtp_port ?? 587,
+      p_smtp_secure: row.smtp_secure ?? false,
+      p_smtp_user: row.smtp_user,
+      p_from_name: row.from_name ?? null,
+      p_is_active: row.is_active ?? true,
+      p_signature_html: row.signature_html ?? null,
+      p_signature_text: row.signature_text ?? null,
+    });
+    if (error) throw new Error(error.message);
+  },
+  async adminSetFirmEmailPassword(password: string) {
+    const { error } = await supabase.rpc('admin_set_firm_email_password', { p_password: password });
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Shared firm inbox (info@) — populated by poll-inbox Edge Function ---------
   // Read-only in the app: staff view incoming mail; replies happen in Outlook.
   async getInboxEmails(opts?: { limit?: number; unreadOnly?: boolean }) {
@@ -2745,6 +2778,8 @@ export const api = {
     attachments?: Array<{ filename: string; contentBase64: string; contentType?: string }>;
     // Admin only (users.write): send the test through another user's SMTP account.
     as_user_id?: string;
+    // Send through the shared firm identity (info@) instead of the caller's own.
+    from_firm?: boolean;
   }) {
     const { data, error } = await supabase.functions.invoke('send-via-outlook', { body: payload });
     if (error) {
