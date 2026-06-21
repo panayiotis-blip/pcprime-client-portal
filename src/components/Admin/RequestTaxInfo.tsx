@@ -3,6 +3,7 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { requestEmailTemplate } from '../shared/taxReturnChecklist';
 import type { ChecklistFormType } from '../shared/taxReturnChecklist';
+import EmailTemplateControls from './EmailTemplateControls';
 
 // Request Tax Info — pick clients and send a standardized "we need this
 // information for your tax return" message from the firm account (info@).
@@ -20,6 +21,7 @@ export default function RequestTaxInfo() {
   const [formType, setFormType] = useState<ChecklistFormType>('individuals');
   const [taxYear, setTaxYear] = useState<number>(DEFAULT_TAX_YEAR);
   const [search, setSearch] = useState('');
+  const [restrictByType, setRestrictByType] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -51,14 +53,25 @@ export default function RequestTaxInfo() {
     [clients],
   );
 
+  // Categories that match the selected return type, so the list shows only the
+  // right clients (individual employees vs self-employed).
+  const typeCats = formType === 'self_employed'
+    ? ['self_employed', 'sole_trader']
+    : ['individual'];
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r =>
-      r.name.toLowerCase().includes(q) ||
-      (r.client_code || '').toLowerCase().includes(q) ||
-      (r.email || '').toLowerCase().includes(q));
-  }, [rows, search]);
+    return rows.filter(r => {
+      if (restrictByType) {
+        const cat = String(r.category || '').toLowerCase();
+        if (!typeCats.includes(cat)) return false;
+      }
+      if (!q) return true;
+      return r.name.toLowerCase().includes(q) ||
+        (r.client_code || '').toLowerCase().includes(q) ||
+        (r.email || '').toLowerCase().includes(q);
+    });
+  }, [rows, search, restrictByType, formType]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
   const toggle = (id: number) => setSelected(prev => {
@@ -145,7 +158,11 @@ export default function RequestTaxInfo() {
             </button>
           </div>
           <input type="text" className="form-input" placeholder="Search clients…" value={search}
-            onChange={e => setSearch(e.target.value)} style={{ marginBottom: 8 }} />
+            onChange={e => setSearch(e.target.value)} style={{ marginBottom: 6 }} />
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, color: '#475569', marginBottom: 8 }}>
+            <input type="checkbox" checked={restrictByType} onChange={e => setRestrictByType(e.target.checked)} />
+            Show only {formType === 'self_employed' ? 'self-employed' : 'individual (employee)'} clients
+          </label>
           <div style={{ maxHeight: 420, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 4 }}>
             {filtered.length === 0 ? (
               <div style={{ padding: 12, color: '#94a3b8', fontSize: 13 }}>No clients with an email address.</div>
@@ -164,6 +181,10 @@ export default function RequestTaxInfo() {
 
         {/* Compose */}
         <div className="card" style={{ padding: 16 }}>
+          <EmailTemplateControls
+            hasContent={!!(subject.trim() || body.trim())}
+            onApply={(s, b) => { setSubject(s); setBody(b); setDirty(true); }}
+          />
           <div className="form-group full-width">
             <label>Subject *</label>
             <input type="text" className="form-input" value={subject}

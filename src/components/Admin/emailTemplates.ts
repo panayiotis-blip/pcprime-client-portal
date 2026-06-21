@@ -48,6 +48,11 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
     body: `Dear {name},\n\nIt is time to prepare your personal income tax return (TD1). Please send us the information we need so we can complete and submit it before the deadline.${SIGN_OFF}`,
   },
   {
+    id: 'payroll_info', label: 'Payroll information request', category: 'Payroll',
+    subject: 'Payroll information needed for {month}',
+    body: `Dear {name},\n\nTo process this period's payroll, please send us by return:\n\n• Any new starters (name, ID, salary, start date)\n• Any leavers (name, last working day)\n• Changes to salaries, hours or benefits\n• Overtime, bonuses or commissions\n• Any unpaid leave / absences\n\nIf there are no changes this period, simply reply "no changes".${SIGN_OFF}`,
+  },
+  {
     id: 'vat_reminder', label: 'VAT return reminder', category: 'Tax',
     subject: 'VAT return — information needed',
     body: `Dear {name},\n\nYour VAT return is due shortly. Please send us your sales and purchases records for the period so we can prepare and submit it on time.${SIGN_OFF}`,
@@ -69,6 +74,14 @@ export const TEMPLATE_CATEGORIES = Array.from(new Set(EMAIL_TEMPLATES.map((t) =>
 // Fill simple placeholders that aren't per-recipient (e.g. {year}); {name} is
 // left for the per-recipient merge at send time.
 export function fillStaticPlaceholders(text: string): string {
-  const year = String(new Date().getFullYear() - 1); // tax work usually concerns last year
-  return text.replace(/\{year\}/g, year);
+  const now = new Date();
+  const year = String(now.getFullYear() - 1); // tax work usually concerns last year
+  const month = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  return text.replace(/\{year\}/g, year).replace(/\{month\}/g, month);
 }
+
+// A custom (DB) template row mapped into the EmailTemplate shape used by the picker.
+export interface CustomTemplateRow { id: number; name: string; category: string; subject: string; body: string }
+export const customToTemplate = (r: CustomTemplateRow): EmailTemplate => ({
+  id: `custom-${r.id}`, label: r.name, category: r.category || 'My templates', subject: r.subject, body: r.body,
+});

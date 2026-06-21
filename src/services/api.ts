@@ -3954,6 +3954,31 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Custom email templates (migration 122) ---------
+  async listEmailTemplates() {
+    const { data, error } = await supabase.from('email_templates')
+      .select('id, name, category, subject, body').eq('is_active', true)
+      .order('category', { ascending: true }).order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async createEmailTemplate(t: { name: string; category?: string; subject: string; body: string }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.from('email_templates')
+      .insert({ name: t.name, category: t.category || 'My templates', subject: t.subject, body: t.body, created_by: session?.user?.id || null })
+      .select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+  async updateEmailTemplate(id: number, patch: Record<string, any>) {
+    const { error } = await supabase.from('email_templates').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteEmailTemplate(id: number) {
+    const { error } = await supabase.from('email_templates').update({ is_active: false }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // Client-portal: list the signed-in client's own emails (RLS scopes to theirs).
   async getMyEmails() {
     const { data, error } = await supabase
