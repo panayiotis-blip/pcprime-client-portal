@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf';
 // Each PDF generator calls registerRobotoFont(doc) immediately after new jsPDF()
 // before any setFont('Roboto', ...) calls. Regenerate via `npm run build:fonts`.
 import { registerRobotoFont } from '../assets/fonts/Roboto-Regular-normal.js';
-import { downloadTaxisnetXml } from '../services/taxisnetXml';
+import { downloadTaxisnetXml, validateExport } from '../services/taxisnetXml';
 import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, Coins, GitCompare, Download, Printer, User, FileDown, FileSpreadsheet, FileCode, Mail, Eye, EyeOff } from 'lucide-react';
 
 // ============ TAX YEAR CONSTANTS ============
@@ -2469,34 +2469,44 @@ Sent via the PC Prime client portal — connected to my email account.`;
 
   const [xmlBusy, setXmlBusy] = useState(false);
   const handleDownloadTaxisnetXml = async () => {
-    setShowExportDialog(false);
     const ft = formType === 'self_employed' ? 'self_employed' : 'individuals';
     const input = getInputState();
-    let result;
+
+    // 1) Check for errors BEFORE exporting. Blocking errors stop the export;
+    //    warnings (e.g. unverified field mappings) need an explicit confirm.
+    const { errors, warnings } = validateExport(input, selectedYear, ft);
+    if (errors.length) {
+      alert(`Cannot export the TaxisNet XML — please fix:\n\n• ${errors.join('\n• ')}`);
+      return;
+    }
+    if (warnings.length && !window.confirm(`Export anyway? Please review:\n\n• ${warnings.join('\n• ')}`)) {
+      return;
+    }
+    setShowExportDialog(false);
+
+    // 2) Build + download.
+    let xml;
     try {
-      result = downloadTaxisnetXml(input, selectedYear, ft); // builds + triggers browser download
+      xml = downloadTaxisnetXml(input, selectedYear, ft);
     } catch (err) {
       alert(`TaxisNet XML generation failed: ${err.message}`);
       return;
     }
-    const noteBlock = result.warnings.length ? `\n\nNotes:\n• ${result.warnings.join('\n• ')}` : '';
 
-    // Portal: also file the XML in the client's Documents folder for later import.
+    // 3) Portal: also file the XML in the client's Documents folder.
     if (onSaveXmlToClient) {
       const formCode = ft === 'self_employed' ? 'epr1a' : 'epr1m';
       const tic = String(input.clientTIC || 'taxpayer').trim() || 'taxpayer';
       const filename = `${formCode}-${tic}-${selectedYear}.xml`;
       setXmlBusy(true);
       try {
-        await onSaveXmlToClient(result.xml, filename);
-        alert(`TaxisNet XML downloaded and saved to the client's Documents folder as "${filename}".${noteBlock}`);
+        await onSaveXmlToClient(xml, filename);
+        alert(`TaxisNet XML downloaded and saved to the client's Documents folder as "${filename}".`);
       } catch (err) {
         alert(`XML downloaded, but saving to the client folder failed: ${err.message}`);
       } finally {
         setXmlBusy(false);
       }
-    } else if (result.warnings.length) {
-      alert(`TaxisNet XML generated with notes:${noteBlock}`);
     }
   };
 
