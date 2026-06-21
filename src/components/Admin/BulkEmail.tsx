@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import { EMAIL_TEMPLATES, TEMPLATE_CATEGORIES, fillStaticPlaceholders } from './emailTemplates';
 
 // Bulk email composer. Compose once, pick many clients, send through the firm
 // account (info@). Sends sequentially so one bad address doesn't abort the run;
@@ -27,6 +28,17 @@ export default function BulkEmail() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [templateId, setTemplateId] = useState('blank');
+
+  const applyTemplate = (id: string) => {
+    setTemplateId(id);
+    const t = EMAIL_TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    if ((subject.trim() || body.trim()) && id !== 'blank' &&
+        !window.confirm('Replace the current subject and message with this template?')) return;
+    setSubject(fillStaticPlaceholders(t.subject));
+    setBody(fillStaticPlaceholders(t.body));
+  };
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState('');
@@ -149,6 +161,19 @@ export default function BulkEmail() {
 
         {/* Compose */}
         <div className="card" style={{ padding: 16 }}>
+          <div className="form-group full-width">
+            <label>Email type / template</label>
+            <select className="form-input" value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
+              {TEMPLATE_CATEGORIES.map((cat) => (
+                <optgroup key={cat} label={cat}>
+                  {EMAIL_TEMPLATES.filter((t) => t.category === cat).map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <small style={{ color: '#64748b', fontSize: '0.78em' }}>Pick a template to pre-fill, then edit freely.</small>
+          </div>
           <div className="form-group full-width">
             <label>Subject *</label>
             <input type="text" className="form-input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Reminder: {name}, your VAT return is due" />
