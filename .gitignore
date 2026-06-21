@@ -34,6 +34,8 @@ _legacy-sqlite-backup/
 clients_import.csv
 .vercel/
 .claude/
+# Real TaxisNet sample filings — contain personal data, keep local only
+supabase/xsd-tep-ext-2024/**/Samples/
 
 # Per-task brief files (transient, kept locally)
 *-instructions.md
