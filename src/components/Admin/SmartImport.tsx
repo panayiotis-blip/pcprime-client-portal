@@ -11,6 +11,7 @@ import {
 } from '../../services/smartImport/fields';
 import { validateField, parseDateLoose } from '../../services/validation';
 import { downloadImportTemplate } from '../../services/smartImport/template';
+import { rankClientMatches } from '../../services/clientMatch';
 
 // Smart Import — Excel field-mapping import for client data.
 // Phases 2-3 cover Steps 1-3: upload, sheet pick, auto-match, and the
@@ -30,13 +31,23 @@ interface RowResult { index: number; record: Record<string, any>; issues: RowIss
 
 type RowAction = 'create' | 'update' | 'nochange' | 'skip';
 interface FieldDiff { field: string; current: string; incoming: string; willChange: boolean; }
+interface MatchOption { id: number; label: string; score: number; reason: string }
 interface ReviewRow {
   index: number;
   record: Record<string, any>;
   action: RowAction;
   matched: any | null;
   diffs: FieldDiff[];
+  // Ranked existing-client candidates (strong-id or fuzzy name). `suggestion`
+  // is a medium-confidence fuzzy match the user should confirm before import,
+  // so we don't silently create a duplicate.
+  candidates: MatchOption[];
+  suggestion: MatchOption | null;
 }
+
+// At/above this score we treat a match as definitive (email / tax no / code /
+// phone). Below it (fuzzy name) we surface it as a suggestion to confirm.
+const STRONG_MATCH = 0.97;
 
 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
 const normName = (v: any) => norm(v).replace(/\s+/g, ' ');
@@ -48,20 +59,8 @@ function displayVal(v: any): string {
   return String(v);
 }
 
-// Match an import row to an existing client: VAT → client code → name
-// (normalised exact match on either the primary or Greek tax-office name).
-function matchClient(record: Record<string, any>, clients: any[]): any | null {
-  const vat = norm(record.vat_number);
-  if (vat) { const m = clients.find((c) => norm(c.vat_number) === vat); if (m) return m; }
-  const code = norm(record.client_code);
-  if (code) { const m = clients.find((c) => norm(c.client_code) === code); if (m) return m; }
-  const nm = normName(record.name);
-  if (nm) {
-    const m = clients.find((c) => normName(c.name) === nm || normName(c.name_tax_office) === nm);
-    if (m) return m;
-  }
-  return null;
-}
+const clientLabel = (c: any): string =>
+  c?.client_code ? `${c.client_code} — ${c.name || ''}`.trim() : (c?.name || `#${c?.id}`);
 
 function actionBadge(action: RowAction) {
   const map: Record<RowAction, { bg: string; fg: string; label: string }> = {
@@ -194,6 +193,10 @@ export default function SmartImport() {
 
   const [mergeMode, setMergeMode] = useState<'fill' | 'overwrite'>('fill');
   const [decisions, setDecisions] = useState<Record<number, boolean>>({});
+  // Per-row manual match override: a client id to match to, or 'new' to force
+  // create. Absent → use the automatic resolution (strong id auto-matches;
+  // fuzzy names stay unmatched until confirmed).
+  const [manualMatch, setManualMatch] = useState<Record<number, number | 'new'>>({});
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
@@ -403,11 +406,30 @@ export default function SmartImport() {
   const reviewRows: ReviewRow[] = useMemo(() => {
     return rowResults.map((rr): ReviewRow => {
       if (rr.issues.some((i) => i.level === 'error')) {
-        return { index: rr.index, record: rr.record, action: 'skip', matched: null, diffs: [] };
+        return { index: rr.index, record: rr.record, action: 'skip', matched: null, diffs: [], candidates: [], suggestion: null };
       }
-      const matched = matchClient(rr.record, clients);
+      // Rank existing clients (strong id, then transliterated fuzzy name).
+      const ranked = rankClientMatches(rr.record, clients);
+      const candidates: MatchOption[] = ranked.map((m) => ({
+        id: m.client.id, label: clientLabel(m.client), score: m.score, reason: m.reason,
+      }));
+
+      // Resolve which client (if any) this row matches.
+      const override = manualMatch[rr.index];
+      let matched: any | null = null;
+      let suggestion: MatchOption | null = null;
+      if (override === 'new') {
+        matched = null;
+      } else if (typeof override === 'number') {
+        matched = clients.find((c) => c.id === override) ?? null;
+      } else if (ranked[0] && ranked[0].score >= STRONG_MATCH) {
+        matched = ranked[0].client; // definitive id match — auto
+      } else if (candidates[0]) {
+        suggestion = candidates[0]; // fuzzy name — needs confirmation, stays unmatched
+      }
+
       if (!matched) {
-        return { index: rr.index, record: rr.record, action: 'create', matched: null, diffs: [] };
+        return { index: rr.index, record: rr.record, action: 'create', matched: null, diffs: [], candidates, suggestion };
       }
       const diffs: FieldDiff[] = [];
       for (const [key, raw] of Object.entries(rr.record)) {
@@ -420,9 +442,11 @@ export default function SmartImport() {
         diffs.push({ field: key, current, incoming, willChange });
       }
       const action: RowAction = diffs.some((d) => d.willChange) ? 'update' : 'nochange';
-      return { index: rr.index, record: rr.record, action, matched, diffs };
+      return { index: rr.index, record: rr.record, action, matched, diffs, candidates, suggestion };
     });
-  }, [rowResults, clients, mergeMode]);
+  }, [rowResults, clients, mergeMode, manualMatch]);
+
+  const possibleDupes = reviewRows.filter((r) => !r.matched && r.suggestion).length;
 
   // A create/update row is included unless the user has excluded it.
   const isIncluded = (r: ReviewRow): boolean => {
@@ -576,6 +600,15 @@ export default function SmartImport() {
             <strong style={{ color: 'var(--pc-red)' }}>{skipCount}</strong> skipped (errors)
           </p>
 
+          {possibleDupes > 0 && (
+            <div style={{ fontSize: 13, padding: '8px 12px', borderRadius: 6, marginBottom: 12,
+              background: 'rgba(234,179,8,0.14)', color: '#92600a', border: '1px solid rgba(234,179,8,0.4)' }}>
+              ⚠ <strong>{possibleDupes}</strong> row{possibleDupes === 1 ? '' : 's'} look like a possible duplicate of an
+              existing client (matched by name across Greek/English spelling). They’re set to <em>create new</em> by
+              default — review each below and click <strong>“match to this”</strong> to update the existing client instead.
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
             <label style={{ fontSize: 13, fontWeight: 500 }}>For existing clients:</label>
             <select
@@ -626,6 +659,33 @@ export default function SmartImport() {
                         {r.matched && (
                           <div style={{ fontSize: 11, color: 'var(--pc-text-3)' }}>
                             matches {r.matched.client_code || r.matched.name}
+                            {' · '}
+                            <button type="button" className="btn btn-link btn-sm" style={{ padding: 0, fontSize: 11 }}
+                              onClick={() => setManualMatch((p) => ({ ...p, [r.index]: 'new' }))}>
+                              not a match
+                            </button>
+                          </div>
+                        )}
+                        {!r.matched && r.suggestion && (
+                          <div style={{ fontSize: 11, marginTop: 2, padding: '3px 6px', borderRadius: 4,
+                            background: 'rgba(234,179,8,0.14)', color: '#92600a' }}>
+                            ⚠ Possible duplicate: <strong>{r.suggestion.label}</strong> ({r.suggestion.reason}){' '}
+                            <button type="button" className="btn btn-link btn-sm" style={{ padding: 0, fontSize: 11 }}
+                              onClick={() => setManualMatch((p) => ({ ...p, [r.index]: r.suggestion!.id }))}>
+                              match to this
+                            </button>
+                            {r.candidates.length > 1 && (
+                              <select
+                                value=""
+                                onChange={(e) => e.target.value && setManualMatch((p) => ({ ...p, [r.index]: Number(e.target.value) }))}
+                                style={{ marginLeft: 6, fontSize: 11 }}
+                              >
+                                <option value="">other…</option>
+                                {r.candidates.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.label} ({c.reason})</option>
+                                ))}
+                              </select>
+                            )}
                           </div>
                         )}
                       </td>
