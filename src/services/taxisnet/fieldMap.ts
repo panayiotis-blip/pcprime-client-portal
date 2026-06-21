@@ -24,6 +24,10 @@ export interface FlatEntry {
   kind: FieldKind;
   required?: boolean;
   confidence: Confidence;
+  // Optional guard: emit this field only when the predicate passes (gets the
+  // whole input_data). Used e.g. to route self-employed trade figures to the
+  // in-Republic vs outside-Republic column block.
+  when?: (input: any) => boolean;
 }
 
 export interface GridColEntry {
@@ -145,11 +149,59 @@ const EPR1M: FormMap = {
 };
 
 // ---- epr1a — TD1A self-employed --------------------------------------------
+// Self-employed schedules from the official TD1A form layout (Part 4 Α1/Α2/Α3).
+// The sample filing doesn't populate these, so column meanings come from the
+// form's printed structure — all inferred, confirm via a TaxisNet import.
+const seActivity = (field: string) => `selfEmployedActivities.0.${field}`;
+const isOutside = (input: any) => !!input?.selfEmployedActivities?.[0]?.isOutsideRepublic;
+const isInRepublic = (input: any) => !isOutside(input);
+
 const EPR1A: FormMap = {
   ticSource: 'clientTIC',
   ticFieldKey: 'epr1am1t0r1c1', // Part 1 taxpayer T.I.C. — confirmed (sample)
-  flat: [],
-  grids: [],
+  flat: [
+    // Part 4.Α1 — Trade / industry / profession (single activity).
+    { key: 'epr1am4ta1r1c1', source: seActivity('mainCategory'), kind: 'text', confidence: 'inferred' },
+    { key: 'epr1am4ta1r1ac1', source: seActivity('occupationalCategory'), kind: 'text', confidence: 'inferred' },
+    // Income arising IN the Republic (r2: profit / loss / losses b/f 1997 / losses >5y).
+    { key: 'epr1am4ta1r2c1', source: seActivity('taxableProfit'), kind: 'money', confidence: 'inferred', when: isInRepublic },
+    { key: 'epr1am4ta1r2c2', source: seActivity('lossCurrentYear'), kind: 'money', confidence: 'inferred', when: isInRepublic },
+    { key: 'epr1am4ta1r2c3', source: seActivity('lossesBfFrom1997'), kind: 'money', confidence: 'inferred', when: isInRepublic },
+    { key: 'epr1am4ta1r2c4', source: seActivity('lossesMoreThan5yNotCarried'), kind: 'money', confidence: 'inferred', when: isInRepublic },
+    // Income arising OUTSIDE the Republic (r4 profit/loss/losses b/f, r5 losses>5y + tax paid).
+    { key: 'epr1am4ta1r4c1', source: seActivity('taxableProfit'), kind: 'money', confidence: 'inferred', when: isOutside },
+    { key: 'epr1am4ta1r4c2', source: seActivity('lossCurrentYear'), kind: 'money', confidence: 'inferred', when: isOutside },
+    { key: 'epr1am4ta1r4c3', source: seActivity('lossesBfFrom1997'), kind: 'money', confidence: 'inferred', when: isOutside },
+    { key: 'epr1am4ta1r5c1', source: seActivity('lossesMoreThan5yNotCarried'), kind: 'money', confidence: 'inferred', when: isOutside },
+    { key: 'epr1am4ta1r5ac1', source: seActivity('taxPaidOutside'), kind: 'money', confidence: 'inferred', when: isOutside },
+    // Part 4.Α2 — Gain/(loss) on disposal of immovable property or shares.
+    // Form layout: r1 = gains (c2 immovable, c3 shares), r2 = losses (c2/c3), r3 = TIC, r4 = country.
+    { key: 'epr1am4ta2r1c2', source: 'disposalGainImmovable', kind: 'money', confidence: 'inferred' },
+    { key: 'epr1am4ta2r1c3', source: 'disposalGainShares', kind: 'money', confidence: 'inferred' },
+    { key: 'epr1am4ta2r2c2', source: 'disposalLossImmovable', kind: 'money', confidence: 'inferred' },
+    { key: 'epr1am4ta2r2c3', source: 'disposalLossShares', kind: 'money', confidence: 'inferred' },
+    { key: 'epr1am4ta2r3c1', source: 'disposalTicOfCompany', kind: 'tic', confidence: 'inferred' },
+    { key: 'epr1am4ta2r4c1', source: 'disposalCountry', kind: 'text', confidence: 'inferred' },
+  ],
+  grids: [
+    {
+      // Part 4.Α3 — Income from partnership. Form columns 1-11; portal carries 9
+      // (no occupational category / tax-paid-outside). Positional in form order.
+      gridId: 'epr1am4ta3r1',
+      source: 'partnerships',
+      cols: [
+        { col: 'c1', field: 'tic', kind: 'tic', confidence: 'inferred' },
+        { col: 'c1b', field: 'name', kind: 'text', confidence: 'inferred' },
+        { col: 'c2', field: 'code', kind: 'text', confidence: 'inferred' },
+        { col: 'c2b', field: 'percentage', kind: 'text', confidence: 'inferred' },
+        { col: 'c3', field: 'salary', kind: 'money', confidence: 'inferred' },
+        { col: 'c4', field: 'interestOnCapital', kind: 'money', confidence: 'inferred' },
+        { col: 'c5', field: 'tradingIncome', kind: 'money', confidence: 'inferred' },
+        { col: 'c6', field: 'tradingLoss', kind: 'money', confidence: 'inferred' },
+        { col: 'c7', field: 'taxWithheld', kind: 'money', confidence: 'inferred' },
+      ],
+    },
+  ],
 };
 
 export const FIELD_MAPS: Record<'epr1m' | 'epr1a', FormMap> = { epr1m: EPR1M, epr1a: EPR1A };

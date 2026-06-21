@@ -31,6 +31,7 @@ export function collectFields(inputData: any, formType: TaxReturnFormType): Coll
   const flat: CollectedField[] = [];
   if (tic) flat.push({ key: map.ticFieldKey, value: tic, confidence: 'confirmed' });
   for (const e of map.flat) {
+    if (e.when && !e.when(inputData)) continue;
     const value = fmtByKind(e.kind, resolve(inputData, e.source));
     if (value) flat.push({ key: e.key, value, confidence: e.confidence });
   }
