@@ -2618,6 +2618,57 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // --------- Client onboarding / refresh questionnaire (migration 120) ---------
+  // Public (token-keyed) — callable by an anonymous browser via SECURITY DEFINER RPCs.
+  async getClientIntake(token: string) {
+    const { data, error } = await supabase.rpc('get_client_intake_by_token', { p_token: token });
+    if (error) throw new Error(error.message);
+    return (data as any[])?.[0] || null; // RPC returns a table → take first row
+  },
+  async submitClientIntake(token: string, payload: any) {
+    const { data, error } = await supabase.rpc('submit_client_intake_by_token', { p_token: token, p_payload: payload });
+    if (error) throw new Error(error.message);
+    return data as { ok: boolean; error?: string };
+  },
+  // Staff-side — create an intake link for a client (or a blank new-client intake).
+  async createClientIntake(params: { clientId?: number | null; mode?: 'new' | 'refresh'; expiresInDays?: number }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = (crypto as any).randomUUID
+      ? crypto.randomUUID().replace(/-/g, '') + Math.random().toString(36).slice(2, 8)
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const expires_at = params.expiresInDays
+      ? new Date(Date.now() + params.expiresInDays * 864e5).toISOString()
+      : null;
+    const { data, error } = await supabase.from('client_intake_submissions')
+      .insert({
+        token,
+        client_id: params.clientId ?? null,
+        mode: params.mode || (params.clientId ? 'refresh' : 'new'),
+        status: 'pending',
+        created_by: session?.user?.id || null,
+        sent_at: new Date().toISOString(),
+        expires_at,
+      })
+      .select('id, token').single();
+    if (error) throw new Error(error.message);
+    return data as { id: number; token: string };
+  },
+  async listClientIntakes(status?: string) {
+    let q = supabase.from('client_intake_submissions')
+      .select('*').order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async reviewClientIntake(id: number, patch: { status: 'approved' | 'rejected'; notes?: string }) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('client_intake_submissions')
+      .update({ ...patch, reviewed_by: session?.user?.id || null, reviewed_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- User SMTP settings (per-user Outlook credentials for sending email) ---------
   // The plaintext password is never returned via the table read — only the
   // SECURITY DEFINER get_user_smtp_password() RPC can decrypt it, and that's
