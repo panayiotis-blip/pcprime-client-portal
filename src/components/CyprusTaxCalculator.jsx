@@ -4,7 +4,8 @@ import { jsPDF } from 'jspdf';
 // Each PDF generator calls registerRobotoFont(doc) immediately after new jsPDF()
 // before any setFont('Roboto', ...) calls. Regenerate via `npm run build:fonts`.
 import { registerRobotoFont } from '../assets/fonts/Roboto-Regular-normal.js';
-import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, Coins, GitCompare, Download, Printer, User, FileDown, FileSpreadsheet, Mail, Eye, EyeOff } from 'lucide-react';
+import { downloadTaxisnetXml } from '../services/taxisnetXml';
+import { Calculator, FileText, ChevronDown, ChevronUp, Info, Briefcase, Users, Coins, GitCompare, Download, Printer, User, FileDown, FileSpreadsheet, FileCode, Mail, Eye, EyeOff } from 'lucide-react';
 
 // ============ TAX YEAR CONSTANTS ============
 const TAX_YEARS = {
@@ -736,7 +737,9 @@ const ComputationPanel = React.memo(({ results, year, isComparison = false, Y })
 //   taxYearLock  — when editing an existing return, lock the year selector to this year
 //   formType      — 'individuals' | 'self_employed' (Chunk D wires this to a different field layout;
 //                   for now it's just stored on the row and shown in the tab header)
-export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState, onSave, taxYearLock, formType } = {}) {
+//   onSaveXmlToClient(xml, filename) — portal-only; files the generated TaxisNet XML into the
+//                   client's Documents folder. When absent (public /tax), the XML only downloads.
+export default function CyprusTaxCalculatorWithPDF({ clientPrefill, initialState, onSave, taxYearLock, formType, onSaveXmlToClient } = {}) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   void formType; // referenced to silence unused-prop warnings until Chunk D consumes it
   // Pull a previously-saved value if present, else use the supplied fallback.
@@ -2464,6 +2467,39 @@ Sent via the PC Prime client portal — connected to my email account.`;
     generateTd1Pdf(activeResults, selectedYear);
   };
 
+  const [xmlBusy, setXmlBusy] = useState(false);
+  const handleDownloadTaxisnetXml = async () => {
+    setShowExportDialog(false);
+    const ft = formType === 'self_employed' ? 'self_employed' : 'individuals';
+    const input = getInputState();
+    let result;
+    try {
+      result = downloadTaxisnetXml(input, selectedYear, ft); // builds + triggers browser download
+    } catch (err) {
+      alert(`TaxisNet XML generation failed: ${err.message}`);
+      return;
+    }
+    const noteBlock = result.warnings.length ? `\n\nNotes:\n• ${result.warnings.join('\n• ')}` : '';
+
+    // Portal: also file the XML in the client's Documents folder for later import.
+    if (onSaveXmlToClient) {
+      const formCode = ft === 'self_employed' ? 'epr1a' : 'epr1m';
+      const tic = String(input.clientTIC || 'taxpayer').trim() || 'taxpayer';
+      const filename = `${formCode}-${tic}-${selectedYear}.xml`;
+      setXmlBusy(true);
+      try {
+        await onSaveXmlToClient(result.xml, filename);
+        alert(`TaxisNet XML downloaded and saved to the client's Documents folder as "${filename}".${noteBlock}`);
+      } catch (err) {
+        alert(`XML downloaded, but saving to the client folder failed: ${err.message}`);
+      } finally {
+        setXmlBusy(false);
+      }
+    } else if (result.warnings.length) {
+      alert(`TaxisNet XML generated with notes:${noteBlock}`);
+    }
+  };
+
   const handlePrintPreview = () => {
     // Simple HTML preview for those who prefer browser print
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -2926,6 +2962,19 @@ ${r.totalSDC > 0 ? `<div class="summary-row"><span>Special Defence Contribution<
                   </button>
                   <p style={{ fontSize: '0.68rem', color: COLORS.textDim, marginBottom: '0.85rem', fontStyle: 'italic', paddingLeft: '0.25rem' }}>
                     TD1-shaped filing draft — all parts laid out with codes / columns matching the official form
+                  </p>
+
+                  {/* TAXISNET XML (portal-only) — for direct import into TaxisNet */}
+                  <button onClick={handleDownloadTaxisnetXml} disabled={xmlBusy}
+                    style={{ width: '100%', padding: '0.85rem', background: COLORS.bg, color: COLORS.accent,
+                      border: `1.5px solid ${COLORS.accent}`, borderRadius: '3px', cursor: xmlBusy ? 'wait' : 'pointer', fontFamily: 'inherit',
+                      fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', gap: '0.5rem', marginBottom: '0.4rem', opacity: xmlBusy ? 0.6 : 1 }}>
+                    <FileCode size={16} />
+                    {xmlBusy ? 'Saving…' : `Download TaxisNet XML (${formType === 'self_employed' ? 'epr1a' : 'epr1m'})`}
+                  </button>
+                  <p style={{ fontSize: '0.68rem', color: COLORS.textDim, marginBottom: '0.85rem', fontStyle: 'italic', paddingLeft: '0.25rem' }}>
+                    Official Ministry of Finance XML for direct upload to TaxisNet{onSaveXmlToClient ? ' — also filed in the client’s Documents folder' : ''}
                   </p>
                 </>
               )}

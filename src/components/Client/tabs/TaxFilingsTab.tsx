@@ -7,6 +7,8 @@ import {
 } from '../../shared/TaxFilingMeta';
 // @ts-expect-error — JSX file with no exported types
 import CyprusTaxCalculator from '../../CyprusTaxCalculator.jsx';
+import TaxReturnChecklistGate from './TaxReturnChecklistGate';
+import type { ChecklistState } from './TaxReturnChecklistGate';
 
 interface Props { clientId: number; canEdit: boolean; clientName?: string; client?: any; }
 
@@ -58,6 +60,8 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
   // Editor mode (for tax-return-type filings)
   const [editorReturn, setEditorReturn] = useState<any | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
+  // Pre-start checklist gate — editor stays closed until passed for this session.
+  const [gatePassed, setGatePassed] = useState(false);
 
   // Filters
   const [fYear, setFYear] = useState<string>('');
@@ -116,6 +120,8 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
         taxReturn = await api.getTaxReturn(newId);
       }
       setEditorReturn(taxReturn);
+      // Skip the gate only if this return was already confirmed before.
+      setGatePassed(!!taxReturn?.checklist?.confirmed_at);
     } catch (err: any) {
       alert('Could not open the return editor: ' + err.message);
     } finally {
@@ -128,6 +134,35 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
     await api.updateTaxReturn(editorReturn.id, {
       input_data: inputData,
       results: snapshot.results,
+    });
+  };
+
+  // Record the pre-start checklist confirmation on the return, then open editor.
+  const confirmChecklist = async (state: ChecklistState) => {
+    if (!editorReturn) return;
+    try {
+      await api.updateTaxReturn(editorReturn.id, { checklist: state });
+      setEditorReturn({ ...editorReturn, checklist: state });
+    } catch (err: any) {
+      // Persisting the checklist shouldn't block data entry — log and proceed.
+      console.error('Could not save checklist:', err);
+    }
+    setGatePassed(true);
+  };
+
+  // File a generated TaxisNet XML into the client's Documents folder so it can
+  // be retrieved and uploaded to TaxisNet later.
+  const saveXmlToClient = async (xml: string, filename: string) => {
+    const file = new File([xml], filename, { type: 'application/xml' });
+    await api.uploadDocumentsToFolder({
+      clientId,
+      folderId: null,
+      docType: 'tax_return_xml',
+      category: 'tax',
+      month: '',
+      year: String(editorReturn?.tax_year || ''),
+      files: [file],
+      notes: 'TaxisNet XML export (TD1)',
     });
   };
 
@@ -216,11 +251,29 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
   if (editorReturn) {
     const formType: FormType = (editorReturn.form_type as FormType) || 'individuals';
     const titleLabel = formType === 'self_employed' ? 'Self Employed' : 'Tax Return Individuals';
+
+    // Gate: confirm we hold the client's information before opening the editor.
+    if (!gatePassed) {
+      return (
+        <TaxReturnChecklistGate
+          formType={formType}
+          clientName={clientName}
+          taxYear={editorReturn.tax_year}
+          initial={editorReturn.checklist as ChecklistState}
+          canEdit={canEdit}
+          onConfirm={confirmChecklist}
+          onCancel={() => { setEditorReturn(null); setGatePassed(false); }}
+        />
+      );
+    }
     return (
       <div className="client-tab-content">
         <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setEditorReturn(null)}>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setEditorReturn(null); setGatePassed(false); }}>
             ← Back to filings
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setGatePassed(false)} title="Review the information checklist">
+            ☑ Checklist
           </button>
           <strong style={{ fontSize: '1.05em' }}>{titleLabel} {editorReturn.tax_year}</strong>
           <span style={{ fontSize: '0.78em', padding: '2px 8px', background: 'var(--pc-bg-alt, #e7eaef)', borderRadius: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -241,6 +294,7 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
           clientPrefill={clientPrefill}
           initialState={editorReturn.input_data || {}}
           onSave={saveCurrent}
+          onSaveXmlToClient={saveXmlToClient}
           taxYearLock={editorReturn.tax_year}
           formType={formType}
         />

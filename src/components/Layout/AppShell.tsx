@@ -35,6 +35,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/messages',  label: 'Messages',     icon: '✉' },
       { path: '/inbox',     label: 'Inbox',        icon: '📬' },
       { path: '/bulk-email', label: 'Bulk Email',  icon: '📨' },
+      { path: '/request-tax-info', label: 'Request Tax Info', icon: '🧾' },
       { path: '/client-expenses', label: 'Client Expenses', icon: '📥' },
       { path: '/timesheet', label: 'Timesheet',    icon: '⏱' },
       { path: '/calendar',  label: 'Calendar',     icon: '◷' },

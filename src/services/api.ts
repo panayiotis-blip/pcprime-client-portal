@@ -297,7 +297,7 @@ async function learnFromInvoice(clientId: number, vendorName: string, data: any)
 // to), but a true belt-and-braces fix would be server-side
 // validation in an edge function. Flagged as a Phase-2 task.
 // -----------------------------------------------------------------
-const ALLOWED_TYPES_DESCRIPTION = 'PDF, JPG, PNG, or HEIC';
+const ALLOWED_TYPES_DESCRIPTION = 'PDF, JPG, PNG, HEIC, or XML';
 
 async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: string; reason?: string }> {
   if (!file.size) return { ok: false, type: 'empty', reason: 'File is empty.' };
@@ -325,6 +325,20 @@ async function detectAllowedFileType(file: File): Promise<{ ok: boolean; type: s
       return { ok: true, type: 'heic' };
     }
   }
+  // XML: plain-text, browser-viewable. Allowed so TaxisNet tax-return exports
+  // can be filed in a client's Documents folder. Accept a leading UTF-8 BOM
+  // (EF BB BF) or whitespace before the "<?xml" / "<" opening.
+  {
+    let i = 0;
+    if (b.length >= 3 && b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF) i = 3; // skip BOM
+    while (i < b.length && (b[i] === 0x20 || b[i] === 0x09 || b[i] === 0x0A || b[i] === 0x0D)) i++;
+    if (b[i] === 0x3C) { // '<'  — "<?xml" declaration or a root element
+      const isXmlName = file.name.toLowerCase().endsWith('.xml');
+      const isXmlDecl = b[i + 1] === 0x3F; // '<?'
+      if (isXmlName || isXmlDecl) return { ok: true, type: 'xml' };
+    }
+  }
+
   // Note: we DO NOT allow ZIP-based files (XLSX, DOCX, ZIP). They can't be
   // previewed in the browser, only downloaded — the user wants every uploaded
   // file to be viewable in-app, so we reject them here.
