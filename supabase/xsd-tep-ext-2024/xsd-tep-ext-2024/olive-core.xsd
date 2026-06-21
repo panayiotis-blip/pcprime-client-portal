@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<xsd:schema targetNamespace="http://www.intracom.gr/olive" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:olive="http://www.intracom.gr/olive" elementFormDefault="qualified">
+	<xsd:annotation>
+		<xsd:documentation xml:lang="EL">To παρόν XML Schema ορίζει κοινά χρησιμοποιούμενους τύπους. Προορίζεται για δημόσια χρήση</xsd:documentation>
+	</xsd:annotation>
+	<xsd:simpleType name="notNullStringType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός ενός string που δεν μπορεί να είναι κενό</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:minLength value="1"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="idType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για τη γενική αναπαράσταση κωδικού</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="\d{1,19}"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="gYear">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση έτους</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:gYear">
+			<xsd:minInclusive value="1970"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:complexType name="keyType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση σύνθετου κλειδιού</xsd:documentation>
+		</xsd:annotation>
+		<xsd:attribute name="id" use="required" type="olive:idType"/>
+		<xsd:attribute name="year" use="required" type="olive:gYear"/>
+	</xsd:complexType>
+	<xsd:complexType name="keyValuePairType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση ζεύγους της μορφής ονόματος μεταβλητής και περιεχομένου αυτής</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:extension base="olive:notNullStringType">
+				<xsd:attribute name="key" use="required" type="olive:notNullStringType"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	<xsd:simpleType name="timestampType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση χρονόσημου</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:dateTime"/>
+	</xsd:simpleType>
+	<xsd:simpleType name="date">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση ημερομηνιών (μεγαλύτερες ή ίσες από την 01/01/1900</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:date">
+			<xsd:minInclusive value="1900-01-01"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:complexType name="date-rangeType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορίζεται η μορφή αναπαράστασης ενός διαστήματος μεταξύ δυο ημερομηνιών. Προσοχή: το XML-SCHEMA δε μπορεί διαπιστώσει ποια από τις δυο ημερομηνίες είναι μικρότερη. Θα πρέπει όμως η ημερομηνία from να είναι μικρότερη της ημερομηνίας to.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:attribute name="from" type="olive:date" use="required"/>
+		<xsd:attribute name="to" type="olive:date" use="required"/>
+	</xsd:complexType>
+	<xsd:simpleType name="monthType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση των μηνών.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:integer">
+			<xsd:minInclusive value="1"/>
+			<xsd:maxInclusive value="12"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="trimesterType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση τριμήνων.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:integer">
+			<xsd:minInclusive value="1"/>
+			<xsd:maxInclusive value="4"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="moneyAmountType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορίζεται η μορφή των τιμών που αναπαραστούν χρηματικά ποσά. 
+			Προσοχή τα χρηματικά ποσά δεν πρέπει να περιέχουν σύμβολα για τις χιλιάδες ενώ
+			το διαχωριστικό των δεκαδικών ψηφίων είναι ",". Αρνητικά ποσά περιγράφονται με
+                τη προσθήκη ενός μείον (&apos;-&apos;) ακριβώς πριν το ποσό.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="-?\d{1,9},\d{1,2}"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:simpleType name="currencyType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορίζονται τα νομίσματα που θα χειρίζεται το σύστημα.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="CYP"/>
+			<xsd:enumeration value="EUR"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	<xsd:complexType name="moneyType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορίζεται ένα element για την αναπαράσταση χρηματικών ποσών.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:extension base="olive:moneyAmountType">
+				<xsd:attribute name="currency" type="olive:currencyType" use="optional" default="CYP"/>
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+	<xsd:complexType name="bodyType" mixed="true">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Οποιοδήποτε περιεχόμενο</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:any minOccurs="1"/>
+		</xsd:sequence>
+	</xsd:complexType>
+</xsd:schema>

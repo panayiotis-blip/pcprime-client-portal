@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema 
+	targetNamespace="http://www.mof.gov.cy" 
+	xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+	elementFormDefault="qualified" 
+	xmlns:olive="http://www.intracom.gr/olive" 
+	xmlns:mof="http://www.mof.gov.cy">
+
+	<xsd:annotation>
+		<xsd:documentation xml:lang="EL">Το παρόν XML schema περιέχει
+		ορισμούς γενικών τύπων οι οποίοι πρόκεται να χρησιμοποιηθούν
+		από άλλα XML schema του Υπουργείου Οικονομικών.
+		Προορίζεται για εσωτερική ή δημόσια χρήση από το Υπουργείο Οικονομικών
+		</xsd:documentation>
+	</xsd:annotation>
+	
+	<xsd:import schemaLocation="olive-core.xsd" namespace="http://www.intracom.gr/olive"></xsd:import>
+	<xsd:import namespace="http://www.intracom.gr/olive" schemaLocation="olive-core.xsd" />
+	
+	<xsd:complexType name="gridRowType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Αναπαριστά γραμμή πίνακα</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="field" type="olive:keyValuePairType" maxOccurs="100" />
+		</xsd:sequence>
+		<xsd:attribute name="number" type="xsd:long" use="required" />
+	</xsd:complexType>
+	<xsd:complexType name="gridSectionType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Αναπαριστά πίνακα</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="row" type="mof:gridRowType" maxOccurs="100" />
+		</xsd:sequence>
+		<xsd:attribute name="id" type="xsd:string" use="required" />
+	</xsd:complexType>
+
+	<xsd:complexType name="receiptInfoType">
+		<xsd:annotation id="receiptInfoType">
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση τη παραλαβή δήλωσης</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="created" type="olive:timestampType">
+				<xsd:annotation>
+					<xsd:documentation xml:lang="EL">Χρονόσημο παραλαβής δήλωσης από το Taxisnet. Αποδίδεται από το TAXISnet</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="key" type="olive:keyType">
+				<xsd:annotation>
+					<xsd:documentation xml:lang="EL">Αριθμός παραλαβής δήλωσης. Μοναδίκος αριθμός για κάθε τύπο δήλωσης ο οποίος αποδίδεται από το TAXISnet</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>
+
+	<xsd:simpleType name="vatDigitsType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση των ψηφίων των αριθμών ΦΠΑ της ευρωπαϊκής ένωσης</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:minLength value="1" />
+			<xsd:maxLength value="12" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="cyprianVatDigitsType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση των ψηφίων των αριθμών ΦΠΑ της Κυπριακής Δημ.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="\d{8}[A-Z]{1}"/>			
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:simpleType name="vatCountryPrefixType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορίζονται προθέματα για τις χώρες της ευρωπαϊκής ένωσης.</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+
+			<xsd:enumeration value="CY" />
+			
+			<xsd:enumeration value="BE" />
+			<xsd:enumeration value="FR" />
+			<xsd:enumeration value="DE" />
+			<xsd:enumeration value="DK" />
+			<xsd:enumeration value="EL" />
+			<xsd:enumeration value="IE" />
+			<xsd:enumeration value="ES" />
+			<xsd:enumeration value="IT" />
+			<xsd:enumeration value="LU" />
+			<xsd:enumeration value="GB" />
+			<xsd:enumeration value="NL" />
+			<xsd:enumeration value="PT" />
+			<xsd:enumeration value="AT" />
+			<xsd:enumeration value="FI" />
+			<xsd:enumeration value="SE" />
+			<xsd:enumeration value="CZ" />
+			<xsd:enumeration value="EE" />
+			<xsd:enumeration value="HU" />
+			<xsd:enumeration value="LT" />
+			<xsd:enumeration value="LV" />
+			<xsd:enumeration value="MT" />
+			<xsd:enumeration value="PL" />
+			<xsd:enumeration value="SI" />
+			<xsd:enumeration value="SK" />
+			<xsd:enumeration value="BG" />
+			<xsd:enumeration value="RO" />
+			<xsd:enumeration value="HR" />
+			<xsd:enumeration value="XI" />
+
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:complexType name="vatNumberType" mixed="true">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση αριθμού ΦΠΑ για τις χώρες της ευρωπαϊκής ένωσης</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:extension base="mof:vatDigitsType">
+				<xsd:attribute name="country" type="mof:vatCountryPrefixType" use="required" />
+			</xsd:extension>
+		</xsd:simpleContent>
+	</xsd:complexType>
+
+
+	<xsd:complexType name="cyprianVatNumberType" mixed="true">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση κυπριακού αριθμού ΦΠΑ</xsd:documentation>
+		</xsd:annotation>
+		<xsd:simpleContent>
+			<xsd:restriction base="mof:vatNumberType">
+				<xsd:minLength value="9" />
+				<xsd:maxLength value="9" />
+				<xsd:attribute name="country" type="mof:vatCountryPrefixType" use="required" fixed="CY"></xsd:attribute>
+			</xsd:restriction>
+		</xsd:simpleContent>
+	</xsd:complexType>
+
+	<xsd:simpleType name="TICType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση κυπριακού ΑΦΤ</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="\d{8}[A-Z]{1}"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+
+	<xsd:simpleType name="phoneNumberType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση κυπριακού ΑΦΤ</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:pattern value="\d{1,15}"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+	<xsd:complexType name="taxpayerIdentifierType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου ο οποιος θα προσδιορίζει τον φορολογούμενο τον οποίο αφορά ένα εισερχόμενο στο TAXISnet μήνυμα</xsd:documentation>
+		</xsd:annotation>
+		<xsd:choice>
+			<xsd:element name="vatNumber" type="mof:cyprianVatNumberType" />
+			<xsd:element name="tic" type="mof:TICType" />
+		</xsd:choice>
+	</xsd:complexType>
+
+	<xsd:complexType name="vatTaxpayerIdentifierType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου ο οποιος θα προσδιορίζει τον φορολογούμενο τον οποίο αφορά ένα εισερχόμενο στο TAXISnet μήνυμα</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="vatNumber" type="mof:cyprianVatNumberType" />
+		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:complexType name="incomeTaxpayerIdentifierType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου ο οποιος θα προσδιορίζει τον φορολογούμενο τον οποίο αφορά ένα εισερχόμενο στο TAXISnet μήνυμα</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="tic" type="mof:TICType" />
+		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:complexType name="contactInfoType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση στοιχείων επαφής χρήστη TAXISnet</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:choice>
+				<xsd:annotation><xsd:documentation xml:lang="EL">Στη περίπτωση φυσικού προσώπου ένας χρήστης φέρει ονοματεπώνυμο. Αντίθετα
+				στη περίπτωση νομικού προσώπου φέρει επωνυμία</xsd:documentation></xsd:annotation>
+				<xsd:sequence>
+					<xsd:element name="last-name" type="xsd:string" />
+					<xsd:element name="first-name" type="xsd:string" />
+				</xsd:sequence>
+				<xsd:element name="name" type="xsd:string" />
+			</xsd:choice>
+			<xsd:element name="email" type="xsd:string" >
+				<xsd:annotation><xsd:documentation xml:lang="EL">H διεύθυνηση ηλεκτρονικού ταχυδρομείου του χρήστη</xsd:documentation> </xsd:annotation>
+			</xsd:element>
+			<xsd:element name="phone" type="mof:phoneNumberType" minOccurs="0" >
+				<xsd:annotation><xsd:documentation xml:lang="EL">Tηλέφωνο χρήστη</xsd:documentation> </xsd:annotation>
+			</xsd:element>
+		</xsd:sequence>
+	</xsd:complexType>
+	
+	<xsd:simpleType name="roleActionType">
+		<xsd:annotation><xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση των επιτρεπτών ενεργειών που ορίζει το σύστημα του ΦΠΑ ή των προσόδων να πραγματοποιηθούν για το ρόλο ενός χρήστη στο TAXISnet</xsd:documentation> </xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="activate"/>
+			<xsd:enumeration value="deactivate"/>
+		</xsd:restriction>
+	</xsd:simpleType>
+	
+</xsd:schema>

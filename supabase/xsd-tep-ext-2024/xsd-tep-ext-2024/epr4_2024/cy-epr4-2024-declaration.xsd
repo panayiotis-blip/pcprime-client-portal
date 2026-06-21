@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema targetNamespace="http://www.mof.gov.cy" xmlns:mof="http://www.mof.gov.cy" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:olive="http://www.intracom.gr/olive" elementFormDefault="qualified">
+
+	<xsd:annotation>
+		<xsd:documentation xml:lang="EL">
+		XML Schema για την αναπαράσταση δηλώσεων ΕΠΡ4 εταιρείας Φορολογικού Έτους 2024 το οποίο υποβάλλεται από τελικό χρήστη. 
+		To παρόν schema προορίζεται για δημόσια χρήση.</xsd:documentation>
+	</xsd:annotation>
+
+	<xsd:include schemaLocation="cy-core.xsd" />
+	<xsd:import namespace="http://www.intracom.gr/olive" schemaLocation="olive-core.xsd" />
+   <xsd:include schemaLocation="cy-epr4-2024-keys.xsd" />
+
+	<xsd:simpleType name="epr4DocumentVersionType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση της έκδοσης υλοποίησης του παρόντος XML Schema</xsd:documentation>
+		</xsd:annotation>
+		<xsd:restriction base="xsd:string">
+			<xsd:enumeration value="2024-1.0" />
+		</xsd:restriction>
+	</xsd:simpleType>
+
+   <xsd:complexType name="customEpr42024GridRowType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Αναπαριστά γραμμή πίνακα σε δήλωση epr4 2024</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="field" type="mof:epr42024GridKeyValuePairType" maxOccurs="100" />
+		</xsd:sequence>
+		<xsd:attribute name="number" type="xsd:long" use="required" />
+	</xsd:complexType>
+   
+   <xsd:complexType name="customEpr42024GridSectionType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Αναπαριστά πίνακα epr4 2024</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="row" type="mof:customEpr42024GridRowType" maxOccurs="500" />
+		</xsd:sequence>
+		<xsd:attribute name="id" type="xsd:string" use="required" />
+	</xsd:complexType>
+   
+	<xsd:complexType name="epr4GridSectionType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση πίνακα της δήλωσης</xsd:documentation>
+		</xsd:annotation>
+		<xsd:complexContent>
+			<xsd:restriction base="mof:customEpr42024GridSectionType">
+				<xsd:sequence>
+					<xsd:element name="row" type="mof:customEpr42024GridRowType" maxOccurs="500">
+						<xsd:unique name="unique-epr4-grid-row-field-key">
+							<xsd:annotation>
+								<xsd:documentation xml:lang="EL">Αποτρέπει την παρουσία δυο ίδιων κωδικών, μεταξύ των ζευγών (κωδικός-τιμή) στις γραμμές κάθε πίνακα</xsd:documentation>
+							</xsd:annotation>
+							<xsd:selector xpath="mof:field" />
+							<xsd:field xpath="@key" />
+						</xsd:unique>
+					</xsd:element>
+				</xsd:sequence>
+				<xsd:attribute name="id" use="required">
+					<xsd:annotation>
+						<xsd:documentation xml:lang="EL">Αναπαριστά των κωδικό του ο οποίος προσδιορίζει με μοναδιαίο τρόπο κάθε πίνακα της δήλωσης. Οι επιτρεπτές τιμές αναφέρονται στην ακόλουθη λίστα</xsd:documentation>
+					</xsd:annotation>
+					<xsd:simpleType>
+						<xsd:restriction base="xsd:string">
+							<xsd:enumeration value="epr4m1ter10" />
+							<xsd:enumeration value="epr4m2tc7r8" />
+							<xsd:enumeration value="epr4m2tc10r1" />
+							<xsd:enumeration value="epr4m2tc11r1" />
+							<xsd:enumeration value="epr4m2tc14r1" />
+							<xsd:enumeration value="epr4m2tc16r3" />
+							<xsd:enumeration value="epr4m2tc20r1" />
+							<xsd:enumeration value="epr4m2tc20br1" />
+							<xsd:enumeration value="epr4m4tbr4" />
+							<xsd:enumeration value="epr4m4tbr6" />
+							<xsd:enumeration value="epr4m4tir1" />
+							<xsd:enumeration value="epr4m5tb2r1" />
+							<xsd:enumeration value="epr4m6t0r1" />
+						</xsd:restriction>
+					</xsd:simpleType>
+				</xsd:attribute>
+			</xsd:restriction>
+		</xsd:complexContent>
+	</xsd:complexType>
+
+	<xsd:complexType name="epr4DeclType">
+		<xsd:annotation>
+			<xsd:documentation xml:lang="EL">Ορισμός τύπου δήλωσης ΕΠΡ4 Εταιρείας</xsd:documentation>
+		</xsd:annotation>
+		<xsd:sequence>
+			<xsd:element name="period" type="olive:date-rangeType">
+				<xsd:annotation>
+					<xsd:documentation xml:lang="EL">H περίοδος για την οποία πραγματοποιήθηκε η δήλωση</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="field" type="mof:epr42024KeyValuePairType" maxOccurs="1000">
+				<xsd:annotation>
+					<xsd:documentation xml:lang="EL">Αναπαριστά ζεύγος της μορφής κωδικός πεδίου - τιμή. Με το τρόπο αυτό απεικονίζεται κάθε πεδίο της δήλωσης ανεξαρτήτως μέρους το οποίο δεν περιέχεται σε πίνακα.</xsd:documentation>
+				</xsd:annotation>
+			</xsd:element>
+			<xsd:element name="grid" type="mof:epr4GridSectionType" minOccurs="0" maxOccurs="20">
+				<xsd:unique name="unique-epr4-grid-row-num">
+					<xsd:annotation>
+						<xsd:documentation xml:lang="EL">Περιορισμός ο οποίος εξασφαλίζει ότι οι γραμμές του κάθε πίνακα θα προσδιορίζονται από μοναδικό αριθμό γραμμής</xsd:documentation>
+					</xsd:annotation>
+					<xsd:selector xpath="mof:row" />
+					<xsd:field xpath="@number" />
+				</xsd:unique>
+			</xsd:element>
+		</xsd:sequence>
+		<xsd:attribute name="version" type="mof:epr4DocumentVersionType" use="required">
+			<xsd:annotation>
+				<xsd:documentation xml:lang="EL">Έκδοσης υλοποίησης του παρόντος XML Schema</xsd:documentation>
+			</xsd:annotation>
+		</xsd:attribute>
+	</xsd:complexType>
+
+	<xsd:element name="epr4-declarations">
+		<xsd:annotation><xsd:documentation xml:lang="EL">
+		Ορισμός τύπου για την αναπαράσταση μιας ή περισσότερων  (ενδεικτικά έχει τεθεί άνω όριο 20) δηλώσεων ΕΠΡ4 εταιρείας
+		</xsd:documentation> </xsd:annotation>
+		<xsd:complexType>
+			<xsd:sequence>
+				<xsd:element name="epr4-declaration" maxOccurs="20">
+					<xsd:annotation>
+						<xsd:documentation xml:lang="EL">Δήλωση ΕΠΡ4 εταιρείας</xsd:documentation>
+					</xsd:annotation>
+					<xsd:complexType>
+						<xsd:complexContent>
+							<xsd:extension base="mof:epr4DeclType">
+								<xsd:attribute name="taxpayer" type="mof:TICType" use="required"></xsd:attribute>
+							</xsd:extension>
+						</xsd:complexContent>
+					</xsd:complexType>
+					<xsd:key name="unique-epr4-field-key">
+						<xsd:annotation>
+							<xsd:documentation xml:lang="EL">Περιορισμός ο οποίος εξασφαλίζει ότι κάθε ζεύγος, της μορφής κωδικός πεδίου - τιμή, το οποίο αναπαριστά πεδίο της δήλωσης εκτός πίνακα θα εμφανίζεται το πολύ μια φορά.</xsd:documentation>
+						</xsd:annotation>
+						<xsd:selector xpath="mof:field" />
+						<xsd:field xpath="@key" />
+					</xsd:key>
+					<xsd:key name="unique-epr4-grid-id">
+						<xsd:annotation>
+							<xsd:documentation xml:lang="EL">Περιορισμός ο οποίος εξασφαλίζει ότι κάθε πίνακας θα εμφανίζεται το πολύ μια φορά σε κάθε δήλωση</xsd:documentation>
+						</xsd:annotation>
+						<xsd:selector xpath="mof:grid" />
+						<xsd:field xpath="@id" />
+					</xsd:key>
+				</xsd:element>
+			</xsd:sequence>
+		</xsd:complexType>
+		<xsd:key name="unique-epr4-per-taxpayer">
+			<xsd:annotation>
+				<xsd:documentation xml:lang="EL">Περιορισμός ο οποίος εξασφαλίζει ότι έχουμε μοναδικές δηλώσεις ΕΠΡ4 εταιρείας ανά φορολογούμενο</xsd:documentation>
+			</xsd:annotation>
+			<xsd:selector xpath="mof:epr4-declaration" />
+			<xsd:field xpath="@taxpayer" />
+		</xsd:key>
+	</xsd:element>
+
+</xsd:schema>

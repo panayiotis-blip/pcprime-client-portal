@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema 
+	targetNamespace="http://www.mof.gov.cy" 
+	xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+	elementFormDefault="qualified" 
+	xmlns:olive="http://www.intracom.gr/olive" 
+	xmlns:mof="http://www.mof.gov.cy">
+
+	<xsd:annotation>
+		<xsd:documentation xml:lang="EL">Το παρόν XML schema περιέχει
+		ορισμούς τύπων οι οποίοι πρόκειται να χρησιμοποιηθούν
+		για την αναπαράσταση δήλωσης ΕΠΡ614 Ενοικίων Φορολογικού Έτους 2024
+		</xsd:documentation>
+	</xsd:annotation>
+	
+	<xsd:import schemaLocation="olive-core.xsd" namespace="http://www.intracom.gr/olive"></xsd:import>
+	<xsd:import namespace="http://www.intracom.gr/olive" schemaLocation="olive-core.xsd" />
+	
+	 <xsd:complexType name="epr6142024KeyValuePairType">
+      <xsd:annotation>
+         <xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση ζεύγους της μορφής κωδικός πεδίου - τιμή για την απεικόνιση κάθε πεδίου της δήλωσης ΕΠΡ614 2024 ανεξαρτήτως μέρους το οποίο δεν περιέχεται σε πίνακα.</xsd:documentation>
+      </xsd:annotation>
+      <xsd:simpleContent>
+         <xsd:extension base="olive:notNullStringType">
+            <xsd:attribute name="key" use="required" >
+               <xsd:annotation>
+                  <xsd:documentation xml:lang="EL">Αναπαριστά τον κωδικό του πεδίου της δήλωσης ΕΠΡ614 2024 το οποίο δεν περιέχεται σε πίνακα. Οι επιτρεπτές τιμές αναφέρονται στην ακόλουθη λίστα</xsd:documentation>
+               </xsd:annotation>
+               <xsd:simpleType>
+                  <xsd:restriction base="xsd:string">
+                     <xsd:enumeration value="epr614m0t0r1c1"/>
+                     <xsd:enumeration value="epr614m0t0r2c1"/>
+                     <xsd:enumeration value="epr614m0t0r3c1"/>
+                     <xsd:enumeration value="epr614m0t0r4c1"/>
+                     <xsd:enumeration value="epr614m0t0r5c1"/>
+                     <xsd:enumeration value="epr614m0t0r6c1"/>
+                     <xsd:enumeration value="epr614m3t2r1c1"/>
+                     <xsd:enumeration value="epr614m3t2r1c2"/>
+                     <xsd:enumeration value="epr614m3t2r1c3"/>
+                     <xsd:enumeration value="epr614m3t2r1c4"/>
+                     <xsd:enumeration value="epr614m3t2r1c5"/>
+                     <xsd:enumeration value="epr614m3t2r1c6"/>
+                     <xsd:enumeration value="epr614m3t2r1c7"/>
+                     <xsd:enumeration value="epr614m3t2r1c8"/>
+                     <xsd:enumeration value="epr614m3t2r1c9"/>
+                     <xsd:enumeration value="epr614m3t2r1c10"/>
+                     <xsd:enumeration value="epr614m3t2r1c11"/>
+                     <xsd:enumeration value="epr614m3t2r1c12"/>
+                     <xsd:enumeration value="epr614m3t2r1c13"/>
+                     <xsd:enumeration value="epr614m3t2r2c1"/>
+                     <xsd:enumeration value="epr614m3t2r2c2"/>
+                     <xsd:enumeration value="epr614m3t2r2c3"/>
+                     <xsd:enumeration value="epr614m3t2r2c4"/>
+                     <xsd:enumeration value="epr614m3t2r2c5"/>
+                     <xsd:enumeration value="epr614m3t2r2c6"/>
+                     <xsd:enumeration value="epr614m3t2r2c7"/>
+                     <xsd:enumeration value="epr614m3t2r2c8"/>
+                     <xsd:enumeration value="epr614m3t2r2c9"/>
+                     <xsd:enumeration value="epr614m3t2r2c10"/>
+                     <xsd:enumeration value="epr614m3t2r2c11"/>
+                     <xsd:enumeration value="epr614m3t2r2c12"/>
+                     <xsd:enumeration value="epr614m3t2r2c13"/>
+                     <xsd:enumeration value="epr614m3t2r3c1"/>
+                     <xsd:enumeration value="epr614m3t2r3c2"/>
+                     <xsd:enumeration value="epr614m3t2r3c3"/>
+                     <xsd:enumeration value="epr614m3t2r3c4"/>
+                     <xsd:enumeration value="epr614m3t2r3c5"/>
+                     <xsd:enumeration value="epr614m3t2r3c6"/>
+                     <xsd:enumeration value="epr614m3t2r3c7"/>
+                     <xsd:enumeration value="epr614m3t2r3c8"/>
+                     <xsd:enumeration value="epr614m3t2r3c9"/>
+                     <xsd:enumeration value="epr614m3t2r3c10"/>
+                     <xsd:enumeration value="epr614m3t2r3c11"/>
+                     <xsd:enumeration value="epr614m3t2r3c12"/>
+                     <xsd:enumeration value="epr614m3t2r3c13"/>
+                     <xsd:enumeration value="epr614m3t2r4c1"/>
+                     <xsd:enumeration value="epr614m3t2r4c2"/>
+                     <xsd:enumeration value="epr614m3t2r4c3"/>
+                     <xsd:enumeration value="epr614m3t2r4c4"/>
+                     <xsd:enumeration value="epr614m3t2r4c5"/>
+                     <xsd:enumeration value="epr614m3t2r4c6"/>
+                     <xsd:enumeration value="epr614m3t2r4c7"/>
+                     <xsd:enumeration value="epr614m3t2r4c8"/>
+                     <xsd:enumeration value="epr614m3t2r4c9"/>
+                     <xsd:enumeration value="epr614m3t2r4c10"/>
+                     <xsd:enumeration value="epr614m3t2r4c11"/>
+                     <xsd:enumeration value="epr614m3t2r4c12"/>
+                     <xsd:enumeration value="epr614m3t2r4c13"/>
+                  </xsd:restriction>
+               </xsd:simpleType>
+            </xsd:attribute>
+         </xsd:extension>
+      </xsd:simpleContent>
+   </xsd:complexType>
+   
+   <xsd:complexType name="epr6142024GridKeyValuePairType">
+      <xsd:annotation>
+         <xsd:documentation xml:lang="EL">Ορισμός τύπου για την αναπαράσταση ζεύγους της μορφής κωδικός πεδίου - τιμή για την απεικόνιση κάθε πεδίου της δήλωσης ΕΠΡ614 2024 το οποίο περιέχεται σε πίνακα.</xsd:documentation>
+      </xsd:annotation>
+      <xsd:simpleContent>
+         <xsd:extension base="olive:notNullStringType">
+            <xsd:attribute name="key" use="required">
+               <xsd:annotation>
+                  <xsd:documentation xml:lang="EL">Αναπαριστά τον κωδικό του πεδίου σε πίνακα της δήλωσης ΕΠΡ614 2024. Οι επιτρεπτές τιμές αναφέρονται στην ακόλουθη λίστα</xsd:documentation>
+               </xsd:annotation>
+               <xsd:simpleType>
+                  <xsd:restriction base="xsd:string">
+                     <xsd:enumeration value="epr614m1t1r1c1"/>
+                     <xsd:enumeration value="epr614m1t1r1c2"/>
+                     <xsd:enumeration value="epr614m1t1r1c2b"/>
+                     <xsd:enumeration value="epr614m1t1r1c2c"/>
+                     <xsd:enumeration value="epr614m1t1r1c3"/>
+                     <xsd:enumeration value="epr614m1t1r1c4"/>
+                     <xsd:enumeration value="epr614m1t1r1c5"/>
+                     <xsd:enumeration value="epr614m1t1r1c6"/>
+                     <xsd:enumeration value="epr614m1t1r1c7"/>
+                     <xsd:enumeration value="epr614m1t1r1c8"/>
+                     <xsd:enumeration value="epr614m1t1r1c9"/>
+                     <xsd:enumeration value="epr614m1t1r1c10"/>
+                     <xsd:enumeration value="epr614m1t1r1c11"/>
+                     <xsd:enumeration value="epr614m1t1r1c12"/>
+                     <xsd:enumeration value="epr614m1t1r1c12b"/>
+                  </xsd:restriction>
+               </xsd:simpleType>
+            </xsd:attribute>
+         </xsd:extension>
+      </xsd:simpleContent>
+   </xsd:complexType>
+	
+</xsd:schema>
