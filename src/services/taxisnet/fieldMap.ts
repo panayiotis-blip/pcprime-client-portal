@@ -69,6 +69,78 @@ const EPR1M: FormMap = {
         { col: 'c9', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
       ],
     },
+    {
+      // Part 4.B pensions — grid tb. Positional: tb has exactly c1–c6 and the
+      // pension model has exactly 6 fields, following the TIC/name/code lead
+      // pattern proven in 4.A. No sample populated tb, so all inferred.
+      gridId: 'epr1mm4tbr1',
+      source: 'pensions',
+      cols: [
+        { col: 'c1', field: 'payerTic', kind: 'tic', confidence: 'inferred' },
+        { col: 'c2', field: 'payerName', kind: 'text', confidence: 'inferred' },
+        { col: 'c3', field: 'code', kind: 'text', confidence: 'inferred' },
+        { col: 'c4', field: 'amount', kind: 'money', confidence: 'inferred' },
+        { col: 'c5', field: 'taxWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c6', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+      ],
+    },
+    {
+      // Part 4.C rents — grid tc. c12/c13/c15/c16 are anchored to official
+      // column numbers the portal model already documents (capital allowances,
+      // interest payable, SDC, GHS). Identity/gross cols c1–c8 are positional
+      // guesses — the form's full column order isn't confirmed here. All inferred.
+      gridId: 'epr1mm4tcr1',
+      source: 'rentalProperties',
+      cols: [
+        { col: 'c1', field: 'registrationNo', kind: 'text', confidence: 'inferred' },
+        { col: 'c2', field: 'propertyTypeCode', kind: 'text', confidence: 'inferred' },
+        { col: 'c3', field: 'acquisitionDate', kind: 'date', confidence: 'inferred' },
+        { col: 'c4', field: 'ownershipShare', kind: 'text', confidence: 'inferred' },
+        { col: 'c5', field: 'lesseeTic', kind: 'tic', confidence: 'inferred' },
+        { col: 'c6', field: 'lesseeName', kind: 'text', confidence: 'inferred' },
+        { col: 'c7', field: 'annualGrossInRepublic', kind: 'money', confidence: 'inferred' },
+        { col: 'c8', field: 'annualGrossOutsideRepublic', kind: 'money', confidence: 'inferred' },
+        { col: 'c12', field: 'capitalAllowances', kind: 'money', confidence: 'inferred' },
+        { col: 'c13', field: 'interestPayable', kind: 'money', confidence: 'inferred' },
+        { col: 'c15', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c16', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+      ],
+    },
+    {
+      // Part 4.E interest — grid te. c2/c3/c5 are CONFIRMED by the sample filing
+      // (payer name / interest code / gross). c1 (debtor TIC, omitted in the
+      // sample because the payers were foreign) and the withholding cols are
+      // inferred. `country` is intentionally NOT mapped — the sample uses a
+      // coded country format (e.g. OECD605) we don't capture as free text.
+      gridId: 'epr1mm4ter1',
+      source: 'interestSources',
+      cols: [
+        { col: 'c1', field: 'debtorTic', kind: 'tic', confidence: 'inferred' },
+        { col: 'c2', field: 'debtorName', kind: 'text', confidence: 'confirmed' },
+        { col: 'c3', field: 'code', kind: 'text', confidence: 'confirmed' },
+        { col: 'c5', field: 'grossInterest', kind: 'money', confidence: 'confirmed' },
+        { col: 'c6', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c7', field: 'taxPaidOutside', kind: 'money', confidence: 'inferred' },
+        { col: 'c7a', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+      ],
+    },
+    {
+      // Part 4.F dividends — grid tz (position F, after the portal-skipped D).
+      // No epr1m sample populated tz, so all inferred. `country` not mapped
+      // (coded format, as with interest).
+      gridId: 'epr1mm4tzr1',
+      source: 'dividendSources',
+      cols: [
+        { col: 'c1', field: 'payerTic', kind: 'tic', confidence: 'inferred' },
+        { col: 'c2', field: 'businessName', kind: 'text', confidence: 'inferred' },
+        { col: 'c3', field: 'code', kind: 'text', confidence: 'inferred' },
+        { col: 'c4', field: 'grossDividend', kind: 'money', confidence: 'inferred' },
+        { col: 'c5', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c5a', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c6', field: 'taxPaidOutside', kind: 'money', confidence: 'inferred' },
+        { col: 'c7', field: 'receiptDate', kind: 'date', confidence: 'inferred' },
+      ],
+    },
   ],
 };
 

@@ -1,7 +1,7 @@
 // Pre-export error check. Runs when the user clicks "Export to XML" — blocking
 // errors stop the export; warnings let it proceed with a confirm.
 
-import { collectFields, SUPPORTED_YEARS } from './buildXml';
+import { collectFields, SUPPORTED_YEARS, PROVISIONAL_YEARS } from './buildXml';
 import { KEY_CATALOGUE } from './keyCatalogue';
 import { FIELD_MAPS } from './fieldMap';
 import { TIC_RE, formCode } from './format';
@@ -16,7 +16,9 @@ export function validateExport(inputData: any, year: number, formType: TaxReturn
   const cat = KEY_CATALOGUE[form];
 
   if (!SUPPORTED_YEARS.includes(year)) {
-    warnings.push(`No bundled TaxisNet schema for ${year} — generated against the ${SUPPORTED_YEARS.join('/')} form; re-check when the ${year} schema is added.`);
+    warnings.push(`No bundled TaxisNet schema for ${year} — generated against the 2024 form; re-check when the ${year} schema is added.`);
+  } else if (PROVISIONAL_YEARS.includes(year)) {
+    warnings.push(`${year} is generated against the 2024 schema (no separate ${year} XSD published yet) — re-check once the ${year} schema lands.`);
   }
 
   const { tic, flat, grids } = collectFields(inputData, formType);

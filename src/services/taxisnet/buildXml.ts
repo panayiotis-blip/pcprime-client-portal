@@ -7,7 +7,12 @@ import { fmtByKind, formCode, xmlEscape } from './format';
 import type { TaxReturnFormType } from './format';
 
 const MOF_NS = 'http://www.mof.gov.cy';
-export const SUPPORTED_YEARS = [2024];
+// 2024 has a published XSD. 2025 has no separate schema yet — we reuse the 2024
+// key set on the assumption the form is unchanged; the version string still
+// reflects the selected year (e.g. "2025-1.0"). Differences get fixed as found.
+export const SUPPORTED_YEARS = [2024, 2025];
+const PROVISIONAL_YEARS = [2025];
+export { PROVISIONAL_YEARS };
 const versionFor = (year: number) => `${SUPPORTED_YEARS.includes(year) ? year : 2024}-1.0`;
 
 const resolve = (obj: any, path: string): unknown =>
