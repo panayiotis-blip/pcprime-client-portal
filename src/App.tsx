@@ -51,6 +51,7 @@ import Inbox from './components/Admin/Inbox';
 import FirmEmailSettings from './components/Admin/FirmEmailSettings';
 import BulkEmail from './components/Admin/BulkEmail';
 import RequestTaxInfo from './components/Admin/RequestTaxInfo';
+import ClientIntakeReview from './components/Admin/ClientIntakeReview';
 import MyCompany from './components/Client/MyCompany';
 import MyCustomers from './components/Client/MyCustomers';
 import SalesInvoices from './components/Client/SalesInvoices';
@@ -148,6 +149,7 @@ function AuthedApp() {
             <Route path="/settings/firm-email" element={<FirmEmailSettings />} />
             <Route path="/bulk-email" element={<BulkEmail />} />
             <Route path="/request-tax-info" element={<RequestTaxInfo />} />
+            <Route path="/onboarding-review" element={<ClientIntakeReview />} />
             <Route path="/billing" element={<InvoicesList />} />
             <Route path="/billing/recurring" element={<RecurringInvoices />} />
             <Route path="/billing/age-analysis" element={<AgeAnalysis />} />
