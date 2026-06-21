@@ -114,6 +114,7 @@ const CLIENT_GROUPS: NavGroup[] = [
       { path: '/my-deadlines', label: 'Deadlines',   icon: '⏰' },
       { path: '/documents',    label: 'Documents',   icon: '⊟' },
       { path: '/my-messages',  label: 'Messages',    icon: '✉' },
+      { path: '/my-emails',    label: 'Inbox',       icon: '📥' },
     ],
   },
 ];

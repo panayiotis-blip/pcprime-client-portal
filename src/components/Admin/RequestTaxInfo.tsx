@@ -93,6 +93,7 @@ export default function RequestTaxInfo() {
       try {
         await api.sendViaOutlook({ from_firm: true, to: r.email!, subject: subj, body: text, html });
         sent++;
+        api.logOutboundClientEmail(r.id, { subject: subj, html, plain: text, recipients: [r.email!] }).catch(() => {});
       } catch (err: any) {
         fails.push(`${r.name}: ${err.message}`);
       }

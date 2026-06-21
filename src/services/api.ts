@@ -3940,6 +3940,30 @@ export const api = {
     return data || [];
   },
 
+  // Record an outbound firm email on a client's record so it shows in their
+  // portal Inbox (read-only). Best-effort — callers shouldn't fail a send if
+  // logging fails. (migration 121)
+  async logOutboundClientEmail(clientId: number, p: { subject?: string; html?: string; plain?: string; recipients?: string[] }) {
+    const { error } = await supabase.rpc('log_outbound_client_email', {
+      p_client_id: clientId,
+      p_subject: p.subject ?? null,
+      p_html: p.html ?? null,
+      p_plain: p.plain ?? null,
+      p_recipients: p.recipients ?? [],
+    });
+    if (error) throw new Error(error.message);
+  },
+
+  // Client-portal: list the signed-in client's own emails (RLS scopes to theirs).
+  async getMyEmails() {
+    const { data, error } = await supabase
+      .from('client_emails')
+      .select('id, client_id, direction, sender_email, sender_name, subject, received_at, attachment_count')
+      .order('received_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   async getClientEmailAttachmentSignedUrl(storagePath: string, expiresInSeconds = 60): Promise<string> {
     const { data, error } = await supabase.storage
       .from('client-email-attachments')

@@ -101,6 +101,8 @@ export default function BulkEmail() {
           attachments: attachment ? [attachment] : undefined,
         });
         sent++;
+        // Record on the client's portal Inbox (read-only) so they can see it.
+        api.logOutboundClientEmail(r.id, { subject: subj, html, plain: text, recipients: [r.email!] }).catch(() => {});
       } catch (err: any) {
         fails.push(`${r.name}: ${err.message}`);
       }

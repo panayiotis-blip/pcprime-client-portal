@@ -46,6 +46,7 @@ import SalesReports from './components/Billing/SalesReports';
 import MyBilling from './components/Client/MyBilling';
 import MyDeadlines from './components/Client/MyDeadlines';
 import MyMessages from './components/Client/MyMessages';
+import MyEmails from './components/Client/MyEmails';
 import MessagesInbox from './components/Admin/MessagesInbox';
 import Inbox from './components/Admin/Inbox';
 import FirmEmailSettings from './components/Admin/FirmEmailSettings';
@@ -133,6 +134,7 @@ function AuthedApp() {
             <Route path="/my-billing" element={<MyBilling />} />
             <Route path="/my-deadlines" element={<MyDeadlines />} />
             <Route path="/my-messages" element={<MyMessages />} />
+            <Route path="/my-emails" element={<MyEmails />} />
             <Route path="/my-company" element={<MyCompany />} />
             <Route path="/my-customers" element={<MyCustomers />} />
             <Route path="/sales" element={<SalesInvoices />} />
