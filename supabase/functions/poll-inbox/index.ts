@@ -167,7 +167,8 @@ async function listSinceCursor(token: string, startHistoryId: string): Promise<{
   let pageToken = '';
   let newestHistoryId = startHistoryId;
   do {
-    const qs = new URLSearchParams({ startHistoryId, historyTypes: 'messageAdded', labelId: 'INBOX' });
+    // No labelId filter → capture messages added to ANY folder (Inbox, Sent, …).
+    const qs = new URLSearchParams({ startHistoryId, historyTypes: 'messageAdded' });
     if (pageToken) qs.set('pageToken', pageToken);
     const data = await gmailGet(`/history?${qs.toString()}`, token);
     if (data.historyId) newestHistoryId = String(data.historyId);
@@ -185,7 +186,8 @@ async function listSeed(token: string): Promise<{ ids: string[]; newestHistoryId
   const ids = new Set<string>();
   let pageToken = '';
   do {
-    const qs = new URLSearchParams({ labelIds: 'INBOX', q: SEED_QUERY, maxResults: '100' });
+    // All folders incl. Spam/Trash; no labelIds filter so Sent is included too.
+    const qs = new URLSearchParams({ q: SEED_QUERY, maxResults: '100', includeSpamTrash: 'true' });
     if (pageToken) qs.set('pageToken', pageToken);
     const data = await gmailGet(`/messages?${qs.toString()}`, token);
     for (const m of data.messages || []) if (m.id) ids.add(m.id);
@@ -234,6 +236,7 @@ async function processMessage(messageId: string, token: string): Promise<'stored
       body_plain:       acc.plain || null,
       received_at:      receivedAt,
       has_attachments:  acc.attachments.length > 0,
+      label_ids:        Array.isArray(msg.labelIds) ? msg.labelIds : [],
     })
     .select('id')
     .single();

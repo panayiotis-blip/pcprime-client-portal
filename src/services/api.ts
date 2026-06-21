@@ -2735,7 +2735,7 @@ export const api = {
   // Read-only in the app: staff view incoming mail; replies happen in Outlook.
   async getInboxEmails(opts?: { limit?: number; unreadOnly?: boolean }) {
     let q = supabase.from('inbox_emails')
-      .select('id, gmail_thread_id, from_email, from_name, subject, snippet, received_at, has_attachments, is_read')
+      .select('id, gmail_thread_id, from_email, from_name, to_emails, label_ids, subject, snippet, received_at, has_attachments, is_read')
       .order('received_at', { ascending: false })
       .limit(opts?.limit ?? 100);
     if (opts?.unreadOnly) q = q.eq('is_read', false);
