@@ -10,7 +10,7 @@ import { useApp } from '../../context/AppContext';
 type Sub = {
   id: number; token: string; client_id: number | null; mode: string; status: string;
   payload: any; prefill: any; notes: string | null;
-  created_at: string; submitted_at: string | null;
+  created_at: string; sent_at: string | null; submitted_at: string | null;
 };
 
 // Core payload-key -> client column mappings that approve can apply directly.
@@ -50,11 +50,56 @@ export default function ClientIntakeReview() {
   const { clients } = useApp();
   const [rows, setRows] = useState<Sub[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'submitted' | 'all'>('submitted');
+  const [tab, setTab] = useState<'submitted' | 'sent' | 'all'>('submitted');
   // Link generator
   const [linkClient, setLinkClient] = useState<string>('');
   const [newLink, setNewLink] = useState<string>('');
   const [linkBusy, setLinkBusy] = useState(false);
+
+  // Bulk send
+  const DEFAULT_SUBJECT = 'Please confirm your details are up to date';
+  const DEFAULT_MSG =
+    'Dear {name},\n\nAs part of keeping your records up to date, please review and confirm your details using your secure link below:\n\n{link}\n\nIt only takes a few minutes. If anything is out of date, please correct it and submit.\n\nKind regards,\nPC Prime & Calculate Consultants Ltd';
+  const [bulkSel, setBulkSel] = useState<Set<number>>(new Set());
+  const [bulkSearch, setBulkSearch] = useState('');
+  const [bulkSubj, setBulkSubj] = useState(DEFAULT_SUBJECT);
+  const [bulkMsg, setBulkMsg] = useState(DEFAULT_MSG);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState('');
+  const [bulkResult, setBulkResult] = useState<{ sent: number; fails: string[] } | null>(null);
+
+  const firstEmail = (v: any) => (Array.isArray(v) ? v[0] : v) || '';
+  const mailable = useMemo(() => (clients as any[]).filter((c) => firstEmail(c.email)), [clients]);
+  const bulkShown = useMemo(() => {
+    const q = bulkSearch.trim().toLowerCase();
+    if (!q) return mailable;
+    return mailable.filter((c) => (c.name || '').toLowerCase().includes(q) || (c.client_code || '').toLowerCase().includes(q));
+  }, [mailable, bulkSearch]);
+  const toggleBulk = (id: number) => setBulkSel((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const sendBulk = async () => {
+    const recips = mailable.filter((c) => bulkSel.has(c.id));
+    if (!recips.length) { alert('Select at least one client.'); return; }
+    if (!bulkSubj.trim() || !bulkMsg.includes('{link}')) { alert('Subject required, and the message must include {link}.'); return; }
+    if (!confirm(`Send the onboarding/refresh request to ${recips.length} client(s) from info@?`)) return;
+    setBulkBusy(true); setBulkResult(null);
+    let sent = 0; const fails: string[] = [];
+    for (let i = 0; i < recips.length; i++) {
+      const c = recips[i];
+      setBulkProgress(`Sending ${i + 1} of ${recips.length}…`);
+      try {
+        const { token } = await api.createClientIntake({ clientId: c.id, mode: 'refresh', expiresInDays: 30 });
+        const url = `${window.location.origin}/client-intake/${token}`;
+        const subj = bulkSubj.replace(/\{name\}/gi, c.name);
+        const text = bulkMsg.replace(/\{name\}/gi, c.name).replace(/\{link\}/gi, url);
+        const html = text.split('\n').map((l) => `<p>${l || '&nbsp;'}</p>`).join('').replace(url, `<a href="${url}">${url}</a>`);
+        await api.sendViaOutlook({ from_firm: true, to: firstEmail(c.email), subject: subj, body: text, html });
+        api.logOutboundClientEmail(c.id, { subject: subj, html, plain: text, recipients: [firstEmail(c.email)] }).catch(() => {});
+        sent++;
+      } catch (e: any) { fails.push(`${c.name}: ${e.message}`); }
+    }
+    setBulkProgress(''); setBulkBusy(false); setBulkSel(new Set()); setBulkResult({ sent, fails }); load();
+  };
 
   const createLink = async () => {
     setLinkBusy(true); setNewLink('');
@@ -80,9 +125,21 @@ export default function ClientIntakeReview() {
   useEffect(load, []);
 
   const shown = useMemo(
-    () => rows.filter((r) => (tab === 'submitted' ? r.status === 'submitted' : true)),
+    () => rows.filter((r) =>
+      tab === 'submitted' ? r.status === 'submitted'
+        : tab === 'sent' ? r.status === 'pending'
+        : true),
     [rows, tab],
   );
+
+  // Follow-up due: requested over a year ago and never replied, or last
+  // approved over a year ago (annual refresh cycle).
+  const followUpDue = (r: Sub): boolean => {
+    const ref = r.submitted_at || r.created_at;
+    if (!ref) return false;
+    return (Date.now() - new Date(ref).getTime()) > 365 * 864e5;
+  };
+  const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-GB') : '—');
 
   const openReview = async (s: Sub) => {
     setSel(s); setLive(null);
@@ -202,13 +259,51 @@ export default function ClientIntakeReview() {
         )}
       </div>
 
+      {/* Bulk send onboarding / refresh requests */}
+      <details className="card" style={{ padding: 12, marginBottom: 14 }}>
+        <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#1a365d' }}>
+          Send onboarding / refresh requests to many clients
+        </summary>
+        <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 14, marginTop: 12 }}>
+          <div>
+            <input className="form-input" placeholder="Search clients…" value={bulkSearch} onChange={(e) => setBulkSearch(e.target.value)} style={{ marginBottom: 6 }} />
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>{bulkSel.size} selected</div>
+            <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 4 }}>
+              {bulkShown.length === 0 ? <div style={{ padding: 10, color: '#94a3b8', fontSize: 13 }}>No clients with an email.</div> :
+                bulkShown.map((c) => (
+                  <label key={c.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '5px 9px', borderBottom: '1px solid #f1f5f9', fontSize: 13, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={bulkSel.has(c.id)} onChange={() => toggleBulk(c.id)} />
+                    <span>{c.name}{c.client_code ? ` · ${c.client_code}` : ''}</span>
+                  </label>
+                ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input className="form-input" value={bulkSubj} onChange={(e) => setBulkSubj(e.target.value)} placeholder="Subject" />
+            <textarea className="form-input" rows={9} value={bulkMsg} onChange={(e) => setBulkMsg(e.target.value)} style={{ resize: 'vertical' }} />
+            <small style={{ color: '#64748b', fontSize: '0.78em' }}>Each client gets their own secure link. Use {'{name}'} and {'{link}'} (required). Sent from info@; the request date is recorded.</small>
+            {bulkProgress && <div style={{ fontSize: 13, color: '#1a365d' }}>{bulkProgress}</div>}
+            {bulkResult && (
+              <div style={{ fontSize: 13, padding: '8px 10px', borderRadius: 4, background: bulkResult.fails.length ? '#fef9c3' : '#dcfce7', whiteSpace: 'pre-wrap' }}>
+                Sent {bulkResult.sent} of {bulkResult.sent + bulkResult.fails.length}.{bulkResult.fails.length ? `\nFailed:\n${bulkResult.fails.join('\n')}` : ''}
+              </div>
+            )}
+            <div style={{ textAlign: 'right' }}>
+              <button className="btn btn-primary" onClick={sendBulk} disabled={bulkBusy || bulkSel.size === 0}>
+                {bulkBusy ? 'Sending…' : `Send to ${bulkSel.size} client${bulkSel.size === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        {(['submitted', 'all'] as const).map((t) => (
+        {(['submitted', 'sent', 'all'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             style={{ padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600,
               border: '1px solid ' + (tab === t ? '#1a365d' : '#cbd5e1'),
               background: tab === t ? '#1a365d' : '#fff', color: tab === t ? '#fff' : '#475569' }}>
-            {t === 'submitted' ? 'Awaiting review' : 'All'}
+            {t === 'submitted' ? 'Replied — to review' : t === 'sent' ? 'Awaiting client' : 'All'}
           </button>
         ))}
       </div>
@@ -217,13 +312,17 @@ export default function ClientIntakeReview() {
         <p style={{ color: '#94a3b8' }}>Nothing here.</p>
       ) : (
         <table className="export-table">
-          <thead><tr><th>Submitted</th><th>Mode</th><th>Client</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Client</th><th>Mode</th><th>Requested</th><th>Replied</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {shown.map((r) => (
               <tr key={r.id}>
-                <td>{r.submitted_at ? new Date(r.submitted_at).toLocaleString('en-GB') : '—'}</td>
+                <td>
+                  {r.payload?.name || r.prefill?.name || (r.client_id ? `#${r.client_id}` : 'New')}
+                  {followUpDue(r) && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, color: '#b45309', background: 'rgba(234,179,8,0.18)', padding: '1px 6px', borderRadius: 999 }}>follow-up due</span>}
+                </td>
                 <td>{r.mode === 'new' ? 'New client' : 'Refresh'}</td>
-                <td>{r.payload?.name || r.prefill?.name || (r.client_id ? `#${r.client_id}` : 'New')}</td>
+                <td>{fmt(r.sent_at || r.created_at)}</td>
+                <td>{r.submitted_at ? <span style={{ color: '#047857', fontWeight: 600 }}>{fmt(r.submitted_at)}</span> : <span style={{ color: '#94a3b8' }}>not yet</span>}</td>
                 <td>{pill(r.status)}</td>
                 <td>{r.status === 'submitted' && <button className="btn btn-primary btn-sm" onClick={() => openReview(r)}>Review</button>}</td>
               </tr>
