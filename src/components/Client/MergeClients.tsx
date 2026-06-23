@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
@@ -33,8 +34,10 @@ const COMPARE_FIELDS = [
 export default function MergeClients({ onDone }: { onDone?: () => void }) {
   const { clients, refreshClients, invoices } = useApp();
   const { runWith } = useMFAStepUp();
-  const [keepId, setKeepId] = useState<number>(0);
-  const [mergeId, setMergeId] = useState<number>(0);
+  // Pre-fill from ?keep=&merge= so the duplicate-finder can hand off a pair.
+  const [params] = useSearchParams();
+  const [keepId, setKeepId] = useState<number>(Number(params.get('keep')) || 0);
+  const [mergeId, setMergeId] = useState<number>(Number(params.get('merge')) || 0);
   const [selections, setSelections] = useState<Record<string, 'keep' | 'merge'>>({});
   const [searchKeep, setSearchKeep] = useState('');
   const [searchMerge, setSearchMerge] = useState('');
