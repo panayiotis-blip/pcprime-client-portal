@@ -41,6 +41,8 @@ const isEmployedish = (f: Record<string, any>) =>
 const isSelfEmployedish = (f: Record<string, any>) =>
   ['Self-employed', 'Both employed & self-employed'].includes(f.employment_status) ||
   f.client_category === 'Self-employed';
+const isMarriedish = (f: Record<string, any>) =>
+  ['Married', 'Civil partnership'].includes(f.marital_status);
 
 export const INTAKE_SECTIONS: IntakeSection[] = [
   {
@@ -92,6 +94,21 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
       { key: 'social_insurance_number', label: 'Social Insurance number', type: 'text', half: true, when: isIndividual },
       { key: 'employer_number', label: 'SI employer number (if you employ staff)', type: 'text', half: true },
       { key: 'tax_residency_country', label: 'Country of tax residence', type: 'text', half: true, placeholder: 'Cyprus' },
+    ],
+  },
+  {
+    id: 'family',
+    title: 'Family',
+    description: 'Helps us apply the right allowances and reliefs.',
+    when: isIndividual,
+    fields: [
+      { key: 'marital_status', label: 'Marital status', type: 'select',
+        options: ['Single', 'Married', 'Civil partnership', 'Divorced', 'Widowed'], half: true },
+      { key: 'spouse_name', label: "Spouse / partner's name", type: 'text', half: true, when: isMarriedish },
+      { key: 'spouse_tic', label: "Spouse / partner's TIC", type: 'text', half: true, when: isMarriedish },
+      { key: 'num_dependants', label: 'Number of dependent children', type: 'number', half: true },
+      { key: 'dependants_notes', label: 'Notes on dependants (ages, studying, etc.)', type: 'textarea',
+        when: (f) => Number(f.num_dependants) > 0 },
     ],
   },
   {
@@ -158,6 +175,16 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
     },
   },
   {
+    id: 'bank',
+    title: 'Bank details',
+    description: 'Used for tax refunds and payments. Optional, but it saves time later.',
+    fields: [
+      { key: 'bank_name', label: 'Bank name', type: 'text', half: true },
+      { key: 'bank_iban', label: 'IBAN', type: 'text', half: true, placeholder: 'CY00 0000 0000 0000 0000 0000 0000' },
+      { key: 'bank_swift', label: 'SWIFT / BIC', type: 'text', half: true },
+    ],
+  },
+  {
     id: 'kyc',
     title: 'Compliance (KYC / AML)',
     description: 'Required of us as regulated accountants. Your details are kept confidential.',
@@ -176,6 +203,8 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
     id: 'notes',
     title: 'Anything else',
     fields: [
+      { key: 'previous_accountant', label: 'Previous accountant / firm (if any)', type: 'text', half: true },
+      { key: 'previous_accountant_contact', label: 'Their contact (for handover)', type: 'text', half: true },
       { key: 'notes', label: 'Notes for us', type: 'textarea' },
     ],
   },

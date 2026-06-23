@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../services/api';
+import { api, type IntakeAttachment } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 
 // Staff review/approve queue for client onboarding submissions. Each submission
@@ -11,7 +11,15 @@ type Sub = {
   id: number; token: string; client_id: number | null; mode: string; status: string;
   payload: any; prefill: any; notes: string | null;
   created_at: string; sent_at: string | null; submitted_at: string | null;
+  attachments?: IntakeAttachment[];
 };
+
+const KIND_LABELS: Record<string, string> = {
+  id: 'ID card', passport: 'Passport', proof_of_address: 'Proof of address',
+  tax_doc: 'Tax document', other: 'Document',
+};
+// Files of these kinds belong in the restricted KYC bucket; the rest in general docs.
+const kycKinds = new Set(['id', 'passport', 'proof_of_address']);
 
 // Core payload-key -> client column mappings that approve can apply directly.
 const CORE: { k: string; col: string; label: string }[] = [
@@ -116,6 +124,7 @@ export default function ClientIntakeReview() {
   const [sel, setSel] = useState<Sub | null>(null);
   const [live, setLive] = useState<any | null>(null);
   const [apply, setApply] = useState<Record<string, boolean>>({});
+  const [invite, setInvite] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = () => {
@@ -156,6 +165,9 @@ export default function ClientIntakeReview() {
       if (sub && sub !== cur) next[c.k] = true;
     }
     setApply(next);
+    // Default-on for brand-new clients (they have no login yet); off for an
+    // existing client, who likely already has portal access.
+    setInvite(!s.client_id);
   };
 
   const diffs = useMemo(() => {
@@ -178,6 +190,15 @@ export default function ClientIntakeReview() {
 
   const extrasNote = () =>
     extras.map(([k, v]) => `${k}: ${Array.isArray(v) ? JSON.stringify(v) : v}`).join('\n');
+
+  const openAttachment = async (a: IntakeAttachment) => {
+    try {
+      const url = await api.intakeAttachmentUrl(a.storage_path);
+      window.open(url, '_blank', 'noopener');
+    } catch (e: any) {
+      alert('Could not open the file: ' + e.message);
+    }
+  };
 
   const approve = async () => {
     if (!sel) return;
@@ -206,7 +227,47 @@ export default function ClientIntakeReview() {
           });
         } catch { /* note is best-effort */ }
       }
+      // File any attachments into the client's permanent Documents (KYC docs go
+      // to the restricted bucket). Best-effort: a failure here doesn't block the
+      // approval — the files remain in the intake bucket for manual handling.
+      if (clientId && sel.attachments?.length) {
+        const month = new Date().toISOString().slice(0, 7); // YYYY-MM
+        for (const a of sel.attachments) {
+          try {
+            const url = await api.intakeAttachmentUrl(a.storage_path);
+            const blob = await (await fetch(url)).blob();
+            const file = new File([blob], a.name, { type: a.mime || blob.type });
+            await api.uploadDocumentsToFolder({
+              clientId, docType: 'document',
+              category: kycKinds.has(a.kind) ? 'kyc' : 'other',
+              month, files: [file],
+              notes: `From onboarding submission — ${KIND_LABELS[a.kind] || a.kind}`,
+            });
+          } catch { /* leave it in the intake bucket if the copy fails */ }
+        }
+      }
+
+      // Optionally give the client portal access — emails a secure setup link
+      // (reuses the same invite path as the Applications approve flow). This is
+      // best-effort: approval still stands if the invite can't be sent.
+      let inviteWarning = '';
+      if (invite && clientId) {
+        const email = String(
+          sel.payload?.email || (Array.isArray(live?.email) ? live.email[0] : live?.email) || '',
+        ).trim();
+        const full_name = String(patch.name || sel.payload?.name || live?.name || '').trim() || undefined;
+        if (!email) {
+          inviteWarning = 'No email address was on the submission, so the portal invite was not sent.';
+        } else {
+          try {
+            await api.inviteClient({ email, full_name, client_id: clientId });
+          } catch (e: any) {
+            inviteWarning = `Client approved, but the portal invite could not be sent: ${e.message}`;
+          }
+        }
+      }
       await api.reviewClientIntake(sel.id, { status: 'approved' });
+      if (inviteWarning) alert(inviteWarning);
       setSel(null); load();
     } catch (e: any) {
       alert('Approve failed: ' + e.message);
@@ -372,7 +433,30 @@ export default function ClientIntakeReview() {
               </>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+            {sel.attachments && sel.attachments.length > 0 && (
+              <>
+                <h4 style={{ margin: '16px 0 6px', color: '#475569' }}>Attachments (filed to the client's Documents on approve)</h4>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 6 }}>
+                  {sel.attachments.map((a, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 10px', fontSize: 13, borderBottom: i < sel.attachments!.length - 1 ? '1px solid #f1f5f9' : undefined }}>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                      <span style={{ color: '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
+                        {KIND_LABELS[a.kind] || a.kind} · {(a.size / 1048576).toFixed(1)} MB
+                      </span>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openAttachment(a)}>View</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 18, fontSize: 13.5, color: '#475569' }}>
+              <input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} />
+              Invite this client to the portal — emails a secure link to set up their login
+              {sel.client_id ? <span style={{ color: '#94a3b8' }}> (skip if they already have one)</span> : null}
+            </label>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
               <button className="btn btn-secondary" onClick={() => setSel(null)} disabled={busy}>Cancel</button>
               <button className="btn btn-secondary" style={{ color: '#b91c1c' }} onClick={reject} disabled={busy}>Reject</button>
               <button className="btn btn-primary" onClick={approve} disabled={busy}>

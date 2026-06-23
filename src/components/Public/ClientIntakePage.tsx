@@ -17,6 +17,17 @@ const C = {
 // Greek email may arrive as text[]; show the first for editing.
 const firstEmail = (v: any) => (Array.isArray(v) ? v[0] : v) || '';
 
+// Attachment categories the client can label each uploaded file with.
+const DOC_KINDS = [
+  { value: 'id', label: 'ID card' },
+  { value: 'passport', label: 'Passport' },
+  { value: 'proof_of_address', label: 'Proof of address' },
+  { value: 'tax_doc', label: 'Tax document' },
+  { value: 'other', label: 'Other' },
+];
+
+type PendingFile = { id: string; file: File; kind: string };
+
 export default function ClientIntakePage() {
   const { token } = useParams<{ token: string }>();
   const [loading, setLoading] = useState(true);
@@ -27,6 +38,8 @@ export default function ClientIntakePage() {
   const [lists, setLists] = useState<Record<string, any[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [files, setFiles] = useState<PendingFile[]>([]);
+  const [uploadMsg, setUploadMsg] = useState('');
 
   useEffect(() => {
     if (!token) { setError('Invalid link.'); setLoading(false); return; }
@@ -58,15 +71,36 @@ export default function ClientIntakePage() {
   const setItem = (k: string, i: number, fk: string, v: any) =>
     setLists((p) => ({ ...p, [k]: (p[k] || []).map((it, idx) => (idx === i ? { ...it, [fk]: v } : it)) }));
 
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const next: PendingFile[] = Array.from(list).map((file, i) => ({
+      id: `${Date.now()}_${i}_${file.name}`, file, kind: 'other',
+    }));
+    setFiles((p) => [...p, ...next]);
+  };
+  const removeFile = (id: string) => setFiles((p) => p.filter((f) => f.id !== id));
+  const setFileKind = (id: string, kind: string) =>
+    setFiles((p) => p.map((f) => (f.id === id ? { ...f, kind } : f)));
+
   const submit = async () => {
     if (!token) return;
     setSubmitting(true);
+    setError('');
     try {
+      // Upload attachments first — each is validated and appended to the
+      // submission server-side. If one fails we stop so the client can retry
+      // (nothing is submitted yet).
+      for (let i = 0; i < files.length; i++) {
+        setUploadMsg(`Uploading document ${i + 1} of ${files.length}…`);
+        await api.uploadIntakeFile(token, files[i].file, files[i].kind);
+      }
+      setUploadMsg('');
       const payload = { ...form, ...lists, _submitted_at: new Date().toISOString() };
       const res = await api.submitClientIntake(token, payload);
       if (!res.ok) { setError(res.error || 'Could not submit.'); return; }
       setDone(true);
     } catch (e: any) {
+      setUploadMsg('');
       setError(e.message);
     } finally {
       setSubmitting(false);
@@ -180,7 +214,41 @@ export default function ClientIntakePage() {
 
       {sections.map(section)}
 
+      {/* Documents / attachments — uploaded on submit via the intake-upload function */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+        <h3 style={{ color: C.navy, margin: '0 0 2px', fontSize: 18 }}>Documents</h3>
+        <p style={{ color: C.dim, fontSize: 13, margin: '0 0 14px' }}>
+          Please attach a copy of your ID or passport, and any other relevant documents
+          (proof of address, tax letters…). PDF, JPG, PNG or HEIC, up to 10&nbsp;MB each.
+        </p>
+
+        {files.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            {files.map((f) => (
+              <div key={f.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 8 }}>
+                <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file.name}</span>
+                <span style={{ fontSize: 12, color: C.dim, whiteSpace: 'nowrap' }}>{(f.file.size / 1048576).toFixed(1)} MB</span>
+                <select value={f.kind} onChange={(e) => setFileKind(f.id, e.target.value)}
+                  style={{ padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 13 }}>
+                  {DOC_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                </select>
+                <button type="button" onClick={() => removeFile(f.id)}
+                  style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: 13 }}>Remove</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label style={{ display: 'inline-block', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 14px', cursor: 'pointer', fontSize: 13, color: C.navy, fontWeight: 600 }}>
+          + Add document(s)
+          <input type="file" multiple accept=".pdf,image/png,image/jpeg,image/heic,image/heif"
+            style={{ display: 'none' }}
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+        </label>
+      </div>
+
       {error && <p style={{ color: '#b91c1c', fontSize: 14 }}>{error}</p>}
+      {uploadMsg && <p style={{ color: C.navy, fontSize: 13, textAlign: 'right' }}>{uploadMsg}</p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8, marginBottom: 40 }}>
         <button onClick={submit} disabled={submitting}
           style={{ background: C.navy, color: '#fff', border: 'none', borderRadius: 8, padding: '12px 28px', fontSize: 15, fontWeight: 600, cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.7 : 1 }}>

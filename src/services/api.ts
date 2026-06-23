@@ -69,6 +69,16 @@ export interface ClientAddress {
   updated_at: string;
 }
 
+// One file attached to a client onboarding submission (migration 123).
+export interface IntakeAttachment {
+  name: string;
+  mime: string;
+  size: number;
+  kind: string;            // 'id' | 'passport' | 'proof_of_address' | 'other' | …
+  storage_path: string;
+  uploaded_at: string;
+}
+
 export interface AuthUser {
   id: string;                 // auth.users.id (uuid)
   username: string;
@@ -2667,6 +2677,29 @@ export const api = {
       .update({ ...patch, reviewed_by: session?.user?.id || null, reviewed_at: new Date().toISOString() })
       .eq('id', id);
     if (error) throw new Error(error.message);
+  },
+  // Public (token-keyed) — upload an onboarding attachment via the intake-upload
+  // edge function (anon can't write storage directly; the function validates the
+  // token with the service role and appends the file to the submission).
+  async uploadIntakeFile(token: string, file: File, kind: string) {
+    const fd = new FormData();
+    fd.append('token', token);
+    fd.append('kind', kind);
+    fd.append('file', file);
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/intake-upload`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_ANON_KEY }, // no Content-Type — the browser sets the multipart boundary
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({ ok: false, error: 'Upload failed.' }));
+    if (!data.ok) throw new Error(data.error || 'Upload failed.');
+    return data.file as IntakeAttachment;
+  },
+  // Staff-side — short-lived signed URL to view/download an intake attachment.
+  async intakeAttachmentUrl(storagePath: string) {
+    const { data, error } = await supabase.storage.from('intake-attachments').createSignedUrl(storagePath, 300);
+    if (error) throw new Error(error.message);
+    return data.signedUrl;
   },
 
   // --------- User SMTP settings (per-user Outlook credentials for sending email) ---------

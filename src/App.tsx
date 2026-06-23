@@ -78,6 +78,7 @@ import ClientIntakePage from './components/Public/ClientIntakePage';
 import Applications from './components/Admin/Applications';
 import MFAChallenge from './components/Auth/MFAChallenge';
 import ForcedMfaSetup from './components/Auth/ForcedMfaSetup';
+import ClientMfaNudge from './components/Auth/ClientMfaNudge';
 import TermsGate from './components/Auth/TermsGate';
 import { CURRENT_TOS_VERSION } from './components/Auth/terms';
 import { isStaffRole } from './services/api';
@@ -104,6 +105,8 @@ function AuthedApp() {
         <ViewPreferencesProvider>
         <DashboardLayoutProvider>
         <MFAStepUpProvider>
+        {/* Non-blocking 2FA nudge for clients without an authenticator. */}
+        <ClientMfaNudge />
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
