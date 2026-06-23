@@ -54,6 +54,16 @@ type InboxDetail = InboxRow & {
   attachments: Attachment[];
 };
 
+type SyncStatus = {
+  mailbox: string;
+  last_run_at: string | null;
+  last_error: string | null;
+  has_cursor: boolean;
+  message_count: number;
+  unread_count: number;
+  latest_received_at: string | null;
+};
+
 const fmtDateTime = (iso: string) => formatDateTime(iso, '');
 const fmtSize = (bytes: number | null) => {
   if (bytes == null) return '';
@@ -74,6 +84,9 @@ export default function Inbox() {
   const [assignClientId, setAssignClientId] = useState<number | ''>('');
   const [assigning, setAssigning] = useState(false);
   const [assignMsg, setAssignMsg] = useState<string | null>(null);
+  const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
   const clientOptions = useMemo(
     () => (clients as any[]).map(c => ({ value: c.id, label: c.name, sublabel: c.client_code || '' })),
@@ -106,8 +119,24 @@ export default function Inbox() {
     } finally {
       setLoading(false);
     }
+    // Poller health is non-blocking — never let it break the list view.
+    api.getInboxSyncStatus().then(setSync).catch(() => {});
   };
   useEffect(() => { load(); }, []);
+
+  const handleSync = async () => {
+    setSyncing(true); setSyncMsg(null);
+    try {
+      const r = await api.triggerInboxSync();
+      setSyncMsg(`Synced: ${r.stored} new, ${r.duplicate} duplicate${r.failed ? `, ${r.failed} failed` : ''}.`);
+      await load();
+    } catch (e: any) {
+      setSyncMsg('Sync failed: ' + e.message);
+      api.getInboxSyncStatus().then(setSync).catch(() => {});
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const unread = useMemo(() => emails.filter(e => !e.is_read).length, [emails]);
 
@@ -189,12 +218,30 @@ export default function Inbox() {
           <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
             {loading ? 'Loading…' : '↻ Refresh'}
           </button>
+          <button className="btn btn-primary btn-sm" onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
+            {syncing ? 'Syncing…' : '⟳ Sync now'}
+          </button>
         </div>
       </div>
 
-      <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 10px' }}>
+      <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 6px' }}>
         A mirror of the <strong>info@primeandcalculate.com</strong> mailbox — Inbox, Sent, Spam &amp; Trash — visible to all staff. Read-only; reply from Outlook.
       </p>
+
+      {/* Poller health — last run / last error, plus the manual-sync result. */}
+      <div style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 10px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {sync ? (
+          sync.last_run_at
+            ? <span>Last synced <strong>{fmtDateTime(sync.last_run_at)}</strong> · {sync.message_count} message{sync.message_count === 1 ? '' : 's'}</span>
+            : <span style={{ color: '#b45309' }}>⚠ Never synced — the info@ mailbox isn't connected yet.</span>
+        ) : <span>Sync status unavailable.</span>}
+        {sync?.last_error && (
+          <span style={{ color: '#b91c1c' }}>· Last error: {sync.last_error}</span>
+        )}
+        {syncMsg && (
+          <span style={{ color: syncMsg.startsWith('Sync failed') ? '#b91c1c' : '#15803d' }}>· {syncMsg}</span>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
         {FOLDER_TABS.map(t => {

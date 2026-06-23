@@ -15,7 +15,8 @@
 // The cursor only advances on a clean run.
 //
 // AUTH
-//   - Caller: requires the CRON_SECRET as the `x-cron-secret` header.
+//   - Caller: EITHER the CRON_SECRET as the `x-cron-secret` header (scheduled
+//     runs) OR a logged-in staff member's JWT (the in-app "Sync now" button).
 //     Deploy with gateway "Verify JWT" OFF.
 //   - Gmail: OAuth refresh-token grant for the info@ mailbox, scope
 //     gmail.readonly (read-only). NO catch-all routing needed — this reads the
@@ -44,8 +45,13 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 // ---------------- helpers ----------------
 
@@ -274,9 +280,25 @@ async function processMessage(messageId: string, token: string): Promise<'stored
 // ---------------- entry point ----------------
 
 Deno.serve(async (req: Request) => {
-  if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) {
-    return json({ ok: false, error: 'Unauthorized.' }, 401);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  // Auth: cron secret (scheduled) OR a logged-in staff member (manual "Sync now").
+  let trigger: 'cron' | 'manual' = 'cron';
+  const cronOk = !!CRON_SECRET && req.headers.get('x-cron-secret') === CRON_SECRET;
+  if (!cronOk) {
+    const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    const { data: { user } } = token
+      ? await admin.auth.getUser(token)
+      : { data: { user: null } } as any;
+    let staffOk = false;
+    if (user) {
+      const { data: prof } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
+      staffOk = !!prof && ['owner', 'supervisor', 'admin', 'staff'].includes(prof.role);
+    }
+    if (!staffOk) return json({ ok: false, error: 'Unauthorized.' }, 401);
+    trigger = 'manual';
   }
+
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN || !GMAIL_ADDRESS) {
     return json({ ok: false, error: 'Gmail is not configured — missing GOOGLE_* / GMAIL_ADDRESS secrets.' }, 500);
   }
@@ -312,7 +334,7 @@ Deno.serve(async (req: Request) => {
       updated_at:  new Date().toISOString(),
     }, { onConflict: 'mailbox' });
 
-    return json({ ok: true, mode, scanned: ids.length, stored, duplicate, failed });
+    return json({ ok: true, trigger, mode, scanned: ids.length, stored, duplicate, failed });
   } catch (e) {
     const message = (e as Error)?.message || String(e);
     console.error('poll-inbox run failed:', message);

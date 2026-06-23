@@ -2865,6 +2865,36 @@ export const api = {
     if (error) throw new Error(error.message);
     return count || 0;
   },
+  // Poller health (last run / last error) — email_sync_state is service-role-only,
+  // exposed to staff via the SECURITY DEFINER RPC from migration 124.
+  async getInboxSyncStatus(mailbox = 'info@primeandcalculate.com') {
+    const { data, error } = await supabase.rpc('get_inbox_sync_status', { p_mailbox: mailbox });
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row || null) as null | {
+      mailbox: string;
+      last_run_at: string | null;
+      last_error: string | null;
+      has_cursor: boolean;
+      message_count: number;
+      unread_count: number;
+      latest_received_at: string | null;
+    };
+  },
+  // Manually run the poller now (the "Sync now" button). Goes through poll-inbox's
+  // staff-JWT path; returns the live counts so the user sees the result/error.
+  async triggerInboxSync() {
+    const { data, error } = await supabase.functions.invoke('poll-inbox', { body: {} });
+    if (error) {
+      // Surface the function's own error message when available (FunctionsHttpError
+      // carries the Response in .context), otherwise the generic non-2xx message.
+      let msg = error.message;
+      try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    if (data && data.ok === false) throw new Error(data.error || 'Sync failed');
+    return data as { ok: true; trigger: string; mode: string; scanned: number; stored: number; duplicate: number; failed: number };
+  },
   // File a shared-inbox email against a client (Emails tab + Documents). The
   // copy/cross-bucket work happens server-side in the assign-inbox-email fn.
   async assignInboxEmailToClient(inboxEmailId: number, clientId: number) {
