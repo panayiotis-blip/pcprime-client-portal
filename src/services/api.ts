@@ -2853,6 +2853,30 @@ export const api = {
     const { error } = await supabase.from('inbox_emails').update({ is_read: read }).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  // All messages in one Gmail conversation (oldest first), for the threaded view.
+  async getInboxThread(gmailThreadId: string) {
+    const { data, error } = await supabase.from('inbox_emails')
+      .select('*, attachments:inbox_email_attachments(id, filename, mime_type, size_bytes, storage_path)')
+      .eq('gmail_thread_id', gmailThreadId)
+      .order('received_at', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  // Write-back to Gmail (mark read/unread, archive, trash, untrash) via gmail.modify;
+  // the Edge Function mirrors Gmail's resulting labels into inbox_emails.
+  async inboxAction(action: 'read' | 'unread' | 'archive' | 'trash' | 'untrash', ids: number | number[]) {
+    const inbox_email_ids = Array.isArray(ids) ? ids : [ids];
+    const { data, error } = await supabase.functions.invoke('inbox-action', { body: { action, inbox_email_ids } });
+    if (error) {
+      let msg = error.message;
+      try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    if (data && data.ok === false && (!data.results || !data.results.length)) {
+      throw new Error(data.error || (data.errors && data.errors[0]?.error) || 'Action failed');
+    }
+    return data as { ok: boolean; action: string; results: { id: number; label_ids: string[]; is_read: boolean }[]; errors?: { id: number; error: string }[] };
+  },
   async getInboxAttachmentUrl(storagePath: string) {
     const { data, error } = await supabase.storage
       .from('inbox-attachments').createSignedUrl(storagePath, 120);
