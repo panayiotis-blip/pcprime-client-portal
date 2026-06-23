@@ -45,8 +45,9 @@ const STAFF_GROUPS: NavGroup[] = [
   {
     key: 'clients', label: 'Clients',
     items: [
-      { path: '/clients',     label: 'Clients',     icon: '⊡' },
-      { path: '/credentials', label: 'Credentials', icon: '🔑', requires: (u) => hasPermission(u, 'credentials.read') },
+      { path: '/clients',     label: 'Clients',         icon: '⊡' },
+      { path: '/clients/duplicates', label: 'Find Duplicates', icon: '⧉' },
+      { path: '/credentials', label: 'Credentials',     icon: '🔑', requires: (u) => hasPermission(u, 'credentials.read') },
     ],
   },
   {

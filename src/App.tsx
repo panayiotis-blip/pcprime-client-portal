@@ -14,6 +14,7 @@ import ClientManager from './components/Client/ClientManager';
 import ClientDetail from './components/Client/ClientDetail';
 import ClientCardPrint from './components/Client/ClientCardPrint';
 import SmartImport from './components/Admin/SmartImport';
+import DuplicateFinder from './components/Admin/DuplicateFinder';
 import TaxFilingsPage from './components/Admin/TaxFilingsPage';
 import UnlinkedDirectors from './components/Admin/UnlinkedDirectors';
 import CredentialsVault from './components/Admin/CredentialsVault';
@@ -116,6 +117,7 @@ function AuthedApp() {
             <Route path="/clients" element={<ClientManager />} />
             <Route path="/clients/deleted" element={<DeletedClients />} />
             <Route path="/clients/smart-import" element={<SmartImport />} />
+            <Route path="/clients/duplicates" element={<DuplicateFinder />} />
             <Route path="/clients/unlinked-directors" element={<UnlinkedDirectors />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
