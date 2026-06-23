@@ -2895,6 +2895,27 @@ export const api = {
     if (data && data.ok === false) throw new Error(data.error || 'Sync failed');
     return data as { ok: true; trigger: string; mode: string; scanned: number; stored: number; duplicate: number; failed: number };
   },
+  // Send mail FROM info@ via the Gmail API (compose / reply / forward). Threaded
+  // when reply_to_inbox_id is set. Sent message lands in Gmail's Sent folder and
+  // surfaces in the Inbox after the next poll.
+  async sendInboxEmail(payload: {
+    to: string[];
+    cc?: string[];
+    bcc?: string[];
+    subject: string;
+    body_html: string;
+    reply_to_inbox_id?: number;
+    attachments?: { filename: string; mime_type?: string; content_base64: string }[];
+  }) {
+    const { data, error } = await supabase.functions.invoke('inbox-send', { body: payload });
+    if (error) {
+      let msg = error.message;
+      try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    if (data && data.ok === false) throw new Error(data.error || 'Send failed');
+    return data as { ok: true; gmail_message_id?: string; gmail_thread_id?: string };
+  },
   // File a shared-inbox email against a client (Emails tab + Documents). The
   // copy/cross-bucket work happens server-side in the assign-inbox-email fn.
   async assignInboxEmailToClient(inboxEmailId: number, clientId: number) {

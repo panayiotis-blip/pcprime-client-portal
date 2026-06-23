@@ -72,6 +72,33 @@ const fmtSize = (bytes: number | null) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
+// The shared mailbox we send FROM — excluded from reply-all recipients.
+const INFO_ADDRESS = 'info@primeandcalculate.com';
+
+type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward';
+type ComposeState = {
+  mode: ComposeMode;
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  replyToInboxId?: number;
+  files: File[];
+};
+
+const stripHtml = (h: string | null) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const escapeHtml = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] || c));
+// Plain-text composer body → minimal HTML (pre-wrap keeps the user's line breaks).
+const textToHtml = (t: string) =>
+  `<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">${escapeHtml(t)}</div>`;
+const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1] || '');
+  r.onerror = reject;
+  r.readAsDataURL(file);
+});
+const dropPrefix = (subj: string | null, re: RegExp) => (subj || '').replace(re, '').trim();
+
 export default function Inbox() {
   const { clients } = useApp();
   const [emails, setEmails] = useState<InboxRow[]>([]);
@@ -87,6 +114,9 @@ export default function Inbox() {
   const [sync, setSync] = useState<SyncStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [compose, setCompose] = useState<ComposeState | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendErr, setSendErr] = useState<string | null>(null);
 
   const clientOptions = useMemo(
     () => (clients as any[]).map(c => ({ value: c.id, label: c.name, sublabel: c.client_code || '' })),
@@ -135,6 +165,78 @@ export default function Inbox() {
       api.getInboxSyncStatus().then(setSync).catch(() => {});
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // ---- Compose / reply / forward ----
+  const startCompose = () => { setSendErr(null); setCompose({ mode: 'new', to: '', cc: '', subject: '', body: '', files: [] }); };
+
+  const startReply = (all: boolean) => {
+    if (!open) return;
+    const o = open;
+    const cc = all
+      ? [...new Set([...(o.to_emails || []), ...(o.cc_emails || [])]
+          .map(e => e.toLowerCase())
+          .filter(e => e && e !== INFO_ADDRESS && e !== (o.from_email || '').toLowerCase()))]
+      : [];
+    const base = dropPrefix(o.subject, /^(re:\s*)+/i);
+    setSendErr(null);
+    setCompose({
+      mode: all ? 'replyAll' : 'reply',
+      to: o.from_email || '',
+      cc: cc.join(', '),
+      subject: base ? `Re: ${base}` : 'Re:',
+      body: '',
+      replyToInboxId: o.id,
+      files: [],
+    });
+  };
+
+  const startForward = () => {
+    if (!open) return;
+    const o = open;
+    const quoted =
+      `\n\n---------- Forwarded message ----------\n` +
+      `From: ${o.from_name ? `${o.from_name} <${o.from_email || ''}>` : (o.from_email || '')}\n` +
+      `Date: ${fmtDateTime(o.received_at)}\n` +
+      `Subject: ${o.subject || '(no subject)'}\n` +
+      `To: ${(o.to_emails || []).join(', ')}\n\n` +
+      `${o.body_plain || stripHtml(o.body_html) || ''}`;
+    const base = dropPrefix(o.subject, /^(fwd:\s*)+/i);
+    setSendErr(null);
+    setCompose({ mode: 'forward', to: '', cc: '', subject: base ? `Fwd: ${base}` : 'Fwd:', body: quoted, files: [] });
+  };
+
+  const handleSend = async () => {
+    if (!compose) return;
+    const to = compose.to.split(',').map(s => s.trim()).filter(Boolean);
+    const cc = compose.cc.split(',').map(s => s.trim()).filter(Boolean);
+    if (!to.length) { setSendErr('Add at least one recipient.'); return; }
+    setSending(true); setSendErr(null);
+    try {
+      const attachments = await Promise.all(compose.files.map(async f => ({
+        filename: f.name,
+        mime_type: f.type || 'application/octet-stream',
+        content_base64: await fileToBase64(f),
+      })));
+      await api.sendInboxEmail({
+        to, cc,
+        subject: compose.subject,
+        body_html: textToHtml(compose.body),
+        // Thread only on reply/reply-all; forward + new start a fresh thread.
+        reply_to_inbox_id: (compose.mode === 'reply' || compose.mode === 'replyAll') ? compose.replyToInboxId : undefined,
+        attachments,
+      });
+      setCompose(null);
+      setOpen(null);
+      setSyncMsg('Sent ✓ — pulling it into Sent…');
+      await api.triggerInboxSync().catch(() => {});
+      await load();
+      setSyncMsg('Sent ✓');
+    } catch (e: any) {
+      setSendErr(e.message);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -218,14 +320,17 @@ export default function Inbox() {
           <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
             {loading ? 'Loading…' : '↻ Refresh'}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
+          <button className="btn btn-secondary btn-sm" onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
             {syncing ? 'Syncing…' : '⟳ Sync now'}
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={startCompose} title="Compose a new email from info@">
+            ✏️ Compose
           </button>
         </div>
       </div>
 
       <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 6px' }}>
-        A mirror of the <strong>info@primeandcalculate.com</strong> mailbox — Inbox, Sent, Spam &amp; Trash — visible to all staff. Read-only; reply from Outlook.
+        The shared <strong>info@primeandcalculate.com</strong> mailbox — Inbox, Sent, Spam &amp; Trash — visible to all staff. Compose and reply here; sent mail threads back into Gmail.
       </p>
 
       {/* Poller health — last run / last error, plus the manual-sync result. */}
@@ -340,6 +445,15 @@ export default function Inbox() {
                   <div><strong>Received:</strong> {fmtDateTime(open.received_at)}</div>
                 </div>
 
+                {/* Reply / forward — sends FROM info@ via the Gmail API, threaded. */}
+                <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => startReply(false)}>↩ Reply</button>
+                  {((open.to_emails || []).length + (open.cc_emails || []).length > 1) && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => startReply(true)}>↩↩ Reply all</button>
+                  )}
+                  <button className="btn btn-secondary btn-sm" onClick={startForward}>➦ Forward</button>
+                </div>
+
                 {/* Save to a client folder (Emails tab + Documents) */}
                 <div style={{ marginTop: 10, padding: 10, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <strong style={{ fontSize: 13 }}>Save to client:</strong>
@@ -382,6 +496,69 @@ export default function Inbox() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {compose && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+          zIndex: 110, padding: '32px 16px', overflowY: 'auto',
+        }} onClick={() => !sending && setCompose(null)}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 720 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>
+                {compose.mode === 'forward' ? 'Forward' : compose.mode === 'new' ? 'New email' : 'Reply'}
+                <span style={{ fontSize: 13, fontWeight: 400, color: '#64748b' }}> — from {INFO_ADDRESS}</span>
+              </h3>
+              <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>✕</button>
+            </div>
+
+            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+              <label style={{ fontSize: 12.5, color: '#475569' }}>
+                To <span style={{ color: '#94a3b8' }}>(comma-separated)</span>
+                <input className="form-input" value={compose.to}
+                  onChange={e => setCompose({ ...compose, to: e.target.value })}
+                  placeholder="name@example.com" autoFocus />
+              </label>
+              <label style={{ fontSize: 12.5, color: '#475569' }}>
+                Cc
+                <input className="form-input" value={compose.cc}
+                  onChange={e => setCompose({ ...compose, cc: e.target.value })}
+                  placeholder="optional" />
+              </label>
+              <label style={{ fontSize: 12.5, color: '#475569' }}>
+                Subject
+                <input className="form-input" value={compose.subject}
+                  onChange={e => setCompose({ ...compose, subject: e.target.value })} />
+              </label>
+              <label style={{ fontSize: 12.5, color: '#475569' }}>
+                Message
+                <textarea className="form-input" value={compose.body}
+                  onChange={e => setCompose({ ...compose, body: e.target.value })}
+                  rows={10} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
+              </label>
+              <label style={{ fontSize: 12.5, color: '#475569' }}>
+                Attachments
+                <input type="file" multiple className="form-input"
+                  onChange={e => setCompose({ ...compose, files: Array.from(e.target.files || []) })} />
+              </label>
+              {compose.files.length > 0 && (
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  {compose.files.map(f => `${f.name} (${fmtSize(f.size)})`).join(', ')}
+                </div>
+              )}
+            </div>
+
+            {sendErr && <div style={{ marginTop: 8, fontSize: 13, color: '#b91c1c' }}>{sendErr}</div>}
+
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending}>
+                {sending ? 'Sending…' : '➤ Send'}
+              </button>
+            </div>
           </div>
         </div>
       )}
