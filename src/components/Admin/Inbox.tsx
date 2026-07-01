@@ -5,9 +5,10 @@ import { formatDateTime } from '../../services/dates';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
 
-// Shared firm inbox (info@primeandcalculate.com). Read-only: staff view
-// incoming mail captured by the poll-inbox Edge Function; replies happen in
-// Outlook. Mirrors the per-client ClientEmails view, minus per-client direction.
+// Shared firm inbox (info@primeandcalculate.com). Full two-way: staff view mail
+// captured by the poll-inbox Edge Function, and compose / reply / reply-all /
+// forward (inbox-send) plus read-unread / archive / trash (inbox-action) — all
+// synced back to Gmail. Mirrors the per-client ClientEmails view, minus per-client direction.
 
 type InboxRow = {
   id: number;

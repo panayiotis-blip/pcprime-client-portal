@@ -3,9 +3,9 @@
 -- Run in Supabase Dashboard → SQL Editor → New Query
 -- =============================================================
 -- A staff-wide view of the firm's general mailbox. The poll-inbox Edge
--- Function reads info@ via the Gmail API (read-only) and writes every INBOX
--- message here so the whole team can see incoming mail inside the portal
--- (replies still happen in Outlook). Service role writes; staff read.
+-- Function reads info@ via the Gmail API and writes every message here so the
+-- whole team can see it inside the portal; compose/reply and read/archive/trash
+-- go back to Gmail via inbox-send / inbox-action. Service role writes; staff read.
 --
 -- Cursor/high-watermark lives in public.email_sync_state (migration 114),
 -- keyed by mailbox = 'info@primeandcalculate.com'. No change needed here.
@@ -36,7 +36,7 @@ create index if not exists inbox_emails_received_idx
   on public.inbox_emails (received_at desc);
 
 comment on table public.inbox_emails is
-  'Shared firm inbox (info@). Written only by the poll-inbox Edge Function (service_role). Staff read; replies happen in Outlook, not here.';
+  'Shared firm inbox (info@). Written by the poll-inbox / inbox-send / inbox-action Edge Functions (service_role). Staff read; compose and reply happen in the portal and sync back to Gmail.';
 
 -- ---- 2. Attachments ----
 create table if not exists public.inbox_email_attachments (
