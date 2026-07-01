@@ -136,14 +136,25 @@ Dashboard → **Edge Functions** → for **each** of `poll-inbox`, `inbox-send`,
 
 ## Part D — Run the migrations
 
-Dashboard → **SQL Editor**, run in order (each is in `supabase/migrations/`):
+Dashboard → **SQL Editor**, run **in order** (each is in `supabase/migrations/`).
+All are idempotent (`if not exists` / `create or replace`), so re-running any that
+were already applied is harmless — when in doubt, run the whole list:
 
-1. `124_inbox_sync_status.sql` — the staff-visible sync-health RPC.
-2. `125_schedule_poll_inbox.sql` — schedules `poll-inbox` every 5 min and creates
+1. `114_email_sync_state.sql` — the poller's cursor / last-run / last-error table.
+2. `116_inbox_emails.sql` — the `inbox_emails` + `inbox_email_attachments` tables,
+   RLS, and the `inbox-attachments` storage bucket.
+3. `117_firm_email_settings.sql` — firm-wide email settings.
+4. `118_inbox_labels.sql` — **adds the `label_ids` column to `inbox_emails`.**
+   ⚠ Required: `poll-inbox` writes `label_ids` on every message and the folder
+   tabs (Inbox/Sent/Spam/Trash) read it. Skip this and every poll fails with
+   `column "label_ids" does not exist` and nothing syncs.
+5. `124_inbox_sync_status.sql` — the staff-visible sync-health RPC
+   (`get_inbox_sync_status`; depends on `public.is_admin()`, already in the DB).
+6. `125_schedule_poll_inbox.sql` — schedules `poll-inbox` every 5 min and creates
    the Vault placeholders.
 
-(Tables `116_inbox_emails.sql` + cursor `114_email_sync_state.sql` should already
-be applied from earlier; re-running them is harmless.)
+> `114`, `116`, `117`, `118` may already be applied from earlier work — re-running
+> them changes nothing. The two that are definitely new are `124` and `125`.
 
 ---
 

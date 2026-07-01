@@ -2830,7 +2830,8 @@ export const api = {
   },
 
   // --------- Shared firm inbox (info@) — populated by poll-inbox Edge Function ---------
-  // Read-only in the app: staff view incoming mail; replies happen in Outlook.
+  // Two-way in the app: staff view mail, and compose/reply (inbox-send) plus
+  // read/archive/trash (inbox-action) sync back to Gmail.
   async getInboxEmails(opts?: { limit?: number; unreadOnly?: boolean }) {
     let q = supabase.from('inbox_emails')
       .select('id, gmail_thread_id, from_email, from_name, to_emails, label_ids, subject, snippet, received_at, has_attachments, is_read')
