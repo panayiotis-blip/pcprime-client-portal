@@ -682,7 +682,12 @@ export const api = {
   },
 
   async createClient(data: any) {
-    const { data: row, error } = await supabase.from('clients').insert(data).select().single();
+    // Normalise before insert — clients.email/tags are arrays (text[]), but the
+    // Add Client form supplies them as plain strings (and always carries an
+    // email key, even when blank). Without this the insert sends a string into
+    // a text[] column and Postgres rejects it, so every add fails.
+    const patch = normaliseClientForWrite(data);
+    const { data: row, error } = await supabase.from('clients').insert(patch).select().single();
     if (error) throw new Error(error.message);
     return { id: row.id };
   },
