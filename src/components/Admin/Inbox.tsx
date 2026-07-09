@@ -143,6 +143,7 @@ export default function Inbox() {
   const [assignClientId, setAssignClientId] = useState<number | ''>('');
   const [assigning, setAssigning] = useState(false);
   const [assignMsg, setAssignMsg] = useState<string | null>(null);
+  const [autoMatched, setAutoMatched] = useState(false);
   const [actioning, setActioning] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [sync, setSync] = useState<SyncStatus | null>(null);
@@ -197,17 +198,34 @@ export default function Inbox() {
       .catch(() => {});
   }, []);
 
-  const handleAssign = async (msgId: number) => {
-    if (!msgId || !assignClientId) return;
-    setAssigning(true);
-    setAssignMsg(null);
+  // Match an email address against a client's stored address(es) so filing can
+  // auto-pick the right client. clients.email may be an array or a "; "-joined
+  // string depending on the read path — handle both.
+  const matchClientByEmail = (addresses: string[]): number | null => {
+    const set = new Set(addresses.map(a => a.trim().toLowerCase()).filter(a => a && a !== INFO_ADDRESS));
+    if (!set.size) return null;
+    for (const c of clients as any[]) {
+      const emails = Array.isArray(c.email) ? c.email : String(c.email || '').split(/[;,]+/);
+      for (const em of emails) {
+        const v = String(em || '').trim().toLowerCase();
+        if (v && set.has(v)) return c.id;
+      }
+    }
+    return null;
+  };
+
+  // File the whole open conversation (every message, sent + received) into the
+  // selected client's Emails tab + Documents.
+  const fileConversation = async () => {
+    if (!thread || !assignClientId) return;
+    setAssigning(true); setAssignMsg(null);
     try {
-      const res = await api.assignInboxEmailToClient(msgId, Number(assignClientId));
+      let filed = 0;
+      for (const m of thread) { await api.assignInboxEmailToClient(m.id, Number(assignClientId)); filed++; }
       const name = (clients as any[]).find(c => c.id === Number(assignClientId))?.name || 'client';
-      setAssignMsg(res.already ? `Already filed to ${name}.` : `Filed to ${name} (Emails tab + Documents${res.attachments_copied ? `, ${res.attachments_copied} attachment(s)` : ''}).`);
-      setAssignClientId('');
+      setAssignMsg(`Filed ${filed} message${filed === 1 ? '' : 's'} to ${name} — Emails tab + Documents.`);
     } catch (e: any) {
-      setAssignMsg('Assign failed: ' + e.message);
+      setAssignMsg('Filing failed: ' + e.message);
     } finally {
       setAssigning(false);
     }
@@ -374,6 +392,7 @@ export default function Inbox() {
     setAssignClientId('');
     setAssignMsg(null);
     setActionMsg(null);
+    setAutoMatched(false);
     setThreadSubject(row.subject || '(no subject)');
     try {
       const msgs = row.gmail_thread_id
@@ -381,6 +400,14 @@ export default function Inbox() {
         : [await api.getInboxEmail(row.id) as InboxDetail];
       setThread(msgs);
       setExpandedId(msgs.length ? msgs[msgs.length - 1].id : null);
+      // Auto-suggest the client this conversation belongs to.
+      const addrs: string[] = [];
+      for (const m of msgs) {
+        if (folderOf(m.label_ids) === 'Sent') addrs.push(...(m.to_emails || []), ...(m.cc_emails || []));
+        else if (m.from_email) addrs.push(m.from_email);
+      }
+      const match = matchClientByEmail(addrs);
+      if (match) { setAssignClientId(match); setAutoMatched(true); }
       const unreadIds = msgs.filter(m => !m.is_read).map(m => m.id);
       if (unreadIds.length) {
         setEmails(prev => prev.map(e => unreadIds.includes(e.id) ? { ...e, is_read: true } : e));
@@ -587,6 +614,27 @@ export default function Inbox() {
                 <div style={{ marginBottom: 6, fontSize: 12.5, color: actionMsg.startsWith('Action failed') ? '#b91c1c' : '#15803d' }}>{actionMsg}</div>
               )}
 
+              {/* File the whole conversation to a client (auto-matched by address) */}
+              <div style={{ margin: '6px 0 2px', padding: 10, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: 13 }}>📁 File to client:</strong>
+                <div style={{ minWidth: 220, flex: 1 }}>
+                  <SearchableSelect
+                    value={assignClientId === '' ? '' : String(assignClientId)}
+                    options={clientOptions}
+                    onChange={(v) => { setAssignClientId(v ? Number(v) : ''); setAutoMatched(false); }}
+                    placeholder="Search and pick a client…"
+                    allowClear
+                  />
+                </div>
+                {autoMatched && <span style={{ fontSize: 12, color: '#15803d' }}>✓ auto-matched</span>}
+                <button className="btn btn-primary btn-sm" onClick={fileConversation} disabled={assigning || !assignClientId}>
+                  {assigning ? 'Filing…' : `File conversation${thread.length > 1 ? ` (${thread.length})` : ''}`}
+                </button>
+              </div>
+              {assignMsg && (
+                <div style={{ marginBottom: 6, fontSize: 12.5, color: /failed/i.test(assignMsg) ? '#b91c1c' : '#15803d' }}>{assignMsg}</div>
+              )}
+
               <div style={{ display: 'grid', gap: 10, marginTop: 6 }}>
                 {thread.map(m => {
                   const f = folderOf(m.label_ids);
@@ -636,25 +684,6 @@ export default function Inbox() {
                               ? <button className="btn btn-secondary btn-sm" onClick={() => handleAction('untrash', m)} disabled={actioning}>♻ Restore</button>
                               : <button className="btn btn-secondary btn-sm" onClick={() => handleAction('trash', m)} disabled={actioning} style={{ color: '#b91c1c' }}>🗑 Trash</button>}
                           </div>
-
-                          <div style={{ marginTop: 10, padding: 10, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <strong style={{ fontSize: 13 }}>Save to client:</strong>
-                            <div style={{ minWidth: 220, flex: 1 }}>
-                              <SearchableSelect
-                                value={assignClientId === '' ? '' : String(assignClientId)}
-                                options={clientOptions}
-                                onChange={(v) => setAssignClientId(v ? Number(v) : '')}
-                                placeholder="Search and pick a client…"
-                                allowClear
-                              />
-                            </div>
-                            <button className="btn btn-primary btn-sm" onClick={() => handleAssign(m.id)} disabled={assigning || !assignClientId}>
-                              {assigning ? 'Filing…' : 'Assign'}
-                            </button>
-                          </div>
-                          {assignMsg && (
-                            <div style={{ marginTop: 6, fontSize: 12.5, color: assignMsg.startsWith('Assign failed') ? '#b91c1c' : '#15803d' }}>{assignMsg}</div>
-                          )}
 
                           {m.attachments && m.attachments.length > 0 && (
                             <div style={{ marginTop: 12 }}>
