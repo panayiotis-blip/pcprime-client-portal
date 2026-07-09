@@ -32,29 +32,38 @@ export default function FirmEmailSettings() {
   const escHtml = (t: string) => String(t || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] || c));
 
   // Build the professional "logo-left + gold divider" signature (email-safe
-  // table layout, navy/gold brand). Empty fields are simply omitted.
+  // nested-table layout, navy/gold brand). Per-row padding gives reliable
+  // vertical spacing across mail clients. Empty fields are simply omitted.
   const buildSignatureHtml = (): string => {
     const NAVY = '#0d1b2e', GOLD = '#b8963e', MUTED = '#5a6478';
-    const detail = (val: string, href?: string, label = '') =>
-      val ? `<div style="margin:1px 0;">${label}${href ? `<a href="${href}" style="color:${NAVY};text-decoration:none;">${escHtml(val)}</a>` : escHtml(val)}</div>` : '';
+    const A = 'font-family:Arial,Helvetica,sans-serif;';
     const site = sig.website ? (sig.website.startsWith('http') ? sig.website : `https://${sig.website}`) : '';
-    const detailsCol =
-      `<td style="border-left:2px solid ${GOLD};padding-left:16px;vertical-align:top;font-family:Arial,Helvetica,sans-serif;">` +
-      (sig.name ? `<div style="font-size:15px;font-weight:bold;color:${NAVY};">${escHtml(sig.name)}</div>` : '') +
-      (sig.title ? `<div style="color:${GOLD};font-weight:600;font-size:13px;">${escHtml(sig.title)}</div>` : '') +
-      (sig.firm ? `<div style="color:${NAVY};font-size:13px;">${escHtml(sig.firm)}</div>` : '') +
-      `<div style="height:6px;line-height:6px;">&nbsp;</div>` +
-      detail(sig.phone, undefined, 'T&nbsp;') +
-      detail(sig.mobile, undefined, 'M&nbsp;') +
-      detail(sig.email, `mailto:${sig.email}`) +
-      detail(sig.website, site) +
-      (sig.address ? `<div style="margin-top:4px;color:${MUTED};font-size:12px;">${escHtml(sig.address)}</div>` : '') +
-      (sig.tagline ? `<div style="margin-top:6px;color:${MUTED};font-size:11px;font-style:italic;">${escHtml(sig.tagline)}</div>` : '') +
-      `</td>`;
-    const logoCol = sig.logoUrl
-      ? `<td style="padding-right:16px;vertical-align:top;"><img src="${escHtml(sig.logoUrl)}" alt="${escHtml(sig.firm || 'Logo')}" width="${sig.logoWidth || 120}" style="display:block;border:0;width:${sig.logoWidth || 120}px;height:auto;"></td>`
+    const link = (val: string, href: string) => `<a href="${href}" style="color:${NAVY};text-decoration:none;">${escHtml(val)}</a>`;
+
+    // Contact block — one line each, with clear line spacing.
+    const contactLines: string[] = [];
+    if (sig.phone)   contactLines.push(`<span style="color:${MUTED};">T</span>&nbsp; ${escHtml(sig.phone)}`);
+    if (sig.mobile)  contactLines.push(`<span style="color:${MUTED};">M</span>&nbsp; ${escHtml(sig.mobile)}`);
+    if (sig.email)   contactLines.push(link(sig.email, `mailto:${sig.email}`));
+    if (sig.website) contactLines.push(link(sig.website, site));
+    const contactHtml = contactLines.length
+      ? `<tr><td style="${A}font-size:13px;color:${NAVY};line-height:21px;padding-top:8px;">${contactLines.join('<br>')}</td></tr>`
       : '';
-    return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:${NAVY};line-height:1.4;"><tr>${logoCol}${detailsCol}</tr></table>`;
+
+    const rows =
+      (sig.name  ? `<tr><td style="${A}font-size:17px;font-weight:bold;color:${NAVY};line-height:22px;padding-bottom:2px;">${escHtml(sig.name)}</td></tr>` : '') +
+      (sig.title ? `<tr><td style="${A}font-size:13px;font-weight:bold;color:${GOLD};line-height:18px;padding-bottom:2px;letter-spacing:.3px;">${escHtml(sig.title)}</td></tr>` : '') +
+      (sig.firm  ? `<tr><td style="${A}font-size:14px;color:${NAVY};line-height:19px;">${escHtml(sig.firm)}</td></tr>` : '') +
+      contactHtml +
+      (sig.address ? `<tr><td style="${A}font-size:12px;color:${MUTED};line-height:17px;padding-top:8px;">${escHtml(sig.address)}</td></tr>` : '') +
+      (sig.tagline ? `<tr><td style="${A}font-size:11px;color:${MUTED};font-style:italic;line-height:16px;padding-top:8px;">${escHtml(sig.tagline)}</td></tr>` : '');
+
+    const detailsTable = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;">${rows}</table>`;
+    const detailsCol = `<td style="border-left:3px solid ${GOLD};padding:2px 0 2px 18px;vertical-align:middle;">${detailsTable}</td>`;
+    const logoCol = sig.logoUrl
+      ? `<td style="padding:0 18px 0 0;vertical-align:middle;"><img src="${escHtml(sig.logoUrl)}" alt="${escHtml(sig.firm || 'Logo')}" width="${sig.logoWidth || 120}" style="display:block;border:0;width:${sig.logoWidth || 120}px;height:auto;"></td>`
+      : '';
+    return `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;${A}"><tr>${logoCol}${detailsCol}</tr></table>`;
   };
 
   const buildSignatureText = (): string => [
