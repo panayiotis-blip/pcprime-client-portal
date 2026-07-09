@@ -187,6 +187,9 @@ type Favourite = {
 
 export default function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Desktop: collapse the whole nav sidebar for a wider content view.
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => localStorage.getItem('appNavCollapsed') === '1');
+  useEffect(() => { localStorage.setItem('appNavCollapsed', navCollapsed ? '1' : '0'); }, [navCollapsed]);
   const location = useLocation();
   const { user, logout } = useAuth();
   const [newTaskCount, setNewTaskCount] = useState(0);
@@ -479,11 +482,14 @@ export default function AppShell() {
   const isPrintRoute = /\/print(\?|$)/.test(location.pathname);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${navCollapsed ? 'nav-collapsed' : ''}`}>
       <header className="mobile-header">
         <button className="menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>&#9776;</button>
         <h1>PC Prime Portal</h1>
       </header>
+      {navCollapsed && (
+        <button type="button" className="nav-expand-btn" onClick={() => setNavCollapsed(false)} title="Show menu">»</button>
+      )}
 
       <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
@@ -492,6 +498,7 @@ export default function AppShell() {
           </Link>
           <p className="sidebar-subtitle">Client Portal</p>
         </div>
+        <button type="button" className="nav-collapse-toggle" onClick={() => setNavCollapsed(true)} title="Collapse the menu for a wider view">« Collapse menu</button>
 
         <ul className="sidebar-nav-list">
           {/* Dashboard — always visible, no group */}
