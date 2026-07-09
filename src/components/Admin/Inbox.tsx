@@ -157,11 +157,13 @@ export default function Inbox() {
   // Resizable panes — widths persist in localStorage.
   const [sidebarW, setSidebarW] = useState<number>(() => Number(localStorage.getItem('inboxSidebarW')) || 190);
   const [listW, setListW] = useState<number>(() => Number(localStorage.getItem('inboxListW')) || 380);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('inboxSidebarCollapsed') === '1');
   // Enlarge the compose window (Outlook-style maximise).
   const [composeMax, setComposeMax] = useState(false);
 
   useEffect(() => { localStorage.setItem('inboxSidebarW', String(sidebarW)); }, [sidebarW]);
   useEffect(() => { localStorage.setItem('inboxListW', String(listW)); }, [listW]);
+  useEffect(() => { localStorage.setItem('inboxSidebarCollapsed', sidebarCollapsed ? '1' : '0'); }, [sidebarCollapsed]);
 
   // Drag a pane divider. Clamps to sensible bounds so a pane can't vanish.
   const startDrag = (which: 'sidebar' | 'list', e: React.MouseEvent) => {
@@ -488,10 +490,17 @@ export default function Inbox() {
         display: 'flex', border: paneBorder, borderRadius: 8, overflow: 'hidden',
         height: 'calc(100vh - 200px)', minHeight: 520, marginTop: 10, background: '#fff',
       }}>
-        {/* ---- Left: folder sidebar ---- */}
-        <div style={{ width: sidebarW, background: '#f8fafc', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: 10 }}>
-            <button className="btn btn-primary" style={{ width: '100%' }} onClick={startCompose}>✏️ Compose</button>
+        {/* ---- Left: folder sidebar (collapsible to a slim icon rail) ---- */}
+        <div style={{ width: sidebarCollapsed ? 56 : sidebarW, background: '#f8fafc', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: sidebarCollapsed ? '8px 6px' : 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%' }}
+              onClick={() => setSidebarCollapsed(v => !v)}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar for a wider view'}>
+              {sidebarCollapsed ? '»' : '« Collapse'}
+            </button>
+            <button className="btn btn-primary" style={{ width: '100%' }} onClick={startCompose} title="Compose a new email">
+              {sidebarCollapsed ? '✏️' : '✏️ Compose'}
+            </button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px' }}>
             {FOLDERS.map(f => {
@@ -500,34 +509,41 @@ export default function Inbox() {
               const active = folder === f;
               return (
                 <button key={f} onClick={() => setFolder(f)}
+                  title={sidebarCollapsed ? `${f}${un > 0 ? ` — ${un} unread` : ''}` : undefined}
                   style={{
                     width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
                     background: active ? '#1a365d' : 'transparent', color: active ? '#fff' : '#334155',
-                    borderRadius: 6, padding: '8px 10px', marginBottom: 2,
+                    borderRadius: 6, padding: sidebarCollapsed ? '8px 0' : '8px 10px', marginBottom: 2,
                     display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5,
                     fontWeight: un > 0 ? 700 : 500,
+                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start', position: 'relative',
                   }}>
                   <span>{folderIcon[f]}</span>
-                  <span style={{ flex: 1 }}>{f}</span>
-                  {un > 0 && (
+                  {!sidebarCollapsed && <span style={{ flex: 1 }}>{f}</span>}
+                  {!sidebarCollapsed && un > 0 && (
                     <span style={{ background: active ? '#fff' : '#1a365d', color: active ? '#1a365d' : '#fff', borderRadius: 999, fontSize: 11, padding: '0 6px', fontWeight: 700 }}>{un}</span>
                   )}
-                  <span style={{ opacity: 0.6, fontSize: 11.5 }}>{total}</span>
+                  {!sidebarCollapsed && <span style={{ opacity: 0.6, fontSize: 11.5 }}>{total}</span>}
+                  {sidebarCollapsed && un > 0 && (
+                    <span style={{ position: 'absolute', top: 4, right: 8, width: 8, height: 8, borderRadius: 999, background: '#dc2626' }} />
+                  )}
                 </button>
               );
             })}
           </div>
-          <div style={{ borderTop: paneBorder, padding: 8, display: 'flex', gap: 6 }}>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={load} disabled={loading}>{loading ? '…' : '↻'}</button>
+          <div style={{ borderTop: paneBorder, padding: 8, display: 'flex', flexDirection: sidebarCollapsed ? 'column' : 'row', gap: 6 }}>
+            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={load} disabled={loading} title="Refresh">{loading ? '…' : '↻'}</button>
             <button className="btn btn-secondary btn-sm" style={{ flex: 2 }} onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
-              {syncing ? 'Syncing…' : '⟳ Sync now'}
+              {syncing ? '…' : (sidebarCollapsed ? '⟳' : '⟳ Sync now')}
             </button>
           </div>
         </div>
 
-        {/* draggable divider: sidebar ↔ list */}
-        <div onMouseDown={(e) => startDrag('sidebar', e)} title="Drag to resize"
-          style={{ width: 6, cursor: 'col-resize', background: '#eef2f7', flexShrink: 0 }} />
+        {/* draggable divider: sidebar ↔ list (only when expanded) */}
+        {!sidebarCollapsed && (
+          <div onMouseDown={(e) => startDrag('sidebar', e)} title="Drag to resize"
+            style={{ width: 6, cursor: 'col-resize', background: '#eef2f7', flexShrink: 0 }} />
+        )}
 
         {/* ---- Middle: conversation list ---- */}
         <div style={{ width: listW, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
