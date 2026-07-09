@@ -190,6 +190,18 @@ export default function AppShell() {
   // Desktop: collapse the whole nav sidebar for a wider content view.
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => localStorage.getItem('appNavCollapsed') === '1');
   useEffect(() => { localStorage.setItem('appNavCollapsed', navCollapsed ? '1' : '0'); }, [navCollapsed]);
+  // Track desktop vs mobile so the collapse only reshapes the layout on desktop
+  // (on mobile the sidebar is an off-canvas drawer). Drives inline widths below.
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => typeof window === 'undefined' ? true : window.matchMedia('(min-width: 769px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 769px)');
+    const on = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
+  const RAIL_W = 58;
+  const collapsedNavStyle = navCollapsed && isDesktop ? { width: RAIL_W } : undefined;
+  const collapsedMainStyle = navCollapsed && isDesktop ? { marginLeft: RAIL_W } : undefined;
   const location = useLocation();
   const { user, logout } = useAuth();
   const [newTaskCount, setNewTaskCount] = useState(0);
@@ -518,7 +530,7 @@ export default function AppShell() {
         <h1>PC Prime Portal</h1>
       </header>
 
-      <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`} style={collapsedNavStyle}>
         {navCollapsed ? renderRail(visibleGroups) : (<>
         <div className="sidebar-header">
           <Link to="/" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>
@@ -693,7 +705,7 @@ export default function AppShell() {
 
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      <main className="main-content">
+      <main className="main-content" style={collapsedMainStyle}>
         <Outlet />
       </main>
 
