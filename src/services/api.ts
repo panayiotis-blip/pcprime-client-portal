@@ -2833,6 +2833,15 @@ export const api = {
     const { error } = await supabase.rpc('admin_set_firm_email_password', { p_password: password });
     if (error) throw new Error(error.message);
   },
+  // Staff-readable firm signature (migration 126) — just the signature fields,
+  // so any staff member composing from the shared Inbox can insert it. Never
+  // exposes SMTP credentials.
+  async getFirmEmailSignature(): Promise<{ signature_html: string | null; signature_text: string | null }> {
+    const { data, error } = await supabase.rpc('get_firm_email_signature');
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return { signature_html: row?.signature_html ?? null, signature_text: row?.signature_text ?? null };
+  },
 
   // --------- Shared firm inbox (info@) — populated by poll-inbox Edge Function ---------
   // Two-way in the app: staff view mail, and compose/reply (inbox-send) plus

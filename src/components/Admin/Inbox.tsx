@@ -4,11 +4,14 @@ import { api } from '../../services/api';
 import { formatDateTime } from '../../services/dates';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
+import RichTextEditor from './RichTextEditor';
 
-// Shared firm inbox (info@primeandcalculate.com). Full two-way: staff view mail
-// captured by the poll-inbox Edge Function, and compose / reply / reply-all /
-// forward (inbox-send) plus read-unread / archive / trash (inbox-action) — all
-// synced back to Gmail. Mirrors the per-client ClientEmails view, minus per-client direction.
+// Shared firm inbox (info@primeandcalculate.com), laid out like Outlook:
+// folder sidebar · conversation list · reading pane. Full two-way — staff view
+// mail captured by poll-inbox, and compose / reply / reply-all / forward
+// (inbox-send) plus read-unread / archive / trash (inbox-action), all synced
+// back to Gmail. Outgoing mail is rich-text, wrapped in a branded HTML shell,
+// with the firm signature inserted (from firm_email_settings via migration 126).
 
 type InboxRow = {
   id: number;
@@ -35,7 +38,10 @@ const folderOf = (labels: string[] | null): Folder => {
   if (l.includes('INBOX')) return 'Inbox';
   return 'Other';
 };
-const FOLDER_TABS: Array<'All' | Folder> = ['All', 'Inbox', 'Sent', 'Spam', 'Trash'];
+const FOLDERS: Array<'All' | Folder> = ['All', 'Inbox', 'Sent', 'Spam', 'Trash'];
+const folderIcon: Record<string, string> = {
+  All: '🗂', Inbox: '📥', Sent: '📤', Spam: '⚠', Trash: '🗑',
+};
 const folderColor: Record<Folder, string> = {
   Inbox: '#1e40af', Sent: '#15803d', Spam: '#b45309', Trash: '#64748b', Draft: '#7c3aed', Other: '#475569',
 };
@@ -83,24 +89,15 @@ type ComposeState = {
   to: string;
   cc: string;
   subject: string;
-  body: string;
+  body: string;          // HTML (from the rich-text editor)
   replyToInboxId?: number;
   files: File[];
 };
 
 const stripHtml = (h: string | null) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const escapeHtml = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] || c));
-// Plain-text composer body → minimal HTML (pre-wrap keeps the user's line breaks).
-const textToHtml = (t: string) =>
-  `<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">${escapeHtml(t)}</div>`;
-const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-  const r = new FileReader();
-  r.onload = () => resolve(String(r.result).split(',')[1] || '');
-  r.onerror = reject;
-  r.readAsDataURL(file);
-});
-const dropPrefix = (subj: string | null, re: RegExp) => (subj || '').replace(re, '').trim();
 
+// Sanitiser for DISPLAYING received mail (strict — no inline styles / scripts).
 const SANITISE_OPTS = {
   FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
   FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'style'],
@@ -111,6 +108,24 @@ const sanitiseBody = (msg: { body_html: string | null; body_plain: string | null
     ? DOMPurify.sanitize(msg.body_html, SANITISE_OPTS)
     : `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${escapeHtml(msg.body_plain || '')}</pre>`;
 
+// Wrap the composed body in a clean, branded HTML email shell so recipients see
+// a professional message rather than raw text. Applied at send time.
+const wrapEmailHtml = (inner: string) =>
+  `<!DOCTYPE html><html><head><meta charset="UTF-8">` +
+  `<meta name="viewport" content="width=device-width,initial-scale=1"></head>` +
+  `<body style="margin:0;padding:0;background:#f4f5f7;">` +
+  `<div style="max-width:640px;margin:0 auto;padding:24px;` +
+  `font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.55;color:#1a365d;background:#ffffff;">` +
+  `${inner}</div></body></html>`;
+
+const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(String(r.result).split(',')[1] || '');
+  r.onerror = reject;
+  r.readAsDataURL(file);
+});
+const dropPrefix = (subj: string | null, re: RegExp) => (subj || '').replace(re, '').trim();
+
 export default function Inbox() {
   const { clients } = useApp();
   const [emails, setEmails] = useState<InboxRow[]>([]);
@@ -120,6 +135,7 @@ export default function Inbox() {
   const [folder, setFolder] = useState<'All' | Folder>('All');
   const [thread, setThread] = useState<InboxDetail[] | null>(null);
   const [threadSubject, setThreadSubject] = useState('');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [assignClientId, setAssignClientId] = useState<number | ''>('');
@@ -133,11 +149,23 @@ export default function Inbox() {
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
+  // Firm signature, loaded once (staff-readable RPC). Inserted into new mail.
+  const [sigHtml, setSigHtml] = useState<string>('');
 
   const clientOptions = useMemo(
     () => (clients as any[]).map(c => ({ value: c.id, label: c.name, sublabel: c.client_code || '' })),
     [clients],
   );
+
+  useEffect(() => {
+    api.getFirmEmailSignature()
+      .then(s => {
+        if (s.signature_html && s.signature_html.trim()) setSigHtml(s.signature_html);
+        else if (s.signature_text && s.signature_text.trim())
+          setSigHtml(`<div style="white-space:pre-wrap">${escapeHtml(s.signature_text)}</div>`);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleAssign = async (msgId: number) => {
     if (!msgId || !assignClientId) return;
@@ -165,7 +193,6 @@ export default function Inbox() {
     } finally {
       setLoading(false);
     }
-    // Poller health is non-blocking — never let it break the list view.
     api.getInboxSyncStatus().then(setSync).catch(() => {});
   };
   useEffect(() => { load(); }, []);
@@ -185,7 +212,33 @@ export default function Inbox() {
   };
 
   // ---- Compose / reply / forward ----
-  const startCompose = () => { setSendErr(null); setCompose({ mode: 'new', to: '', cc: '', subject: '', body: '', files: [] }); };
+  // Signature-first body: two blank lines to type into, then the firm signature.
+  const openingBody = () => `<div><br></div><div><br></div>${sigHtml}`;
+
+  const quotedOriginal = (o: InboxDetail) => {
+    const who = o.from_name ? `${o.from_name} <${o.from_email || ''}>` : (o.from_email || '');
+    const inner = o.body_html
+      ? DOMPurify.sanitize(o.body_html, SANITISE_OPTS)
+      : `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${escapeHtml(o.body_plain || '')}</pre>`;
+    return `<div><br></div>` +
+      `<div style="border-left:3px solid #cbd5e1;padding-left:12px;color:#64748b;font-size:13px">` +
+      `<div>On ${fmtDateTime(o.received_at)}, ${escapeHtml(who)} wrote:</div>${inner}</div>`;
+  };
+
+  const forwardedBlock = (o: InboxDetail) => {
+    const inner = o.body_html
+      ? DOMPurify.sanitize(o.body_html, SANITISE_OPTS)
+      : `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${escapeHtml(o.body_plain || '')}</pre>`;
+    return `<div><br></div>` +
+      `<div style="color:#64748b;font-size:13px">---------- Forwarded message ----------<br>` +
+      `From: ${escapeHtml(o.from_name ? `${o.from_name} <${o.from_email || ''}>` : (o.from_email || ''))}<br>` +
+      `Date: ${escapeHtml(fmtDateTime(o.received_at))}<br>` +
+      `Subject: ${escapeHtml(o.subject || '(no subject)')}<br>` +
+      `To: ${escapeHtml((o.to_emails || []).join(', '))}</div>` +
+      `<div><br></div>${inner}`;
+  };
+
+  const startCompose = () => { setSendErr(null); setCompose({ mode: 'new', to: '', cc: '', subject: '', body: openingBody(), files: [] }); };
 
   const startReply = (all: boolean, o: InboxDetail) => {
     const cc = all
@@ -200,23 +253,16 @@ export default function Inbox() {
       to: o.from_email || '',
       cc: cc.join(', '),
       subject: base ? `Re: ${base}` : 'Re:',
-      body: '',
+      body: openingBody() + quotedOriginal(o),
       replyToInboxId: o.id,
       files: [],
     });
   };
 
   const startForward = (o: InboxDetail) => {
-    const quoted =
-      `\n\n---------- Forwarded message ----------\n` +
-      `From: ${o.from_name ? `${o.from_name} <${o.from_email || ''}>` : (o.from_email || '')}\n` +
-      `Date: ${fmtDateTime(o.received_at)}\n` +
-      `Subject: ${o.subject || '(no subject)'}\n` +
-      `To: ${(o.to_emails || []).join(', ')}\n\n` +
-      `${o.body_plain || stripHtml(o.body_html) || ''}`;
     const base = dropPrefix(o.subject, /^(fwd:\s*)+/i);
     setSendErr(null);
-    setCompose({ mode: 'forward', to: '', cc: '', subject: base ? `Fwd: ${base}` : 'Fwd:', body: quoted, files: [] });
+    setCompose({ mode: 'forward', to: '', cc: '', subject: base ? `Fwd: ${base}` : 'Fwd:', body: openingBody() + forwardedBlock(o), files: [] });
   };
 
   const handleSend = async () => {
@@ -231,16 +277,17 @@ export default function Inbox() {
         mime_type: f.type || 'application/octet-stream',
         content_base64: await fileToBase64(f),
       })));
+      const bodyHtml = wrapEmailHtml(DOMPurify.sanitize(compose.body));
       await api.sendInboxEmail({
         to, cc,
         subject: compose.subject,
-        body_html: textToHtml(compose.body),
-        // Thread only on reply/reply-all; forward + new start a fresh thread.
+        body_html: bodyHtml,
         reply_to_inbox_id: (compose.mode === 'reply' || compose.mode === 'replyAll') ? compose.replyToInboxId : undefined,
         attachments,
       });
       setCompose(null);
       setThread(null);
+      setSelectedKey(null);
       setSyncMsg('Sent ✓ — pulling it into Sent…');
       await api.triggerInboxSync().catch(() => {});
       await load();
@@ -272,9 +319,14 @@ export default function Inbox() {
     for (const e of emails) { const f = folderOf(e.label_ids); c[f] = (c[f] || 0) + 1; }
     return c;
   }, [emails]);
+  // Unread counts per folder — shown as the bold badge in the sidebar.
+  const folderUnread = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const e of emails) { if (!e.is_read) { const f = folderOf(e.label_ids); c[f] = (c[f] || 0) + 1; } }
+    return c;
+  }, [emails]);
 
-  // Collapse the flat list into conversations (one row per Gmail thread). `filtered`
-  // is sorted newest-first, so the first message seen per thread is the latest = rep.
+  // Collapse the flat list into conversations (one row per Gmail thread).
   const threads = useMemo(() => {
     const map = new Map<string, { rep: InboxRow; count: number; unread: number }>();
     for (const e of filtered) {
@@ -286,9 +338,9 @@ export default function Inbox() {
     return [...map.values()];
   }, [filtered]);
 
-  // Open a whole conversation. Single (no thread id) messages load alone.
   const openThread = async (row: InboxRow) => {
     setLoadingDetail(true);
+    setSelectedKey(row.gmail_thread_id || `single-${row.id}`);
     setAssignClientId('');
     setAssignMsg(null);
     setActionMsg(null);
@@ -298,13 +350,12 @@ export default function Inbox() {
         ? (await api.getInboxThread(row.gmail_thread_id) as InboxDetail[])
         : [await api.getInboxEmail(row.id) as InboxDetail];
       setThread(msgs);
-      setExpandedId(msgs.length ? msgs[msgs.length - 1].id : null); // newest expanded
-      // Mark any unread messages read — locally, in our DB, and (best-effort) in Gmail.
+      setExpandedId(msgs.length ? msgs[msgs.length - 1].id : null);
       const unreadIds = msgs.filter(m => !m.is_read).map(m => m.id);
       if (unreadIds.length) {
         setEmails(prev => prev.map(e => unreadIds.includes(e.id) ? { ...e, is_read: true } : e));
-        unreadIds.forEach(id => api.markInboxRead(id, true).catch(() => {})); // our DB (works without Gmail)
-        api.inboxAction('read', unreadIds).catch(() => {});                   // push to Gmail (best-effort)
+        unreadIds.forEach(id => api.markInboxRead(id, true).catch(() => {}));
+        api.inboxAction('read', unreadIds).catch(() => {});
       }
     } catch (err: any) {
       alert('Failed to load conversation: ' + err.message);
@@ -318,15 +369,14 @@ export default function Inbox() {
     try {
       const res = await api.inboxAction(action, msg.id);
       const updated = res.results?.find(r => r.id === msg.id);
-      // Reflect Gmail's new labels in the list (so the row moves folder / unread state).
       if (updated) {
         setEmails(prev => prev.map(e => e.id === msg.id
           ? { ...e, label_ids: updated.label_ids, is_read: updated.is_read } : e));
       }
       const verb = action === 'unread' ? 'Marked unread' : action === 'archive' ? 'Archived' : action === 'untrash' ? 'Restored' : 'Moved to Trash';
       setActionMsg(`${verb} ✓`);
-      // Unread/archive/trash remove the message from where you're looking — close the view.
       setThread(null);
+      setSelectedKey(null);
     } catch (e: any) {
       setActionMsg('Action failed: ' + e.message);
     } finally {
@@ -343,256 +393,241 @@ export default function Inbox() {
     }
   };
 
+  const paneBorder = '1px solid #e2e8f0';
+
   return (
     <div className="dashboard">
-      <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0 }}>
-          📥 Inbox
+          📬 Inbox
           {unread > 0 && <span className="status-badge" style={{ marginLeft: 10, background: '#1a365d', color: '#fff' }}>{unread} unread</span>}
         </h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            className="form-input"
-            placeholder="Search sender or subject..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ maxWidth: 320 }}
-          />
-          <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
-            {loading ? 'Loading…' : '↻ Refresh'}
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
-            {syncing ? 'Syncing…' : '⟳ Sync now'}
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={startCompose} title="Compose a new email from info@">
-            ✏️ Compose
-          </button>
+        <div style={{ fontSize: 12.5, color: '#64748b', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {sync?.last_run_at
+            ? <span>Last synced <strong>{fmtDateTime(sync.last_run_at)}</strong></span>
+            : <span style={{ color: '#b45309' }}>⚠ Never synced</span>}
+          {sync?.last_error && <span style={{ color: '#b91c1c' }}>· {sync.last_error}</span>}
+          {syncMsg && <span style={{ color: syncMsg.startsWith('Sync failed') ? '#b91c1c' : '#15803d' }}>· {syncMsg}</span>}
         </div>
       </div>
 
-      <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 6px' }}>
-        The shared <strong>info@primeandcalculate.com</strong> mailbox — Inbox, Sent, Spam &amp; Trash — visible to all staff. Compose and reply here; sent mail threads back into Gmail.
-      </p>
-
-      {/* Poller health — last run / last error, plus the manual-sync result. */}
-      <div style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 10px', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        {sync ? (
-          sync.last_run_at
-            ? <span>Last synced <strong>{fmtDateTime(sync.last_run_at)}</strong> · {sync.message_count} message{sync.message_count === 1 ? '' : 's'}</span>
-            : <span style={{ color: '#b45309' }}>⚠ Never synced — the info@ mailbox isn't connected yet.</span>
-        ) : <span>Sync status unavailable.</span>}
-        {sync?.last_error && (
-          <span style={{ color: '#b91c1c' }}>· Last error: {sync.last_error}</span>
-        )}
-        {syncMsg && (
-          <span style={{ color: syncMsg.startsWith('Sync failed') ? '#b91c1c' : '#15803d' }}>· {syncMsg}</span>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-        {FOLDER_TABS.map(t => {
-          const n = t === 'All' ? emails.length : (folderCounts[t] || 0);
-          const active = folder === t;
-          return (
-            <button key={t} onClick={() => setFolder(t)}
-              className="btn btn-sm"
-              style={{
-                background: active ? '#1a365d' : '#fff',
-                color: active ? '#fff' : '#1a365d',
-                border: '1px solid #cbd5e1', borderRadius: 999, padding: '3px 12px', fontSize: 12.5,
-              }}>
-              {t} <span style={{ opacity: 0.7 }}>({n})</span>
+      {/* Outlook-style 3-pane frame */}
+      <div style={{
+        display: 'flex', border: paneBorder, borderRadius: 8, overflow: 'hidden',
+        height: 'calc(100vh - 200px)', minHeight: 520, marginTop: 10, background: '#fff',
+      }}>
+        {/* ---- Left: folder sidebar ---- */}
+        <div style={{ width: 190, borderRight: paneBorder, background: '#f8fafc', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: 10 }}>
+            <button className="btn btn-primary" style={{ width: '100%' }} onClick={startCompose}>✏️ Compose</button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px' }}>
+            {FOLDERS.map(f => {
+              const total = f === 'All' ? emails.length : (folderCounts[f] || 0);
+              const un = f === 'All' ? unread : (folderUnread[f] || 0);
+              const active = folder === f;
+              return (
+                <button key={f} onClick={() => setFolder(f)}
+                  style={{
+                    width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
+                    background: active ? '#1a365d' : 'transparent', color: active ? '#fff' : '#334155',
+                    borderRadius: 6, padding: '8px 10px', marginBottom: 2,
+                    display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5,
+                    fontWeight: un > 0 ? 700 : 500,
+                  }}>
+                  <span>{folderIcon[f]}</span>
+                  <span style={{ flex: 1 }}>{f}</span>
+                  {un > 0 && (
+                    <span style={{ background: active ? '#fff' : '#1a365d', color: active ? '#1a365d' : '#fff', borderRadius: 999, fontSize: 11, padding: '0 6px', fontWeight: 700 }}>{un}</span>
+                  )}
+                  <span style={{ opacity: 0.6, fontSize: 11.5 }}>{total}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ borderTop: paneBorder, padding: 8, display: 'flex', gap: 6 }}>
+            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={load} disabled={loading}>{loading ? '…' : '↻'}</button>
+            <button className="btn btn-secondary btn-sm" style={{ flex: 2 }} onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
+              {syncing ? 'Syncing…' : '⟳ Sync now'}
             </button>
-          );
-        })}
-      </div>
-
-      {loading ? (
-        <div className="loading-screen">Loading…</div>
-      ) : error ? (
-        <div className="empty-state"><p style={{ color: '#b91c1c' }}>Failed to load inbox: {error}</p></div>
-      ) : filtered.length === 0 ? (
-        <div className="empty-state">
-          <p>{emails.length === 0 ? 'No emails in the shared inbox yet.' : 'No emails match your search.'}</p>
-          {emails.length === 0 && (
-            <p style={{ fontSize: 13, color: '#64748b', marginTop: 8 }}>
-              Once the info@ mailbox is connected (Gmail API), incoming mail appears here within a few minutes.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="compliance-table-wrapper">
-          <table className="compliance-table">
-            <thead>
-              <tr>
-                <th style={{ width: 70 }}>Folder</th>
-                <th>From / To</th>
-                <th>Subject</th>
-                <th style={{ width: 50 }} title="Attachments">📎</th>
-                <th style={{ width: 150 }}>Received</th>
-              </tr>
-            </thead>
-            <tbody>
-              {threads.map(({ rep: e, count, unread }) => {
-                const f = folderOf(e.label_ids);
-                const isSent = f === 'Sent';
-                const party = isSent
-                  ? (e.to_emails && e.to_emails.length ? e.to_emails.join(', ') : '—')
-                  : (e.from_name || e.from_email || '—');
-                const hasUnread = unread > 0;
-                return (
-                <tr key={e.gmail_thread_id || `single-${e.id}`} style={{ cursor: 'pointer', fontWeight: hasUnread ? 700 : 400 }} onClick={() => openThread(e)}>
-                  <td>
-                    <span className="status-badge" style={{ background: '#eef1f5', color: folderColor[f], fontWeight: 600 }}>{f}</span>
-                  </td>
-                  <td>
-                    <div>{isSent && <span style={{ color: '#94a3b8', fontWeight: 400 }}>To: </span>}{party}</div>
-                    {!isSent && e.from_name && e.from_email && (
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 400 }}>{e.from_email}</div>
-                    )}
-                  </td>
-                  <td style={{ maxWidth: 420, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {e.subject || '(no subject)'}
-                    {count > 1 && <span className="status-badge" style={{ marginLeft: 6, background: '#e2e8f0', color: '#475569', fontWeight: 600 }}>{count}</span>}
-                    {e.snippet && <span style={{ color: '#94a3b8', fontWeight: 400 }}> — {e.snippet}</span>}
-                  </td>
-                  <td style={{ textAlign: 'center' }}>{e.has_attachments ? '📎' : ''}</td>
-                  <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', fontWeight: 400 }}>{fmtDateTime(e.received_at)}</td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {(thread || loadingDetail) && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-          zIndex: 100, padding: '32px 16px', overflowY: 'auto',
-        }} onClick={() => setThread(null)}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 820 }} onClick={e => e.stopPropagation()}>
-            {loadingDetail || !thread ? (
-              <p>Loading…</p>
-            ) : (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                  <h3 style={{ margin: 0, flex: 1 }}>
-                    {threadSubject}
-                    {thread.length > 1 && <span style={{ fontSize: 13, fontWeight: 400, color: '#64748b' }}> · {thread.length} messages</span>}
-                  </h3>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setThread(null)}>✕ Close</button>
-                </div>
-                {actionMsg && (
-                  <div style={{ marginTop: 6, fontSize: 12.5, color: actionMsg.startsWith('Action failed') ? '#b91c1c' : '#15803d' }}>{actionMsg}</div>
-                )}
-
-                <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-                  {thread.map(m => {
-                    const f = folderOf(m.label_ids);
-                    const isOpen = expandedId === m.id;
-                    const recipientCount = (m.to_emails || []).length + (m.cc_emails || []).length;
-                    const inInbox = (m.label_ids || []).includes('INBOX');
-                    const inTrash = (m.label_ids || []).includes('TRASH');
-                    return (
-                      <div key={m.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-                        <div onClick={() => setExpandedId(isOpen ? null : m.id)}
-                          style={{ padding: 10, cursor: 'pointer', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>
-                              {m.from_name || m.from_email || '—'}
-                              <span className="status-badge" style={{ marginLeft: 8, background: '#eef1f5', color: folderColor[f], fontWeight: 600 }}>{f}</span>
-                            </div>
-                            {!isOpen && <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet || ''}</div>}
-                          </div>
-                          <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDateTime(m.received_at)}</div>
-                        </div>
-
-                        {isOpen && (
-                          <div style={{ padding: 12 }}>
-                            <div style={{ padding: 10, background: '#f8fafc', borderRadius: 6, fontSize: 13 }}>
-                              <div><strong>From:</strong> {m.from_name ? `${m.from_name} <${m.from_email || ''}>` : (m.from_email || '—')}</div>
-                              <div><strong>To:</strong> {(m.to_emails || []).join(', ')}</div>
-                              {m.cc_emails && m.cc_emails.length > 0 && <div><strong>Cc:</strong> {m.cc_emails.join(', ')}</div>}
-                              <div><strong>Received:</strong> {fmtDateTime(m.received_at)}</div>
-                            </div>
-
-                            {/* Reply / forward (Gmail API, threaded) + Gmail write-back actions */}
-                            <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                              <button className="btn btn-primary btn-sm" onClick={() => startReply(false, m)}>↩ Reply</button>
-                              {recipientCount > 1 && (
-                                <button className="btn btn-secondary btn-sm" onClick={() => startReply(true, m)}>↩↩ Reply all</button>
-                              )}
-                              <button className="btn btn-secondary btn-sm" onClick={() => startForward(m)}>➦ Forward</button>
-                              <span style={{ flex: 1 }} />
-                              <button className="btn btn-secondary btn-sm" onClick={() => handleAction('unread', m)} disabled={actioning}>● Unread</button>
-                              {inInbox && <button className="btn btn-secondary btn-sm" onClick={() => handleAction('archive', m)} disabled={actioning}>🗄 Archive</button>}
-                              {inTrash
-                                ? <button className="btn btn-secondary btn-sm" onClick={() => handleAction('untrash', m)} disabled={actioning}>♻ Restore</button>
-                                : <button className="btn btn-secondary btn-sm" onClick={() => handleAction('trash', m)} disabled={actioning} style={{ color: '#b91c1c' }}>🗑 Trash</button>}
-                            </div>
-
-                            {/* Save to a client folder (Emails tab + Documents) */}
-                            <div style={{ marginTop: 10, padding: 10, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <strong style={{ fontSize: 13 }}>Save to client:</strong>
-                              <div style={{ minWidth: 240, flex: 1 }}>
-                                <SearchableSelect
-                                  value={assignClientId === '' ? '' : String(assignClientId)}
-                                  options={clientOptions}
-                                  onChange={(v) => setAssignClientId(v ? Number(v) : '')}
-                                  placeholder="Search and pick a client…"
-                                  allowClear
-                                />
-                              </div>
-                              <button className="btn btn-primary btn-sm" onClick={() => handleAssign(m.id)} disabled={assigning || !assignClientId}>
-                                {assigning ? 'Filing…' : 'Assign to client'}
-                              </button>
-                            </div>
-                            {assignMsg && (
-                              <div style={{ marginTop: 6, fontSize: 12.5, color: assignMsg.startsWith('Assign failed') ? '#b91c1c' : '#15803d' }}>{assignMsg}</div>
-                            )}
-
-                            {m.attachments && m.attachments.length > 0 && (
-                              <div style={{ marginTop: 12 }}>
-                                <strong style={{ fontSize: 13 }}>Attachments ({m.attachments.length})</strong>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0 0' }}>
-                                  {m.attachments.map(att => (
-                                    <li key={att.id} style={{
-                                      padding: '6px 10px', marginBottom: 4, background: '#eef1f5', borderRadius: 4, fontSize: 13,
-                                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
-                                    }}>
-                                      <span>📎 {att.filename} <span style={{ color: '#64748b' }}>({fmtSize(att.size_bytes)})</span></span>
-                                      <button className="btn btn-link btn-sm" onClick={() => downloadAttachment(att)}>Download</button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-
-                            <div style={{ marginTop: 12, padding: 12, border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 14, lineHeight: 1.45 }}>
-                              <div dangerouslySetInnerHTML={{ __html: sanitiseBody(m) }} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
           </div>
         </div>
-      )}
 
+        {/* ---- Middle: conversation list ---- */}
+        <div style={{ width: 380, borderRight: paneBorder, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: 8, borderBottom: paneBorder }}>
+            <input type="text" className="form-input" placeholder="Search sender or subject…"
+              value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%' }} />
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {loading ? (
+              <div style={{ padding: 20, color: '#64748b' }}>Loading…</div>
+            ) : error ? (
+              <div style={{ padding: 20, color: '#b91c1c' }}>Failed to load: {error}</div>
+            ) : threads.length === 0 ? (
+              <div style={{ padding: 20, color: '#64748b', fontSize: 13 }}>
+                {emails.length === 0 ? 'No mail yet — click “Sync now”.' : 'No messages match your search.'}
+              </div>
+            ) : threads.map(({ rep: e, count, unread: un }) => {
+              const f = folderOf(e.label_ids);
+              const isSent = f === 'Sent';
+              const party = isSent
+                ? (e.to_emails && e.to_emails.length ? e.to_emails.join(', ') : '—')
+                : (e.from_name || e.from_email || '—');
+              const key = e.gmail_thread_id || `single-${e.id}`;
+              const selected = selectedKey === key;
+              const hasUnread = un > 0;
+              return (
+                <div key={key} onClick={() => openThread(e)}
+                  style={{
+                    padding: '10px 12px', borderBottom: paneBorder, cursor: 'pointer',
+                    background: selected ? '#eef2ff' : hasUnread ? '#fff' : '#fff',
+                    borderLeft: selected ? '3px solid #1a365d' : '3px solid transparent',
+                  }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 13.5, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {isSent && <span style={{ color: '#94a3b8', fontWeight: 400 }}>To: </span>}{party}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtDateTime(e.received_at)}</span>
+                  </div>
+                  <div style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                    {folder === 'All' && <span className="status-badge" style={{ marginRight: 6, background: '#eef1f5', color: folderColor[f], fontWeight: 600, fontSize: 10.5 }}>{f}</span>}
+                    {e.subject || '(no subject)'}
+                    {count > 1 && <span style={{ marginLeft: 6, color: '#64748b', fontWeight: 600 }}>({count})</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                    {e.has_attachments && '📎 '}{e.snippet || ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ---- Right: reading pane ---- */}
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#fff' }}>
+          {loadingDetail ? (
+            <div style={{ padding: 24, color: '#64748b' }}>Loading conversation…</div>
+          ) : !thread ? (
+            <div style={{ padding: 40, color: '#94a3b8', textAlign: 'center', marginTop: 40 }}>
+              <div style={{ fontSize: 40 }}>✉️</div>
+              <p>Select a message to read it here.</p>
+            </div>
+          ) : (
+            <div style={{ padding: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
+                <h3 style={{ margin: 0, fontSize: 18, color: '#0f172a' }}>
+                  {threadSubject}
+                  {thread.length > 1 && <span style={{ fontSize: 13, fontWeight: 400, color: '#64748b' }}> · {thread.length} messages</span>}
+                </h3>
+                <button className="btn btn-secondary btn-sm" onClick={() => { setThread(null); setSelectedKey(null); }}>✕</button>
+              </div>
+              {actionMsg && (
+                <div style={{ marginBottom: 6, fontSize: 12.5, color: actionMsg.startsWith('Action failed') ? '#b91c1c' : '#15803d' }}>{actionMsg}</div>
+              )}
+
+              <div style={{ display: 'grid', gap: 10, marginTop: 6 }}>
+                {thread.map(m => {
+                  const f = folderOf(m.label_ids);
+                  const isOpen = expandedId === m.id;
+                  const recipientCount = (m.to_emails || []).length + (m.cc_emails || []).length;
+                  const inInbox = (m.label_ids || []).includes('INBOX');
+                  const inTrash = (m.label_ids || []).includes('TRASH');
+                  return (
+                    <div key={m.id} style={{ border: paneBorder, borderRadius: 6, overflow: 'hidden' }}>
+                      <div onClick={() => setExpandedId(isOpen ? null : m.id)}
+                        style={{ padding: 10, cursor: 'pointer', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 600 }}>
+                            {m.from_name || m.from_email || '—'}
+                            <span className="status-badge" style={{ marginLeft: 8, background: '#eef1f5', color: folderColor[f], fontWeight: 600 }}>{f}</span>
+                          </div>
+                          {!isOpen && <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet || ''}</div>}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDateTime(m.received_at)}</div>
+                      </div>
+
+                      {isOpen && (
+                        <div style={{ padding: 12 }}>
+                          <div style={{ padding: 10, background: '#f8fafc', borderRadius: 6, fontSize: 13 }}>
+                            <div><strong>From:</strong> {m.from_name ? `${m.from_name} <${m.from_email || ''}>` : (m.from_email || '—')}</div>
+                            <div><strong>To:</strong> {(m.to_emails || []).join(', ')}</div>
+                            {m.cc_emails && m.cc_emails.length > 0 && <div><strong>Cc:</strong> {m.cc_emails.join(', ')}</div>}
+                            <div><strong>Received:</strong> {fmtDateTime(m.received_at)}</div>
+                          </div>
+
+                          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button className="btn btn-primary btn-sm" onClick={() => startReply(false, m)}>↩ Reply</button>
+                            {recipientCount > 1 && (
+                              <button className="btn btn-secondary btn-sm" onClick={() => startReply(true, m)}>↩↩ Reply all</button>
+                            )}
+                            <button className="btn btn-secondary btn-sm" onClick={() => startForward(m)}>➦ Forward</button>
+                            <span style={{ flex: 1 }} />
+                            <button className="btn btn-secondary btn-sm" onClick={() => handleAction('unread', m)} disabled={actioning}>● Unread</button>
+                            {inInbox && <button className="btn btn-secondary btn-sm" onClick={() => handleAction('archive', m)} disabled={actioning}>🗄 Archive</button>}
+                            {inTrash
+                              ? <button className="btn btn-secondary btn-sm" onClick={() => handleAction('untrash', m)} disabled={actioning}>♻ Restore</button>
+                              : <button className="btn btn-secondary btn-sm" onClick={() => handleAction('trash', m)} disabled={actioning} style={{ color: '#b91c1c' }}>🗑 Trash</button>}
+                          </div>
+
+                          <div style={{ marginTop: 10, padding: 10, background: '#f1f5f9', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <strong style={{ fontSize: 13 }}>Save to client:</strong>
+                            <div style={{ minWidth: 220, flex: 1 }}>
+                              <SearchableSelect
+                                value={assignClientId === '' ? '' : String(assignClientId)}
+                                options={clientOptions}
+                                onChange={(v) => setAssignClientId(v ? Number(v) : '')}
+                                placeholder="Search and pick a client…"
+                                allowClear
+                              />
+                            </div>
+                            <button className="btn btn-primary btn-sm" onClick={() => handleAssign(m.id)} disabled={assigning || !assignClientId}>
+                              {assigning ? 'Filing…' : 'Assign'}
+                            </button>
+                          </div>
+                          {assignMsg && (
+                            <div style={{ marginTop: 6, fontSize: 12.5, color: assignMsg.startsWith('Assign failed') ? '#b91c1c' : '#15803d' }}>{assignMsg}</div>
+                          )}
+
+                          {m.attachments && m.attachments.length > 0 && (
+                            <div style={{ marginTop: 12 }}>
+                              <strong style={{ fontSize: 13 }}>Attachments ({m.attachments.length})</strong>
+                              <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0 0' }}>
+                                {m.attachments.map(att => (
+                                  <li key={att.id} style={{
+                                    padding: '6px 10px', marginBottom: 4, background: '#eef1f5', borderRadius: 4, fontSize: 13,
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                                  }}>
+                                    <span>📎 {att.filename} <span style={{ color: '#64748b' }}>({fmtSize(att.size_bytes)})</span></span>
+                                    <button className="btn btn-link btn-sm" onClick={() => downloadAttachment(att)}>Download</button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          <div style={{ marginTop: 12, padding: 12, border: paneBorder, borderRadius: 6, fontSize: 14, lineHeight: 1.45 }}>
+                            <div dangerouslySetInnerHTML={{ __html: sanitiseBody(m) }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ---- Compose modal (rich text) ---- */}
       {compose && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
           zIndex: 110, padding: '32px 16px', overflowY: 'auto',
         }} onClick={() => !sending && setCompose(null)}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 720 }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 760 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0 }}>
                 {compose.mode === 'forward' ? 'Forward' : compose.mode === 'new' ? 'New email' : 'Reply'}
@@ -619,12 +654,19 @@ export default function Inbox() {
                 <input className="form-input" value={compose.subject}
                   onChange={e => setCompose({ ...compose, subject: e.target.value })} />
               </label>
-              <label style={{ fontSize: 12.5, color: '#475569' }}>
-                Message
-                <textarea className="form-input" value={compose.body}
-                  onChange={e => setCompose({ ...compose, body: e.target.value })}
-                  rows={10} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
-              </label>
+              <div>
+                <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 4 }}>Message</div>
+                <RichTextEditor
+                  value={compose.body}
+                  onChange={(html) => setCompose(c => c ? { ...c, body: html } : c)}
+                  ariaLabel="Email message body"
+                />
+                {!sigHtml && (
+                  <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
+                    Tip: set a firm signature in Settings → Firm Email so it's added automatically.
+                  </div>
+                )}
+              </div>
               <label style={{ fontSize: 12.5, color: '#475569' }}>
                 Attachments
                 <input type="file" multiple className="form-input"
