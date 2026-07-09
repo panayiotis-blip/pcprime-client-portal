@@ -25,6 +25,8 @@ type InboxRow = {
   received_at: string;
   has_attachments: boolean;
   is_read: boolean;
+  flagged: boolean;
+  is_urgent: boolean;
 };
 
 // Gmail labels → a single display folder.
@@ -151,6 +153,34 @@ export default function Inbox() {
   const [sendErr, setSendErr] = useState<string | null>(null);
   // Firm signature, loaded once (staff-readable RPC). Inserted into new mail.
   const [sigHtml, setSigHtml] = useState<string>('');
+  // Resizable panes — widths persist in localStorage.
+  const [sidebarW, setSidebarW] = useState<number>(() => Number(localStorage.getItem('inboxSidebarW')) || 190);
+  const [listW, setListW] = useState<number>(() => Number(localStorage.getItem('inboxListW')) || 380);
+  // Enlarge the compose window (Outlook-style maximise).
+  const [composeMax, setComposeMax] = useState(false);
+
+  useEffect(() => { localStorage.setItem('inboxSidebarW', String(sidebarW)); }, [sidebarW]);
+  useEffect(() => { localStorage.setItem('inboxListW', String(listW)); }, [listW]);
+
+  // Drag a pane divider. Clamps to sensible bounds so a pane can't vanish.
+  const startDrag = (which: 'sidebar' | 'list', e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = which === 'sidebar' ? sidebarW : listW;
+    const onMove = (ev: MouseEvent) => {
+      const w = startW + (ev.clientX - startX);
+      if (which === 'sidebar') setSidebarW(Math.max(150, Math.min(360, w)));
+      else setListW(Math.max(260, Math.min(680, w)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
 
   const clientOptions = useMemo(
     () => (clients as any[]).map(c => ({ value: c.id, label: c.name, sublabel: c.client_code || '' })),
@@ -384,6 +414,21 @@ export default function Inbox() {
     }
   };
 
+  // Toggle the follow-up flag / urgent marker on a message (optimistic).
+  const toggleMark = async (id: number, field: 'flagged' | 'is_urgent', current: boolean) => {
+    const next = !current;
+    setEmails(prev => prev.map(e => e.id === id ? { ...e, [field]: next } : e));
+    setThread(prev => prev ? prev.map(m => m.id === id ? { ...m, [field]: next } : m) : prev);
+    try {
+      await api.setInboxFlags(id, { [field]: next });
+    } catch (e: any) {
+      // Revert on failure.
+      setEmails(prev => prev.map(em => em.id === id ? { ...em, [field]: current } : em));
+      setThread(prev => prev ? prev.map(m => m.id === id ? { ...m, [field]: current } : m) : prev);
+      alert('Could not update: ' + e.message);
+    }
+  };
+
   const downloadAttachment = async (att: Attachment) => {
     try {
       const url = await api.getInboxAttachmentUrl(att.storage_path);
@@ -417,7 +462,7 @@ export default function Inbox() {
         height: 'calc(100vh - 200px)', minHeight: 520, marginTop: 10, background: '#fff',
       }}>
         {/* ---- Left: folder sidebar ---- */}
-        <div style={{ width: 190, borderRight: paneBorder, background: '#f8fafc', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ width: sidebarW, background: '#f8fafc', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: 10 }}>
             <button className="btn btn-primary" style={{ width: '100%' }} onClick={startCompose}>✏️ Compose</button>
           </div>
@@ -453,8 +498,12 @@ export default function Inbox() {
           </div>
         </div>
 
+        {/* draggable divider: sidebar ↔ list */}
+        <div onMouseDown={(e) => startDrag('sidebar', e)} title="Drag to resize"
+          style={{ width: 6, cursor: 'col-resize', background: '#eef2f7', flexShrink: 0 }} />
+
         {/* ---- Middle: conversation list ---- */}
-        <div style={{ width: 380, borderRight: paneBorder, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div style={{ width: listW, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: 8, borderBottom: paneBorder }}>
             <input type="text" className="form-input" placeholder="Search sender or subject…"
               value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%' }} />
@@ -488,9 +537,17 @@ export default function Inbox() {
                     <span style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 13.5, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {isSent && <span style={{ color: '#94a3b8', fontWeight: 400 }}>To: </span>}{party}
                     </span>
-                    <span style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap', flexShrink: 0 }}>{fmtDateTime(e.received_at)}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      <button
+                        onClick={(ev) => { ev.stopPropagation(); toggleMark(e.id, 'flagged', e.flagged); }}
+                        title={e.flagged ? 'Remove flag' : 'Flag for follow-up'}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: e.flagged ? 1 : 0.3 }}
+                      >🚩</button>
+                      <span style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDateTime(e.received_at)}</span>
+                    </span>
                   </div>
                   <div style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                    {e.is_urgent && <span style={{ background: '#dc2626', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '1px 5px', marginRight: 6 }}>URGENT</span>}
                     {folder === 'All' && <span className="status-badge" style={{ marginRight: 6, background: '#eef1f5', color: folderColor[f], fontWeight: 600, fontSize: 10.5 }}>{f}</span>}
                     {e.subject || '(no subject)'}
                     {count > 1 && <span style={{ marginLeft: 6, color: '#64748b', fontWeight: 600 }}>({count})</span>}
@@ -503,6 +560,10 @@ export default function Inbox() {
             })}
           </div>
         </div>
+
+        {/* draggable divider: list ↔ reading pane */}
+        <div onMouseDown={(e) => startDrag('list', e)} title="Drag to resize"
+          style={{ width: 6, cursor: 'col-resize', background: '#eef2f7', flexShrink: 0 }} />
 
         {/* ---- Right: reading pane ---- */}
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#fff' }}>
@@ -563,6 +624,12 @@ export default function Inbox() {
                             )}
                             <button className="btn btn-secondary btn-sm" onClick={() => startForward(m)}>➦ Forward</button>
                             <span style={{ flex: 1 }} />
+                            <button className="btn btn-secondary btn-sm" onClick={() => toggleMark(m.id, 'flagged', m.flagged)}
+                              style={{ color: m.flagged ? '#b45309' : undefined, fontWeight: m.flagged ? 700 : undefined }}
+                              title="Flag for follow-up">🚩 {m.flagged ? 'Flagged' : 'Flag'}</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => toggleMark(m.id, 'is_urgent', m.is_urgent)}
+                              style={{ color: m.is_urgent ? '#dc2626' : undefined, fontWeight: m.is_urgent ? 700 : undefined }}
+                              title="Mark as urgent">🔴 {m.is_urgent ? 'Urgent' : 'Urgent'}</button>
                             <button className="btn btn-secondary btn-sm" onClick={() => handleAction('unread', m)} disabled={actioning}>● Unread</button>
                             {inInbox && <button className="btn btn-secondary btn-sm" onClick={() => handleAction('archive', m)} disabled={actioning}>🗄 Archive</button>}
                             {inTrash
@@ -627,13 +694,16 @@ export default function Inbox() {
           display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
           zIndex: 110, padding: '32px 16px', overflowY: 'auto',
         }} onClick={() => !sending && setCompose(null)}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: '100%', maxWidth: 760 }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: composeMax ? '96vw' : '100%', maxWidth: composeMax ? 1200 : 760 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0 }}>
                 {compose.mode === 'forward' ? 'Forward' : compose.mode === 'new' ? 'New email' : 'Reply'}
                 <span style={{ fontSize: 13, fontWeight: 400, color: '#64748b' }}> — from {INFO_ADDRESS}</span>
               </h3>
-              <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>✕</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setComposeMax(m => !m)} title={composeMax ? 'Restore size' : 'Enlarge window'}>{composeMax ? '🗗 Restore' : '🗖 Enlarge'}</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>✕</button>
+              </div>
             </div>
 
             <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
@@ -659,6 +729,7 @@ export default function Inbox() {
                 <RichTextEditor
                   value={compose.body}
                   onChange={(html) => setCompose(c => c ? { ...c, body: html } : c)}
+                  minHeight={composeMax ? 440 : 220}
                   ariaLabel="Email message body"
                 />
                 {!sigHtml && (

@@ -2848,7 +2848,7 @@ export const api = {
   // read/archive/trash (inbox-action) sync back to Gmail.
   async getInboxEmails(opts?: { limit?: number; unreadOnly?: boolean }) {
     let q = supabase.from('inbox_emails')
-      .select('id, gmail_thread_id, from_email, from_name, to_emails, label_ids, subject, snippet, received_at, has_attachments, is_read')
+      .select('id, gmail_thread_id, from_email, from_name, to_emails, label_ids, subject, snippet, received_at, has_attachments, is_read, flagged, is_urgent')
       .order('received_at', { ascending: false })
       .limit(opts?.limit ?? 100);
     if (opts?.unreadOnly) q = q.eq('is_read', false);
@@ -2866,6 +2866,12 @@ export const api = {
   },
   async markInboxRead(id: number, read = true) {
     const { error } = await supabase.from('inbox_emails').update({ is_read: read }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Local follow-up flag / urgent marker (migration 127) — portal-managed, not
+  // synced to Gmail.
+  async setInboxFlags(id: number, patch: { flagged?: boolean; is_urgent?: boolean }) {
+    const { error } = await supabase.from('inbox_emails').update(patch).eq('id', id);
     if (error) throw new Error(error.message);
   },
   // All messages in one Gmail conversation (oldest first), for the threaded view.
