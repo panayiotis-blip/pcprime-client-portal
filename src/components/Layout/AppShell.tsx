@@ -333,6 +333,36 @@ export default function AppShell() {
     }
   };
 
+  // Collapsed icon rail — a flat, icon-only version of the nav. Group headers
+  // are dropped; every reachable item shows as an icon with a tooltip + badge.
+  const renderRail = (groups: NavGroup[]) => {
+    const items = groups.flatMap(g => g.items.filter(i => !i.requires || i.requires(user)));
+    return (
+      <>
+        <div className="nav-rail-top">
+          <button type="button" className="nav-rail-btn" onClick={() => setNavCollapsed(false)} title="Expand menu">»</button>
+          <Link to="/" className={`nav-rail-item ${location.pathname === '/' ? 'active' : ''}`} title="Dashboard" onClick={() => setSidebarOpen(false)}>⌂</Link>
+        </div>
+        <div className="nav-rail-items">
+          {items.map(it => {
+            const active = location.pathname === it.path || location.pathname.startsWith(it.path + '/');
+            const badge =
+              it.path === '/tasks' ? newTaskCount :
+              (it.path === '/messages' || it.path === '/my-messages') ? msgUnread :
+              it.path === '/client-expenses' ? expenseCount : 0;
+            return (
+              <Link key={it.path} to={it.path} className={`nav-rail-item ${active ? 'active' : ''}`}
+                title={it.label} onClick={() => setSidebarOpen(false)}>
+                <span>{it.icon}</span>
+                {badge > 0 && <span className="nav-rail-badge">{badge > 9 ? '9+' : badge}</span>}
+              </Link>
+            );
+          })}
+        </div>
+      </>
+    );
+  };
+
   // Client-role users see a flat sidebar (no groups)
   if (user && !isStaffRole(user)) {
     return (
@@ -487,11 +517,9 @@ export default function AppShell() {
         <button className="menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>&#9776;</button>
         <h1>PC Prime Portal</h1>
       </header>
-      {navCollapsed && (
-        <button type="button" className="nav-expand-btn" onClick={() => setNavCollapsed(false)} title="Show menu">»</button>
-      )}
 
       <nav className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        {navCollapsed ? renderRail(visibleGroups) : (<>
         <div className="sidebar-header">
           <Link to="/" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>
             <img src="/logo.png" alt="PC Prime & Calculate Consultants Ltd" style={{ width: '100%', height: 'auto', display: 'block' }} />
@@ -660,6 +688,7 @@ export default function AppShell() {
         </ul>
 
         <SidebarUserMenu user={user} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
+        </>)}
       </nav>
 
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
