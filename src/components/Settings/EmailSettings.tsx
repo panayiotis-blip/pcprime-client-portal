@@ -53,6 +53,76 @@ export default function EmailSettings() {
   // Signature — what gets appended to every outgoing email.
   const [signatureHtml, setSignatureHtml] = useState('');
   const [signatureText, setSignatureText] = useState('');
+  // Per-user signature builder — personal details per user; firm name/logo from
+  // company_settings (never hardcoded).
+  const [sig, setSig] = useState({
+    name: '', subtitle: '', title: '', phone: '', mobile: '', email: '',
+    website: '', firm: '', confidentiality: '', logoUrl: '', logoWidth: 120,
+  });
+  const [logoBusy, setLogoBusy] = useState(false);
+
+  const escHtml = (t: string) => String(t || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] || c));
+
+  // Generate a clean HTML signature with real <br> breaks and a grey
+  // confidentiality notice. Empty fields are omitted.
+  const buildSignatureHtml = (): string => {
+    const NAVY = '#1a365d', MUTED = '#888';
+    const A = 'font-family:Arial,Helvetica,sans-serif;';
+    const site = sig.website ? (sig.website.startsWith('http') ? sig.website : `https://${sig.website}`) : '';
+    const contact: string[] = [];
+    if (sig.phone)   contact.push(`t: ${escHtml(sig.phone)}`);
+    if (sig.mobile)  contact.push(`m: ${escHtml(sig.mobile)}`);
+    if (sig.email)   contact.push(`e: <a href="mailto:${escHtml(sig.email)}" style="color:${NAVY};text-decoration:none;">${escHtml(sig.email)}</a>`);
+    if (sig.website) contact.push(`w: <a href="${escHtml(site)}" style="color:${NAVY};text-decoration:none;">${escHtml(sig.website)}</a>`);
+    const logo = sig.logoUrl ? `<img src="${escHtml(sig.logoUrl)}" alt="${escHtml(sig.firm || 'Logo')}" width="${sig.logoWidth || 120}" style="display:block;border:0;width:${sig.logoWidth || 120}px;height:auto;margin-bottom:8px;">` : '';
+    return `<div style="${A}font-size:13px;color:${NAVY};line-height:1.5;">` +
+      logo +
+      (sig.name ? `<div style="font-weight:bold;font-size:15px;">${escHtml(sig.name)}</div>` : '') +
+      (sig.subtitle ? `<div>${escHtml(sig.subtitle)}</div>` : '') +
+      (sig.title ? `<div>${escHtml(sig.title)}</div>` : '') +
+      (sig.firm ? `<div>${escHtml(sig.firm)}</div>` : '') +
+      (contact.length ? `<div style="margin-top:6px;">${contact.join('<br>')}</div>` : '') +
+      (sig.confidentiality ? `<div style="font-size:11px;color:${MUTED};margin-top:10px;line-height:1.4;">${escHtml(sig.confidentiality)}</div>` : '') +
+      `</div>`;
+  };
+
+  const buildSignatureText = (): string => {
+    const parts: string[] = [];
+    for (const v of [sig.name, sig.subtitle, sig.title, sig.firm]) if (v) parts.push(v);
+    const contact = [
+      sig.phone && `t: ${sig.phone}`, sig.mobile && `m: ${sig.mobile}`,
+      sig.email && `e: ${sig.email}`, sig.website && `w: ${sig.website}`,
+    ].filter(Boolean);
+    if (contact.length) parts.push(contact.join('\n'));
+    if (sig.confidentiality) parts.push('\n' + sig.confidentiality);
+    return parts.join('\n');
+  };
+
+  const generateSignature = () => {
+    if (!sig.name && !sig.firm) { setStatusMsg({ kind: 'err', text: 'Add at least your name or the firm name first.' }); return; }
+    setSignatureHtml(buildSignatureHtml());
+    setSignatureText(buildSignatureText());
+    setStatusMsg({ kind: 'ok', text: 'Signature generated — check the preview, then Save Settings.' });
+  };
+
+  const useCompanyLogo = async () => {
+    try {
+      const cs = await api.getCompanySettings();
+      if (cs?.logo_url) setSig(s => ({ ...s, logoUrl: cs.logo_url }));
+      else setStatusMsg({ kind: 'err', text: 'No firm logo in Company Settings yet — upload one there or paste a URL here.' });
+    } catch (e: any) { setStatusMsg({ kind: 'err', text: e.message }); }
+  };
+
+  const uploadLogo = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { setStatusMsg({ kind: 'err', text: 'Logo must be under 5 MB.' }); return; }
+    setLogoBusy(true);
+    try {
+      const url = await api.uploadCompanyLogo(file);
+      setSig(s => ({ ...s, logoUrl: url }));
+    } catch (e: any) {
+      setStatusMsg({ kind: 'err', text: 'Upload failed: ' + e.message });
+    } finally { setLogoBusy(false); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -70,6 +140,7 @@ export default function EmailSettings() {
         setLastError(row.last_error);
         setSignatureHtml(row.signature_html || '');
         setSignatureText(row.signature_text || '');
+        setSig(s => ({ ...s, email: s.email || row.smtp_user || '' }));
         // Pick the right provider radio based on host so the instructions match.
         setProvider(detectProvider(row.smtp_host));
       }
@@ -80,6 +151,13 @@ export default function EmailSettings() {
     }
   };
   useEffect(() => { load(); }, []);
+
+  // Firm name from company_settings (never hardcoded) to prefill the builder.
+  useEffect(() => {
+    api.getCompanySettings()
+      .then(cs => setSig(s => ({ ...s, firm: s.firm || cs?.name || '' })))
+      .catch(() => {});
+  }, []);
 
   const handlePickProvider = (p: Provider) => {
     setProvider(p);
@@ -329,6 +407,43 @@ export default function EmailSettings() {
             <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 10px' }}>
               Appended to every email you send through the app. Leave blank to send without a signature.
             </p>
+
+            {/* Signature builder — personal details per user; firm name/logo from company_settings */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 12, background: '#fbfcfe', marginBottom: 12 }}>
+              <label style={{ fontWeight: 700, color: '#1a365d' }}>✨ Signature builder</label>
+              <p style={{ fontSize: '0.78em', color: '#64748b', margin: '2px 0 10px' }}>
+                Fill these in and click <strong>Generate</strong> — it builds a clean signature (with a grey confidentiality notice) into the HTML box below, then click Save Settings.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div><label style={{ fontSize: '0.78em' }}>Full name</label><input className="form-input form-input-sm" value={sig.name} onChange={e => setSig(s => ({ ...s, name: e.target.value }))} /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Line under name (optional)</label><input className="form-input form-input-sm" value={sig.subtitle} onChange={e => setSig(s => ({ ...s, subtitle: e.target.value }))} placeholder="e.g. (unsigned) electronic transmission" /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Title / qualification</label><input className="form-input form-input-sm" value={sig.title} onChange={e => setSig(s => ({ ...s, title: e.target.value }))} placeholder="e.g. Professional Accountant (SA)" /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Firm name</label><input className="form-input form-input-sm" value={sig.firm} onChange={e => setSig(s => ({ ...s, firm: e.target.value }))} /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Phone (t:)</label><input className="form-input form-input-sm" value={sig.phone} onChange={e => setSig(s => ({ ...s, phone: e.target.value }))} /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Mobile (m:)</label><input className="form-input form-input-sm" value={sig.mobile} onChange={e => setSig(s => ({ ...s, mobile: e.target.value }))} /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Email (e:)</label><input className="form-input form-input-sm" value={sig.email} onChange={e => setSig(s => ({ ...s, email: e.target.value }))} /></div>
+                <div><label style={{ fontSize: '0.78em' }}>Website (w:)</label><input className="form-input form-input-sm" value={sig.website} onChange={e => setSig(s => ({ ...s, website: e.target.value }))} placeholder="www.firm.com" /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={{ fontSize: '0.78em' }}>Confidentiality notice (shown small &amp; grey, optional)</label><textarea className="form-input form-input-sm" rows={3} value={sig.confidentiality} onChange={e => setSig(s => ({ ...s, confidentiality: e.target.value }))} placeholder="CONFIDENTIALITY NOTICE: This email and any attachments are confidential…" /></div>
+              </div>
+              <div style={{ marginTop: 10, padding: 8, background: '#f1f5f9', borderRadius: 6 }}>
+                <label style={{ fontSize: '0.78em', fontWeight: 600 }}>Logo (optional)</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+                  <input className="form-input form-input-sm" style={{ flex: 1, minWidth: 200 }} placeholder="Paste a logo URL, or use / upload →" value={sig.logoUrl} onChange={e => setSig(s => ({ ...s, logoUrl: e.target.value }))} />
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={useCompanyLogo}>Use company logo</button>
+                  <label className="btn btn-secondary btn-sm" style={{ margin: 0, cursor: 'pointer' }}>{logoBusy ? 'Uploading…' : '⬆ Upload'}<input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); }} /></label>
+                  <span style={{ fontSize: '0.78em', color: '#64748b' }}>Width&nbsp;<input type="number" className="form-input form-input-sm" style={{ width: 64, display: 'inline-block' }} value={sig.logoWidth} onChange={e => setSig(s => ({ ...s, logoWidth: parseInt(e.target.value, 10) || 120 }))} />&nbsp;px</span>
+                </div>
+                {sig.logoUrl && <img src={sig.logoUrl} alt="logo preview" style={{ maxHeight: 44, marginTop: 8, display: 'block' }} />}
+              </div>
+              <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 10 }} onClick={generateSignature}>✨ Generate signature</button>
+              {signatureHtml && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={{ fontSize: '0.78em', color: '#64748b' }}>Preview</label>
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: signatureHtml }} />
+                </div>
+              )}
+            </div>
+
             <div className="form-grid">
               <div className="form-group full-width">
                 <label>HTML signature (rich)</label>

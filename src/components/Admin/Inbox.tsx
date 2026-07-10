@@ -190,12 +190,19 @@ export default function Inbox() {
     [clients],
   );
 
+  // Per-user signature (the composing staff member's own), inserted into new
+  // mail. Newline-safe: plain text pasted into the HTML field keeps its breaks.
   useEffect(() => {
-    api.getFirmEmailSignature()
-      .then(s => {
-        if (s.signature_html && s.signature_html.trim()) setSigHtml(s.signature_html);
-        else if (s.signature_text && s.signature_text.trim())
-          setSigHtml(`<div style="white-space:pre-wrap">${escapeHtml(s.signature_text)}</div>`);
+    api.getMySmtpSettings()
+      .then((row: any) => {
+        const html = (row?.signature_html || '').trim();
+        const text = (row?.signature_text || '').trim();
+        if (html) {
+          const looksHtml = /<[a-z][\s\S]*>/i.test(html);
+          setSigHtml(looksHtml ? html : `<div style="white-space:pre-wrap">${escapeHtml(html)}</div>`);
+        } else if (text) {
+          setSigHtml(`<div style="white-space:pre-wrap">${escapeHtml(text)}</div>`);
+        }
       })
       .catch(() => {});
   }, []);
