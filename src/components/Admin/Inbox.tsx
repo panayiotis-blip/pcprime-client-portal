@@ -5,6 +5,7 @@ import { formatDateTime } from '../../services/dates';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
 import RichTextEditor from './RichTextEditor';
+import RecipientInput, { type RecipientSuggestion } from './RecipientInput';
 
 // Shared firm inbox (info@primeandcalculate.com), laid out like Outlook:
 // folder sidebar · conversation list · reading pane. Full two-way — staff view
@@ -88,8 +89,8 @@ const INFO_ADDRESS = 'info@primeandcalculate.com';
 type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward';
 type ComposeState = {
   mode: ComposeMode;
-  to: string;
-  cc: string;
+  to: string[];
+  cc: string[];
   subject: string;
   body: string;          // HTML (from the rich-text editor)
   replyToInboxId?: number;
@@ -189,6 +190,22 @@ export default function Inbox() {
     () => (clients as any[]).map(c => ({ value: c.id, label: c.name, sublabel: c.client_code || '' })),
     [clients],
   );
+
+  // Recipient autocomplete source — every client email (clients.email is text[])
+  // flattened to {name, email}, de-duplicated. Built from the in-memory client
+  // list (already RLS-scoped via useApp).
+  const recipientSuggestions = useMemo<RecipientSuggestion[]>(() => {
+    const out: RecipientSuggestion[] = [];
+    const seen = new Set<string>();
+    for (const c of clients as any[]) {
+      const emails = Array.isArray(c.email) ? c.email : String(c.email || '').split(/[;,]+/);
+      for (const em of emails) {
+        const e = String(em || '').trim();
+        if (e && !seen.has(e.toLowerCase())) { seen.add(e.toLowerCase()); out.push({ name: c.name || c.client_name || '', email: e }); }
+      }
+    }
+    return out;
+  }, [clients]);
 
   // Per-user signature (the composing staff member's own), inserted into new
   // mail. Newline-safe: plain text pasted into the HTML field keeps its breaks.
@@ -295,7 +312,7 @@ export default function Inbox() {
       `<div><br></div>${inner}`;
   };
 
-  const startCompose = () => { setSendErr(null); setCompose({ mode: 'new', to: '', cc: '', subject: '', body: openingBody(), files: [] }); };
+  const startCompose = () => { setSendErr(null); setCompose({ mode: 'new', to: [], cc: [], subject: '', body: openingBody(), files: [] }); };
 
   const startReply = (all: boolean, o: InboxDetail) => {
     const cc = all
@@ -307,8 +324,8 @@ export default function Inbox() {
     setSendErr(null);
     setCompose({
       mode: all ? 'replyAll' : 'reply',
-      to: o.from_email || '',
-      cc: cc.join(', '),
+      to: o.from_email ? [o.from_email] : [],
+      cc,
       subject: base ? `Re: ${base}` : 'Re:',
       body: openingBody() + quotedOriginal(o),
       replyToInboxId: o.id,
@@ -319,13 +336,13 @@ export default function Inbox() {
   const startForward = (o: InboxDetail) => {
     const base = dropPrefix(o.subject, /^(fwd:\s*)+/i);
     setSendErr(null);
-    setCompose({ mode: 'forward', to: '', cc: '', subject: base ? `Fwd: ${base}` : 'Fwd:', body: openingBody() + forwardedBlock(o), files: [] });
+    setCompose({ mode: 'forward', to: [], cc: [], subject: base ? `Fwd: ${base}` : 'Fwd:', body: openingBody() + forwardedBlock(o), files: [] });
   };
 
   const handleSend = async () => {
     if (!compose) return;
-    const to = compose.to.split(',').map(s => s.trim()).filter(Boolean);
-    const cc = compose.cc.split(',').map(s => s.trim()).filter(Boolean);
+    const to = compose.to.map(s => s.trim()).filter(Boolean);
+    const cc = compose.cc.map(s => s.trim()).filter(Boolean);
     if (!to.length) { setSendErr('Add at least one recipient.'); return; }
     setSending(true); setSendErr(null);
     try {
@@ -760,16 +777,29 @@ export default function Inbox() {
 
             <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
               <label style={{ fontSize: 12.5, color: '#475569' }}>
-                To <span style={{ color: '#94a3b8' }}>(comma-separated)</span>
-                <input className="form-input" value={compose.to}
-                  onChange={e => setCompose({ ...compose, to: e.target.value })}
-                  placeholder="name@example.com" autoFocus />
+                To
+                <div style={{ marginTop: 4 }}>
+                  <RecipientInput
+                    value={compose.to}
+                    onChange={(v) => setCompose(c => c ? { ...c, to: v } : c)}
+                    suggestions={recipientSuggestions}
+                    placeholder="Type a name or email…"
+                    autoFocus
+                    ariaLabel="To recipients"
+                  />
+                </div>
               </label>
               <label style={{ fontSize: 12.5, color: '#475569' }}>
                 Cc
-                <input className="form-input" value={compose.cc}
-                  onChange={e => setCompose({ ...compose, cc: e.target.value })}
-                  placeholder="optional" />
+                <div style={{ marginTop: 4 }}>
+                  <RecipientInput
+                    value={compose.cc}
+                    onChange={(v) => setCompose(c => c ? { ...c, cc: v } : c)}
+                    suggestions={recipientSuggestions}
+                    placeholder="optional"
+                    ariaLabel="Cc recipients"
+                  />
+                </div>
               </label>
               <label style={{ fontSize: 12.5, color: '#475569' }}>
                 Subject
