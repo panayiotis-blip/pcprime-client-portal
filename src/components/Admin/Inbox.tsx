@@ -135,7 +135,7 @@ export default function Inbox() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [folder, setFolder] = useState<'All' | Folder>('All');
+  const [folder, setFolder] = useState<'All' | Folder>('Inbox');
   const [thread, setThread] = useState<InboxDetail[] | null>(null);
   const [threadSubject, setThreadSubject] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
