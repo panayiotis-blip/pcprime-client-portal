@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../../services/api';
 import { formatDateTime } from '../../services/dates';
@@ -161,6 +161,9 @@ export default function Inbox() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('inboxSidebarCollapsed') === '1');
   // Enlarge the compose window (Outlook-style maximise).
   const [composeMax, setComposeMax] = useState(false);
+  // Attachment drag-and-drop highlight + hidden file input trigger.
+  const [dragActive, setDragActive] = useState(false);
+  const attachInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { localStorage.setItem('inboxSidebarW', String(sidebarW)); }, [sidebarW]);
   useEffect(() => { localStorage.setItem('inboxListW', String(listW)); }, [listW]);
@@ -338,6 +341,15 @@ export default function Inbox() {
     setSendErr(null);
     setCompose({ mode: 'forward', to: [], cc: [], subject: base ? `Fwd: ${base}` : 'Fwd:', body: openingBody() + forwardedBlock(o), files: [] });
   };
+
+  // Append (not replace) attached files; dedupe by name+size.
+  const addFiles = (list: FileList | File[]) => setCompose(c => {
+    if (!c) return c;
+    const have = new Set(c.files.map(f => `${f.name}:${f.size}`));
+    const added = Array.from(list).filter(f => !have.has(`${f.name}:${f.size}`));
+    return { ...c, files: [...c.files, ...added] };
+  });
+  const removeFile = (i: number) => setCompose(c => c ? { ...c, files: c.files.filter((_, idx) => idx !== i) } : c);
 
   const handleSend = async () => {
     if (!compose) return;
@@ -806,7 +818,12 @@ export default function Inbox() {
                 <input className="form-input" value={compose.subject}
                   onChange={e => setCompose({ ...compose, subject: e.target.value })} />
               </label>
-              <div>
+              <div
+                onDragOver={(e) => { e.preventDefault(); if (!dragActive) setDragActive(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+                onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
+                style={{ position: 'relative', border: `2px dashed ${dragActive ? '#1a365d' : 'transparent'}`, borderRadius: 8, padding: 2 }}
+              >
                 <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 4 }}>Message</div>
                 <RichTextEditor
                   value={compose.body}
@@ -816,29 +833,46 @@ export default function Inbox() {
                 />
                 {!sigHtml && (
                   <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
-                    Tip: set a firm signature in Settings → Firm Email so it's added automatically.
+                    Tip: set your signature in Settings → Email so it's added automatically.
+                  </div>
+                )}
+                {dragActive && (
+                  <div style={{ position: 'absolute', inset: 0, background: 'rgba(26,54,93,0.06)', border: '2px dashed #1a365d', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1a365d', fontWeight: 600, pointerEvents: 'none' }}>
+                    📎 Drop files to attach
                   </div>
                 )}
               </div>
-              <label style={{ fontSize: 12.5, color: '#475569' }}>
-                Attachments
-                <input type="file" multiple className="form-input"
-                  onChange={e => setCompose({ ...compose, files: Array.from(e.target.files || []) })} />
-              </label>
+
+              {/* Attachment chips */}
+              <input ref={attachInputRef} type="file" multiple style={{ display: 'none' }}
+                onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.currentTarget.value = ''; }} />
               {compose.files.length > 0 && (
-                <div style={{ fontSize: 12, color: '#64748b' }}>
-                  {compose.files.map(f => `${f.name} (${fmtSize(f.size)})`).join(', ')}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {compose.files.map((f, i) => (
+                    <span key={`${f.name}:${f.size}:${i}`} title={f.name}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef1f5', color: '#1a365d', borderRadius: 6, padding: '3px 4px 3px 8px', fontSize: 12.5, maxWidth: '100%' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {f.name}</span>
+                      <span style={{ color: '#64748b', flexShrink: 0 }}>({fmtSize(f.size)})</span>
+                      <button type="button" onClick={() => removeFile(i)} title="Remove"
+                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
 
             {sendErr && <div style={{ marginTop: 8, fontSize: 13, color: '#b91c1c' }}>{sendErr}</div>}
 
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending}>
-                {sending ? 'Sending…' : '➤ Send'}
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => attachInputRef.current?.click()} disabled={sending} title="Attach files">
+                📎 Attach
               </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending}>
+                  {sending ? 'Sending…' : '➤ Send'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
