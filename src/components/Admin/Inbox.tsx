@@ -93,6 +93,7 @@ type ComposeState = {
   cc: string[];
   subject: string;
   body: string;          // HTML (from the rich-text editor)
+  initialBody: string;   // body at open time — to detect user edits for discard
   replyToInboxId?: number;
   files: File[];
 };
@@ -315,7 +316,7 @@ export default function Inbox() {
       `<div><br></div>${inner}`;
   };
 
-  const startCompose = () => { setSendErr(null); setCompose({ mode: 'new', to: [], cc: [], subject: '', body: openingBody(), files: [] }); };
+  const startCompose = () => { const b = openingBody(); setSendErr(null); setCompose({ mode: 'new', to: [], cc: [], subject: '', body: b, initialBody: b, files: [] }); };
 
   const startReply = (all: boolean, o: InboxDetail) => {
     const cc = all
@@ -324,13 +325,15 @@ export default function Inbox() {
           .filter(e => e && e !== INFO_ADDRESS && e !== (o.from_email || '').toLowerCase()))]
       : [];
     const base = dropPrefix(o.subject, /^(re:\s*)+/i);
+    const b = openingBody() + quotedOriginal(o);
     setSendErr(null);
     setCompose({
       mode: all ? 'replyAll' : 'reply',
       to: o.from_email ? [o.from_email] : [],
       cc,
       subject: base ? `Re: ${base}` : 'Re:',
-      body: openingBody() + quotedOriginal(o),
+      body: b,
+      initialBody: b,
       replyToInboxId: o.id,
       files: [],
     });
@@ -338,8 +341,9 @@ export default function Inbox() {
 
   const startForward = (o: InboxDetail) => {
     const base = dropPrefix(o.subject, /^(fwd:\s*)+/i);
+    const b = openingBody() + forwardedBlock(o);
     setSendErr(null);
-    setCompose({ mode: 'forward', to: [], cc: [], subject: base ? `Fwd: ${base}` : 'Fwd:', body: openingBody() + forwardedBlock(o), files: [] });
+    setCompose({ mode: 'forward', to: [], cc: [], subject: base ? `Fwd: ${base}` : 'Fwd:', body: b, initialBody: b, files: [] });
   };
 
   // Append (not replace) attached files; dedupe by name+size.
@@ -383,6 +387,17 @@ export default function Inbox() {
     } finally {
       setSending(false);
     }
+  };
+
+  // Close the composer, confirming first if the user has written anything or
+  // attached files (body always starts with the signature/quoted text, so we
+  // compare against the pristine initial body).
+  const handleDiscard = () => {
+    if (!compose || sending) return;
+    const dirty = compose.body !== compose.initialBody || compose.files.length > 0;
+    if (dirty && !confirm('Discard this message? Your text and attachments will be lost.')) return;
+    setCompose(null);
+    setComposeMax(false);
   };
 
   const unread = useMemo(() => emails.filter(e => !e.is_read).length, [emails]);
@@ -774,8 +789,8 @@ export default function Inbox() {
           position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
           zIndex: 110, padding: '32px 16px', overflowY: 'auto',
-        }} onClick={() => !sending && setCompose(null)}>
-          <div style={{ background: 'white', borderRadius: 8, padding: 20, width: composeMax ? '96vw' : '100%', maxWidth: composeMax ? 1200 : 760 }} onClick={e => e.stopPropagation()}>
+        }} onClick={handleDiscard}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 20, boxShadow: '0 12px 32px rgba(15, 23, 42, 0.22)', width: composeMax ? '96vw' : '100%', maxWidth: composeMax ? 1200 : 760 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0 }}>
                 {compose.mode === 'forward' ? 'Forward' : compose.mode === 'new' ? 'New email' : 'Reply'}
@@ -783,11 +798,11 @@ export default function Inbox() {
               </h3>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => setComposeMax(m => !m)} title={composeMax ? 'Restore size' : 'Enlarge window'}>{composeMax ? '🗗 Restore' : '🗖 Enlarge'}</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>✕</button>
+                <button className="btn btn-secondary btn-sm" onClick={handleDiscard} disabled={sending} title="Discard">✕</button>
               </div>
             </div>
 
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+            <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
               <label style={{ fontSize: 12.5, color: '#475569' }}>
                 To
                 <div style={{ marginTop: 4 }}>
@@ -863,12 +878,12 @@ export default function Inbox() {
 
             {sendErr && <div style={{ marginTop: 8, fontSize: 13, color: '#b91c1c' }}>{sendErr}</div>}
 
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => attachInputRef.current?.click()} disabled={sending} title="Attach files">
                 📎 Attach
               </button>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setCompose(null)} disabled={sending}>Cancel</button>
+                <button className="btn btn-secondary btn-sm" onClick={handleDiscard} disabled={sending} title="Discard this message">🗑 Discard</button>
                 <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending}>
                   {sending ? 'Sending…' : '➤ Send'}
                 </button>
