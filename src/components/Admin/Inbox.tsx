@@ -76,6 +76,23 @@ type SyncStatus = {
 };
 
 const fmtDateTime = (iso: string) => formatDateTime(iso, '');
+// Compact relative date for the message list: today → time (13:07); within the
+// last week → weekday (Mon); this year → 02/07; older → 02/07/2025. The full
+// timestamp is shown as a tooltip on the row.
+const fmtRelativeDate = (iso: string): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round((startToday - startDay) / 86400000);
+  if (dayDiff <= 0) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (dayDiff < 7) return d.toLocaleDateString('en-GB', { weekday: 'short' });
+  if (d.getFullYear() === now.getFullYear()) return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
 const fmtSize = (bytes: number | null) => {
   if (bytes == null) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -140,6 +157,7 @@ export default function Inbox() {
   const [thread, setThread] = useState<InboxDetail[] | null>(null);
   const [threadSubject, setThreadSubject] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [assignClientId, setAssignClientId] = useState<number | ''>('');
@@ -622,6 +640,8 @@ export default function Inbox() {
               const hasUnread = un > 0;
               return (
                 <div key={key} onClick={() => openThread(e)}
+                  onMouseEnter={() => setHoverKey(key)}
+                  onMouseLeave={() => setHoverKey(h => h === key ? null : h)}
                   style={{
                     padding: '5px 10px', borderBottom: paneBorder, cursor: 'pointer',
                     background: selected ? '#eef2ff' : '#fff',
@@ -633,12 +653,15 @@ export default function Inbox() {
                       {isSent && <span style={{ color: '#94a3b8', fontWeight: 400 }}>To: </span>}{party}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {/* A3: paperclip on the date line, only when the message has attachments */}
+                      {e.has_attachments && <span title="Has attachments" style={{ fontSize: 12, color: '#94a3b8' }}>📎</span>}
+                      {/* A4: flag shown only when flagged, or on row hover (no layout shift — opacity only) */}
                       <button
                         onClick={(ev) => { ev.stopPropagation(); toggleMark(e.id, 'flagged', e.flagged); }}
                         title={e.flagged ? 'Remove flag' : 'Flag for follow-up'}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: e.flagged ? 1 : 0.3 }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: (e.flagged || hoverKey === key) ? 1 : 0, transition: 'opacity .1s' }}
                       >🚩</button>
-                      <span style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDateTime(e.received_at)}</span>
+                      <span title={fmtDateTime(e.received_at)} style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelativeDate(e.received_at)}</span>
                     </span>
                   </div>
                   <div style={{ fontWeight: hasUnread ? 700 : 400, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
@@ -648,7 +671,7 @@ export default function Inbox() {
                     {count > 1 && <span style={{ marginLeft: 6, color: '#64748b', fontWeight: 600 }}>({count})</span>}
                   </div>
                   <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
-                    {e.has_attachments && '📎 '}{e.snippet || ''}
+                    {e.snippet || ''}
                   </div>
                 </div>
               );
