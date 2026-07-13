@@ -623,12 +623,13 @@ export default function Inbox() {
               return (
                 <div key={key} onClick={() => openThread(e)}
                   style={{
-                    padding: '10px 12px', borderBottom: paneBorder, cursor: 'pointer',
-                    background: selected ? '#eef2ff' : hasUnread ? '#fff' : '#fff',
-                    borderLeft: selected ? '3px solid #1a365d' : '3px solid transparent',
+                    padding: '5px 10px', borderBottom: paneBorder, cursor: 'pointer',
+                    background: selected ? '#eef2ff' : '#fff',
+                    // Unread → thin navy accent bar on the left edge (A2).
+                    borderLeft: hasUnread ? '3px solid #1a365d' : '3px solid transparent',
                   }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 13.5, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontWeight: hasUnread ? 700 : 400, fontSize: 13.5, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {isSent && <span style={{ color: '#94a3b8', fontWeight: 400 }}>To: </span>}{party}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -640,13 +641,13 @@ export default function Inbox() {
                       <span style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDateTime(e.received_at)}</span>
                     </span>
                   </div>
-                  <div style={{ fontWeight: hasUnread ? 700 : 500, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                  <div style={{ fontWeight: hasUnread ? 700 : 400, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
                     {e.is_urgent && <span style={{ background: '#dc2626', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '1px 5px', marginRight: 6 }}>URGENT</span>}
                     {folder === 'All' && <span className="status-badge" style={{ marginRight: 6, background: '#eef1f5', color: folderColor[f], fontWeight: 600, fontSize: 10.5 }}>{f}</span>}
                     {e.subject || '(no subject)'}
                     {count > 1 && <span style={{ marginLeft: 6, color: '#64748b', fontWeight: 600 }}>({count})</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
                     {e.has_attachments && '📎 '}{e.snippet || ''}
                   </div>
                 </div>
