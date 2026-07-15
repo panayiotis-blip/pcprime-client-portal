@@ -229,6 +229,27 @@ export default function Inbox() {
     return out;
   }, [clients]);
 
+  // A6: email → client name map for resolving list senders/recipients to a
+  // friendly name. Built once from the in-memory client list (clients.email);
+  // O(1) per-row lookup, no query.
+  const clientNameByEmail = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of clients as any[]) {
+      const name = c.name || c.client_name || '';
+      if (!name) continue;
+      const emails = Array.isArray(c.email) ? c.email : String(c.email || '').split(/[;,]+/);
+      for (const em of emails) {
+        const e = String(em || '').trim().toLowerCase();
+        if (e && !m.has(e)) m.set(e, name);
+      }
+    }
+    return m;
+  }, [clients]);
+  const resolveSender = (email?: string | null, fallback?: string | null) => {
+    const e = (email || '').trim().toLowerCase();
+    return (e && clientNameByEmail.get(e)) || fallback || email || '—';
+  };
+
   // Per-user signature (the composing staff member's own), inserted into new
   // mail. Newline-safe: plain text pasted into the HTML field keeps its breaks.
   useEffect(() => {
@@ -633,8 +654,11 @@ export default function Inbox() {
               const f = folderOf(e.label_ids);
               const isSent = f === 'Sent';
               const party = isSent
-                ? (e.to_emails && e.to_emails.length ? e.to_emails.join(', ') : '—')
-                : (e.from_name || e.from_email || '—');
+                ? (e.to_emails && e.to_emails.length ? e.to_emails.map(em => resolveSender(em)).join(', ') : '—')
+                : resolveSender(e.from_email, e.from_name);
+              const partyRaw = isSent
+                ? (e.to_emails || []).join(', ')
+                : (e.from_name ? `${e.from_name} <${e.from_email || ''}>` : (e.from_email || ''));
               const key = e.gmail_thread_id || `single-${e.id}`;
               const selected = selectedKey === key;
               const hasUnread = un > 0;
@@ -649,7 +673,7 @@ export default function Inbox() {
                     borderLeft: hasUnread ? '3px solid #1a365d' : '3px solid transparent',
                   }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontWeight: hasUnread ? 700 : 400, fontSize: 13.5, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span title={partyRaw || undefined} style={{ fontWeight: hasUnread ? 700 : 400, fontSize: 13.5, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {isSent && <span style={{ color: '#94a3b8', fontWeight: 400 }}>To: </span>}{party}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
