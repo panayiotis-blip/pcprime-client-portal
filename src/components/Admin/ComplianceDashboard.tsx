@@ -296,7 +296,7 @@ export default function ComplianceDashboard() {
             <tbody>
               {visibleTasks.map(t => (
                 <tr key={t.id}>
-                  <td>
+                  <td title={t.client_name}>
                     <Link to={`/clients/${t.client_id}`}>
                       {t.client_code && <span className="client-code-inline">{t.client_code}</span>}
                       {t.client_name}

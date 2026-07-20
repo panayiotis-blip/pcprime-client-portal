@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
+import { Hash, Trash2, AlertTriangle, GitMerge, Printer } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
@@ -432,9 +433,17 @@ export default function ClientManager() {
       case 'client_code':          return c.client_code
         ? <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 600, fontFamily: 'monospace' }}>{c.client_code}</Link>
         : <span style={{ color: '#94a3b8' }}>-</span>;
-      case 'name':                 return (
-        <>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      case 'name': {
+        const primaryName = c.client_name || c.name;
+        // Legal (secondary) and trading names move into the hover tooltip so
+        // every row stays a single line and rows share a consistent height.
+        const extraNames = [
+          (c.client_name && c.name && c.client_name !== c.name) ? c.name : null,
+          c.trading_name ? `Trading as: ${c.trading_name}` : null,
+        ].filter(Boolean);
+        const fullTitle = [primaryName, ...extraNames].join('\n');
+        return (
+          <span className="cn-name">
             <button
               type="button"
               className={`pin-star ${pinnedClientIds.has(String(c.id)) ? 'pinned' : ''}`}
@@ -443,14 +452,15 @@ export default function ClientManager() {
             >
               {pinnedClientIds.has(String(c.id)) ? '★' : '☆'}
             </button>
-            <Link to={`/clients/${c.id}`} style={{ color: 'var(--primary)', fontWeight: 500 }}>{c.client_name || c.name}</Link>
+            <Link
+              to={`/clients/${c.id}`}
+              className="cn-name-link"
+              title={fullTitle}
+              style={{ color: 'var(--primary)', fontWeight: 500 }}
+            >{primaryName}</Link>
           </span>
-          {c.client_name && c.name && c.client_name !== c.name && (
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.name}</div>
-          )}
-          {c.trading_name && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{c.trading_name}</div>}
-        </>
-      );
+        );
+      }
       case 'client_category':      return c.client_category || '-';
       case 'client_status':        return c.client_status || '-';
       case 'tax_number':           return c.tax_number || '-';
@@ -929,21 +939,30 @@ export default function ClientManager() {
         <h2>Clients ({clients.filter((c: any) => c.client_category !== 'vendor_only').length})</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={handleGenerateMissing} title="Auto-generate codes for clients without one">
-            #️⃣ Gen Codes
+            <Hash size={15} aria-hidden /> Gen Codes
           </button>
-          {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary">🗑 Deleted</Link>}
+          {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary"><Trash2 size={15} aria-hidden /> Deleted</Link>}
           {isSupervisor && unlinkedCount > 0 && (
-            <Link to="/clients/unlinked-directors" className="btn btn-secondary" style={{ borderColor: '#f59e0b' }} title="Director rows without a linked client">
-              ⚠ Unlinked Directors ({unlinkedCount})
+            <Link
+              to="/clients/unlinked-directors"
+              className="btn btn-secondary"
+              style={{ borderColor: 'var(--warn)', color: 'var(--warn)' }}
+              title="Director rows without a linked client"
+            >
+              <AlertTriangle size={15} aria-hidden /> Unlinked Directors
+              <span style={{
+                background: 'var(--warn)', color: '#fff', borderRadius: 999,
+                padding: '0 7px', marginLeft: 4, fontSize: 12, fontWeight: 700,
+              }}>{unlinkedCount}</span>
             </Link>
           )}
           {isSupervisor && (
             <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
-              {showMerge ? 'Cancel' : '⇄ Merge Duplicates'}
+              {showMerge ? 'Cancel' : <><GitMerge size={15} aria-hidden /> Merge Duplicates</>}
             </button>
           )}
           <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print, Excel or CSV export of the current filtered client list">
-            🖨 Print / Export
+            <Printer size={15} aria-hidden /> Print / Export
           </button>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Add Client'}

@@ -10,6 +10,8 @@
   --success-hover: #059669;
   --danger: #ef4444;
   --danger-hover: #dc2626;
+  --warn: #f59e0b;          /* amber — attention/outstanding-count badges */
+  --link: var(--primary);   /* single colour for inline text links */
   --bg: #f8f9fb;
   --surface: #ffffff;
   --border: #e5e7eb;
@@ -526,6 +528,13 @@ h4 { font-size: 14px; font-weight: 600; }
   }
 }
 
+/* ===== Text links ===== */
+/* One link colour app-wide; no browser blue/purple :visited state. Class-based
+   links (.btn, .sidebar-link, .compliance-table a, .btn-link, footer links…)
+   set their own colour and override this. */
+a { color: var(--link); }
+a:visited { color: var(--link); }
+
 /* ===== Buttons ===== */
 .btn {
   display: inline-flex;
@@ -533,9 +542,9 @@ h4 { font-size: 14px; font-weight: 600; }
   justify-content: center;
   padding: 10px 20px;
   border: none;
-  border-radius: var(--radius);
+  border-radius: var(--pc-radius-sm); /* unify geometry with the design-system .pc-btn */
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;                   /* was 500 — match .pc-btn so primary CTAs look identical */
   cursor: pointer;
   transition: all 0.2s;
   text-decoration: none;
@@ -1652,6 +1661,15 @@ h4 { font-size: 14px; font-weight: 600; }
 }
 .export-table td .client-code-inline { white-space: nowrap; }
 
+/* Clients Name column: keep every row a single line. The primary name
+   truncates with an ellipsis (full legal + trading name on hover via title),
+   so rows share a consistent height instead of stacking to 2-3 lines. */
+.cn-name { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.cn-name-link {
+  display: inline-block; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 260px; vertical-align: middle;
+}
+
 /* Generic compact-row list (used by InvoiceList and other screens) */
 .compact-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .compact-row {
@@ -2588,7 +2606,10 @@ h4 { font-size: 14px; font-weight: 600; }
 .compliance-table td {
   padding: 8px 10px; border-bottom: 1px solid var(--border);
   font-size: 14px; vertical-align: middle;
+  /* Single-line cells so long client names don't wrap and stagger row heights */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
 }
+.compliance-table tr { height: 40px; }
 .compliance-table tr:last-child td { border-bottom: none; }
 .compliance-table tr:hover { background: #f8fafc; }
 .compliance-table a { color: var(--primary); text-decoration: none; }

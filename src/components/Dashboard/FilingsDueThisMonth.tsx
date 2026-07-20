@@ -23,7 +23,7 @@ export default function FilingsDueThisMonth() {
 
   return (
     <Link to="/tax-filings?due_this_month=1" className="kpi-tile">
-      <div className="kpi-tile-label">Filings Due This Month</div>
+      <div className="kpi-tile-label">Due This Month</div>
       <div className="kpi-tile-value">{count == null ? '…' : count}</div>
       <div className="kpi-tile-hint">pending / in progress</div>
     </Link>
