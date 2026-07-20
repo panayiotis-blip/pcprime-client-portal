@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { api } from '../../services/api';
 
 // Client-portal Inbox — a read-only record of email correspondence on the
 // client's file, including mail our office sent on their behalf (bulk emails,
 // tax-info requests, notices). Clients can read but not send from here.
+
+// Inbound email bodies are attacker-controlled, so sanitise before rendering.
+const SANITISE_OPTS = {
+  FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
+  FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'style'],
+  ALLOW_DATA_ATTR: false,
+};
+const escapeHtml = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] || c));
+const sanitiseBody = (m: { body_html: string | null; body_plain: string | null }) =>
+  m?.body_html
+    ? DOMPurify.sanitize(m.body_html, SANITISE_OPTS)
+    : `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${escapeHtml(m?.body_plain || '')}</pre>`;
 
 type Row = {
   id: number; direction: string; sender_name: string | null; sender_email: string | null;
@@ -63,7 +76,7 @@ export default function MyEmails() {
               {new Date(open.received_at).toLocaleString('en-GB')}
             </div>
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 14, fontSize: 14, lineHeight: 1.5 }}
-              dangerouslySetInnerHTML={{ __html: open.body_html || `<pre style="white-space:pre-wrap;font-family:inherit">${(open.body_plain || '').replace(/</g, '&lt;')}</pre>` }} />
+              dangerouslySetInnerHTML={{ __html: sanitiseBody(open) }} />
             <div style={{ textAlign: 'right', marginTop: 14 }}>
               <button className="btn btn-secondary" onClick={() => setOpen(null)}>Close</button>
             </div>
