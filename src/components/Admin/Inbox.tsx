@@ -162,6 +162,7 @@ export default function Inbox() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [listFilter, setListFilter] = useState<'all' | 'unread' | 'flagged' | 'attachments'>('all');
   const [folder, setFolder] = useState<'All' | Folder>('Inbox');
   const [thread, setThread] = useState<InboxDetail[] | null>(null);
   const [threadSubject, setThreadSubject] = useState('');
@@ -454,6 +455,10 @@ export default function Inbox() {
     const q = search.trim().toLowerCase();
     return emails.filter(e => {
       if (folder !== 'All' && folderOf(e.label_ids) !== folder) return false;
+      // D12: quick filter (Unread / Flagged / Has attachment).
+      if (listFilter === 'unread' && e.is_read) return false;
+      if (listFilter === 'flagged' && !e.flagged) return false;
+      if (listFilter === 'attachments' && !e.has_attachments) return false;
       if (!q) return true;
       return (e.subject || '').toLowerCase().includes(q) ||
         (e.from_email || '').toLowerCase().includes(q) ||
@@ -461,7 +466,7 @@ export default function Inbox() {
         (e.to_emails || []).join(' ').toLowerCase().includes(q) ||
         (e.snippet || '').toLowerCase().includes(q);
     });
-  }, [emails, search, folder]);
+  }, [emails, search, folder, listFilter]);
 
   const folderCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -672,9 +677,16 @@ export default function Inbox() {
 
         {/* ---- Middle: conversation list ---- */}
         <div style={{ width: listW, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          <div style={{ padding: 8, borderBottom: paneBorder }}>
+          <div style={{ padding: 8, borderBottom: paneBorder, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             <input type="text" className="form-input" placeholder="Search sender or subject…"
-              value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%' }} />
+              value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+            <select className="form-input" value={listFilter} onChange={e => setListFilter(e.target.value as any)}
+              title="Filter messages" style={{ width: 'auto', flexShrink: 0, fontSize: 12.5, padding: '4px 6px' }}>
+              <option value="all">All</option>
+              <option value="unread">Unread</option>
+              <option value="flagged">Flagged</option>
+              <option value="attachments">Has attachment</option>
+            </select>
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {loading ? (
