@@ -100,6 +100,15 @@ const fmtSize = (bytes: number | null) => {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
+// Small inline spinner (self-contained SMIL, no CSS keyframes needed).
+const Spinner = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="42 100">
+      <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.7s" repeatCount="indefinite" />
+    </circle>
+  </svg>
+);
+
 // The shared mailbox we send FROM — excluded from reply-all recipients.
 const INFO_ADDRESS = 'info@primeandcalculate.com';
 
@@ -587,13 +596,6 @@ export default function Inbox() {
           📬 Inbox
           {unread > 0 && <span className="status-badge" style={{ marginLeft: 10, background: '#1a365d', color: '#fff' }}>{unread} unread</span>}
         </h2>
-        <div style={{ fontSize: 12.5, color: '#64748b', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {sync?.last_run_at
-            ? <span>Last synced <strong>{fmtDateTime(sync.last_run_at)}</strong></span>
-            : <span style={{ color: '#b45309' }}>⚠ Never synced</span>}
-          {sync?.last_error && <span style={{ color: '#b91c1c' }}>· {sync.last_error}</span>}
-          {syncMsg && <span style={{ color: syncMsg.startsWith('Sync failed') ? '#b91c1c' : '#15803d' }}>· {syncMsg}</span>}
-        </div>
       </div>
 
       {/* Outlook-style 3-pane frame */}
@@ -604,11 +606,14 @@ export default function Inbox() {
         {/* ---- Left: folder sidebar (collapsible to a slim icon rail) ---- */}
         <div style={{ width: sidebarCollapsed ? 56 : sidebarW, background: '#f8fafc', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: sidebarCollapsed ? '8px 6px' : 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <button className="btn btn-secondary btn-sm" style={{ width: '100%' }}
-              onClick={() => setSidebarCollapsed(v => !v)}
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar for a wider view'}>
-              {sidebarCollapsed ? '»' : '« Collapse'}
-            </button>
+            {/* B9: small chevron collapse control at the top of the pane */}
+            <div style={{ display: 'flex', justifyContent: sidebarCollapsed ? 'center' : 'flex-end' }}>
+              <button onClick={() => setSidebarCollapsed(v => !v)}
+                title={sidebarCollapsed ? 'Expand folders' : 'Collapse folders'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 16, lineHeight: 1, padding: '2px 6px', borderRadius: 4 }}>
+                {sidebarCollapsed ? '»' : '«'}
+              </button>
+            </div>
             <button className="btn btn-primary" style={{ width: '100%' }} onClick={startCompose} title="Compose a new email">
               {sidebarCollapsed ? '✏️' : '✏️ Compose'}
             </button>
@@ -620,7 +625,7 @@ export default function Inbox() {
               const active = folder === f;
               return (
                 <button key={f} onClick={() => setFolder(f)}
-                  title={sidebarCollapsed ? `${f}${un > 0 ? ` — ${un} unread` : ''}` : undefined}
+                  title={`${f} — ${un} unread · ${total} total`}
                   style={{
                     width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
                     background: active ? '#1a365d' : 'transparent', color: active ? '#fff' : '#334155',
@@ -634,7 +639,6 @@ export default function Inbox() {
                   {!sidebarCollapsed && un > 0 && (
                     <span style={{ background: active ? '#fff' : '#1a365d', color: active ? '#1a365d' : '#fff', borderRadius: 999, fontSize: 11, padding: '0 6px', fontWeight: 700 }}>{un}</span>
                   )}
-                  {!sidebarCollapsed && <span style={{ opacity: 0.6, fontSize: 11.5 }}>{total}</span>}
                   {sidebarCollapsed && un > 0 && (
                     <span style={{ position: 'absolute', top: 4, right: 8, width: 8, height: 8, borderRadius: 999, background: '#dc2626' }} />
                   )}
@@ -642,11 +646,21 @@ export default function Inbox() {
               );
             })}
           </div>
-          <div style={{ borderTop: paneBorder, padding: 8, display: 'flex', flexDirection: sidebarCollapsed ? 'column' : 'row', gap: 6 }}>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={load} disabled={loading} title="Refresh">{loading ? '…' : '↻'}</button>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 2 }} onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
-              {syncing ? '…' : (sidebarCollapsed ? '⟳' : '⟳ Sync now')}
+          <div style={{ borderTop: paneBorder, padding: 8 }}>
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              onClick={handleSync} disabled={syncing} title="Fetch new mail from info@ now">
+              {syncing ? <Spinner /> : <span style={{ fontSize: 14, lineHeight: 1 }}>⟳</span>}
+              {!sidebarCollapsed && <span>{syncing ? 'Syncing…' : 'Sync now'}</span>}
             </button>
+            {!sidebarCollapsed && (
+              <div style={{ fontSize: 11, marginTop: 6, textAlign: 'center', lineHeight: 1.4 }}>
+                {sync?.last_run_at
+                  ? <span title={fmtDateTime(sync.last_run_at)} style={{ color: '#94a3b8' }}>Last synced {fmtRelativeDate(sync.last_run_at)}</span>
+                  : <span style={{ color: '#b45309' }}>Never synced</span>}
+                {sync?.last_error && <div style={{ color: '#b91c1c' }}>{sync.last_error}</div>}
+                {syncMsg && <div style={{ color: syncMsg.startsWith('Sync failed') ? '#b91c1c' : '#15803d' }}>{syncMsg}</div>}
+              </div>
+            )}
           </div>
         </div>
 
