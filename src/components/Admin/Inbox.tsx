@@ -828,24 +828,25 @@ export default function Inbox() {
                             <div><strong>Received:</strong> {fmtDateTime(m.received_at)}</div>
                           </div>
 
-                          <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            <button className="btn btn-primary btn-sm" onClick={() => startReply(false, m)}>↩ Reply</button>
+                          {/* C11: one consistent icon+label action row (portal btn family) */}
+                          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button className="btn btn-primary btn-sm" onClick={() => startReply(false, m)} title="Reply">↩ Reply</button>
                             {recipientCount > 1 && (
-                              <button className="btn btn-secondary btn-sm" onClick={() => startReply(true, m)}>↩↩ Reply all</button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => startReply(true, m)} title="Reply to everyone">↩ Reply all</button>
                             )}
-                            <button className="btn btn-secondary btn-sm" onClick={() => startForward(m)}>➦ Forward</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => startForward(m)} title="Forward">➦ Forward</button>
                             <span style={{ flex: 1 }} />
                             <button className="btn btn-secondary btn-sm" onClick={() => toggleMark(m.id, 'flagged', m.flagged)}
                               style={{ color: m.flagged ? '#b45309' : undefined, fontWeight: m.flagged ? 700 : undefined }}
-                              title="Flag for follow-up">🚩 {m.flagged ? 'Flagged' : 'Flag'}</button>
+                              title={m.flagged ? 'Remove flag' : 'Flag for follow-up'}>🚩 {m.flagged ? 'Flagged' : 'Flag'}</button>
                             <button className="btn btn-secondary btn-sm" onClick={() => toggleMark(m.id, 'is_urgent', m.is_urgent)}
                               style={{ color: m.is_urgent ? '#dc2626' : undefined, fontWeight: m.is_urgent ? 700 : undefined }}
-                              title="Mark as urgent">🔴 {m.is_urgent ? 'Urgent' : 'Urgent'}</button>
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleAction('unread', m)} disabled={actioning}>● Unread</button>
-                            {inInbox && <button className="btn btn-secondary btn-sm" onClick={() => handleAction('archive', m)} disabled={actioning}>🗄 Archive</button>}
+                              title={m.is_urgent ? 'Remove urgent' : 'Mark as urgent'}>🔴 {m.is_urgent ? 'Urgent' : 'Mark urgent'}</button>
+                            <button className="btn btn-secondary btn-sm" onClick={() => handleAction('unread', m)} disabled={actioning} title="Mark as unread">✉ Unread</button>
+                            {inInbox && <button className="btn btn-secondary btn-sm" onClick={() => handleAction('archive', m)} disabled={actioning} title="Archive">🗄 Archive</button>}
                             {inTrash
-                              ? <button className="btn btn-secondary btn-sm" onClick={() => handleAction('untrash', m)} disabled={actioning}>♻ Restore</button>
-                              : <button className="btn btn-secondary btn-sm" onClick={() => handleAction('trash', m)} disabled={actioning} style={{ color: '#b91c1c' }}>🗑 Trash</button>}
+                              ? <button className="btn btn-secondary btn-sm" onClick={() => handleAction('untrash', m)} disabled={actioning} title="Restore from Trash">♻ Restore</button>
+                              : <button className="btn btn-secondary btn-sm" onClick={() => handleAction('trash', m)} disabled={actioning} style={{ color: '#b91c1c' }} title="Delete (move to Trash)">🗑 Delete</button>}
                           </div>
 
                           {m.attachments && m.attachments.length > 0 && (
