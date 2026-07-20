@@ -548,6 +548,27 @@ export default function Inbox() {
     }
   };
 
+  // A7: quick row actions from the list-row hover icons.
+  const rowAction = async (action: 'read' | 'unread' | 'trash', e: InboxRow) => {
+    if (action === 'read' || action === 'unread') {
+      const next = action === 'read';
+      setEmails(prev => prev.map(x => x.id === e.id ? { ...x, is_read: next } : x));
+      api.markInboxRead(e.id, next).catch(() => {});
+      api.inboxAction(action, e.id).catch(() => {});
+      return;
+    }
+    // trash → Gmail moves it to Trash; the folder filter drops it from Inbox.
+    try {
+      const res = await api.inboxAction('trash', e.id);
+      const updated = res.results?.find(r => r.id === e.id);
+      setEmails(prev => prev.map(x => x.id === e.id ? { ...x, label_ids: updated?.label_ids ?? x.label_ids, is_read: updated?.is_read ?? x.is_read } : x));
+      const k = e.gmail_thread_id || `single-${e.id}`;
+      if (selectedKey === k) { setThread(null); setSelectedKey(null); }
+    } catch (err: any) {
+      alert('Delete failed: ' + err.message);
+    }
+  };
+
   const downloadAttachment = async (att: Attachment) => {
     try {
       const url = await api.getInboxAttachmentUrl(att.storage_path);
@@ -679,13 +700,26 @@ export default function Inbox() {
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                       {/* A3: paperclip on the date line, only when the message has attachments */}
                       {e.has_attachments && <span title="Has attachments" style={{ fontSize: 12, color: '#94a3b8' }}>📎</span>}
-                      {/* A4: flag shown only when flagged, or on row hover (no layout shift — opacity only) */}
-                      <button
-                        onClick={(ev) => { ev.stopPropagation(); toggleMark(e.id, 'flagged', e.flagged); }}
-                        title={e.flagged ? 'Remove flag' : 'Flag for follow-up'}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1, opacity: (e.flagged || hoverKey === key) ? 1 : 0, transition: 'opacity .1s' }}
-                      >🚩</button>
-                      <span title={fmtDateTime(e.received_at)} style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelativeDate(e.received_at)}</span>
+                      {hoverKey === key ? (
+                        // A7: on hover, swap the date for quick action icons (same line — no vertical shift)
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <button title={e.is_read ? 'Mark unread' : 'Mark read'}
+                            onClick={(ev) => { ev.stopPropagation(); rowAction(e.is_read ? 'unread' : 'read', e); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '0 3px', lineHeight: 1, color: '#475569' }}>{e.is_read ? '●' : '○'}</button>
+                          <button title={e.flagged ? 'Remove flag' : 'Flag for follow-up'}
+                            onClick={(ev) => { ev.stopPropagation(); toggleMark(e.id, 'flagged', e.flagged); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: '0 3px', lineHeight: 1, color: e.flagged ? '#b45309' : '#475569' }}>🚩</button>
+                          <button title="Delete (move to Trash)"
+                            onClick={(ev) => { ev.stopPropagation(); rowAction('trash', e); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: '0 3px', lineHeight: 1, color: '#b91c1c' }}>🗑</button>
+                        </span>
+                      ) : (
+                        <>
+                          {/* A4: flag shown only when flagged when not hovering */}
+                          {e.flagged && <span title="Flagged" style={{ fontSize: 13 }}>🚩</span>}
+                          <span title={fmtDateTime(e.received_at)} style={{ fontSize: 11.5, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtRelativeDate(e.received_at)}</span>
+                        </>
+                      )}
                     </span>
                   </div>
                   <div style={{ fontWeight: hasUnread ? 700 : 400, fontSize: 13, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
