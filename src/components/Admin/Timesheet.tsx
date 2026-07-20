@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, isSupervisorOrHigher } from '../../services/api';
+import { api, isSupervisorOrHigher, isOwner } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/dates';
+import SearchableSelect from '../common/SearchableSelect';
 
 // Billable services (charged to clients).
 const BILLABLE_SERVICES = [
@@ -133,6 +134,19 @@ export default function Timesheet() {
   const { clients } = useApp();
   const location = useLocation();
   const canApprove = isSupervisorOrHigher(user);
+  const isOwnerUser = isOwner(user);
+
+  // Options for the searchable client pickers. Search matches on client name
+  // (label) or client code (sublabel), so staff can type either instead of
+  // scrolling the full list.
+  const clientOptions = useMemo(
+    () => (clients as any[]).map(c => ({
+      value: c.id,
+      label: c.name,
+      sublabel: c.client_code || undefined,
+    })),
+    [clients],
+  );
 
   // 'entries' = standard timesheet view  ·  'review' = approval queue (supervisor only)
   const [mode, setMode] = useState<'entries' | 'review'>('entries');
@@ -460,15 +474,19 @@ export default function Timesheet() {
       {/* Start-timer form */}
       {!timer && timerOpen && (
         <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: '#475569', marginBottom: 8 }}>
+            Timing as <strong>{user?.display_name || user?.username}</strong>
+          </div>
           <div className="form-grid">
             <div className="form-group">
               <label>Client</label>
-              <select className="form-input" value={timerForm.client_id} onChange={e => setTimerForm({ ...timerForm, client_id: e.target.value })}>
-                <option value="">— None —</option>
-                {clients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={timerForm.client_id}
+                options={clientOptions}
+                onChange={v => setTimerForm({ ...timerForm, client_id: v ? String(v) : '' })}
+                placeholder="— None —"
+                allowClear
+              />
             </div>
             <div className="form-group">
               <label>Service</label>
@@ -509,6 +527,9 @@ export default function Timesheet() {
       {/* Quick-log form */}
       {logOpen && (
         <div className="card" style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: '#475569', marginBottom: 8 }}>
+            Logging time as <strong>{user?.display_name || user?.username}</strong>
+          </div>
           <div className="form-grid">
             <div className="form-group">
               <label>Date</label>
@@ -516,12 +537,13 @@ export default function Timesheet() {
             </div>
             <div className="form-group">
               <label>Client</label>
-              <select className="form-input" value={logForm.client_id} onChange={e => setLogForm({ ...logForm, client_id: e.target.value })}>
-                <option value="">— None —</option>
-                {clients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={logForm.client_id}
+                options={clientOptions}
+                onChange={v => setLogForm({ ...logForm, client_id: v ? String(v) : '' })}
+                placeholder="— None —"
+                allowClear
+              />
             </div>
             <div className="form-group">
               <label>Service</label>
@@ -593,12 +615,13 @@ export default function Timesheet() {
           </div>
           <div className="form-group">
             <label>Client</label>
-            <select className="form-input" value={fClient} onChange={e => setFClient(e.target.value)}>
-              <option value="">All clients</option>
-              {clients.map((c: any) => (
-                <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={fClient}
+              options={clientOptions}
+              onChange={v => setFClient(v ? String(v) : '')}
+              placeholder="All clients"
+              allowClear
+            />
           </div>
           <div className="form-group">
             <label>Service</label>
@@ -843,12 +866,14 @@ export default function Timesheet() {
               <tbody>
                 {entries.map(e => {
                   const isEditing = editId === e.id;
-                  // Lock logic mirrors the RLS policy: approved rows are read-only
-                  // unless current user is the approver, or an owner.
-                  const isLocked =
-                    e.approval_status === 'approved' &&
-                    e.approved_by !== user?.id &&
-                    user?.role !== 'owner';
+                  // Lock logic mirrors the RLS policy (migration 131):
+                  //   • a draft row can be corrected/deleted only by the staff
+                  //     member who entered it (their own row);
+                  //   • once reviewed (approved) it is locked — only the owner
+                  //     may edit or delete it (supervisors cannot).
+                  const canEdit   = isOwnerUser || (e.approval_status === 'draft' && e.user_id === user?.id);
+                  const canDelete = canEdit;
+                  const isLocked  = !canEdit;
                   const value = (e.billable && e.rate_snapshot != null)
                     ? `€${((e.minutes / 60) * Number(e.rate_snapshot)).toFixed(2)}`
                     : '—';
@@ -862,10 +887,13 @@ export default function Timesheet() {
                       <td style={{ whiteSpace: 'nowrap' }}>{staffName(e.user_id)}</td>
                       <td>
                         {isEditing ? (
-                          <select className="form-input" value={editForm.client_id} onChange={ev => setEditForm({ ...editForm, client_id: ev.target.value })}>
-                            <option value="">— None —</option>
-                            {clients.map((c: any) => <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>)}
-                          </select>
+                          <SearchableSelect
+                            value={editForm.client_id}
+                            options={clientOptions}
+                            onChange={v => setEditForm({ ...editForm, client_id: v ? String(v) : '' })}
+                            placeholder="— None —"
+                            allowClear
+                          />
                         ) : (
                           e.client_name
                             ? <span>{e.client_code ? <span style={{ color: '#64748b' }}>{e.client_code} — </span> : null}{e.client_name}</span>
@@ -922,27 +950,31 @@ export default function Timesheet() {
                             <button className="btn btn-primary btn-sm" onClick={() => saveEdit(e.id)}>Save</button>
                             <button className="btn btn-secondary btn-sm" onClick={() => setEditId(null)}>Cancel</button>
                           </div>
-                        ) : isLocked ? (
-                          <span style={{ color: '#94a3b8', fontSize: 12 }}>Locked</span>
-                        ) : (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => startEdit(e)}>Edit</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(e.id)}>×</button>
-                            {canApprove && e.approval_status === 'approved' && (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                title="Unlock this approved entry"
-                                onClick={async () => {
-                                  if (!confirm('Unlock this approved entry so it can be edited?')) return;
-                                  try {
-                                    await api.unlockTimeEntries([e.id]);
-                                    await loadEntries();
-                                  } catch (err: any) { alert('Unlock failed: ' + err.message); }
-                                }}
-                              >Unlock</button>
-                            )}
-                          </div>
-                        )}
+                        ) : (() => {
+                          const unlockBtn = canApprove && e.approval_status === 'approved' ? (
+                            <button
+                              key="unlock"
+                              className="btn btn-secondary btn-sm"
+                              title="Unlock this approved entry"
+                              onClick={async () => {
+                                if (!confirm('Unlock this approved entry so it can be edited?')) return;
+                                try {
+                                  await api.unlockTimeEntries([e.id]);
+                                  await loadEntries();
+                                } catch (err: any) { alert('Unlock failed: ' + err.message); }
+                              }}
+                            >Unlock</button>
+                          ) : null;
+                          const actions = [
+                            canEdit   ? <button key="edit" className="btn btn-secondary btn-sm" onClick={() => startEdit(e)}>Edit</button> : null,
+                            canDelete ? <button key="del" className="btn btn-danger btn-sm" onClick={() => handleDelete(e.id)}>×</button> : null,
+                            unlockBtn,
+                          ].filter(Boolean);
+                          if (actions.length === 0) {
+                            return <span style={{ color: '#94a3b8', fontSize: 12 }}>Locked</span>;
+                          }
+                          return <div style={{ display: 'flex', gap: 4 }}>{actions}</div>;
+                        })()}
                       </td>
                     </tr>
                   );
