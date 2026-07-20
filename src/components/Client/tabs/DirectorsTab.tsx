@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../services/api';
 import { useApp } from '../../../context/AppContext';
+import SearchableSelect from '../../common/SearchableSelect';
 
 interface Props { clientId: number; canEdit: boolean; }
 
@@ -15,6 +16,11 @@ type Director = {
   phone: string | null;
   shareholding_percent: number | null;
   role: string;
+  is_director: boolean;
+  is_shareholder: boolean;
+  is_secretary: boolean;
+  is_signatory: boolean;
+  is_ubo: boolean;
   appointed_date: string | null;
   resigned_date: string | null;
   notes: string | null;
@@ -25,21 +31,33 @@ type Directorship = Director & {
   company_code: string | null;
 };
 
-// Free-text accepted; these are presented as quick-pick options.
-const ROLE_SUGGESTIONS = [
-  'Director',
-  'Shareholder',
-  'UBO',
-  'Director/UBO',
-  'Partner/UBO',
-  'Partner',
-  'Secretary',
-  'Signatory',
+// Independent roles a person can hold on a company (any combination).
+type FlagKey = 'is_director' | 'is_shareholder' | 'is_secretary' | 'is_signatory' | 'is_ubo';
+const ROLE_FLAGS: { key: FlagKey; label: string }[] = [
+  { key: 'is_director',    label: 'Director' },
+  { key: 'is_shareholder', label: 'Shareholder' },
+  { key: 'is_secretary',   label: 'Secretary' },
+  { key: 'is_signatory',   label: 'Signatory' },
+  { key: 'is_ubo',         label: 'UBO' },
 ];
+
+// Render the active roles as badges (falls back to any legacy free-text role).
+const roleBadges = (d: any) => {
+  const active = ROLE_FLAGS.filter(f => d[f.key]);
+  if (!active.length) return <span style={{ color: '#94a3b8' }}>{d.role || '—'}</span>;
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+      {active.map(f => (
+        <span key={f.key} style={{ background: '#eef1f5', color: '#1a365d', borderRadius: 999, fontSize: 11, padding: '1px 8px', fontWeight: 600 }}>{f.label}</span>
+      ))}
+    </span>
+  );
+};
 
 const blank = (): Partial<Director> => ({
   name: '', id_number: '', email: '', phone: '',
-  shareholding_percent: null, role: 'Director',
+  shareholding_percent: null,
+  is_director: true, is_shareholder: false, is_secretary: false, is_signatory: false, is_ubo: false,
   appointed_date: '', resigned_date: '', notes: '',
   director_client_id: null,
 });
@@ -187,18 +205,20 @@ export default function DirectorsTab({ clientId, canEdit }: Props) {
                       </td>
                       <td>
                         {canEdit ? (
-                          <input
-                            type="text"
-                            className="form-input form-input-sm"
-                            defaultValue={d.role}
-                            list={`roles-${d.id}`}
-                            onBlur={(e) => e.target.value !== d.role && handleUpdate(d.id, { role: e.target.value })}
-                            style={{ minWidth: 130 }}
-                          />
-                        ) : d.role}
-                        <datalist id={`roles-${d.id}`}>
-                          {ROLE_SUGGESTIONS.map(r => <option key={r} value={r} />)}
-                        </datalist>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {ROLE_FLAGS.map(f => {
+                              const on = !!(d as any)[f.key];
+                              return (
+                                <button key={f.key} type="button"
+                                  onClick={() => handleUpdate(d.id, { [f.key]: !on } as any)}
+                                  title={on ? `Remove ${f.label}` : `Mark as ${f.label}`}
+                                  style={{ border: '1px solid', borderColor: on ? '#1a365d' : '#cbd5e1', background: on ? '#1a365d' : '#fff', color: on ? '#fff' : '#64748b', borderRadius: 999, fontSize: 11, padding: '1px 8px', cursor: 'pointer', fontWeight: on ? 600 : 400 }}>
+                                  {f.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : roleBadges(d)}
                       </td>
                       <td>
                         {canEdit ? (
@@ -241,21 +261,15 @@ export default function DirectorsTab({ clientId, canEdit }: Props) {
             {adding === 'link' && (
               <div className="form-group">
                 <label>Linked client *</label>
-                <select
-                  className="form-input"
+                <SearchableSelect
                   value={newRow.director_client_id ?? ''}
-                  onChange={(e) => onPickLinkedClient(e.target.value ? Number(e.target.value) : null)}
-                  autoFocus
-                >
-                  <option value="">— Pick client —</option>
-                  {clients
-                    .filter((c: any) => c.id !== clientId)
-                    .map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-                    ))}
-                </select>
+                  options={clients.filter((c: any) => c.id !== clientId).map((c: any) => ({ value: c.id, label: c.name, sublabel: c.client_code || '' }))}
+                  onChange={(v) => onPickLinkedClient(v ? Number(v) : null)}
+                  placeholder="Search and pick a client…"
+                  allowClear
+                />
                 <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0 0' }}>
-                  Name + contact will pre-fill from the linked record; you can still edit role / shareholding / dates below.
+                  Name + contact will pre-fill from the linked record; you can still set roles / shareholding / dates below.
                 </p>
               </div>
             )}
@@ -272,19 +286,16 @@ export default function DirectorsTab({ clientId, canEdit }: Props) {
                   autoFocus={adding === 'manual'}
                 />
               </div>
-              <div className="form-group">
-                <label>Role</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  list="new-director-roles"
-                  value={newRow.role || ''}
-                  onChange={(e) => setNewRow(p => ({ ...p, role: e.target.value }))}
-                  placeholder="Director / UBO / Partner / ..."
-                />
-                <datalist id="new-director-roles">
-                  {ROLE_SUGGESTIONS.map(r => <option key={r} value={r} />)}
-                </datalist>
+              <div className="form-group full-width">
+                <label>Roles</label>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', paddingTop: 4 }}>
+                  {ROLE_FLAGS.map(f => (
+                    <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!(newRow as any)[f.key]} onChange={(e) => setNewRow(p => ({ ...p, [f.key]: e.target.checked }))} />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div className="form-group">
                 <label>Shareholding %</label>
@@ -339,7 +350,7 @@ export default function DirectorsTab({ clientId, canEdit }: Props) {
                         <span style={{ color: '#94a3b8' }}>Original record deleted</span>
                       )}
                     </td>
-                    <td>{d.role || '—'}</td>
+                    <td>{roleBadges(d)}</td>
                     <td>{d.shareholding_percent != null ? `${d.shareholding_percent}%` : '—'}</td>
                     <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{d.appointed_date || '—'}</td>
                     <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{d.resigned_date || '—'}</td>
