@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { normaliseSignatureHtml } from '../../services/emailSignature';
 
 type SmtpRow = {
   smtp_host: string;
@@ -184,7 +185,7 @@ export default function EmailSettings() {
         smtp_user: smtpUser.trim(),
         from_name: fromName.trim() || null,
         is_active: isActive,
-        signature_html: signatureHtml.trim() || null,
+        signature_html: normaliseSignatureHtml(signatureHtml) || null,
         signature_text: signatureText.trim() || null,
       });
       if (password) {
@@ -439,7 +440,7 @@ export default function EmailSettings() {
               {signatureHtml && (
                 <div style={{ marginTop: 10 }}>
                   <label style={{ fontSize: '0.78em', color: '#64748b' }}>Preview</label>
-                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: signatureHtml }} />
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: normaliseSignatureHtml(signatureHtml) }} />
                 </div>
               )}
             </div>

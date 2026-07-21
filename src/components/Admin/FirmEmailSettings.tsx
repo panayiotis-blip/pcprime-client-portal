@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { normaliseSignatureHtml } from '../../services/emailSignature';
 
 // Firm sending identity (info@primeandcalculate.com). All client-facing mail in
 // the portal goes out through this single shared account, so the firm presents
@@ -130,7 +131,7 @@ export default function FirmEmailSettings() {
       await api.adminSaveFirmEmailSettings({
         smtp_host: smtpHost, smtp_port: smtpPort, smtp_secure: smtpSecure,
         smtp_user: smtpUser.trim(), from_name: fromName.trim() || null, is_active: isActive,
-        signature_html: signatureHtml.trim() || null, signature_text: signatureText.trim() || null,
+        signature_html: normaliseSignatureHtml(signatureHtml) || null, signature_text: signatureText.trim() || null,
       });
       if (password) { await api.adminSetFirmEmailPassword(password); setHasPassword(true); setPassword(''); }
       setStatus({ kind: 'ok', text: 'Saved.' });
@@ -260,7 +261,7 @@ export default function FirmEmailSettings() {
               {signatureHtml && (
                 <div style={{ marginTop: 10 }}>
                   <label style={{ fontSize: '0.78em', color: '#64748b' }}>Preview</label>
-                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: signatureHtml }} />
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 12, background: '#fff' }} dangerouslySetInnerHTML={{ __html: normaliseSignatureHtml(signatureHtml) }} />
                 </div>
               )}
             </div>

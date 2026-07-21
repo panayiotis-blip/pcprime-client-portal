@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { api } from '../../services/api';
 import { formatDateTime } from '../../services/dates';
+import { normaliseSignatureHtml } from '../../services/emailSignature';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
 import RichTextEditor from './RichTextEditor';
@@ -182,6 +183,9 @@ export default function Inbox() {
   const [compose, setCompose] = useState<ComposeState | null>(null);
   const [sending, setSending] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
+  // Preview-before-send: renders the exact sanitised email (body + signature)
+  // as it will actually go out.
+  const [previewing, setPreviewing] = useState(false);
   // Firm signature, loaded once (staff-readable RPC). Inserted into new mail.
   const [sigHtml, setSigHtml] = useState<string>('');
   // Resizable panes — widths persist in localStorage.
@@ -265,14 +269,12 @@ export default function Inbox() {
   useEffect(() => {
     api.getMySmtpSettings()
       .then((row: any) => {
-        const html = (row?.signature_html || '').trim();
-        const text = (row?.signature_text || '').trim();
-        if (html) {
-          const looksHtml = /<[a-z][\s\S]*>/i.test(html);
-          setSigHtml(looksHtml ? html : `<div style="white-space:pre-wrap">${escapeHtml(html)}</div>`);
-        } else if (text) {
-          setSigHtml(`<div style="white-space:pre-wrap">${escapeHtml(text)}</div>`);
-        }
+        // Plain-text signatures become REAL <br> line breaks (shared helper).
+        // The old white-space:pre-wrap trick relied on literal newlines
+        // surviving into the sent MIME email, which they don't — the signature
+        // then collapsed into one paragraph.
+        const sig = normaliseSignatureHtml(row?.signature_html || row?.signature_text || '');
+        if (sig) setSigHtml(sig);
       })
       .catch(() => {});
   }, []);
@@ -365,7 +367,7 @@ export default function Inbox() {
       `<div><br></div>${inner}`;
   };
 
-  const startCompose = () => { const b = openingBody(); setSendErr(null); setCompose({ mode: 'new', to: [], cc: [], subject: '', body: b, initialBody: b, files: [] }); };
+  const startCompose = () => { const b = openingBody(); setSendErr(null); setPreviewing(false); setCompose({ mode: 'new', to: [], cc: [], subject: '', body: b, initialBody: b, files: [] }); };
 
   const startReply = (all: boolean, o: InboxDetail) => {
     const cc = all
@@ -375,7 +377,7 @@ export default function Inbox() {
       : [];
     const base = dropPrefix(o.subject, /^(re:\s*)+/i);
     const b = openingBody() + quotedOriginal(o);
-    setSendErr(null);
+    setSendErr(null); setPreviewing(false);
     setCompose({
       mode: all ? 'replyAll' : 'reply',
       to: o.from_email ? [o.from_email] : [],
@@ -391,7 +393,7 @@ export default function Inbox() {
   const startForward = (o: InboxDetail) => {
     const base = dropPrefix(o.subject, /^(fwd:\s*)+/i);
     const b = openingBody() + forwardedBlock(o);
-    setSendErr(null);
+    setSendErr(null); setPreviewing(false);
     setCompose({ mode: 'forward', to: [], cc: [], subject: base ? `Fwd: ${base}` : 'Fwd:', body: b, initialBody: b, files: [] });
   };
 
@@ -948,13 +950,26 @@ export default function Inbox() {
                 onDrop={(e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
                 style={{ position: 'relative', border: `2px dashed ${dragActive ? '#1a365d' : 'transparent'}`, borderRadius: 8, padding: 2 }}
               >
-                <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 4 }}>Message</div>
-                <RichTextEditor
-                  value={compose.body}
-                  onChange={(html) => setCompose(c => c ? { ...c, body: html } : c)}
-                  minHeight={composeMax ? 440 : 220}
-                  ariaLabel="Email message body"
-                />
+                <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 4 }}>
+                  {previewing ? 'Preview — this is how the email will send' : 'Message'}
+                </div>
+                {previewing ? (
+                  <div
+                    style={{
+                      minHeight: composeMax ? 440 : 220, border: '1px solid #e2e8f0',
+                      borderRadius: 8, padding: '12px 14px', background: '#fff',
+                      overflowY: 'auto', fontSize: 14, lineHeight: 1.5,
+                    }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(compose.body, SANITISE_OPTS) }}
+                  />
+                ) : (
+                  <RichTextEditor
+                    value={compose.body}
+                    onChange={(html) => setCompose(c => c ? { ...c, body: html } : c)}
+                    minHeight={composeMax ? 440 : 220}
+                    ariaLabel="Email message body"
+                  />
+                )}
                 {!sigHtml && (
                   <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
                     Tip: set your signature in Settings → Email so it's added automatically.
@@ -993,6 +1008,10 @@ export default function Inbox() {
               </button>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-secondary btn-sm" onClick={handleDiscard} disabled={sending} title="Discard this message">🗑 Discard</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setPreviewing(p => !p)} disabled={sending}
+                  title="Preview the email exactly as it will send">
+                  {previewing ? '✎ Back to edit' : '👁 Preview'}
+                </button>
                 <button className="btn btn-primary btn-sm" onClick={handleSend} disabled={sending}>
                   {sending ? 'Sending…' : '➤ Send'}
                 </button>
