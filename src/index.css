@@ -338,9 +338,21 @@ h4 { font-size: 14px; font-weight: 600; }
 .sidebar-pin.pinned { color: var(--pc-text); opacity: 1; }
 .sidebar-pin:hover { color: var(--pc-navy); }
 
-.sidebar-group-favourites .sidebar-group-header {
-  color: var(--pc-text);
+/* Favourites reads as a pinned "shortcut shelf": tinted strip + gold star
+   marker, visually distinct from the collapsible grouped nav below it. */
+.sidebar-group-favourites {
+  background: rgba(13,27,46,0.035);
+  border-radius: var(--pc-radius-md);
+  margin: 2px 8px 6px;
 }
+.sidebar-group-favourites .sidebar-group-header { color: var(--pc-text); }
+.sidebar-group-favourites .sidebar-group-label::before {
+  content: '★';
+  color: var(--warn);
+  margin-right: 6px;
+  font-size: 10px;
+}
+.sidebar-group-favourites .sidebar-group-items { background: transparent; }
 
 /* Divider between the pinned Favourites block and the main grouped nav */
 .sidebar-divider {
@@ -489,6 +501,9 @@ h4 { font-size: 14px; font-weight: 600; }
 }
 .nav-collapse-toggle:hover { color: var(--pc-navy); background: rgba(13,27,46,0.04); }
 .nav-rail-top { display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
+/* Compact icon-only brand mark shown at the top of the collapsed rail */
+.nav-rail-logo { display: flex; align-items: center; justify-content: center; padding: 4px 0 6px; }
+.nav-rail-logo img { width: 26px; height: 26px; display: block; }
 .nav-rail-btn {
   background: none; border: none; cursor: pointer; color: var(--pc-text-2);
   font-size: 18px; line-height: 1; padding: 6px; border-radius: 6px;

@@ -352,6 +352,9 @@ export default function AppShell() {
     return (
       <>
         <div className="nav-rail-top">
+          <Link to="/" className="nav-rail-logo" title="PC Prime Portal — Dashboard" onClick={() => setSidebarOpen(false)}>
+            <img src="/favicon.svg" alt="Home" />
+          </Link>
           <button type="button" className="nav-rail-btn" onClick={() => setNavCollapsed(false)} title="Expand menu">»</button>
           <Link to="/" className={`nav-rail-item ${location.pathname === '/' ? 'active' : ''}`} title="Dashboard" onClick={() => setSidebarOpen(false)}>⌂</Link>
         </div>
