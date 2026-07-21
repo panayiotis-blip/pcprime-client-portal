@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import PrintToolbar from '../shared/PrintToolbar';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 type Mode = 'sales' | 'vat' | 'receipts';
 
@@ -212,12 +214,13 @@ export default function SalesReports() {
           {mode !== 'vat' && (
             <div className="form-group">
               <label>Client (optional)</label>
-              <select className="form-input" value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
-                <option value="">All clients</option>
-                {clients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={clientFilter}
+                options={toClientOptions(clients)}
+                onChange={v => setClientFilter(v ? String(v) : '')}
+                placeholder="All clients"
+                allowClear
+              />
             </div>
           )}
         </div>

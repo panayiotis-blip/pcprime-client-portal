@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 type Tab = 'invoices' | 'compliance' | 'workload';
 
@@ -152,10 +154,13 @@ function InvoiceSummary({ invoices, clients }: { invoices: any[]; clients: any[]
       <div className="filters-bar no-print" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', margin: '12px 0' }}>
         <div className="form-group" style={{ minWidth: 220 }}>
           <label>Client</label>
-          <select className="form-input" value={fClient} onChange={e => setFClient(e.target.value)}>
-            <option value="">All clients</option>
-            {clients.map((c: any) => <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>)}
-          </select>
+          <SearchableSelect
+            value={fClient}
+            options={toClientOptions(clients)}
+            onChange={v => setFClient(v ? String(v) : '')}
+            placeholder="All clients"
+            allowClear
+          />
         </div>
         <div className="form-group">
           <label>From month</label>

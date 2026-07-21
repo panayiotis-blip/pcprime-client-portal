@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
 import { Hash, Trash2, AlertTriangle, GitMerge, Printer } from 'lucide-react';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
@@ -1293,21 +1295,23 @@ export default function ClientManager() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     <div>
                       <label style={{ fontSize: '0.74em', color: '#5a6478', display: 'block', marginBottom: 2 }}>From client</label>
-                      <select className="form-input form-input-sm" value={printFromId ?? ''} onChange={e => setPrintFromId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%' }}>
-                        <option value="">— First —</option>
-                        {rangeClientOptions.map((c: any) => (
-                          <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' · ' : ''}{c.name}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect
+                        value={printFromId ?? ''}
+                        options={toClientOptions(rangeClientOptions)}
+                        onChange={v => setPrintFromId(v ? Number(v) : null)}
+                        placeholder="— First —"
+                        allowClear
+                      />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.74em', color: '#5a6478', display: 'block', marginBottom: 2 }}>To client</label>
-                      <select className="form-input form-input-sm" value={printToId ?? ''} onChange={e => setPrintToId(e.target.value ? Number(e.target.value) : null)} style={{ width: '100%' }}>
-                        <option value="">— Last —</option>
-                        {rangeClientOptions.map((c: any) => (
-                          <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' · ' : ''}{c.name}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect
+                        value={printToId ?? ''}
+                        options={toClientOptions(rangeClientOptions)}
+                        onChange={v => setPrintToId(v ? Number(v) : null)}
+                        placeholder="— Last —"
+                        allowClear
+                      />
                     </div>
                   </div>
                   {(printFromId || printToId || printTypeFilter !== 'all') && (

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 interface UnlinkedDirector {
   id: number;
@@ -172,25 +174,16 @@ export default function UnlinkedDirectors() {
                     <td>{d.name}</td>
                     <td>{d.role}</td>
                     <td>
-                      <select
-                        className="form-input form-input-sm"
-                        disabled={!canEdit || busyId === d.id}
-                        defaultValue=""
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (v) handleLink(d, Number(v));
-                          // Reset the dropdown so it doesn't keep showing the chosen value after the row disappears
-                          e.target.value = '';
-                        }}
-                        style={{ minWidth: 220 }}
-                      >
-                        <option value="">— Pick client —</option>
-                        {individualClients.map((c: any) => (
-                          <option key={c.id} value={c.id}>
-                            {c.client_code ? c.client_code + ' — ' : ''}{c.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div style={{ minWidth: 220 }}>
+                        {/* Value never stored — picking a client links the director and the picker resets */}
+                        <SearchableSelect
+                          value=""
+                          options={toClientOptions(individualClients)}
+                          onChange={v => { if (v) handleLink(d, Number(v)); }}
+                          placeholder="— Pick client —"
+                          disabled={!canEdit || busyId === d.id}
+                        />
+                      </div>
                     </td>
                     {canEdit && (
                       <td>

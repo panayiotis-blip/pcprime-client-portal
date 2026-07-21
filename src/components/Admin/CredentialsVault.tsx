@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, hasPermission } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 
@@ -319,24 +321,16 @@ export default function CredentialsVault() {
                           <span style={{ color: '#94a3b8' }}>(unlinked)</span>
                         )}
                         {canWrite && (
-                          <select
-                            className="form-input form-input-sm"
-                            defaultValue=""
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              if (v) handleQuickLink(r.id, Number(v));
-                              e.target.value = '';
-                            }}
-                            style={{ fontSize: 11, padding: '2px 4px', maxWidth: 220 }}
-                            title="Link to a client"
-                          >
-                            <option value="">→ Link to client…</option>
-                            {clients.map((c: any) => (
-                              <option key={c.id} value={c.id}>
-                                {c.client_code ? c.client_code + ' — ' : ''}{c.name}
-                              </option>
-                            ))}
-                          </select>
+                          // Value is never stored — picking a client fires the link
+                          // action and the picker resets to its placeholder.
+                          <div style={{ maxWidth: 220 }}>
+                            <SearchableSelect
+                              value=""
+                              options={toClientOptions(clients)}
+                              onChange={v => { if (v) handleQuickLink(r.id, Number(v)); }}
+                              placeholder="→ Link to client…"
+                            />
+                          </div>
                         )}
                       </div>
                     )}
@@ -420,16 +414,13 @@ export default function CredentialsVault() {
               </div>
               <div className="form-group full-width">
                 <label>Linked client</label>
-                <select
-                  className="form-input"
+                <SearchableSelect
                   value={editing.form.client_id}
-                  onChange={e => setEditing(s => s ? { ...s, form: { ...s.form, client_id: e.target.value, owner_label: e.target.value ? '' : s.form.owner_label } } : s)}
-                >
-                  <option value="">— Not linked (firm-owned) —</option>
-                  {clients.map((c: any) => (
-                    <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-                  ))}
-                </select>
+                  options={toClientOptions(clients)}
+                  onChange={v => setEditing(s => s ? { ...s, form: { ...s.form, client_id: v ? String(v) : '', owner_label: v ? '' : s.form.owner_label } } : s)}
+                  placeholder="— Not linked (firm-owned) —"
+                  allowClear
+                />
               </div>
               {!editing.form.client_id && (
                 <div className="form-group full-width">

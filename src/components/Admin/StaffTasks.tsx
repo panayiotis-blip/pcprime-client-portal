@@ -8,6 +8,8 @@ import LogMessageModal from './LogMessageModal';
 import RunSchedulesModal from './RunSchedulesModal';
 import TaskCompletionModal, { templateFor } from './TaskCompletionModal';
 import SendPendingEmailsModal from './SendPendingEmailsModal';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 import { formatDateTime } from '../../services/dates';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
@@ -436,12 +438,13 @@ export default function StaffTasks() {
             </div>
             <div className="form-group">
               <label>Client (optional)</label>
-              <select className="form-input" value={form.client_id} onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))}>
-                <option value="">—</option>
-                {clients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.client_code ? `${c.client_code} — ` : ''}{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.client_id}
+                options={toClientOptions(clients)}
+                onChange={v => setForm(p => ({ ...p, client_id: v ? String(v) : '' }))}
+                placeholder="—"
+                allowClear
+              />
             </div>
             <div className="form-group">
               <label>Assignee</label>
@@ -513,12 +516,13 @@ export default function StaffTasks() {
         </div>
         <div className="form-group" style={{ minWidth: 180 }}>
           <label>Client</label>
-          <select className="form-input" value={fClient} onChange={e => setFClient(e.target.value)}>
-            <option value="">All</option>
-            {clients.map((c: any) => (
-              <option key={c.id} value={c.id}>{c.client_code ? `${c.client_code} — ` : ''}{c.name}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={fClient}
+            options={toClientOptions(clients)}
+            onChange={v => setFClient(v ? String(v) : '')}
+            placeholder="All clients"
+            allowClear
+          />
         </div>
         <div className="form-group">
           <label>Due from</label>

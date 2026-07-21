@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 interface Props {
   preSelectedClientId?: number | null;
@@ -97,12 +99,14 @@ export default function ApplyTaskTemplateModal({ preSelectedClientId, onClose, o
             </div>
             <div className="form-group">
               <label>Client (optional)</label>
-              <select className="form-input" value={clientId} onChange={e => setClientId(e.target.value)} disabled={!!preSelectedClientId}>
-                <option value="">— None —</option>
-                {clients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.client_code ? `${c.client_code} — ` : ''}{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={clientId}
+                options={toClientOptions(clients)}
+                onChange={v => setClientId(v ? String(v) : '')}
+                placeholder="— None —"
+                allowClear
+                disabled={!!preSelectedClientId}
+              />
               {preSelectedClientId && (
                 <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>Pre-selected from this client's page.</p>
               )}

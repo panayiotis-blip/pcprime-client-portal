@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 const CATEGORIES = ['Asset', 'Liability', 'Equity', 'Income', 'Expense'];
 
@@ -256,10 +258,13 @@ export default function ChartOfAccounts({ clientId }: { clientId: number }) {
 
           <h4>Copy from another client</h4>
           <div className="form-row">
-            <select value={copyFromClient} onChange={(e) => setCopyFromClient(parseInt(e.target.value))} className="form-input">
-              <option value={0}>-- Select Client --</option>
-              {clients.filter((c: any) => c.id !== clientId).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <SearchableSelect
+              value={copyFromClient || ''}
+              options={toClientOptions(clients.filter((c: any) => c.id !== clientId))}
+              onChange={v => setCopyFromClient(v ? Number(v) : 0)}
+              placeholder="-- Select Client --"
+              allowClear
+            />
             <button className="btn btn-primary btn-sm" onClick={handleCopy} disabled={!copyFromClient}>Copy</button>
           </div>
         </div>

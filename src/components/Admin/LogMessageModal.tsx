@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 interface Props {
   onClose: () => void;
@@ -98,10 +100,13 @@ export default function LogMessageModal({ onClose, onSaved }: Props) {
               </div>
               <div className="form-group">
                 <label>About client (optional)</label>
-                <select className="form-input" value={clientId} onChange={e => setClientId(e.target.value)}>
-                  <option value="">— None —</option>
-                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={clientId}
+                  options={toClientOptions(clients)}
+                  onChange={v => setClientId(v ? String(v) : '')}
+                  placeholder="— None —"
+                  allowClear
+                />
               </div>
               <div className="form-group">
                 <label>Priority</label>

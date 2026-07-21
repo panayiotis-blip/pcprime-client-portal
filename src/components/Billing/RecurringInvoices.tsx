@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { Modal, Button } from '../ui';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 // Accounting — billing module Phase A. A per-client recurring billing
 // profile; "Generate drafts" turns the active profiles into draft
@@ -293,12 +295,13 @@ export default function RecurringInvoices() {
           <div className="form-grid">
             <div className="form-group">
               <label>Client *</label>
-              <select className="form-input" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-                <option value="">— Select —</option>
-                {clients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                value={form.client_id}
+                options={toClientOptions(clients)}
+                onChange={v => setForm({ ...form, client_id: v ? String(v) : '' })}
+                placeholder="— Select —"
+                allowClear
+              />
             </div>
             <div className="form-group">
               <label>Label</label>

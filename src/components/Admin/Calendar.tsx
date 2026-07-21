@@ -7,6 +7,8 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatDateTime } from '../../services/dates';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 const TIMESHEET_SERVICES = [
   'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
@@ -482,10 +484,13 @@ export default function Calendar() {
               </div>
               <div className="form-group">
                 <label>Client (optional)</label>
-                <select className="form-input" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-                  <option value="">— None —</option>
-                  {clients.map((c: any) => <option key={c.id} value={c.id}>{c.client_code ? c.client_code + ' — ' : ''}{c.name}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.client_id}
+                  options={toClientOptions(clients)}
+                  onChange={v => setForm({ ...form, client_id: v ? String(v) : '' })}
+                  placeholder="— None —"
+                  allowClear
+                />
               </div>
             </div>
             <div className="form-group">

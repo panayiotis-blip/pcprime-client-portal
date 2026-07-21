@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type IntakeAttachment } from '../../services/api';
 import { useApp } from '../../context/AppContext';
+import SearchableSelect from '../common/SearchableSelect';
+import { toClientOptions } from '../../services/clientOptions';
 
 // Staff review/approve queue for client onboarding submissions. Each submission
 // is diffed against the live client record; staff pick which changes to apply
@@ -305,10 +307,13 @@ export default function ClientIntakeReview() {
       {/* Create an onboarding / refresh link to send a client */}
       <div className="card" style={{ padding: 12, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Create link:</span>
-        <select className="form-input" style={{ maxWidth: 320 }} value={linkClient} onChange={(e) => setLinkClient(e.target.value)}>
-          <option value="">New client (blank intake)</option>
-          {(clients as any[]).map((c) => <option key={c.id} value={c.id}>{c.name}{c.client_code ? ` · ${c.client_code}` : ''}</option>)}
-        </select>
+        <SearchableSelect
+          value={linkClient}
+          options={toClientOptions(clients)}
+          onChange={v => setLinkClient(v ? String(v) : '')}
+          placeholder="New client (blank intake)"
+          allowClear
+        />
         <button className="btn btn-primary btn-sm" onClick={createLink} disabled={linkBusy}>
           {linkBusy ? 'Creating…' : 'Generate link'}
         </button>
