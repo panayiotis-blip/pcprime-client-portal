@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api, isStaffRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/dates';
+import { PanelSkeleton } from '../ui';
 
 const DOC_TYPES = [
   { value: 'invoice', label: 'Invoice (Received)' },
@@ -59,6 +60,10 @@ export default function ClientDocuments({ clientId }: Props) {
   const [uploadEmailedDate, setUploadEmailedDate] = useState('');
   const [activeYear, setActiveYear] = useState<string>('');
   const [activeMonth, setActiveMonth] = useState<string>('');
+  // Covers the whole opening sequence — folders, then that folder's documents.
+  // The tab used to render an empty shell for both round trips, which read as
+  // "there's nothing here" rather than "still loading".
+  const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const buildTree = (flat: FolderNode[]): FolderNode[] => {
@@ -82,8 +87,14 @@ export default function ClientDocuments({ clientId }: Props) {
       if (!activeFolder && tree.length > 0) {
         const scanned = flat.find((f: any) => f.category_key === 'scanned');
         setActiveFolder(scanned || tree[0]);
+      } else if (tree.length === 0) {
+        // No folders at all — no document fetch will follow, so release the
+        // loading gate here or the skeleton would never clear.
+        setLoading(false);
       }
-    } catch {}
+    } catch {
+      setLoading(false);
+    }
   };
 
   const loadDocuments = async () => {
@@ -99,8 +110,13 @@ export default function ClientDocuments({ clientId }: Props) {
     try { setDocuments(await api.getDocuments(params)); } catch {}
   };
 
-  useEffect(() => { loadFolders(); }, [clientId]);
-  useEffect(() => { loadDocuments(); }, [clientId, activeFolder, activeYear, activeMonth]);
+  useEffect(() => { setLoading(true); loadFolders(); }, [clientId]);
+  useEffect(() => {
+    // Wait for the folder tree to pick a default before fetching documents;
+    // loadDocuments would otherwise no-op and clear the gate too early.
+    if (!activeFolder) return;
+    loadDocuments().finally(() => setLoading(false));
+  }, [clientId, activeFolder, activeYear, activeMonth]);
 
   const toggleExpanded = (id: number) => {
     setExpanded(prev => {
@@ -267,6 +283,8 @@ export default function ClientDocuments({ clientId }: Props) {
       </div>
     );
   };
+
+  if (loading) return <div className="client-documents"><PanelSkeleton rows={7} /></div>;
 
   return (
     <div className="client-documents">
