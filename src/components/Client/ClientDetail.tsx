@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -102,6 +102,14 @@ export default function ClientDetail() {
   const [client, setClient] = useState<any>(null);
   const [form, setForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  // A tab can own a sub-form (addresses) and register its saver here, so the
+  // single header Save commits the whole record rather than each tab carrying
+  // its own button — pressing the wrong one used to lose edits silently.
+  const tabSaveRef = useRef<(() => Promise<void>) | null>(null);
+  const [tabDirty, setTabDirty] = useState(false);
+  const registerTabSave = useCallback((fn: (() => Promise<void>) | null) => {
+    tabSaveRef.current = fn;
+  }, []);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [tab, setTab] = useState<TabKey>('info');
@@ -160,17 +168,25 @@ export default function ClientDetail() {
     };
   }, [clients, client]);
 
+  // Dirtiness of the client form itself. The header receives `isDirty ||
+  // tabDirty` so the single Save also lights up for a tab's own sub-form
+  // (addresses), and Prev/Next still block navigation with unsaved edits.
   const isDirty = useMemo(() => isFormDirty(form, client), [form, client]);
 
   const handleSave = async () => {
-    if (!isDirty) return;
+    if (!isDirty && !tabDirty) return;
     setSaving(true);
     try {
-      if (isAdmin) {
-        await api.updateClient(clientId, form);
-      } else {
-        await api.selfUpdateClient(clientId, form);
+      if (isDirty) {
+        if (isAdmin) {
+          await api.updateClient(clientId, form);
+        } else {
+          await api.selfUpdateClient(clientId, form);
+        }
       }
+      // Commit any sub-form the active tab owns (currently addresses). Runs
+      // after the client row so both land under one Save press.
+      if (tabSaveRef.current) await tabSaveRef.current();
       await refreshClients();
       await loadClient();
     } catch (err: any) {
@@ -344,7 +360,7 @@ export default function ClientDetail() {
       <ClientHeader
         client={client}
         form={form}
-        isDirty={isDirty}
+        isDirty={isDirty || tabDirty}
         isSaving={saving}
         canEdit={editable}
         canToggleActive={canToggleActive}
@@ -411,7 +427,7 @@ export default function ClientDetail() {
       {/* Tab content */}
       <div className="cd-tab-pane">
         {tab === 'info'        && <ClientInfoTab />}
-        {tab === 'contacts'    && <ContactsTab />}
+        {tab === 'contacts'    && <ContactsTab registerSave={registerTabSave} onDirtyChange={setTabDirty} />}
         {tab === 'tax'         && <TaxRegistrationTab />}
         {tab === 'services'    && <ClientServicesTab clientId={clientId} />}
         {tab === 'kyc'         && <KYCPanel clientId={clientId} onRefresh={loadClient} />}

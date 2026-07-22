@@ -17,7 +17,14 @@ type Draft = Partial<ClientAddress> & { _dirty?: boolean };
 const isCompanyLike = (cat: string) =>
   cat === 'company' || cat === 'partnership' || cat === 'sole_trader';
 
-export default function ContactsTab() {
+type ContactsTabProps = {
+  /** Hand the address saver to ClientDetail so the header Save commits it too. */
+  registerSave?: (fn: (() => Promise<void>) | null) => void;
+  /** Report unsaved address edits so the header Save can enable itself. */
+  onDirtyChange?: (dirty: boolean) => void;
+};
+
+export default function ContactsTab({ registerSave, onDirtyChange }: ContactsTabProps = {}) {
   const { editing, form, client, onChange } = useFieldCtx();
   const emailValue = (editing ? form.email : client.email) || '';
   const emailLooksOk = isValidEmailList(emailValue);
@@ -112,6 +119,19 @@ export default function ContactsTab() {
 
   const anyDirty = Object.values(drafts).some(d => d?._dirty);
 
+  // Addresses used to have their own Save button, separate from the header's.
+  // Editing an address and pressing the header Save silently did nothing — the
+  // changes looked saved but weren't. The tab now hands its saver up so ONE
+  // Save commits everything. Registered on every render so the closure always
+  // sees the current drafts; cleared on unmount so a stale saver can't fire.
+  useEffect(() => {
+    registerSave?.(handleSaveAddresses);
+    return () => registerSave?.(null);
+  });
+
+  useEffect(() => { onDirtyChange?.(anyDirty); }, [anyDirty, onDirtyChange]);
+  useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
+
   // `loading` was already tracked here but never rendered, so the tab flashed
   // an empty form until the addresses arrived.
   if (loading) return <div className="client-tab-content"><PanelSkeleton /></div>;
@@ -180,15 +200,12 @@ export default function ContactsTab() {
               />
             );
           })}
-          {editing && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleSaveAddresses}
-                disabled={!anyDirty || saving}
-              >
-                {saving ? 'Saving addresses…' : 'Save addresses'}
-              </button>
+          {/* No Save button here on purpose — the header Save commits addresses
+              along with the rest of the record. A second one caused edits to be
+              lost when the header Save was pressed instead. */}
+          {editing && anyDirty && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, fontSize: 12, color: '#5a6478' }}>
+              {saving ? 'Saving addresses…' : 'Unsaved address changes — use Save in the toolbar above.'}
             </div>
           )}
         </>
