@@ -42,6 +42,10 @@ export function transliterate(name: string): string {
   return out;
 }
 
+// 'partnership' is intentionally unreachable today: the firm records
+// partnerships as companies, and clients.client_type is constrained to
+// ('individual', 'company') by migration 093 anyway. The mapping is kept so
+// the format is defined if that ever changes — it is not a missing feature.
 const TYPE_PREFIX: Record<string, string> = {
   individual:  'IND',
   company:     'CO',
