@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { PanelSkeleton } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { api, isStaffRole, hasPermission, isSupervisorOrHigher, roleLabel } from '../../services/api';
 import QuickActionsFab from './QuickActionsFab';
@@ -518,7 +519,9 @@ export default function AppShell() {
         </nav>
 
         {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-        <main className="main-content"><Outlet /></main>
+        <main className="main-content">
+          <Suspense fallback={<PanelSkeleton />}><Outlet /></Suspense>
+        </main>
       </div>
     );
   }
@@ -709,7 +712,11 @@ export default function AppShell() {
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <main className="main-content" style={collapsedMainStyle}>
-        <Outlet />
+        {/* Route components are lazy-loaded — the shell around this panel stays
+            mounted, so only the content area shows a placeholder. */}
+        <Suspense fallback={<PanelSkeleton />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* Floating quick-actions button — hidden on print routes */}

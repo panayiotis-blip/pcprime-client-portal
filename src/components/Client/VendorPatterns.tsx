@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { formatDate } from '../../services/dates';
+import { PanelSkeleton } from '../ui';
 
 export default function VendorPatterns({ clientId }: { clientId: number }) {
   const [patterns, setPatterns] = useState<any[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
   const [edits, setEdits] = useState<any>({});
+  // Without this the tab rendered "Vendor Patterns (0)" before the fetch
+  // resolved, which reads as "none exist" rather than "still loading".
+  const [loading, setLoading] = useState(true);
 
   const load = async () => { try { setPatterns(await api.getVendorPatterns(clientId)); } catch {} };
-  useEffect(() => { load(); }, [clientId]);
+  useEffect(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [clientId]);
 
   const handleSave = async (id: number) => {
     await api.updateVendorPattern(id, edits);
@@ -23,6 +30,8 @@ export default function VendorPatterns({ clientId }: { clientId: number }) {
       await load();
     }
   };
+
+  if (loading) return <div className="vendor-patterns"><PanelSkeleton rows={4} /></div>;
 
   return (
     <div className="vendor-patterns">

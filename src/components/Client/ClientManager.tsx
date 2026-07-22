@@ -375,9 +375,21 @@ export default function ClientManager() {
     }
   };
 
-  const getInvoiceCount = (clientId: number) => invoices.filter((inv: any) => inv.client_id === clientId).length;
+  // Invoice counts keyed by client id. Previously this was a linear scan of the
+  // whole invoice array per client, called once per rendered row (and again per
+  // comparison when sorting by invoice count) — O(clients × invoices) on every
+  // single render. One pass, cached until the invoices actually change.
+  const invoiceCountByClient = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const inv of invoices as any[]) {
+      m.set(inv.client_id, (m.get(inv.client_id) || 0) + 1);
+    }
+    return m;
+  }, [invoices]);
 
-  const filtered = clients.filter((c: any) => {
+  const getInvoiceCount = (clientId: number) => invoiceCountByClient.get(clientId) || 0;
+
+  const filtered = useMemo(() => clients.filter((c: any) => {
     // Free-text search
     if (searchTerm) {
       const t = searchTerm.toLowerCase();
@@ -411,7 +423,7 @@ export default function ClientManager() {
     if (adv.cityContains && !(c.city || '').toLowerCase().includes(adv.cityContains.toLowerCase())) return false;
 
     return true;
-  });
+  }), [clients, searchTerm, filterCategory, filterStatus, filterCity, filterHasVat, filterTag, adv]);
 
   // Distinct tags present in the data — drives the Tag dropdown
   const allTags = useMemo(() => {
@@ -905,17 +917,17 @@ export default function ClientManager() {
   };
 
   // Sort the filtered list — applied to the List view, also to Compact for stability.
-  const sortedFiltered = [...filtered].sort((a: any, b: any) => {
+  const sortedFiltered = useMemo(() => [...filtered].sort((a: any, b: any) => {
     const dir = sortDir === 'asc' ? 1 : -1;
     if (sortKey === 'invoice_count') {
-      return dir * (getInvoiceCount(a.id) - getInvoiceCount(b.id));
+      return dir * ((invoiceCountByClient.get(a.id) || 0) - (invoiceCountByClient.get(b.id) || 0));
     }
     const av = String(a[sortKey] || '').toLowerCase();
     const bv = String(b[sortKey] || '').toLowerCase();
     if (av < bv) return -1 * dir;
     if (av > bv) return  1 * dir;
     return 0;
-  });
+  }), [filtered, sortKey, sortDir, invoiceCountByClient]);
 
   // Range dropdown options for the Print modal — type-filtered + sorted by
   // name. Declared AFTER sortedFiltered because the useMemo callback runs

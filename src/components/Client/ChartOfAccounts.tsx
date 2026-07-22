@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
 import { toClientOptions } from '../../services/clientOptions';
+import { PanelSkeleton } from '../ui';
 
 const CATEGORIES = ['Asset', 'Liability', 'Equity', 'Income', 'Expense'];
 
@@ -76,10 +77,16 @@ export default function ChartOfAccounts({ clientId }: { clientId: number }) {
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [applyingMaster, setApplyingMaster] = useState(false);
+  // Guards the initial fetch only — later reloads after add/delete keep the
+  // existing rows on screen rather than flashing a skeleton over them.
+  const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => { try { setAccounts(await api.getAccounts(clientId)); } catch {} };
-  useEffect(() => { load(); }, [clientId]);
+  useEffect(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [clientId]);
 
   const handleAdd = async () => {
     if (!newCode.trim() || !newDesc.trim()) return;
@@ -201,6 +208,8 @@ export default function ChartOfAccounts({ clientId }: { clientId: number }) {
     if (searchTerm) { const t = searchTerm.toLowerCase(); return a.code.toLowerCase().includes(t) || a.description.toLowerCase().includes(t); }
     return true;
   });
+
+  if (loading) return <div className="chart-of-accounts"><PanelSkeleton /></div>;
 
   return (
     <div className="chart-of-accounts">

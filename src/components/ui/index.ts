@@ -26,6 +26,9 @@ export type { CardProps } from './Card';
 export { default as Menu } from './Menu';
 export type { MenuProps, MenuItem } from './Menu';
 
+export { default as PanelSkeleton, Skeleton, SkeletonText, SkeletonTable } from './Skeleton';
+export type { SkeletonProps } from './Skeleton';
+
 export { default as Modal } from './Modal';
 export type { ModalProps } from './Modal';
 

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
@@ -5,85 +6,94 @@ import { ScanProvider } from './context/ScanContext';
 import { MFAStepUpProvider } from './context/MFAStepUpContext';
 import { ViewPreferencesProvider } from './context/ViewPreferencesContext';
 import { DashboardLayoutProvider } from './context/DashboardLayoutContext';
+import { PanelSkeleton } from './components/ui';
+
+/* Eager: the shell, the auth gates, and the two entry points. These are needed
+   on the very first paint, so deferring them would only add a round trip. */
 import AppShell from './components/Layout/AppShell';
 import LoginPage from './components/Auth/LoginPage';
-import Dashboard from './components/Dashboard';
-import ScannerPage from './components/Scanner/ScannerPage';
-import InvoiceEditor from './components/Invoice/InvoiceEditor';
-import ClientManager from './components/Client/ClientManager';
-import ClientDetail from './components/Client/ClientDetail';
-import ClientCardPrint from './components/Client/ClientCardPrint';
-import SmartImport from './components/Admin/SmartImport';
-import DuplicateFinder from './components/Admin/DuplicateFinder';
-import TaxFilingsPage from './components/Admin/TaxFilingsPage';
-import UnlinkedDirectors from './components/Admin/UnlinkedDirectors';
-import CredentialsVault from './components/Admin/CredentialsVault';
-import ExportPage from './components/Export/ExportPage';
-import DocumentsPage from './components/Documents/DocumentsPage';
-import UserManagement from './components/Admin/UserManagement';
-import ComplianceDashboard from './components/Admin/ComplianceDashboard';
-import AuditLog from './components/Admin/AuditLog';
-import StaffTasks from './components/Admin/StaffTasks';
-import TaskTemplates from './components/Admin/TaskTemplates';
-import Reports from './components/Admin/Reports';
-import Calendar from './components/Admin/Calendar';
-import Timesheet from './components/Admin/Timesheet';
-import TimesheetPrint from './components/Admin/TimesheetPrint';
-import CompanySettings from './components/Admin/CompanySettings';
-import MasterChartOfAccounts from './components/Admin/MasterChartOfAccounts';
-import ServiceSettings from './components/Admin/ServiceSettings';
-import EmailSettings from './components/Settings/EmailSettings';
-import InvoicesList from './components/Billing/InvoicesList';
-import BillingInvoiceEditor from './components/Billing/InvoiceEditor';
-import InvoicePrint from './components/Billing/InvoicePrint';
-import RecurringInvoices from './components/Billing/RecurringInvoices';
-import ReceiptPrint from './components/Billing/ReceiptPrint';
-import AgeAnalysis from './components/Billing/AgeAnalysis';
-import ClientStatement from './components/Billing/ClientStatement';
-import StatementPrint from './components/Billing/StatementPrint';
-import StatementsBatchPrint from './components/Billing/StatementsBatchPrint';
-import ServicePresets from './components/Billing/ServicePresets';
-import SalesReports from './components/Billing/SalesReports';
-import MyBilling from './components/Client/MyBilling';
-import MyDeadlines from './components/Client/MyDeadlines';
-import MyMessages from './components/Client/MyMessages';
-import MyEmails from './components/Client/MyEmails';
-import MessagesInbox from './components/Admin/MessagesInbox';
-import Inbox from './components/Admin/Inbox';
-import FirmEmailSettings from './components/Admin/FirmEmailSettings';
-import BulkEmail from './components/Admin/BulkEmail';
-import RequestTaxInfo from './components/Admin/RequestTaxInfo';
-import ClientIntakeReview from './components/Admin/ClientIntakeReview';
-import MyCompany from './components/Client/MyCompany';
-import MyCustomers from './components/Client/MyCustomers';
-import SalesInvoices from './components/Client/SalesInvoices';
-import CustomerInvoiceEditor from './components/Client/CustomerInvoiceEditor';
-import CustomerInvoicePrint from './components/Client/CustomerInvoicePrint';
-import CustomerReceiptPrint from './components/Client/CustomerReceiptPrint';
-import CustomerDebtors from './components/Client/CustomerDebtors';
-import MyExpenses from './components/Client/MyExpenses';
-import MyScanPage from './components/Client/MyScanPage';
-import ClientExpenses from './components/Admin/ClientExpenses';
-import MyReports from './components/Client/MyReports';
-import AiUsage from './components/Admin/AiUsage';
-import PhoneLog from './components/Admin/PhoneLog';
-import Security from './components/Admin/Security';
-import DeletedClients from './components/Admin/DeletedClients';
-import MergeClients from './components/Client/MergeClients';
 import LandingPage from './components/Public/LandingPage';
-import TaxCalculator from './components/Public/TaxCalculator';
-import PrivacyNotice from './components/Public/PrivacyNotice';
-import SignupApplication from './components/Public/SignupApplication';
-import EngagementAcceptPage from './components/Public/EngagementAcceptPage';
-import ClientIntakePage from './components/Public/ClientIntakePage';
-import Applications from './components/Admin/Applications';
 import MFAChallenge from './components/Auth/MFAChallenge';
 import ForcedMfaSetup from './components/Auth/ForcedMfaSetup';
 import ClientMfaNudge from './components/Auth/ClientMfaNudge';
 import TermsGate from './components/Auth/TermsGate';
 import { CURRENT_TOS_VERSION } from './components/Auth/terms';
 import { isStaffRole } from './services/api';
-import DesignSystemDemo from './components/_design/DesignSystemDemo';
+
+/* Lazy: every route below is code-split into its own chunk, fetched on first
+   visit. This keeps heavy, rarely-used dependencies (xlsx, jspdf, html2canvas,
+   pdfjs, recharts) out of the initial download — they used to ship to every
+   user on every cold load as part of one ~6.4 MB bundle. */
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const ScannerPage = lazy(() => import('./components/Scanner/ScannerPage'));
+const InvoiceEditor = lazy(() => import('./components/Invoice/InvoiceEditor'));
+const ClientManager = lazy(() => import('./components/Client/ClientManager'));
+const ClientDetail = lazy(() => import('./components/Client/ClientDetail'));
+const ClientCardPrint = lazy(() => import('./components/Client/ClientCardPrint'));
+const SmartImport = lazy(() => import('./components/Admin/SmartImport'));
+const DuplicateFinder = lazy(() => import('./components/Admin/DuplicateFinder'));
+const TaxFilingsPage = lazy(() => import('./components/Admin/TaxFilingsPage'));
+const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
+const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
+const ExportPage = lazy(() => import('./components/Export/ExportPage'));
+const DocumentsPage = lazy(() => import('./components/Documents/DocumentsPage'));
+const UserManagement = lazy(() => import('./components/Admin/UserManagement'));
+const ComplianceDashboard = lazy(() => import('./components/Admin/ComplianceDashboard'));
+const AuditLog = lazy(() => import('./components/Admin/AuditLog'));
+const StaffTasks = lazy(() => import('./components/Admin/StaffTasks'));
+const TaskTemplates = lazy(() => import('./components/Admin/TaskTemplates'));
+const Reports = lazy(() => import('./components/Admin/Reports'));
+const Calendar = lazy(() => import('./components/Admin/Calendar'));
+const Timesheet = lazy(() => import('./components/Admin/Timesheet'));
+const TimesheetPrint = lazy(() => import('./components/Admin/TimesheetPrint'));
+const CompanySettings = lazy(() => import('./components/Admin/CompanySettings'));
+const MasterChartOfAccounts = lazy(() => import('./components/Admin/MasterChartOfAccounts'));
+const ServiceSettings = lazy(() => import('./components/Admin/ServiceSettings'));
+const EmailSettings = lazy(() => import('./components/Settings/EmailSettings'));
+const InvoicesList = lazy(() => import('./components/Billing/InvoicesList'));
+const BillingInvoiceEditor = lazy(() => import('./components/Billing/InvoiceEditor'));
+const InvoicePrint = lazy(() => import('./components/Billing/InvoicePrint'));
+const RecurringInvoices = lazy(() => import('./components/Billing/RecurringInvoices'));
+const ReceiptPrint = lazy(() => import('./components/Billing/ReceiptPrint'));
+const AgeAnalysis = lazy(() => import('./components/Billing/AgeAnalysis'));
+const ClientStatement = lazy(() => import('./components/Billing/ClientStatement'));
+const StatementPrint = lazy(() => import('./components/Billing/StatementPrint'));
+const StatementsBatchPrint = lazy(() => import('./components/Billing/StatementsBatchPrint'));
+const ServicePresets = lazy(() => import('./components/Billing/ServicePresets'));
+const SalesReports = lazy(() => import('./components/Billing/SalesReports'));
+const MyBilling = lazy(() => import('./components/Client/MyBilling'));
+const MyDeadlines = lazy(() => import('./components/Client/MyDeadlines'));
+const MyMessages = lazy(() => import('./components/Client/MyMessages'));
+const MyEmails = lazy(() => import('./components/Client/MyEmails'));
+const MessagesInbox = lazy(() => import('./components/Admin/MessagesInbox'));
+const Inbox = lazy(() => import('./components/Admin/Inbox'));
+const FirmEmailSettings = lazy(() => import('./components/Admin/FirmEmailSettings'));
+const BulkEmail = lazy(() => import('./components/Admin/BulkEmail'));
+const RequestTaxInfo = lazy(() => import('./components/Admin/RequestTaxInfo'));
+const ClientIntakeReview = lazy(() => import('./components/Admin/ClientIntakeReview'));
+const MyCompany = lazy(() => import('./components/Client/MyCompany'));
+const MyCustomers = lazy(() => import('./components/Client/MyCustomers'));
+const SalesInvoices = lazy(() => import('./components/Client/SalesInvoices'));
+const CustomerInvoiceEditor = lazy(() => import('./components/Client/CustomerInvoiceEditor'));
+const CustomerInvoicePrint = lazy(() => import('./components/Client/CustomerInvoicePrint'));
+const CustomerReceiptPrint = lazy(() => import('./components/Client/CustomerReceiptPrint'));
+const CustomerDebtors = lazy(() => import('./components/Client/CustomerDebtors'));
+const MyExpenses = lazy(() => import('./components/Client/MyExpenses'));
+const MyScanPage = lazy(() => import('./components/Client/MyScanPage'));
+const ClientExpenses = lazy(() => import('./components/Admin/ClientExpenses'));
+const MyReports = lazy(() => import('./components/Client/MyReports'));
+const AiUsage = lazy(() => import('./components/Admin/AiUsage'));
+const PhoneLog = lazy(() => import('./components/Admin/PhoneLog'));
+const Security = lazy(() => import('./components/Admin/Security'));
+const DeletedClients = lazy(() => import('./components/Admin/DeletedClients'));
+const MergeClients = lazy(() => import('./components/Client/MergeClients'));
+const TaxCalculator = lazy(() => import('./components/Public/TaxCalculator'));
+const PrivacyNotice = lazy(() => import('./components/Public/PrivacyNotice'));
+const SignupApplication = lazy(() => import('./components/Public/SignupApplication'));
+const EngagementAcceptPage = lazy(() => import('./components/Public/EngagementAcceptPage'));
+const ClientIntakePage = lazy(() => import('./components/Public/ClientIntakePage'));
+const Applications = lazy(() => import('./components/Admin/Applications'));
+const DesignSystemDemo = lazy(() => import('./components/_design/DesignSystemDemo'));
 
 function AuthedApp() {
   const { user, mfa } = useAuth();
@@ -202,6 +212,10 @@ function AppRoutes() {
   if (loading) return <div className="loading-screen">Loading...</div>;
 
   return (
+    // Outer boundary for the standalone public pages below, which render
+    // outside AppShell and so can't use its in-panel skeleton. Routes inside
+    // AppShell resolve against its own nearer boundary, keeping the sidebar up.
+    <Suspense fallback={<div className="loading-screen">Loading…</div>}>
     <Routes>
       {/* Always-public routes */}
       <Route path="/tax" element={<TaxCalculator />} />
@@ -215,6 +229,7 @@ function AppRoutes() {
       {/* Everything else: authed → real app, anonymous → landing */}
       <Route path="/*" element={user ? <AuthedApp /> : <PublicApp />} />
     </Routes>
+    </Suspense>
   );
 }
 

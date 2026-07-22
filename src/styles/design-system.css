@@ -291,6 +291,42 @@
 }
 
 /* =============================================================
+   5c. Skeleton (loading placeholders)
+   ============================================================= */
+.pc-skel {
+  display: block;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #eef0f4 25%, #f6f7f9 50%, #eef0f4 75%);
+  background-size: 200% 100%;
+  animation: pc-skel-shimmer 1.4s ease-in-out infinite;
+}
+.pc-skel--circle { border-radius: 50%; }
+
+@keyframes pc-skel-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+/* Respect the OS "reduce motion" setting — hold a flat tone instead. */
+@media (prefers-reduced-motion: reduce) {
+  .pc-skel { animation: none; background: #eef0f4; }
+}
+
+.pc-skel-stack { display: flex; flex-direction: column; gap: var(--pc-sp-8); }
+
+.pc-skel-table { display: flex; flex-direction: column; gap: 10px; }
+.pc-skel-row {
+  display: grid;
+  grid-template-columns: 22% repeat(var(--pc-skel-cols, 3), 1fr);
+  gap: var(--pc-sp-16);
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--pc-border);
+}
+
+.pc-skel-panel { display: flex; flex-direction: column; gap: var(--pc-sp-16); padding: var(--pc-sp-8) 0; }
+
+/* =============================================================
    6. Modal
    ============================================================= */
 .pc-modal-overlay {

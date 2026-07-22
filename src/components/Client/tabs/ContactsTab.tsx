@@ -3,6 +3,7 @@ import { Field, useFieldCtx } from '../fieldContext';
 import { EmailLinks, isValidEmailList } from '../../shared/MultiEmail';
 import { api, type ClientAddress } from '../../../services/api';
 import AddressBlock from '../AddressBlock';
+import { PanelSkeleton } from '../../ui';
 
 // Tab 2: Contacts — contact person + structured addresses (UI polish part 5).
 // Single legacy `clients.address` field replaced by per-type rows in
@@ -110,6 +111,10 @@ export default function ContactsTab() {
   };
 
   const anyDirty = Object.values(drafts).some(d => d?._dirty);
+
+  // `loading` was already tracked here but never rendered, so the tab flashed
+  // an empty form until the addresses arrived.
+  if (loading) return <div className="client-tab-content"><PanelSkeleton /></div>;
 
   return (
     <div className="client-tab-content">
