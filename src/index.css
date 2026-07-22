@@ -322,6 +322,39 @@ h4 { font-size: 14px; font-weight: 600; }
   background: rgba(13,27,46,0.03);
 }
 
+/* ---- Tax filings summary grid -------------------------------------------
+   One row per client, one cell per tax year. Colour carries the meaning, so
+   every cell also has a title/aria-label — colour alone is not an accessible
+   signal, and these blocks have no text of their own. */
+.tf-view-toggle { display: inline-flex; gap: 4px; }
+
+.tf-summary-controls {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.tf-summary-controls label { display: flex; flex-direction: column; gap: 4px; }
+.tf-control-label { font-size: 12px; color: var(--pc-text-2, #64748b); }
+.tf-check { flex-direction: row !important; align-items: center; gap: 6px !important; font-size: 13px; }
+
+.tf-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-left: auto; font-size: 12px; color: #64748b; }
+.tf-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+
+.tf-cell {
+  display: inline-block;
+  width: 22px; height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+.tf-cell--filed   { background: #16a34a; }
+.tf-cell--overdue { background: #dc2626; }
+.tf-cell--pending { background: #f59e0b; }
+.tf-cell--none    { background: #e2e8f0; }
+
+.tf-year-head { width: 46px; text-align: center; }
+.tf-year-cell { text-align: center; padding: 4px 2px; }
+.tf-year-cell a { display: inline-block; line-height: 0; }
+.tf-client-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Nested nav entries — e.g. Firm Email / Master CoA / Service Settings sitting
    under Company Settings. Indented and slightly muted so the parent still
    reads as the heading of the pair. */

@@ -7,6 +7,7 @@ import {
   FILING_TYPES, FILING_STATUSES,
   filingTypeLabel, StatusPill, taxYears,
 } from '../shared/TaxFilingMeta';
+import TaxFilingsSummary from './TaxFilingsSummary';
 
 type Filing = {
   id: number;
@@ -51,6 +52,11 @@ export default function TaxFilingsPage() {
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const [filter, setFilter] = useState<any>(initialFilter);
+  // Deep links that carry a filter (from the dashboard tiles) open the detailed
+  // list, since they describe a specific slice rather than the whole picture.
+  const [view, setView] = useState<'summary' | 'list'>(
+    Object.keys(initialFilter).length > 0 ? 'list' : 'summary',
+  );
 
   const load = async () => {
     setLoading(true);
@@ -136,9 +142,29 @@ export default function TaxFilingsPage() {
       <div className="dashboard-header">
         <h2>Tax Filings</h2>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button className="btn btn-secondary btn-sm" onClick={exportExcel} disabled={rows.length === 0}>⬇ Export Excel</button>
+          {/* Summary is the default: the at-a-glance picture across clients.
+              List keeps the filters, bulk status actions and Excel export. */}
+          <div className="tf-view-toggle">
+            <button
+              className={`btn btn-sm ${view === 'summary' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setView('summary')}
+            >
+              Summary
+            </button>
+            <button
+              className={`btn btn-sm ${view === 'list' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setView('list')}
+            >
+              List
+            </button>
+          </div>
+          {view === 'list' && (
+            <button className="btn btn-secondary btn-sm" onClick={exportExcel} disabled={rows.length === 0}>⬇ Export Excel</button>
+          )}
         </div>
       </div>
+
+      {view === 'summary' ? <TaxFilingsSummary /> : (<>
 
       {/* Quick views */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0' }}>
@@ -269,6 +295,7 @@ export default function TaxFilingsPage() {
           </table>
         </div>
       )}
+      </>)}
     </div>
   );
 }
