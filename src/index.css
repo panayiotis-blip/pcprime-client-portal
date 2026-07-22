@@ -326,6 +326,43 @@ h4 { font-size: 14px; font-weight: 600; }
    One row per client, one cell per tax year. Colour carries the meaning, so
    every cell also has a title/aria-label — colour alone is not an accessible
    signal, and these blocks have no text of their own. */
+/* ---- Service Settings: master–detail --------------------------------- */
+.svc-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.svc-list {
+  display: flex; flex-direction: column; gap: 2px;
+  background: #fff;
+  border: 1px solid var(--pc-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 6px;
+  position: sticky; top: 12px;
+}
+.svc-list-item {
+  display: flex; flex-direction: column; gap: 2px;
+  width: 100%; padding: 8px 10px;
+  border: none; background: transparent;
+  border-radius: 6px;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.svc-list-item:hover { background: var(--pc-tint, #f8f9fb); }
+.svc-list-item.active { background: var(--pc-gold-tint, rgba(13,27,46,0.06)); }
+.svc-list-label { font-size: 13px; font-weight: 600; color: #1a365d; }
+.svc-list-item.active .svc-list-label { color: var(--pc-navy, #0d1b2e); }
+.svc-list-meta { font-size: 11px; color: #94a3b8; }
+.svc-detail { min-width: 0; }
+.svc-detail > div:first-child { margin-top: 0 !important; }
+
+/* Stack on narrow screens — the list becomes a scrolling strip above. */
+@media (max-width: 860px) {
+  .svc-layout { grid-template-columns: 1fr; }
+  .svc-list { position: static; flex-direction: row; overflow-x: auto; }
+  .svc-list-item { min-width: 160px; }
+}
+
 .tf-view-toggle { display: inline-flex; gap: 4px; }
 
 .tf-summary-controls {

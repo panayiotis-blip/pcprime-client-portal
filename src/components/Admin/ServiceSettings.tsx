@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { PanelSkeleton } from '../ui';
 
 // Admin page at /settings/services — supervisor-only. Lets the firm:
 //   • see the service catalogue (read-only for now; row inserts are seed-time
@@ -52,6 +53,10 @@ export default function ServiceSettings() {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [templates, setTemplates] = useState<Record<number, Template>>({});
   const [loading, setLoading] = useState(true);
+  // Master–detail: the catalogue used to render every service fully expanded,
+  // which on seven services was a wall of dense tables with nothing in focus.
+  // One service is shown at a time now.
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editingStage, setEditingStage] = useState<number | null>(null);
   const [draftSubject, setDraftSubject] = useState('');
   const [draftBody, setDraftBody] = useState('');
@@ -72,7 +77,13 @@ export default function ServiceSettings() {
         api.getServiceDeliverables(),
         api.getServiceEmailTemplates(),
       ]);
-      setServices(svcs as ServiceDef[]);
+      const svcList = svcs as ServiceDef[];
+      setServices(svcList);
+      // Keep the current selection across reloads; fall back to the first
+      // service when nothing is selected or the selected one was deleted.
+      setSelectedId(prev =>
+        prev != null && svcList.some(s => s.id === prev) ? prev : (svcList[0]?.id ?? null),
+      );
       setStages(stgs as Stage[]);
       setDeliverables(dels as Deliverable[]);
       const tplMap: Record<number, Template> = {};
@@ -257,7 +268,7 @@ export default function ServiceSettings() {
   };
 
   return (
-    <div style={{ padding: '1rem 1.5rem', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: '1rem 1.5rem', maxWidth: 1280, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
         <h2 style={{ color: '#1a365d', margin: 0 }}>Service Settings</h2>
         <Link to="/" style={{ fontSize: 13, color: '#1e40af' }}>← Back to dashboard</Link>
@@ -271,7 +282,36 @@ export default function ServiceSettings() {
         <button className="btn btn-primary btn-sm" onClick={handleAddService}>+ Add Service</button>
       </div>
 
-      {loading ? <p>Loading…</p> : services.map(svc => {
+      {loading ? <PanelSkeleton rows={8} /> : services.length === 0 ? (
+        <div className="empty-state">
+          <p>No services in the catalogue yet. Add the first one above.</p>
+        </div>
+      ) : (
+      <div className="svc-layout">
+        <aside className="svc-list">
+          {services.map(s => {
+            const nStages = stages.filter(x => x.service_id === s.id).length;
+            const nDelivs = deliverables.filter(d => d.service_id === s.id).length;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                className={`svc-list-item ${s.id === selectedId ? 'active' : ''}`}
+                onClick={() => setSelectedId(s.id)}
+              >
+                <span className="svc-list-label">{s.label}</span>
+                <span className="svc-list-meta">
+                  {nStages === 0 ? 'No stages' : `${nStages} stage${nStages === 1 ? '' : 's'}`}
+                  {' · '}
+                  {nDelivs === 0 ? 'no deliverables' : `${nDelivs} deliverable${nDelivs === 1 ? '' : 's'}`}
+                </span>
+              </button>
+            );
+          })}
+        </aside>
+
+        <div className="svc-detail">
+      {services.filter(s => s.id === selectedId).map(svc => {
         const stagesForSvc = stages.filter(s => s.service_id === svc.id).sort((a, b) => a.ordinal - b.ordinal);
         return (
           <div key={svc.id} style={{ marginTop: 16, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
@@ -382,6 +422,9 @@ export default function ServiceSettings() {
           </div>
         );
       })}
+        </div>
+      </div>
+      )}
 
       {/* Add Stage modal */}
       {addStageForServiceId != null && (
