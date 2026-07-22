@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ExternalLink } from 'lucide-react';
 import { api, hasPermission } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
@@ -17,6 +18,8 @@ type Credential = {
   sub_type: string | null;
   username: string | null;
   notes: string | null;
+  // Per-credential URL, falling back to the platform site's default.
+  effective_url: string | null;
 };
 
 // Suggested values — accepted as free text via datalist
@@ -293,7 +296,23 @@ export default function CredentialsVault() {
             <tbody>
               {filtered.map(r => (
                 <tr key={r.id}>
-                  <td><strong>{r.platform}</strong></td>
+                  <td>
+                    <strong>{r.platform}</strong>
+                    {/* Click straight through to the platform's own site. No
+                        password ceremony — that's what Quick login is for on
+                        the client's Credentials tab. */}
+                    {r.effective_url && (
+                      <a
+                        href={r.effective_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Open ${r.effective_url}`}
+                        style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle' }}
+                      >
+                        <ExternalLink size={13} />
+                      </a>
+                    )}
+                  </td>
                   <td>{r.sub_type || '—'}</td>
                   <td>
                     {r.client_id && r.client_code ? (

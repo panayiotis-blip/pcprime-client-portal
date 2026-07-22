@@ -3740,7 +3740,7 @@ export const api = {
   async getAllCredentials() {
     const { data, error } = await supabase
       .from('platform_credentials')
-      .select('id, client_id, platform, sub_type, username, notes, owner_label, client:clients(name, client_code, deleted_at)')
+      .select('id, client_id, platform, sub_type, username, notes, owner_label, url, site:platform_sites(url), client:clients(name, client_code, deleted_at)')
       .order('platform', { ascending: true })
       .order('sub_type', { ascending: true, nullsFirst: true })
       .order('id', { ascending: true });
@@ -3751,6 +3751,9 @@ export const api = {
         ...r,
         client_name: r.client?.name || null,
         client_code: r.client?.client_code || null,
+        // Same rule as getCredentials: a per-credential URL overrides the
+        // platform site's default. The vault had no URL at all before this.
+        effective_url: r.url || r.site?.url || null,
       }));
   },
 
