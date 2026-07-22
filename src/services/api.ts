@@ -247,6 +247,33 @@ async function getJournalFolderId(clientId: number, journalCode: string): Promis
   return data?.id || null;
 }
 
+// ---------- Reference-data cache ----------
+// Categories and cities are small, firm-wide lists that change rarely, yet each
+// was refetched from scratch on every mount of every component that shows them
+// (three apiece). The cached value is the in-flight promise, so components that
+// mount at the same time share a single request instead of racing.
+const lookupCache = new Map<string, Promise<any[]>>();
+
+function cachedLookup(key: string, fetcher: () => Promise<any[]>): Promise<any[]> {
+  let hit = lookupCache.get(key);
+  if (!hit) {
+    // Drop a rejected fetch so the next caller retries rather than being handed
+    // the same failure forever.
+    hit = fetcher().catch(err => { lookupCache.delete(key); throw err; });
+    lookupCache.set(key, hit);
+  }
+  // Hand out a copy: callers that sort or splice the result would otherwise
+  // corrupt the cached array for everyone else.
+  return hit.then(rows => [...rows]);
+}
+
+// Called after any write to a cached table, so the next read re-fetches.
+function invalidateLookup(prefix: string) {
+  for (const key of Array.from(lookupCache.keys())) {
+    if (key.startsWith(prefix)) lookupCache.delete(key);
+  }
+}
+
 async function getClientIdsForUser(uid: string): Promise<number[]> {
   const { data } = await supabase.from('user_clients').select('client_id').eq('user_id', uid);
   return (data || []).map((r: any) => r.client_id);
@@ -578,6 +605,9 @@ export const api = {
   },
 
   async logout() {
+    // Reference data is firm-wide, but RLS still scopes what a session can see —
+    // don't let the next user on this browser inherit the previous one's rows.
+    lookupCache.clear();
     await supabase.auth.signOut();
   },
 
@@ -1719,25 +1749,30 @@ export const api = {
   // --------- Client categories (editable client/company category list) ---------
   // Active categories only — used by the client form + Clients list filter.
   async getClientCategories() {
-    const { data, error } = await supabase.from('client_categories')
-      .select('*').eq('is_active', true)
-      .order('display_order', { ascending: true });
-    if (error) throw new Error(error.message);
-    return data || [];
+    return cachedLookup('client_categories:active', async () => {
+      const { data, error } = await supabase.from('client_categories')
+        .select('*').eq('is_active', true)
+        .order('display_order', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
   },
 
   // Every category, active or not — used by the Company Settings admin.
   async getAllClientCategories() {
-    const { data, error } = await supabase.from('client_categories')
-      .select('*').order('display_order', { ascending: true });
-    if (error) throw new Error(error.message);
-    return data || [];
+    return cachedLookup('client_categories:all', async () => {
+      const { data, error } = await supabase.from('client_categories')
+        .select('*').order('display_order', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
   },
 
   async createClientCategory(payload: Record<string, any>) {
     const { data, error } = await supabase.from('client_categories')
       .insert(payload).select().single();
     if (error) throw new Error(error.message);
+    invalidateLookup('client_categories');
     return data;
   },
 
@@ -1745,43 +1780,55 @@ export const api = {
     const { error } = await supabase.from('client_categories')
       .update(payload).eq('id', id);
     if (error) throw new Error(error.message);
+    invalidateLookup('client_categories');
   },
 
   async deleteClientCategory(id: number) {
     const { error } = await supabase.from('client_categories').delete().eq('id', id);
     if (error) throw new Error(error.message);
+    invalidateLookup('client_categories');
   },
 
   async reorderClientCategories(ids: number[]) {
-    for (let i = 0; i < ids.length; i++) {
-      const { error } = await supabase.from('client_categories')
-        .update({ display_order: i + 1 }).eq('id', ids[i]);
-      if (error) throw new Error(error.message);
+    // Invalidate even on a partial failure — some rows may already have moved.
+    try {
+      for (let i = 0; i < ids.length; i++) {
+        const { error } = await supabase.from('client_categories')
+          .update({ display_order: i + 1 }).eq('id', ids[i]);
+        if (error) throw new Error(error.message);
+      }
+    } finally {
+      invalidateLookup('client_categories');
     }
   },
 
   // --------- Cities (editable city list for client addresses) ---------
   // Active cities only — used by the address city dropdown.
   async getCities() {
-    const { data, error } = await supabase.from('cities')
-      .select('*').eq('is_active', true)
-      .order('name', { ascending: true });
-    if (error) throw new Error(error.message);
-    return data || [];
+    return cachedLookup('cities:active', async () => {
+      const { data, error } = await supabase.from('cities')
+        .select('*').eq('is_active', true)
+        .order('name', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
   },
 
   // Every city, active or not — used by the Company Settings admin.
   async getAllCities() {
-    const { data, error } = await supabase.from('cities')
-      .select('*').order('name', { ascending: true });
-    if (error) throw new Error(error.message);
-    return data || [];
+    return cachedLookup('cities:all', async () => {
+      const { data, error } = await supabase.from('cities')
+        .select('*').order('name', { ascending: true });
+      if (error) throw new Error(error.message);
+      return data || [];
+    });
   },
 
   async createCity(payload: Record<string, any>) {
     const { data, error } = await supabase.from('cities')
       .insert(payload).select().single();
     if (error) throw new Error(error.message);
+    invalidateLookup('cities');
     return data;
   },
 
@@ -1789,11 +1836,13 @@ export const api = {
     const { error } = await supabase.from('cities')
       .update(payload).eq('id', id);
     if (error) throw new Error(error.message);
+    invalidateLookup('cities');
   },
 
   async deleteCity(id: number) {
     const { error } = await supabase.from('cities').delete().eq('id', id);
     if (error) throw new Error(error.message);
+    invalidateLookup('cities');
   },
 
   // Outbound email is sent exclusively through each staff member's own
