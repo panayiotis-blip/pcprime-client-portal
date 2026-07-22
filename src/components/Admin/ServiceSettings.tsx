@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { PanelSkeleton } from '../ui';
+import { Modal, PanelSkeleton } from '../ui';
 
 // Admin page at /settings/services — supervisor-only. Lets the firm:
 //   • see the service catalogue (read-only for now; row inserts are seed-time
@@ -58,6 +58,18 @@ export default function ServiceSettings() {
   // One service is shown at a time now.
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editingStage, setEditingStage] = useState<number | null>(null);
+  // Service + deliverable dialogs. Both replace chains of browser prompt()
+  // calls, which gave no validation, no cancel-safety and no field context.
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [serviceDraft, setServiceDraft] = useState<{
+    id: number | null; label: string; key: string; description: string; keyTouched: boolean;
+  }>({ id: null, label: '', key: '', description: '', keyTouched: false });
+  const [deliverableModalOpen, setDeliverableModalOpen] = useState(false);
+  const [savingDeliverable, setSavingDeliverable] = useState(false);
+  const [deliverableDraft, setDeliverableDraft] = useState<{
+    id: number | null; serviceId: number | null; label: string; description: string;
+  }>({ id: null, serviceId: null, label: '', description: '' });
   const [draftSubject, setDraftSubject] = useState('');
   const [draftBody, setDraftBody] = useState('');
   const [saving, setSaving] = useState(false);
@@ -132,33 +144,46 @@ export default function ServiceSettings() {
   };
 
   // ---- Catalogue management ----
-  const handleAddService = async () => {
-    const label = prompt('New service — display label (e.g. "Audit"):');
-    if (!label || !label.trim()) return;
-    const keySuggest = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const key = prompt(`Internal key (no spaces, used in code). Default:`, keySuggest);
-    if (!key || !key.trim()) return;
-    const description = prompt('Short description (optional):') || '';
-    try {
-      await api.createServiceDefinition({
-        key: key.trim(), label: label.trim(),
-        description: description.trim() || null,
-        ordinal: (services[services.length - 1]?.ordinal ?? 0) + 10,
-      });
-      await load();
-    } catch (err: any) {
-      alert('Create failed: ' + (err?.message || String(err)));
-    }
+  // Add and edit share one dialog. `key` is only settable on create: it is the
+  // stable identifier other code matches on, so renaming it would orphan the
+  // service's stages and per-client opt-ins.
+  const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  const openAddService = () => {
+    setServiceDraft({ id: null, label: '', key: '', description: '', keyTouched: false });
+    setServiceModalOpen(true);
   };
 
-  const handleRenameService = async (svc: ServiceDef) => {
-    const next = prompt('New label for service:', svc.label);
-    if (!next || !next.trim() || next.trim() === svc.label) return;
+  const openEditService = (svc: ServiceDef) => {
+    setServiceDraft({
+      id: svc.id, label: svc.label, key: svc.key,
+      description: svc.description || '', keyTouched: true,
+    });
+    setServiceModalOpen(true);
+  };
+
+  const saveService = async () => {
+    const label = serviceDraft.label.trim();
+    const key = serviceDraft.key.trim();
+    const description = serviceDraft.description.trim() || null;
+    if (!label) { alert('Display label is required.'); return; }
+    if (serviceDraft.id == null && !key) { alert('Internal key is required.'); return; }
+    setSavingService(true);
     try {
-      await api.updateServiceDefinition(svc.id, { label: next.trim() });
+      if (serviceDraft.id == null) {
+        await api.createServiceDefinition({
+          key, label, description,
+          ordinal: (services[services.length - 1]?.ordinal ?? 0) + 10,
+        });
+      } else {
+        await api.updateServiceDefinition(serviceDraft.id, { label, description });
+      }
       await load();
+      setServiceModalOpen(false);
     } catch (err: any) {
-      alert('Rename failed: ' + (err?.message || String(err)));
+      alert('Save failed: ' + (err?.message || String(err)));
+    } finally {
+      setSavingService(false);
     }
   };
 
@@ -225,36 +250,38 @@ export default function ServiceSettings() {
   };
 
   // Deliverables
-  const handleAddDeliverable = async (serviceId: number) => {
-    const label = prompt('Deliverable label (what we do):');
-    if (!label || !label.trim()) return;
-    const description = prompt('Short description (optional):') || '';
-    try {
-      await api.createServiceDeliverable({
-        service_id: serviceId,
-        label: label.trim(),
-        description: description.trim() || null,
-        ordinal: (deliverables.filter(d => d.service_id === serviceId).length + 1) * 10,
-      });
-      await load();
-    } catch (err: any) {
-      alert('Add failed: ' + (err?.message || String(err)));
-    }
+  // Add and edit share one dialog, as with services.
+  const openAddDeliverable = (serviceId: number) => {
+    setDeliverableDraft({ id: null, serviceId, label: '', description: '' });
+    setDeliverableModalOpen(true);
   };
-  const handleEditDeliverable = async (d: Deliverable) => {
-    const label = prompt('Label:', d.label);
-    if (label == null) return;
-    if (!label.trim()) { alert('Label is required.'); return; }
-    const description = prompt('Description:', d.description || '');
-    if (description == null) return;
+  const openEditDeliverable = (d: Deliverable) => {
+    setDeliverableDraft({
+      id: d.id, serviceId: d.service_id, label: d.label, description: d.description || '',
+    });
+    setDeliverableModalOpen(true);
+  };
+  const saveDeliverable = async () => {
+    const label = deliverableDraft.label.trim();
+    const description = deliverableDraft.description.trim() || null;
+    if (!label) { alert('Label is required.'); return; }
+    setSavingDeliverable(true);
     try {
-      await api.updateServiceDeliverable(d.id, {
-        label: label.trim(),
-        description: description.trim() || null,
-      });
+      if (deliverableDraft.id == null) {
+        await api.createServiceDeliverable({
+          service_id: deliverableDraft.serviceId!,
+          label, description,
+          ordinal: (deliverables.filter(d => d.service_id === deliverableDraft.serviceId).length + 1) * 10,
+        });
+      } else {
+        await api.updateServiceDeliverable(deliverableDraft.id, { label, description });
+      }
       await load();
+      setDeliverableModalOpen(false);
     } catch (err: any) {
-      alert('Update failed: ' + (err?.message || String(err)));
+      alert('Save failed: ' + (err?.message || String(err)));
+    } finally {
+      setSavingDeliverable(false);
     }
   };
   const handleDeleteDeliverable = async (d: Deliverable) => {
@@ -279,7 +306,7 @@ export default function ServiceSettings() {
       </p>
 
       <div style={{ marginBottom: 12 }}>
-        <button className="btn btn-primary btn-sm" onClick={handleAddService}>+ Add Service</button>
+        <button className="btn btn-primary btn-sm" onClick={openAddService}>+ Add Service</button>
       </div>
 
       {loading ? <PanelSkeleton rows={8} /> : services.length === 0 ? (
@@ -322,7 +349,7 @@ export default function ServiceSettings() {
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
                 <button className="btn btn-secondary btn-sm" onClick={() => openAddStage(svc.id)}>+ Stage</button>
-                <button className="btn btn-link btn-sm" onClick={() => handleRenameService(svc)}>✎ Rename</button>
+                <button className="btn btn-link btn-sm" onClick={() => openEditService(svc)}>✎ Edit</button>
                 <button className="btn btn-link btn-sm" onClick={() => handleDeleteService(svc)} style={{ color: '#b91c1c' }}>✕ Delete</button>
               </div>
             </div>
@@ -400,7 +427,7 @@ export default function ServiceSettings() {
             <div style={{ padding: '10px 14px', borderTop: '1px solid #f1f5f9', background: '#fafbfc' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <strong style={{ fontSize: 13, color: '#1a365d' }}>Deliverables</strong>
-                <button className="btn btn-secondary btn-sm" onClick={() => handleAddDeliverable(svc.id)}>+ Deliverable</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => openAddDeliverable(svc.id)}>+ Deliverable</button>
               </div>
               {(() => {
                 const delivs = deliverables.filter(d => d.service_id === svc.id);
@@ -411,7 +438,7 @@ export default function ServiceSettings() {
                       <li key={d.id} style={{ marginBottom: 4 }}>
                         <span style={{ color: '#1a365d' }}>{d.label}</span>
                         {d.description && <span style={{ color: '#94a3b8', fontSize: 12 }}> — {d.description}</span>}
-                        <button className="btn btn-link btn-sm" onClick={() => handleEditDeliverable(d)} style={{ marginLeft: 4 }}>edit</button>
+                        <button className="btn btn-link btn-sm" onClick={() => openEditDeliverable(d)} style={{ marginLeft: 4 }}>edit</button>
                         <button className="btn btn-link btn-sm" onClick={() => handleDeleteDeliverable(d)} style={{ color: '#b91c1c' }}>×</button>
                       </li>
                     ))}
@@ -425,6 +452,97 @@ export default function ServiceSettings() {
         </div>
       </div>
       )}
+
+      {/* Service add / edit */}
+      <Modal
+        open={serviceModalOpen}
+        onClose={() => setServiceModalOpen(false)}
+        title={serviceDraft.id == null ? 'Add service' : `Edit ${serviceDraft.label || 'service'}`}
+        footer={
+          <>
+            <button className="btn btn-secondary btn-sm" onClick={() => setServiceModalOpen(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveService} disabled={savingService}>
+              {savingService ? 'Saving…' : serviceDraft.id == null ? 'Add service' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="form-group">
+          <label>Display label</label>
+          <input
+            type="text" className="form-input" autoFocus
+            placeholder="e.g. Statutory Audit"
+            value={serviceDraft.label}
+            onChange={(e) => {
+              const label = e.target.value;
+              setServiceDraft(d => ({
+                ...d,
+                label,
+                // Keep the key in step with the label until it's edited by hand.
+                key: d.id == null && !d.keyTouched ? slugify(label) : d.key,
+              }));
+            }}
+          />
+        </div>
+        <div className="form-group">
+          <label>Internal key</label>
+          <input
+            type="text" className="form-input"
+            placeholder="e.g. statutory_audit"
+            value={serviceDraft.key}
+            disabled={serviceDraft.id != null}
+            onChange={(e) => setServiceDraft(d => ({ ...d, key: e.target.value, keyTouched: true }))}
+          />
+          <small style={{ color: '#64748b', fontSize: 12 }}>
+            {serviceDraft.id == null
+              ? 'Lower case, no spaces. Suggested from the label — edit it if you prefer.'
+              : 'Fixed after creation: stages and per-client opt-ins are tied to this key.'}
+          </small>
+        </div>
+        <div className="form-group">
+          <label>Description <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
+          <textarea
+            className="form-input" rows={3}
+            placeholder="What this service covers — shown on the client's Services tab."
+            value={serviceDraft.description}
+            onChange={(e) => setServiceDraft(d => ({ ...d, description: e.target.value }))}
+          />
+        </div>
+      </Modal>
+
+      {/* Deliverable add / edit */}
+      <Modal
+        open={deliverableModalOpen}
+        onClose={() => setDeliverableModalOpen(false)}
+        title={deliverableDraft.id == null ? 'Add deliverable' : 'Edit deliverable'}
+        footer={
+          <>
+            <button className="btn btn-secondary btn-sm" onClick={() => setDeliverableModalOpen(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={saveDeliverable} disabled={savingDeliverable}>
+              {savingDeliverable ? 'Saving…' : deliverableDraft.id == null ? 'Add deliverable' : 'Save changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="form-group">
+          <label>Label</label>
+          <input
+            type="text" className="form-input" autoFocus
+            placeholder="e.g. Prepare audit schedules"
+            value={deliverableDraft.label}
+            onChange={(e) => setDeliverableDraft(d => ({ ...d, label: e.target.value }))}
+          />
+        </div>
+        <div className="form-group">
+          <label>Description <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
+          <textarea
+            className="form-input" rows={3}
+            placeholder="Detail shown under this deliverable on engagement letters."
+            value={deliverableDraft.description}
+            onChange={(e) => setDeliverableDraft(d => ({ ...d, description: e.target.value }))}
+          />
+        </div>
+      </Modal>
 
       {/* Add Stage modal */}
       {addStageForServiceId != null && (
