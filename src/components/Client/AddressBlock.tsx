@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ClientAddress } from '../../services/api';
 
 // Reusable address block — used by ContactsTab for the 2-3 typed addresses
@@ -29,11 +30,23 @@ export default function AddressBlock({
   editing, value, onChange, title, cities = [], primaryAddress, primaryLabel,
 }: Props) {
   const linked = !!value.is_linked_to_registered && !!primaryAddress;
+  // Unique per instance — ContactsTab renders two or three of these at once.
+  const cityListId = useId();
 
   // While linked, display the primary address's values regardless of what's
   // stored — the parent flushes the snapshot to this row on save so the DB
   // mirrors the link state.
   const display = linked && primaryAddress ? primaryAddress : value;
+
+  // The city list is a Cyprus-only lookup, so it's offered as suggestions only
+  // while the address is in Cyprus (or the country hasn't been filled in yet).
+  // A foreign address gets a plain free-text box rather than irrelevant hints.
+  const isCyprus = (() => {
+    const c = (display.country || '').trim().toLowerCase();
+    if (!c) return true;
+    return ['cy', 'cyp', 'cyprus', 'κυπρος', 'κύπρος'].includes(c);
+  })();
+  const citySuggestions = isCyprus ? cities : [];
 
   return (
     <div className="form-section" style={{ marginBottom: 12 }}>
@@ -90,19 +103,24 @@ export default function AddressBlock({
             />
           </div>
           <div className="form-group">
-            <label>City</label>
-            <select
-              className="form-input"
+            <label>City / Town / Village</label>
+            {/* Free text with suggestions, not a closed list: Cyprus villages
+                missing from the lookup — and any foreign city — must be
+                typeable. The stored column has always been plain text. */}
+            <input
+              type="text" className="form-input"
+              list={citySuggestions.length ? cityListId : undefined}
               value={display.city || ''}
               onChange={e => onChange({ city: e.target.value })}
               disabled={linked}
-            >
-              <option value="">— Select city —</option>
-              {cities.map(c => <option key={c} value={c}>{c}</option>)}
-              {display.city && !cities.includes(display.city) && (
-                <option value={display.city}>{display.city}</option>
-              )}
-            </select>
+              placeholder={citySuggestions.length ? 'Type or pick from the list' : 'Type the city or town'}
+              autoComplete="off"
+            />
+            {citySuggestions.length > 0 && (
+              <datalist id={cityListId}>
+                {citySuggestions.map(c => <option key={c} value={c} />)}
+              </datalist>
+            )}
           </div>
           <div className="form-group">
             <label>Postal code</label>

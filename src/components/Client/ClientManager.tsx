@@ -425,6 +425,19 @@ export default function ClientManager() {
     return true;
   }), [clients, searchTerm, filterCategory, filterStatus, filterCity, filterHasVat, filterTag, adv]);
 
+  // City filter options = the managed lookup PLUS any city actually present on
+  // a client. Addresses accept free text (villages missing from the lookup,
+  // foreign cities), so a lookup-only dropdown would show clients in the City
+  // column that could never be filtered for.
+  const cityFilterOptions = useMemo(() => {
+    const s = new Set<string>(cityOptions);
+    for (const c of clients as any[]) {
+      const city = (c.city || '').trim();
+      if (city) s.add(city);
+    }
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [cityOptions, clients]);
+
   // Distinct tags present in the data — drives the Tag dropdown
   const allTags = useMemo(() => {
     const s = new Set<string>();
@@ -1127,7 +1140,7 @@ export default function ClientManager() {
         </select>
         <select className="form-input" value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ maxWidth: 150 }} title="Filter by city">
           <option value="">All cities</option>
-          {cityOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          {cityFilterOptions.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
         {allTags.length > 0 && (
           <select className="form-input" value={filterTag} onChange={e => setFilterTag(e.target.value)} style={{ maxWidth: 150 }} title="Filter by tag">
