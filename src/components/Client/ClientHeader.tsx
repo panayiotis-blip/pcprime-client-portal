@@ -49,6 +49,18 @@ export default function ClientHeader({
   const navigate = useNavigate();
   const isActive = client.is_active !== false;
 
+  // Leaving the record throws away unsaved edits exactly as switching tabs
+  // does. Prev/Next are already disabled while dirty; Close, Find and New
+  // navigate away, so they ask first.
+  const leaveGuard = (to: string) => () => {
+    if (isDirty && !confirm(
+      'You have unsaved changes.\n\n'
+      + 'OK — leave and discard them\n'
+      + 'Cancel — stay here so you can press Save first'
+    )) return;
+    navigate(to);
+  };
+
   // Header now shows ONLY one line: the legal name for companies, or
   // "First Surname" for individuals. The tax-office name + every other
   // detail lives on the tabs below — keep the header read-cleanly.
@@ -100,7 +112,7 @@ export default function ClientHeader({
       <div className="chb-actions">
         {/* Navigation — leaving or moving between records */}
         <div className="chb-group">
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients')} title="Back to client list (close)">
+          <button className="btn btn-secondary btn-sm" onClick={leaveGuard('/clients')} title="Back to client list (close)">
             <X size={14} /> Close
           </button>
           <button
@@ -119,7 +131,7 @@ export default function ClientHeader({
           >
             Next <ChevronRight size={14} />
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients')} title="Search the client list">
+          <button className="btn btn-secondary btn-sm" onClick={leaveGuard('/clients')} title="Search the client list">
             <Search size={14} /> Find
           </button>
         </div>
@@ -135,7 +147,7 @@ export default function ClientHeader({
               key: 'new',
               label: 'New client',
               icon: <Plus size={14} />,
-              onSelect: () => navigate('/clients?new=1'),
+              onSelect: leaveGuard('/clients?new=1'),
             },
             {
               key: 'copy',

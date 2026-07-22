@@ -110,6 +110,21 @@ export default function ClientDetail() {
   const registerTabSave = useCallback((fn: (() => Promise<void>) | null) => {
     tabSaveRef.current = fn;
   }, []);
+
+  // Switching tabs unmounts the current one, so any unsaved edits it holds are
+  // gone for good. Warn before that happens rather than discarding in silence.
+  const requestTab = (next: TabKey) => {
+    if (next === tab) return;
+    if (isDirty || tabDirty) {
+      const ok = confirm(
+        'You have unsaved changes on this tab.\n\n'
+        + 'OK — discard them and switch tabs\n'
+        + 'Cancel — stay here so you can press Save first'
+      );
+      if (!ok) return;
+    }
+    setTab(next);
+  };
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [tab, setTab] = useState<TabKey>('info');
@@ -396,7 +411,7 @@ export default function ClientDetail() {
           <button
             key={t.key}
             className={`cd-tab ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
+            onClick={() => requestTab(t.key)}
           >
             {t.label}
           </button>
@@ -414,7 +429,7 @@ export default function ClientDetail() {
                 <button
                   key={t.key}
                   className={`cd-more-item ${tab === t.key ? 'active' : ''}`}
-                  onClick={() => { setTab(t.key); setMoreOpen(false); }}
+                  onClick={() => { requestTab(t.key); setMoreOpen(false); }}
                 >
                   {t.label}
                 </button>
