@@ -17,6 +17,9 @@ type NavItem = {
   label: string;
   icon: string;
   requires?: (u: any) => boolean;
+  // Nested entries shown indented under this one. The parent stays a real
+  // link; the sub-list opens automatically when the active route is inside it.
+  children?: NavItem[];
 };
 
 type NavGroup = {
@@ -82,15 +85,23 @@ const STAFF_GROUPS: NavGroup[] = [
     requires: (u) => isSupervisorOrHigher(u),
     items: [
       { path: '/users',                   label: 'Users',           icon: '⊙', requires: (u) => hasPermission(u, 'users.read') },
-      { path: '/reports',                 label: 'Reports',         icon: '◈' },
-      { path: '/ai-usage',                label: 'AI Usage',        icon: '◇' },
       { path: '/applications',            label: 'Applications',    icon: '📝' },
-      { path: '/audit',                   label: 'Audit Log',       icon: '⌚', requires: (u) => hasPermission(u, 'audit.read') },
-      { path: '/settings/company',        label: 'Company Settings', icon: '⚙' },
-      { path: '/settings/firm-email',     label: 'Firm Email (info@)', icon: '📧', requires: (u) => hasPermission(u, 'users.write') },
-      { path: '/master-accounts',         label: 'Master CoA',      icon: '◉' },
-      { path: '/settings/services',       label: 'Service Settings', icon: '⚯' },
-      { path: '/clients/deleted',         label: 'Deleted Clients', icon: '🗑' },
+      {
+        path: '/reports', label: 'Reports', icon: '◈',
+        children: [
+          { path: '/audit',           label: 'Audit Log',       icon: '⌚', requires: (u) => hasPermission(u, 'audit.read') },
+          { path: '/ai-usage',        label: 'AI Usage',        icon: '◇' },
+          { path: '/clients/deleted', label: 'Deleted Clients', icon: '🗑' },
+        ],
+      },
+      {
+        path: '/settings/company', label: 'Company Settings', icon: '⚙',
+        children: [
+          { path: '/settings/firm-email', label: 'Firm Email (info@)', icon: '📧', requires: (u) => hasPermission(u, 'users.write') },
+          { path: '/master-accounts',     label: 'Master CoA',         icon: '◉' },
+          { path: '/settings/services',   label: 'Service Settings',   icon: '⚯' },
+        ],
+      },
     ],
   },
 ];
@@ -123,23 +134,30 @@ const CLIENT_GROUPS: NavGroup[] = [
 
 // Does the active route belong to one of this group's items?
 function routeMatchesGroup(group: NavGroup, pathname: string): boolean {
-  return group.items.some(item =>
-    item.path === pathname || pathname.startsWith(item.path + '/'),
-  );
+  // Recurses into children, or landing on a nested route (Audit Log, Service
+  // Settings…) would leave its group collapsed by the smart default.
+  const matches = (item: NavItem): boolean =>
+    item.path === pathname
+    || pathname.startsWith(item.path + '/')
+    || (item.children || []).some(matches);
+  return group.items.some(matches);
 }
 
 // Lookup a NavItem by its path across all groups (staff + client) — used by
 // the Favourites section to resolve a pinned menu_item's label + icon.
 function findNavItem(path: string): NavItem | undefined {
-  for (const g of STAFF_GROUPS) {
-    const found = g.items.find(i => i.path === path);
-    if (found) return found;
-  }
-  for (const g of CLIENT_GROUPS) {
-    const found = g.items.find(i => i.path === path);
-    if (found) return found;
-  }
-  return undefined;
+  // Searches nested entries too — they are pinnable, so a pinned child would
+  // otherwise lose its label and icon in the Favourites shelf.
+  const search = (items: NavItem[]): NavItem | undefined => {
+    for (const i of items) {
+      if (i.path === path) return i;
+      const nested = i.children && search(i.children);
+      if (nested) return nested;
+    }
+    return undefined;
+  };
+  return search(STAFF_GROUPS.flatMap(g => g.items))
+    || search(CLIENT_GROUPS.flatMap(g => g.items));
 }
 
 // Bottom-of-sidebar identity block: the user name + role, with a chevron
@@ -349,7 +367,14 @@ export default function AppShell() {
   // Collapsed icon rail — a flat, icon-only version of the nav. Group headers
   // are dropped; every reachable item shows as an icon with a tooltip + badge.
   const renderRail = (groups: NavGroup[]) => {
-    const items = groups.flatMap(g => g.items.filter(i => !i.requires || i.requires(user)));
+    // Nested entries are flattened in: the rail is icon-only with tooltips, so
+    // hierarchy has no meaning here — but leaving children out would drop them
+    // from the menu entirely whenever the sidebar is collapsed.
+    const items = groups.flatMap(g =>
+      g.items
+        .filter(i => !i.requires || i.requires(user))
+        .flatMap(i => [i, ...(i.children || []).filter(c => !c.requires || c.requires(user))]),
+    );
     return (
       <>
         <div className="nav-rail-top">
@@ -653,6 +678,7 @@ export default function AppShell() {
                   <ul className="sidebar-group-items">
                     {g.items.map(item => {
                       const isPinned = favourites.some(f => f.favourite_type === 'menu_item' && f.target_id === item.path);
+                      const kids = (item.children || []).filter(c => !c.requires || c.requires(user));
                       return (
                         <li key={item.path}>
                           <Link
@@ -695,6 +721,47 @@ export default function AppShell() {
                               {isPinned ? '★' : '☆'}
                             </button>
                           </Link>
+
+                          {/* Nested entries (e.g. Firm Email under Company
+                              Settings). Indented under their parent so the
+                              Administration group reads as two short lists
+                              rather than one long flat one. */}
+                          {kids.length > 0 && (
+                            <ul className="sidebar-subgroup-items">
+                              {kids.map(kid => {
+                                const kidPinned = favourites.some(f => f.favourite_type === 'menu_item' && f.target_id === kid.path);
+                                return (
+                                  <li key={kid.path}>
+                                    <Link
+                                      to={kid.path}
+                                      className={`sidebar-link sidebar-sub-link sidebar-nested-link ${location.pathname === kid.path ? 'active' : ''}`}
+                                      onClick={() => setSidebarOpen(false)}
+                                    >
+                                      <span className="nav-icon">{kid.icon}</span>
+                                      {kid.label}
+                                      <button
+                                        type="button"
+                                        className={`sidebar-pin ${kidPinned ? 'pinned' : ''}`}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          if (kidPinned) {
+                                            const fav = favourites.find(f => f.favourite_type === 'menu_item' && f.target_id === kid.path);
+                                            if (fav) unpinFavourite(fav.id);
+                                          } else {
+                                            pinMenuItem(kid.path, kid.label);
+                                          }
+                                        }}
+                                        title={kidPinned ? 'Unpin from Favourites' : 'Pin to Favourites'}
+                                      >
+                                        {kidPinned ? '★' : '☆'}
+                                      </button>
+                                    </Link>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
                         </li>
                       );
                     })}

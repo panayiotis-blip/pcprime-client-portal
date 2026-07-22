@@ -322,6 +322,21 @@ h4 { font-size: 14px; font-weight: 600; }
   background: rgba(13,27,46,0.03);
 }
 
+/* Nested nav entries — e.g. Firm Email / Master CoA / Service Settings sitting
+   under Company Settings. Indented and slightly muted so the parent still
+   reads as the heading of the pair. */
+.sidebar-subgroup-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sidebar-nested-link {
+  padding-left: 34px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.sidebar-nested-link.active { opacity: 1; }
+
 /* Star pin button on hover */
 .sidebar-pin {
   margin-left: auto;
