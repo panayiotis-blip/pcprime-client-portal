@@ -252,6 +252,34 @@ async function getClientIdsForUser(uid: string): Promise<number[]> {
   return (data || []).map((r: any) => r.client_id);
 }
 
+// Batched form of the above, for when we need the links for many users at once.
+// Replaces a per-user query loop (N+1). Paged explicitly rather than issuing one
+// unbounded .in(): a single large query would be silently truncated if
+// PostgREST's max-rows is configured, whereas the per-user queries never came
+// near that ceiling. Errors are swallowed, matching getClientIdsForUser — a
+// failed lookup yields no links rather than breaking the calling page.
+async function getClientIdsByUser(uids: string[]): Promise<Map<string, number[]>> {
+  const byUser = new Map<string, number[]>();
+  if (!uids.length) return byUser;
+
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('user_clients')
+      .select('user_id, client_id')
+      .in('user_id', uids)
+      .range(from, from + PAGE - 1);
+    if (error) break;
+    for (const r of (data || []) as any[]) {
+      const list = byUser.get(r.user_id);
+      if (list) list.push(r.client_id);
+      else byUser.set(r.user_id, [r.client_id]);
+    }
+    if (!data || data.length < PAGE) break;
+  }
+  return byUser;
+}
+
 // ---------- Vendor pattern helpers ----------
 function normalizeVendor(name: string): string {
   return (name || '').toUpperCase().replace(/\b(LTD|LIMITED|LLC|SA|AE|EE|OE|CO|COMPANY|INC|CORP)\b/g, '')
@@ -589,18 +617,17 @@ export const api = {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
 
-    // Fold in linked client ids
-    const out: any[] = [];
-    for (const p of data || []) {
-      const ids = await getClientIdsForUser(p.id);
-      out.push({
-        id: p.id, username: p.username, display_name: p.full_name || p.username,
-        role: p.role, active: p.active, created_at: p.created_at,
-        hourly_rate: p.hourly_rate ?? null,
-        client_ids: ids,
-      });
-    }
-    return out;
+    // Fold in linked client ids. Previously one query per user, awaited in
+    // sequence — N+1 round trips for N users, and this runs uncached on the
+    // mount of every component that lists staff.
+    const profiles = (data || []) as any[];
+    const idsByUser = await getClientIdsByUser(profiles.map(p => p.id));
+    return profiles.map(p => ({
+      id: p.id, username: p.username, display_name: p.full_name || p.username,
+      role: p.role, active: p.active, created_at: p.created_at,
+      hourly_rate: p.hourly_rate ?? null,
+      client_ids: idsByUser.get(p.id) || [],
+    }));
   },
 
   async createUser(data: { email: string; password: string; username?: string; display_name?: string; role?: 'admin' | 'client'; client_ids?: number[] }) {
