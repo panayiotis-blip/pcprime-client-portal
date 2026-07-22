@@ -343,10 +343,12 @@ export default function ClientManager() {
     return hit ? { id: hit.id, name: hit.client_name || hit.name || '(unnamed)' } : null;
   })();
 
-  const previewCode = async (name: string) => {
+  // The type decides the prefix (IND- vs CO-), so it has to travel with the
+  // name — the surname/legal_name split above already picks the right field.
+  const previewCode = async (name: string, clientType: string) => {
     if (!name.trim()) { setForm((p: any) => ({ ...p, client_code: '' })); return; }
     try {
-      const { code } = await api.getNextClientCode(name);
+      const { code } = await api.getNextClientCode(name, clientType);
       setForm((p: any) => ({ ...p, client_code: code }));
     } catch {}
   };
@@ -1030,7 +1032,7 @@ export default function ClientManager() {
                       const surname = e.target.value;
                       const next = `${form.first_name || ''} ${surname}`.trim();
                       setForm((p: any) => ({ ...p, surname, name: next }));
-                      previewCode(surname);
+                      previewCode(surname, 'individual');
                     }}
                     className="form-input"
                     placeholder="Surname (used for the client code)"
@@ -1061,7 +1063,7 @@ export default function ClientManager() {
                   onChange={(e) => {
                     const legal_name = e.target.value;
                     setForm((p: any) => ({ ...p, legal_name, name: legal_name }));
-                    previewCode(legal_name);
+                    previewCode(legal_name, 'company');
                   }}
                   className="form-input"
                   placeholder="Company legal name"

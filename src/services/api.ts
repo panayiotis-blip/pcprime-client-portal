@@ -2,6 +2,7 @@
 // so existing components keep working. All data access goes through the
 // Supabase client with RLS enforcing per-client access.
 import { supabase } from '../lib/supabase';
+import { clientCodePrefix } from './clientCode';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -751,7 +752,7 @@ export const api = {
 
   // Part 6C — quick-create a pure vendor from the invoice editor.
   async quickCreateVendor(payload: { name: string; tax_number?: string; email?: string; phone?: string }) {
-    const { code } = await api.getNextClientCode(payload.name);
+    const { code } = await api.getNextClientCode(payload.name, 'company');
     const email = (payload.email || '').trim();
     const { data: row, error } = await supabase.from('clients').insert({
       client_code:     code,
@@ -822,21 +823,36 @@ export const api = {
     return data;
   },
 
-  async getNextClientCode(name: string) {
-    const prefix = '221' + (name || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3).padEnd(3, 'X');
+  // CO-ALP-001 / IND-GEO-002 / PART-XYZ-001 — see services/clientCode.ts.
+  // The counter runs per three-letter group, so only codes sharing this exact
+  // prefix are scanned. Existing 221XXXNNN and PC-CO-NNN codes never match a
+  // new prefix, so they are neither renumbered nor counted.
+  //
+  // The old implementation did .replace(/[^A-Z]/g, '') on an uppercased name,
+  // which discarded Greek entirely — every Greek-named client fell through to
+  // the padding and collapsed onto the same 221XXX prefix.
+  async getNextClientCode(name: string, clientType?: string | null) {
+    const prefix = clientCodePrefix(name, clientType);
     const { data } = await supabase.from('clients').select('client_code').like('client_code', `${prefix}%`);
     const max = (data || []).reduce((m: number, r: any) => {
-      const n = parseInt((r.client_code || '').slice(6), 10);
+      const n = parseInt((r.client_code || '').slice(prefix.length), 10);
       return isNaN(n) ? m : Math.max(m, n);
     }, 0);
     return { code: `${prefix}${String(max + 1).padStart(3, '0')}` };
   },
 
   async generateMissingCodes() {
-    const { data } = await supabase.from('clients').select('id, name, client_code').or('client_code.is.null,client_code.eq.');
+    // surname/legal_name mirror what the Add Client form feeds the generator,
+    // so a backfilled code matches what the form would have produced.
+    const { data } = await supabase.from('clients')
+      .select('id, name, client_code, client_type, surname, legal_name')
+      .or('client_code.is.null,client_code.eq.');
     let updated = 0;
     for (const c of data || []) {
-      const { code } = await api.getNextClientCode(c.name);
+      const basis = c.client_type === 'individual'
+        ? (c.surname || c.name)
+        : (c.legal_name || c.name);
+      const { code } = await api.getNextClientCode(basis, c.client_type);
       await supabase.from('clients').update({ client_code: code }).eq('id', c.id);
       updated++;
     }
@@ -3729,11 +3745,6 @@ export const api = {
     return (data || {}) as Record<string, number>;
   },
 
-  async generateClientCodeV2(name: string): Promise<string> {
-    const { data, error } = await supabase.rpc('generate_client_code_v2', { p_name: name });
-    if (error) throw new Error(error.message);
-    return data as string;
-  },
 
   // Standalone Passwords/Credentials page — all credentials across all clients
   // plus firm-owned (client_id IS NULL) ones with an owner_label.
@@ -3883,11 +3894,15 @@ export const api = {
   },
 
   // Create a new individual client from a director name, then link the
-  // director row to it. Two sequential calls — the new client gets its
-  // PC-IN-NNN code from generate_client_code_v3, then the director row is
-  // updated to point at it.
+  // director row to it. Two sequential calls — the new client gets its code,
+  // then the director row is updated to point at it.
+  //
+  // This used generate_client_code_v3, which issued PC-IN-NNN from a global
+  // per-type counter and ignored the name entirely. It now goes through the
+  // same generator as the Add Client form, so a director-created client is
+  // numbered like any other individual.
   async createClientFromDirector(directorId: number, directorName: string) {
-    const code = await api.generateClientCodeV3('IND');
+    const { code } = await api.getNextClientCode(directorName, 'individual');
     const { data: newClient, error: cErr } = await supabase
       .from('clients')
       .insert({
@@ -3909,13 +3924,10 @@ export const api = {
     return newClient;
   },
 
-  // We don't currently have generate_client_code_v3 wired to the JS API.
-  // Add a thin wrapper here so the page above can call it cleanly.
-  async generateClientCodeV3(type: 'IND' | 'CO' | 'PART'): Promise<string> {
-    const { data, error } = await supabase.rpc('generate_client_code_v3', { p_type: type });
-    if (error) throw new Error(error.message);
-    return data as string;
-  },
+  // generateClientCodeV2 / V3 wrappers removed: getNextClientCode is now the
+  // single generator. The SQL functions still exist in the database but
+  // nothing calls them — v2 issued 3-letter+number codes, v3 issued
+  // PC-IN/CO/PA-NNN from a global per-type counter.
 
   // Reverse lookup: which companies/clients list this client as a director / UBO etc.
   async getDirectorshipsForClient(linkedClientId: number) {

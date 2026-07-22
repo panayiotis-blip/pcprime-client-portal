@@ -29,7 +29,7 @@ export default function Applications() {
     if (!confirm(`Approve "${a.business_name}"?\n\nThis creates a client record and emails ${a.email} a portal invite.`)) return;
     setBusyId(a.id);
     try {
-      const { code } = await api.getNextClientCode(a.business_name);
+      const { code } = await api.getNextClientCode(a.business_name, 'company');
       const { id } = await api.createClient({
         client_code: code,
         name: a.business_name,
