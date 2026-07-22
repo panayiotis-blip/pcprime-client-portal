@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../../services/api';
+import { Link } from 'react-router-dom';
+import { api, isStaffRole } from '../../../services/api';
+import { useAuth } from '../../../context/AuthContext';
 
 // Services tab on the client detail page. Lists every service in the
 // catalogue with a toggle. When enabled, the per-stage rows expand so the
@@ -34,6 +36,7 @@ type Override = {
 };
 
 export default function ClientServicesTab({ clientId }: { clientId: number }) {
+  const { user } = useAuth();
   const [services, setServices] = useState<ServiceDef[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [clientServices, setClientServices] = useState<ClientService[]>([]);
@@ -107,11 +110,24 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
   return (
     <div className="client-tab-content">
       <div className="form-section">
-        <h3>Services</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0 }}>Services</h3>
+          {/* The catalogue is firm-wide and carries stages, cadences and email
+              automation, so a service can't just be typed in here — it's
+              defined once in Service Settings and then ticked per client.
+              This link exists because the list otherwise reads as closed. */}
+          {isStaffRole(user) && (
+            <Link to="/settings/services" className="btn btn-secondary btn-sm">
+              ＋ Add / edit services
+            </Link>
+          )}
+        </div>
         <p style={{ fontSize: 13, color: '#5a6478', margin: '4px 0 16px' }}>
           Tick the services we provide to this client. Each enabled service unfolds its workflow stages
           so you can adjust dates from the firm defaults (e.g. payroll info request on a different day).
           When a stage fires, an internal task is created and an email is queued for sending.
+          Need a service that isn't listed? Add it in <Link to="/settings/services">Service Settings</Link> and it
+          becomes available for every client.
         </p>
 
         {services.map(svc => {
