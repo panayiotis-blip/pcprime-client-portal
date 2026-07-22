@@ -363,6 +363,16 @@ h4 { font-size: 14px; font-weight: 600; }
   .svc-list-item { min-width: 160px; }
 }
 
+/* Spouse-billing reminder on the invoice editor — informational, not an error. */
+.cbp-invoice-hint {
+  padding: 8px 10px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #92400e;
+}
+
 .tf-view-toggle { display: inline-flex; gap: 4px; }
 
 .tf-summary-controls {

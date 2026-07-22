@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../services/api';
 import { formatDate } from '../../../services/dates';
+import CoupleBillingPanel from '../CoupleBillingPanel';
 
 type Props = { clientId: number };
 
@@ -68,6 +69,9 @@ export default function FinancialsTab({ clientId }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Spouse / partner billing link — who this client's invoices go to. */}
+      <CoupleBillingPanel clientId={clientId} />
+
       {/* Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button

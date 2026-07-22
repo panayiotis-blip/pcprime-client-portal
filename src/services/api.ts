@@ -841,6 +841,63 @@ export const api = {
     return { code: `${prefix}${String(max + 1).padStart(3, '0')}` };
   },
 
+  // --------- Client couples (spouse billing link) ---------
+  // Two individual clients whose fees go out on one invoice in the payer's
+  // name. Records, folders and documents stay entirely separate — see
+  // migration 135. Not to be confused with mergeClient, which destroys one.
+  async getClientCouple(clientId: number) {
+    const { data, error } = await supabase
+      .from('client_couples')
+      .select('*, a:clients!client_a_id(id, name, client_code), b:clients!client_b_id(id, name, client_code)')
+      .or(`client_a_id.eq.${clientId},client_b_id.eq.${clientId}`)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    const row: any = data;
+    // Resolve the pair from the caller's point of view so the UI doesn't have
+    // to care which side of the stored (a < b) ordering it landed on.
+    const isA = row.client_a_id === clientId;
+    const partner = isA ? row.b : row.a;
+    return {
+      id: row.id as number,
+      partner_id: partner?.id ?? null,
+      partner_name: partner?.name ?? null,
+      partner_code: partner?.client_code ?? null,
+      payer_client_id: row.payer_client_id as number,
+      this_client_pays: row.payer_client_id === clientId,
+      notes: row.notes as string | null,
+    };
+  },
+
+  async linkClientCouple(clientId: number, partnerId: number, payerClientId: number, notes?: string | null) {
+    if (clientId === partnerId) throw new Error('A client cannot be linked to itself.');
+    if (payerClientId !== clientId && payerClientId !== partnerId) {
+      throw new Error('The payer must be one of the two linked clients.');
+    }
+    // The table stores the pair with the lower id first; the trigger rejects a
+    // client that is already half of another couple.
+    const [a, b] = clientId < partnerId ? [clientId, partnerId] : [partnerId, clientId];
+    const { data, error } = await supabase
+      .from('client_couples')
+      .insert({ client_a_id: a, client_b_id: b, payer_client_id: payerClientId, notes: notes || null })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async setCouplePayer(coupleId: number, payerClientId: number) {
+    const { error } = await supabase
+      .from('client_couples')
+      .update({ payer_client_id: payerClientId })
+      .eq('id', coupleId);
+    if (error) throw new Error(error.message);
+  },
+
+  async unlinkClientCouple(coupleId: number) {
+    const { error } = await supabase.from('client_couples').delete().eq('id', coupleId);
+    if (error) throw new Error(error.message);
+  },
+
   async generateMissingCodes() {
     // surname/legal_name mirror what the Add Client form feeds the generator,
     // so a backfilled code matches what the form would have produced.

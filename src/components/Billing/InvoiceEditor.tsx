@@ -111,6 +111,8 @@ export default function InvoiceEditor() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [eligibleEntries, setEligibleEntries] = useState<any[]>([]);
+  // Spouse billing link, if this invoice's client is half of a couple.
+  const [couple, setCouple] = useState<{ partner_name: string | null; this_client_pays: boolean } | null>(null);
   const [showAddTime, setShowAddTime] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
 
@@ -133,6 +135,16 @@ export default function InvoiceEditor() {
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [id]);
+
+  // Non-blocking: a missing or failed couple lookup just hides the hint.
+  useEffect(() => {
+    if (!invoice?.client_id) { setCouple(null); return; }
+    let cancelled = false;
+    api.getClientCouple(invoice.client_id)
+      .then(c => { if (!cancelled) setCouple(c as any); })
+      .catch(() => { if (!cancelled) setCouple(null); });
+    return () => { cancelled = true; };
+  }, [invoice?.client_id]);
 
   // Load approved + unbilled time entries for this client so the user can add
   // them to the draft. Refreshes when invoice loads.
@@ -504,6 +516,20 @@ export default function InvoiceEditor() {
                   disabled={!isEditable}
                 />
               </div>
+              {couple && (
+                <div className="form-group full-width">
+                  {/* The couple link is only meaningful at the point of
+                      invoicing, so it surfaces here rather than as a badge
+                      elsewhere on the record. */}
+                  <div className="cbp-invoice-hint">
+                    {couple.this_client_pays ? (
+                      <>This client is invoiced for <strong>{couple.partner_name}</strong> as well — include both people's work on this invoice.</>
+                    ) : (
+                      <>Fees for this client are normally invoiced to <strong>{couple.partner_name}</strong>. Check this invoice should be raised here.</>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="form-group full-width">
                 <label>Bill-to details (snapshot)</label>
                 <textarea className="form-input" rows={2}
