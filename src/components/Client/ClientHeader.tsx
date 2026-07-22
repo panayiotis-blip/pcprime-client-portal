@@ -1,5 +1,9 @@
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import {
+  X, ChevronLeft, ChevronRight, ChevronDown, Search, Plus, Copy, Undo2,
+  Printer, Trash2, Save,
+} from 'lucide-react';
+import { Menu, type MenuItem } from '../ui';
 
 interface Props {
   client: any;
@@ -16,6 +20,9 @@ interface Props {
   onCopy: () => void;
   onToggleActive: () => void;
   onChangeStatus: (status: string) => void;
+  // Record-level actions owned by ClientDetail (invite, templates, statements).
+  // They join the "More actions" menu instead of a second button strip.
+  extraActions?: MenuItem[];
 }
 
 const CLIENT_STATUSES: { value: string; label: string }[] = [
@@ -37,9 +44,9 @@ export default function ClientHeader({
   client, form, isDirty, isSaving, canEdit, canToggleActive,
   prevClientId, nextClientId,
   onSave, onClear, onDelete, onCopy, onToggleActive, onChangeStatus,
+  extraActions = [],
 }: Props) {
   const navigate = useNavigate();
-  const [findOpen, setFindOpen] = useState(false);
   const isActive = client.is_active !== false;
 
   // Header now shows ONLY one line: the legal name for companies, or
@@ -91,57 +98,90 @@ export default function ClientHeader({
       )}
 
       <div className="chb-actions">
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients')} title="Back to client list (close)">
-          ⤺ Close
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => prevClientId && navigate(`/clients/${prevClientId}`)}
-          disabled={!prevClientId || isDirty}
-          title={isDirty ? 'Save changes before navigating' : 'Previous client'}
-        >
-          ◀ Prev
-        </button>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => nextClientId && navigate(`/clients/${nextClientId}`)}
-          disabled={!nextClientId || isDirty}
-          title={isDirty ? 'Save changes before navigating' : 'Next client'}
-        >
-          Next ▶
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients')}>
-          🔍 Find
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients?new=1')}>
-          ＋ New
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={onCopy} disabled={!canEdit} title="Duplicate this client as a new record">
-          ⎘ Copy
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={onClear} disabled={!isDirty || !canEdit} title="Discard unsaved changes">
-          ✕ Clear
-        </button>
-        <a
-          href={`/clients/${client.id}/print`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn btn-secondary btn-sm"
-          title="Open print-friendly client card"
-        >
-          🖨 Print
-        </a>
-        <button className="btn btn-danger btn-sm" onClick={onDelete} disabled={!canEdit}>
-          🗑 Delete
-        </button>
-        <button
-          className={`btn btn-primary btn-sm ${isDirty ? 'chb-save-dirty' : ''}`}
-          onClick={onSave}
-          disabled={!isDirty || !canToggleActive || isSaving}
-          title={isDirty ? 'Save unsaved changes' : 'No changes to save'}
-        >
-          {isSaving ? 'Saving…' : isDirty ? '● Save' : 'Save'}
-        </button>
+        {/* Navigation — leaving or moving between records */}
+        <div className="chb-group">
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients')} title="Back to client list (close)">
+            <X size={14} /> Close
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => prevClientId && navigate(`/clients/${prevClientId}`)}
+            disabled={!prevClientId || isDirty}
+            title={isDirty ? 'Save changes before navigating' : 'Previous client'}
+          >
+            <ChevronLeft size={14} /> Prev
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => nextClientId && navigate(`/clients/${nextClientId}`)}
+            disabled={!nextClientId || isDirty}
+            title={isDirty ? 'Save changes before navigating' : 'Next client'}
+          >
+            Next <ChevronRight size={14} />
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/clients')} title="Search the client list">
+            <Search size={14} /> Find
+          </button>
+        </div>
+
+        <span className="chb-divider" aria-hidden="true" />
+
+        {/* Record actions — everything that isn't save or delete */}
+        <Menu
+          label={<>More actions <ChevronDown size={14} /></>}
+          align="left"
+          items={[
+            {
+              key: 'new',
+              label: 'New client',
+              icon: <Plus size={14} />,
+              onSelect: () => navigate('/clients?new=1'),
+            },
+            {
+              key: 'copy',
+              label: 'Copy',
+              icon: <Copy size={14} />,
+              onSelect: onCopy,
+              disabled: !canEdit,
+              title: 'Duplicate this client as a new record',
+            },
+            {
+              key: 'clear',
+              label: 'Clear',
+              icon: <Undo2 size={14} />,
+              onSelect: onClear,
+              disabled: !isDirty || !canEdit,
+              title: isDirty ? 'Discard unsaved changes' : 'No changes to discard',
+            },
+            {
+              key: 'print',
+              label: 'Print',
+              icon: <Printer size={14} />,
+              href: `/clients/${client.id}/print`,
+              target: '_blank',
+              title: 'Open print-friendly client card',
+              separatorBefore: true,
+            },
+            ...extraActions,
+          ]}
+        />
+
+        <span className="chb-spacer" />
+
+        {/* Destructive / commit — the only filled buttons in this bar */}
+        <div className="chb-group">
+          <button className="btn btn-danger btn-sm" onClick={onDelete} disabled={!canEdit}>
+            <Trash2 size={14} /> Delete
+          </button>
+          <button
+            className={`btn btn-primary btn-sm ${isDirty ? 'chb-save-dirty' : ''}`}
+            onClick={onSave}
+            disabled={!isDirty || !canToggleActive || isSaving}
+            title={isDirty ? 'Save unsaved changes' : 'No changes to save'}
+          >
+            <Save size={14} /> {isSaving ? 'Saving…' : isDirty ? '● Save' : 'Save'}
+          </button>
+        </div>
       </div>
     </div>
   );

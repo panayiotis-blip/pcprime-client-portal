@@ -23,6 +23,9 @@ export type { FormFieldProps } from './FormField';
 export { default as Card } from './Card';
 export type { CardProps } from './Card';
 
+export { default as Menu } from './Menu';
+export type { MenuProps, MenuItem } from './Menu';
+
 export { default as Modal } from './Modal';
 export type { ModalProps } from './Modal';
 

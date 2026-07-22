@@ -238,6 +238,59 @@
 .pc-card--clickable:hover { box-shadow: var(--pc-shadow-md); transform: translateY(-1px); }
 
 /* =============================================================
+   5b. Menu (overflow-action dropdown)
+   ============================================================= */
+.pc-menu { position: relative; display: inline-block; }
+
+.pc-menu__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 40;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--pc-white);
+  border: 1px solid var(--pc-border);
+  border-radius: var(--pc-radius-sm);
+  box-shadow: var(--pc-shadow-md);
+}
+.pc-menu__panel--left  { left: 0; }
+.pc-menu__panel--right { right: 0; }
+
+/* :visited included so the global a:visited rule can't recolour link items. */
+.pc-menu__item,
+.pc-menu__item:visited {
+  display: flex;
+  align-items: center;
+  gap: var(--pc-sp-8);
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--pc-radius-sm);
+  font: inherit;
+  font-size: 13px;
+  color: var(--pc-text);
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pc-menu__item:hover:not(:disabled) { background: var(--pc-tint); }
+.pc-menu__item:disabled { color: var(--pc-text-3); cursor: not-allowed; }
+
+.pc-menu__item--danger,
+.pc-menu__item--danger:visited { color: var(--pc-red); }
+.pc-menu__item--danger:hover:not(:disabled) { background: #fef2f2; }
+
+.pc-menu__icon { display: inline-flex; flex: 0 0 auto; }
+
+.pc-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--pc-border);
+}
+
+/* =============================================================
    6. Modal
    ============================================================= */
 .pc-modal-overlay {

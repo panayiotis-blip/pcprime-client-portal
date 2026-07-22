@@ -2861,11 +2861,11 @@ a:visited { color: var(--link); }
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
 }
 
-/* Quick-action strip (Invite to Portal, Apply Template, etc.) */
-.cd-quick-strip {
-  display: flex; gap: 8px; flex-wrap: wrap;
-  margin-bottom: 12px;
-}
+/* Toolbar grouping: navigation | record actions | destructive+save.
+   The spacer pushes Delete/Save to the far edge, away from Close/Prev/Next. */
+.chb-group   { display: flex; gap: 6px; flex-wrap: wrap; }
+.chb-divider { width: 1px; align-self: stretch; background: #e2e8f0; margin: 0 2px; }
+.chb-spacer  { flex: 1 1 auto; }
 
 /* Tab bar */
 .cd-tabbar {

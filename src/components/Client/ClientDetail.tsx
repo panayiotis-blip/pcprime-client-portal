@@ -7,7 +7,8 @@ import { api, isStaffRole, hasPermission, isSupervisorOrHigher } from '../../ser
 
 import { FieldCtx } from './fieldContext';
 import ClientHeader from './ClientHeader';
-import { Modal, Button } from '../ui';
+import { Modal, Button, type MenuItem } from '../ui';
+import { FileText, ClipboardList, Mail } from 'lucide-react';
 
 import ClientInfoTab from './tabs/ClientInfoTab';
 import ClientServicesTab from './tabs/ClientServicesTab';
@@ -309,6 +310,34 @@ export default function ClientDetail() {
 
   const ctxValue = { editing: editable, form, client, onChange: handleChange };
 
+  // Record-level actions that used to sit in their own quick-action strip.
+  // They now ride in the header's "More actions" menu — one toolbar, not two.
+  // "Print Client" is omitted: the menu's Print item opens the same
+  // /clients/:id/print view, so listing it twice was pure duplication.
+  const headerExtraActions: MenuItem[] = [
+    ...(isAdmin ? [{
+      key: 'print-statement',
+      label: 'Print statement',
+      icon: <FileText size={14} />,
+      href: `/billing/statement/${clientId}/print`,
+      target: '_blank',
+    }] : []),
+    ...(isAdmin ? [{
+      key: 'apply-template',
+      label: 'Apply task template',
+      icon: <ClipboardList size={14} />,
+      onSelect: () => setShowApplyTemplate(true),
+      separatorBefore: true,
+    }] : []),
+    ...(canInviteUsers ? [{
+      key: 'invite',
+      label: 'Invite to portal',
+      icon: <Mail size={14} />,
+      onSelect: openInvite,
+      separatorBefore: !isAdmin,
+    }] : []),
+  ];
+
   return (
     <FieldCtx.Provider value={ctxValue}>
     <div className="client-detail-v2">
@@ -327,36 +356,8 @@ export default function ClientDetail() {
         onCopy={handleCopy}
         onToggleActive={handleToggleActive}
         onChangeStatus={handleChangeStatus}
+        extraActions={headerExtraActions}
       />
-
-      {/* Quick-action strip (not part of the BTMS-style toolbar) */}
-      <div className="cd-quick-strip">
-        {canInviteUsers && (
-          <button className="btn btn-secondary btn-sm" onClick={openInvite}>
-            ✉️ Invite to portal
-          </button>
-        )}
-        {isAdmin && (
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowApplyTemplate(true)}>
-            📋 Apply task template
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => window.open(`/billing/statement/${clientId}/print`, '_blank')}
-          >
-            📄 Print statement
-          </button>
-        )}
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => window.open(`/clients/${clientId}/print`, '_blank')}
-          title="Open a printable card with the client's full profile"
-        >
-          🖨 Print Client
-        </button>
-      </div>
 
       {/* Unique-email banner hidden until Email Integration (Task 5 / CloudMailin) is live.
           Re-enable by reverting this block once the inbound webhook is configured. */}
