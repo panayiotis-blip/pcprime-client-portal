@@ -8,7 +8,7 @@ import { api, isStaffRole, hasPermission, isSupervisorOrHigher } from '../../ser
 import { FieldCtx } from './fieldContext';
 import ClientHeader from './ClientHeader';
 import { Modal, Button, type MenuItem } from '../ui';
-import { FileText, ClipboardList, Mail } from 'lucide-react';
+import { FileText, ClipboardList, Mail, Download } from 'lucide-react';
 
 import ClientInfoTab from './tabs/ClientInfoTab';
 import ClientServicesTab from './tabs/ClientServicesTab';
@@ -253,6 +253,23 @@ export default function ClientDetail() {
     }
   };
 
+  // GDPR data export — gather the client's personal data and download it as
+  // JSON. Audit-logged inside api.exportClientData for accountability.
+  const handleExportData = async () => {
+    try {
+      const bundle = await api.exportClientData(clientId);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `client-data-${client?.client_code || clientId}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    } catch (err: any) {
+      alert('Data export failed: ' + (err?.message || String(err)));
+    }
+  };
+
   const handleCopy = async () => {
     if (!editable) return;
     if (!confirm(`Create a new client copied from "${client.name}"?`)) return;
@@ -366,6 +383,13 @@ export default function ClientDetail() {
       icon: <Mail size={14} />,
       onSelect: openInvite,
       separatorBefore: !isAdmin,
+    }] : []),
+    ...(isAdmin ? [{
+      key: 'gdpr-export',
+      label: 'Export data (GDPR)',
+      icon: <Download size={14} />,
+      onSelect: handleExportData,
+      separatorBefore: true,
     }] : []),
   ];
 

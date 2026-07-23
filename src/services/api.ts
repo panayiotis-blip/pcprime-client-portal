@@ -911,6 +911,65 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // GDPR Article 15/20 — assemble the personal data held about one client into
+  // a single machine-readable bundle. Staff-triggered and audit-logged (the
+  // export itself is an accountable event). Credential PASSWORDS are never
+  // included — getCredentials already strips the ciphertext; we re-shape here
+  // to make that explicit.
+  async exportClientData(clientId: number) {
+    const [
+      client, addresses, directors, directorships, services,
+      notes, documents, taxFilings, emails, credentials, purchaseInvoices,
+    ] = await Promise.all([
+      api.getClient(clientId).catch(() => null),
+      api.getClientAddresses(clientId).catch(() => []),
+      api.getClientDirectors(clientId).catch(() => []),
+      api.getDirectorshipsForClient(clientId).catch(() => []),
+      api.getClientServices(clientId).catch(() => []),
+      api.getClientNotes(clientId).catch(() => []),
+      api.getDocuments({ client_id: String(clientId) }).catch(() => []),
+      api.getClientTaxFilings(clientId).catch(() => []),
+      api.getClientEmails(clientId).catch(() => []),
+      api.getCredentials(clientId).catch(() => []),
+      api.getInvoices({ client_id: String(clientId) }).catch(() => []),
+    ]);
+
+    const safeCredentials = (credentials as any[]).map(c => ({
+      platform: c.platform, username: c.username,
+      url: c.effective_url ?? c.url ?? null, notes: c.notes,
+      has_stored_password: !!c.has_password,
+    }));
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const bundle = {
+      _meta: {
+        export_type: 'gdpr_client_data',
+        client_id: clientId,
+        exported_at: new Date().toISOString(),
+        exported_by: user?.email ?? user?.id ?? null,
+        note: 'Personal data held about this client. Passwords for stored credentials are deliberately excluded.',
+      },
+      client,
+      addresses,
+      directors,
+      directorships,
+      services,
+      notes,
+      documents,
+      tax_filings: taxFilings,
+      emails,
+      credentials: safeCredentials,
+      purchase_invoices: purchaseInvoices,
+    };
+
+    await api.logAction('client.data_export', 'clients', clientId, {
+      client_name: (client as any)?.name ?? null,
+      sections: Object.keys(bundle).filter(k => k !== '_meta'),
+    });
+
+    return bundle;
+  },
+
   async generateMissingCodes() {
     // surname/legal_name mirror what the Add Client form feeds the generator,
     // so a backfilled code matches what the form would have produced.
