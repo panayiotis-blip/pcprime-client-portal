@@ -6,7 +6,7 @@ import {
   buildDefaultLayout,
   mergeWithRegistry,
   type DashboardLayout,
-} from '../components/Dashboard/widgets';
+} from '../components/Dashboard/widgetLayout';
 
 interface DashboardLayoutAPI {
   layout: DashboardLayout;
