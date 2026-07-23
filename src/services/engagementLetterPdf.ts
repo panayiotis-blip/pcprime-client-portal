@@ -266,20 +266,26 @@ export function generateEngagementLetterPdf(
   doc.setFontSize(10);
   setColor(BODY);
   const coverText = applyMergeFields(data.cover_letter_text || DEFAULT_COVER, mergeVars);
-  // Render paragraphs with breaks
+  // Tighter line height + paragraph gap so the longer (6-section) cover letter
+  // still leaves room for the sign-off on page 1.
   for (const para of coverText.split(/\n+/)) {
     if (!para.trim()) continue;
-    y = writeWrapped(para.trim(), M, y, W - 2 * M);
-    y += 3;
+    y = writeWrapped(para.trim(), M, y, W - 2 * M, 3.9);
+    y += 1.5;
   }
-  y += 6;
+  y += 2;
 
-  // Sign-off
-  y = ensureRoom(45, y);
+  // Firm sign-off, kept together as one block. The client's acceptance and
+  // signature are taken once — in the "Acceptance" block at the end of the
+  // document — so they are NOT duplicated here (the old cover acceptance line,
+  // pinned to the page foot, was what stranded the signature on an otherwise
+  // empty page 2). ensureRoom matches the block's real height so it isn't
+  // bumped to a new page unnecessarily.
+  y = ensureRoom(24, y);
   doc.setFontSize(10);
   setColor(BODY);
   doc.text('Yours faithfully,', M, y);
-  y += 18;
+  y += 12;
   doc.setDrawColor(180, 190, 210);
   doc.line(M, y, M + 80, y);
   y += 4;
@@ -291,20 +297,6 @@ export function generateEngagementLetterPdf(
   doc.setFontSize(9);
   y += 4;
   doc.text(`For and on behalf of ${data.firm.legal_name || data.firm.name || ''}`, M, y);
-
-  // Client acceptance line at the foot of the cover letter
-  y = H - M - 24;
-  doc.setFontSize(9);
-  setColor(BODY);
-  doc.text('We accept the terms of the agreement as set out above and in the Statement of Work.', M, y);
-  y += 12;
-  doc.setDrawColor(180, 190, 210);
-  doc.line(M, y, M + 80, y);
-  doc.line(M + 90, y, M + 170, y);
-  setColor(GREY);
-  doc.setFontSize(8);
-  doc.text('Signature / Name', M, y + 4);
-  doc.text('Date', M + 90, y + 4);
 
   // ============================================================
   // PAGE 2+ — STATEMENT OF WORK
