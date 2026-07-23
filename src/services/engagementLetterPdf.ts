@@ -556,9 +556,22 @@ export function generateEngagementLetterPdf(
   doc.setFontSize(9.5);
   setColor(BODY);
   const termsText = applyMergeFields(data.terms_text || DEFAULT_TERMS, mergeVars);
-  for (const para of termsText.split(/\n+/)) {
-    if (!para.trim()) continue;
-    y = writeWrapped(para.trim(), M, y, W - 2 * M, 4.4);
+  // A clause heading is a short "N. Title" line with no trailing punctuation.
+  // Render it bold, and reserve room for it plus the first couple of body
+  // lines so a heading is never orphaned at the foot of a page when the Terms
+  // run across 2–3 pages.
+  const isClauseHeading = (p: string) => /^\d+\.\s+[A-Z]/.test(p) && p.length < 70 && !/[.:,;]$/.test(p);
+  for (const raw of termsText.split(/\n+/)) {
+    const para = raw.trim();
+    if (!para) continue;
+    if (isClauseHeading(para)) {
+      y = ensureRoom(4.4 * 3, y);
+      doc.setFont('Roboto', 'bold');
+      y = writeWrapped(para, M, y, W - 2 * M, 4.4);
+      doc.setFont('Roboto', 'normal');
+    } else {
+      y = writeWrapped(para, M, y, W - 2 * M, 4.4);
+    }
     y += 3;
   }
 
