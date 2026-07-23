@@ -639,11 +639,14 @@ h4 { font-size: 14px; font-weight: 600; }
 }
 
 /* ===== Text links ===== */
-/* One link colour app-wide; no browser blue/purple :visited state. Class-based
-   links (.btn, .sidebar-link, .compliance-table a, .btn-link, footer links…)
-   set their own colour and override this. */
-a { color: var(--link); }
-a:visited { color: var(--link); }
+/* One link colour app-wide; no browser blue/purple :visited state.
+   Buttons are excluded: a plain `a { color }` (0,0,1) loses to `.btn-primary`
+   (0,1,0), but `a:visited` (0,1,1) BEATS it — so once a button-link's target
+   had been visited (e.g. "+ Scan New" → /scan), its label snapped back to the
+   navy link colour, i.e. navy-on-navy and invisible. Excluding .btn/.pc-btn
+   here lets each button's own colour rule apply cleanly, for every variant. */
+a:not(.btn):not(.pc-btn) { color: var(--link); }
+a:not(.btn):not(.pc-btn):visited { color: var(--link); }
 
 /* ===== Buttons ===== */
 .btn {
