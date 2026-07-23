@@ -4,6 +4,7 @@ import { PanelSkeleton } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { api, isStaffRole, hasPermission, isSupervisorOrHigher, roleLabel } from '../../services/api';
 import QuickActionsFab from './QuickActionsFab';
+import CommandPalette from './CommandPalette';
 
 // Sidebar reorganisation (UI polish Part 1)
 // ------------------------------------------------------------
@@ -788,6 +789,9 @@ export default function AppShell() {
 
       {/* Floating quick-actions button — hidden on print routes */}
       {!isPrintRoute && <QuickActionsFab />}
+
+      {/* Ctrl/Cmd+K "jump to" palette — self-mounts a global key listener */}
+      <CommandPalette />
     </div>
   );
 }
