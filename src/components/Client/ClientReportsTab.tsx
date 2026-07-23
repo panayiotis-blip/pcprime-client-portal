@@ -43,7 +43,7 @@ export default function ClientReportsTab({ clientId }: { clientId: number }) {
   };
 
   const view = async (r: any) => {
-    try { window.open(await api.advisorReportFileUrl(r.storage_path), '_blank'); }
+    try { window.open(await api.advisorReportFileUrl(r.storage_path), '_blank', 'noopener,noreferrer'); }
     catch (e: any) { alert(e.message); }
   };
   const del = async (r: any) => {

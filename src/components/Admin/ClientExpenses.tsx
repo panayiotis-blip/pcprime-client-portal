@@ -28,7 +28,7 @@ export default function ClientExpenses() {
 
   const viewFile = async (path: string) => {
     if (!path) return;
-    try { window.open(await api.expenseFileUrl(path), '_blank'); } catch (err: any) { alert(err.message); }
+    try { window.open(await api.expenseFileUrl(path), '_blank', 'noopener,noreferrer'); } catch (err: any) { alert(err.message); }
   };
 
   const reject = async (e: any) => {

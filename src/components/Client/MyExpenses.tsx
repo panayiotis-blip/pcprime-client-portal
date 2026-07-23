@@ -113,7 +113,7 @@ export default function MyExpenses() {
   };
 
   const viewFile = async (path: string) => {
-    try { window.open(await api.expenseFileUrl(path), '_blank'); } catch (err: any) { alert(err.message); }
+    try { window.open(await api.expenseFileUrl(path), '_blank', 'noopener,noreferrer'); } catch (err: any) { alert(err.message); }
   };
 
   if (!owner) return <div className="empty-state"><p>No client account is linked to your login.</p></div>;

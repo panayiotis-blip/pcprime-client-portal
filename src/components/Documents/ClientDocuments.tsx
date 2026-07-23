@@ -431,7 +431,7 @@ export default function ClientDocuments({ clientId }: Props) {
                           onClick={async () => {
                             try {
                               const url = await api.downloadDocumentUrl(doc.id);
-                              window.open(url, '_blank');
+                              window.open(url, '_blank', 'noopener,noreferrer');
                             } catch (err: any) { alert(err.message); }
                           }}
                         >View</button>

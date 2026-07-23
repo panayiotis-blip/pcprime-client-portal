@@ -36,7 +36,7 @@ export default function MyReports() {
   }, [owner]);
 
   const openReport = async (r: any) => {
-    try { window.open(await api.advisorReportFileUrl(r.storage_path), '_blank'); }
+    try { window.open(await api.advisorReportFileUrl(r.storage_path), '_blank', 'noopener,noreferrer'); }
     catch (err: any) { alert(err.message); }
   };
 
