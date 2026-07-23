@@ -42,6 +42,7 @@ export function collectFields(inputData: any, formType: TaxReturnFormType): Coll
     if (!Array.isArray(arr)) continue;
     const rows: CollectedField[][] = [];
     for (const el of arr) {
+      if (g.rowFilter && !g.rowFilter(el)) continue;
       const row: CollectedField[] = [];
       for (const c of g.cols) {
         const value = fmtByKind(c.kind, el?.[c.field]);

@@ -42,6 +42,10 @@ export interface GridEntry {
   gridId: string;    // e.g. 'epr1mm4tar1'
   source: string;    // array name in input_data, e.g. 'employments'
   cols: GridColEntry[];
+  // Optional per-row guard: emit a row only when the predicate passes (gets the
+  // array element). Used e.g. so the Part 5.D funds grid takes SI / provident /
+  // medical fund rows but skips life-insurance rows, which belong elsewhere.
+  rowFilter?: (el: any) => boolean;
 }
 
 export interface FormMap {
@@ -126,6 +130,11 @@ const EPR1M: FormMap = {
         { col: 'c6', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
         { col: 'c7', field: 'taxPaidOutside', kind: 'money', confidence: 'inferred' },
         { col: 'c7a', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+        // c11 = security / account identifier (e.g. VUTY, an IBKR account, an
+        // ISIN). Confirmed by the real epr1m sample; maps to the portal's
+        // `accountType` free-text field. c10 (country) is a coded value
+        // (OECD605) so it stays unmapped until we capture the coded form.
+        { col: 'c11', field: 'accountType', kind: 'text', confidence: 'confirmed' },
       ],
     },
     {
@@ -143,6 +152,23 @@ const EPR1M: FormMap = {
         { col: 'c5a', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
         { col: 'c6', field: 'taxPaidOutside', kind: 'money', confidence: 'inferred' },
         { col: 'c7', field: 'receiptDate', kind: 'date', confidence: 'inferred' },
+      ],
+    },
+    {
+      // Part 5.D — contributions to Social Insurance / provident / medical
+      // funds. Column layout CONFIRMED by the real epr1m sample: c1 fund TIC,
+      // c2 fund name, c3 type code, c7 amount paid. The sample's c3 codes even
+      // line up with the portal's LIFE_SI_PENSION_CODES (2 = Social Insurance,
+      // 4 = medical/health). Life-insurance rows (code '3') are excluded — they
+      // carry sum-assured logic and are relieved separately, not as a fund row.
+      gridId: 'epr1mm5tdr1',
+      source: 'lifeSiPensionFunds',
+      rowFilter: (el: any) => String(el?.code ?? '') !== '3',
+      cols: [
+        { col: 'c1', field: 'fundTic', kind: 'tic', confidence: 'confirmed' },
+        { col: 'c2', field: 'fundName', kind: 'text', confidence: 'confirmed' },
+        { col: 'c3', field: 'code', kind: 'text', confidence: 'confirmed' },
+        { col: 'c7', field: 'amountPaid', kind: 'money', confidence: 'confirmed' },
       ],
     },
   ],

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { api } from '../../../services/api';
+import { downloadTaxisnetXml, validateExport } from '../../../services/taxisnetXml';
 import {
   FILING_TYPES, FILING_STATUSES,
   filingTypeLabel, StatusPill, taxYears,
@@ -60,6 +61,8 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
   // Editor mode (for tax-return-type filings)
   const [editorReturn, setEditorReturn] = useState<any | null>(null);
   const [editorBusy, setEditorBusy] = useState(false);
+  // Per-row busy flag for the one-click TaxisNet XML test export.
+  const [xmlBusyId, setXmlBusyId] = useState<number | null>(null);
   // Pre-start checklist gate — editor stays closed until passed for this session.
   const [gatePassed, setGatePassed] = useState(false);
 
@@ -126,6 +129,45 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
       alert('Could not open the return editor: ' + err.message);
     } finally {
       setEditorBusy(false);
+    }
+  };
+
+  // One-click TaxisNet XML from a return's SAVED data — no editor / checklist
+  // gate. Built for the test-import loop: generate the file, upload it to
+  // TaxisNet in draft, and feed back whatever it accepts or rejects so inferred
+  // mappings can be confirmed. Reads tax_returns.input_data for (client, year);
+  // the taxpayer T.I.C. falls back to the client record if the return was never
+  // saved through the editor.
+  const handleTestXml = async (filing: Filing) => {
+    if (!isTaxReturnFiling(filing.filing_type)) return;
+    setXmlBusyId(filing.id);
+    try {
+      const formType = FILING_TYPE_TO_FORM_TYPE[filing.filing_type];
+      const existing = (await api.listTaxReturns(clientId)) as Array<{ id: number; tax_year: number }>;
+      const match = existing.find(r => r.tax_year === filing.tax_year);
+      if (!match) {
+        alert('No saved return data for this year yet. Click "Open Return", enter and save the figures, then export the XML.');
+        return;
+      }
+      const tr = await api.getTaxReturn(match.id);
+      const input = tr?.input_data || {};
+      const inputForXml = { ...input, clientTIC: input.clientTIC || client?.tax_number || '' };
+
+      const { errors, warnings } = validateExport(inputForXml, filing.tax_year, formType);
+      if (errors.length) {
+        alert('Cannot export this return yet:\n\n• ' + errors.join('\n• '));
+        return;
+      }
+      if (warnings.length && !confirm(
+        'Before this test export, note:\n\n• ' + warnings.join('\n• ') +
+        '\n\nDownload the XML anyway?'
+      )) return;
+
+      downloadTaxisnetXml(inputForXml, filing.tax_year, formType);
+    } catch (err: any) {
+      alert('XML export failed: ' + err.message);
+    } finally {
+      setXmlBusyId(null);
     }
   };
 
@@ -358,7 +400,7 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                   <th>Reference</th>
                   <th>Amount</th>
                   <th>Notes</th>
-                  <th style={{ width: 80 }}></th>
+                  <th style={{ width: 170 }}></th>
                   {canEdit && <th></th>}
                 </tr>
               </thead>
@@ -437,14 +479,24 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                     </td>
                     <td>
                       {isTaxReturnFiling(r.filing_type) && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => openEditor(r)}
-                          disabled={editorBusy}
-                          title="Open the TD1 editor for this tax return"
-                        >
-                          {editorBusy ? '…' : 'Open Return'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => openEditor(r)}
+                            disabled={editorBusy}
+                            title="Open the TD1 editor for this tax return"
+                          >
+                            {editorBusy ? '…' : 'Open Return'}
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleTestXml(r)}
+                            disabled={xmlBusyId === r.id}
+                            title="Generate the TaxisNet XML from this return's saved data (for a test import)"
+                          >
+                            {xmlBusyId === r.id ? '…' : '⬇ XML'}
+                          </button>
+                        </div>
                       )}
                     </td>
                     {canEdit && (
