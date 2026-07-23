@@ -375,6 +375,18 @@ h4 { font-size: 14px; font-weight: 600; }
 
 .tf-view-toggle { display: inline-flex; gap: 4px; }
 
+/* Clients-list pagination footer */
+.cm-pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 10px 4px 4px;
+  font-size: 13px; color: var(--pc-text-2, #64748b);
+}
+.cm-pager-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cm-pager-size { display: inline-flex; align-items: center; gap: 6px; }
+.cm-pager-size select { width: auto; display: inline-block; }
+.cm-pager-page { min-width: 96px; text-align: center; }
+
 .tf-summary-controls {
   display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
   margin-bottom: 12px;

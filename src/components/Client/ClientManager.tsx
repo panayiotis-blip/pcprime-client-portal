@@ -292,6 +292,13 @@ export default function ClientManager() {
   // with how the user reads paper files.
   const [sortKey, setSortKey] = useState<SortKey>('client_code');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  // Pagination of the RENDERED rows only. Bulk actions, select-all, print-range
+  // and CSV export all read the full `filtered`/`sortedFiltered` arrays, so
+  // slicing what's shown never changes what they operate on. pageSize 0 = show
+  // all (escape hatch for Ctrl+F / a full visual scan).
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
   const onSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir('asc'); }
@@ -944,6 +951,28 @@ export default function ClientManager() {
     return 0;
   }), [filtered, sortKey, sortDir, invoiceCountByClient]);
 
+  // --- Pagination of the visible rows ---
+  const total = sortedFiltered.length;
+  const pageCount = pageSize === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
+  // Clamp on render so a narrowing filter can't leave us on an empty page for a
+  // frame; the effect below syncs the state back.
+  const currentPage = Math.min(page, pageCount - 1);
+  useEffect(() => {
+    if (page !== currentPage) setPage(currentPage);
+  }, [page, currentPage]);
+  // Jump back to page 1 when the search/filters/sort change (a new query should
+  // start at the top) — but NOT when `clients` refreshes after an edit, so
+  // saving a client doesn't bounce you off the page you were on.
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, filterCategory, filterStatus, filterCity, filterHasVat, filterTag, adv, sortKey, sortDir]);
+  const pagedRows = useMemo(
+    () => (pageSize === 0 ? sortedFiltered : sortedFiltered.slice(currentPage * pageSize, currentPage * pageSize + pageSize)),
+    [sortedFiltered, currentPage, pageSize],
+  );
+  const rangeStart = total === 0 ? 0 : (pageSize === 0 ? 1 : currentPage * pageSize + 1);
+  const rangeEnd = pageSize === 0 ? total : Math.min(total, currentPage * pageSize + pageSize);
+
   // Range dropdown options for the Print modal — type-filtered + sorted by
   // name. Declared AFTER sortedFiltered because the useMemo callback runs
   // eagerly during render and would otherwise hit the TDZ on sortedFiltered.
@@ -1550,7 +1579,7 @@ export default function ClientManager() {
             <thead>
               <tr>
                 <th style={{ width: 30 }}>
-                  <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} title="Select all on this page" />
+                  <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAll} title="Select all matching clients (all pages)" />
                 </th>
                 {visibleColumnDefs.map(col => {
                   const sortable = ['client_code', 'name', 'tax_number', 'invoices_count'].includes(col.id);
@@ -1569,7 +1598,7 @@ export default function ClientManager() {
               </tr>
             </thead>
             <tbody>
-              {sortedFiltered.map((c: any) => (
+              {pagedRows.map((c: any) => (
                 <tr key={c.id} style={selectedIds.has(c.id) ? { background: 'var(--pc-gold-tint)' } : undefined}>
                   <td>
                     <input
@@ -1586,6 +1615,43 @@ export default function ClientManager() {
               ))}
             </tbody>
           </table>
+
+          {/* Pagination — controls the rendered rows only. */}
+          <div className="cm-pager">
+            <span className="cm-pager-count">
+              {total === 0 ? 'No clients' : `Showing ${rangeStart}–${rangeEnd} of ${total}`}
+            </span>
+            <div className="cm-pager-controls">
+              <label className="cm-pager-size">
+                Per page:{' '}
+                <select
+                  className="form-input form-input-sm"
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(0); }}
+                >
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                  <option value={0}>All</option>
+                </select>
+              </label>
+              {pageSize !== 0 && pageCount > 1 && (
+                <>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    disabled={currentPage === 0}
+                  >‹ Prev</button>
+                  <span className="cm-pager-page">Page {currentPage + 1} of {pageCount}</span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                    disabled={currentPage >= pageCount - 1}
+                  >Next ›</button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
