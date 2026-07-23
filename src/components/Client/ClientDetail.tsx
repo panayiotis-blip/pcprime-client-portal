@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo, type ReactElement } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -70,6 +70,71 @@ const MORE_TABS: { key: TabKey; label: string }[] = [
   { key: 'accounts',    label: 'Chart of Accounts' },
   { key: 'patterns',    label: 'Vendor Patterns' },
 ];
+
+// ---------------------------------------------------------------------------
+// Keep-alive tab area.
+//
+// These tabs each refetch on mount, so before this they reloaded every time
+// you switched away and back. Here they mount on first visit and are then kept
+// mounted but hidden (display:none), so a revisit is instant and any in-progress
+// input survives the round trip.
+//
+// Deliberately NOT kept alive (rendered conditionally in ClientDetail instead):
+//   - info / contacts / tax / notes: they read the editable form via FieldCtx.
+//     Keeping them mounted would re-render them on every keystroke, and Contacts
+//     owns the address drafts the unsaved-changes guard depends on.
+//   - audit / compliance: their data changes from actions inside the record
+//     (any save adds an audit row; "Apply task template" adds compliance tasks),
+//     so they must refetch on each visit to stay truthful.
+//
+// Wrapped in memo() and fed only stable props (not `form`), so typing in the
+// header form doesn't re-render the fourteen hidden tabs.
+type KeepAliveProps = {
+  clientId: number;
+  editable: boolean;
+  client: any;
+  clientName: string;
+  onRefresh: () => void;
+};
+
+const KEEP_ALIVE_RENDERERS: Record<string, (p: KeepAliveProps) => ReactElement> = {
+  services:         p => <ClientServicesTab clientId={p.clientId} />,
+  kyc:              p => <KYCPanel clientId={p.clientId} onRefresh={p.onRefresh} />,
+  directors:        p => <DirectorsTab clientId={p.clientId} canEdit={p.editable} />,
+  credentials:      p => <PlatformCredentials clientId={p.clientId} />,
+  documents:        p => <ClientDocuments clientId={p.clientId} />,
+  invoices:         p => <InvoiceList clientId={p.clientId} />,
+  financials:       p => <FinancialsTab clientId={p.clientId} />,
+  customer_billing: p => <ClientBillingTab clientId={p.clientId} />,
+  reports:          p => <ClientReportsTab clientId={p.clientId} />,
+  tax_filings:      p => <TaxFilingsTab clientId={p.clientId} canEdit={p.editable} clientName={p.clientName} client={p.client} />,
+  emails:           p => <ClientEmails clientId={p.clientId} />,
+  time:             p => <TimeTab clientId={p.clientId} clientName={p.clientName} />,
+  accounts:         p => <ChartOfAccounts clientId={p.clientId} />,
+  patterns:         p => <VendorPatterns clientId={p.clientId} />,
+};
+const KEEP_ALIVE_KEYS = Object.keys(KEEP_ALIVE_RENDERERS);
+
+const KeepAliveTabs = memo(function KeepAliveTabs(
+  props: KeepAliveProps & { activeTab: string },
+) {
+  const { activeTab } = props;
+  const [mounted, setMounted] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (KEEP_ALIVE_RENDERERS[activeTab] && !mounted.has(activeTab)) {
+      setMounted(prev => new Set(prev).add(activeTab));
+    }
+  }, [activeTab, mounted]);
+  return (
+    <>
+      {KEEP_ALIVE_KEYS.filter(k => mounted.has(k)).map(k => (
+        <div key={k} style={{ display: activeTab === k ? 'block' : 'none' }}>
+          {KEEP_ALIVE_RENDERERS[k](props)}
+        </div>
+      ))}
+    </>
+  );
+});
 
 // Shallow compare to detect dirty form
 function isFormDirty(form: any, client: any): boolean {
@@ -145,7 +210,7 @@ export default function ClientDetail() {
   // editable is the form-fields gate — additionally requires the client to be active.
   const editable = canToggleActive && isActive;
 
-  const loadClient = async () => {
+  const loadClient = useCallback(async () => {
     try {
       setLoadError(null);
       const data = await api.getClient(clientId);
@@ -163,13 +228,13 @@ export default function ClientDetail() {
     } finally {
       setLoadedOnce(true);
     }
-  };
+  }, [clientId]);
 
   useEffect(() => { loadClient(); /* eslint-disable-next-line */ }, [id]);
 
-  const handleChange = (field: string, value: any) => {
+  const handleChange = useCallback((field: string, value: any) => {
     setForm((prev: any) => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
   // Prev / Next by client_code order across all live clients
   const { prevClientId, nextClientId } = useMemo(() => {
@@ -339,7 +404,12 @@ export default function ClientDetail() {
     );
   }
 
-  const ctxValue = { editing: editable, form, client, onChange: handleChange };
+  // Memoised so the FieldCtx consumers (info/contacts/tax/notes) only re-render
+  // when something they actually read changes, not on every ClientDetail render.
+  const ctxValue = useMemo(
+    () => ({ editing: editable, form, client, onChange: handleChange }),
+    [editable, form, client, handleChange],
+  );
 
   // Record-level actions that used to sit in their own quick-action strip.
   // They now ride in the header's "More actions" menu — one toolbar, not two.
@@ -439,28 +509,28 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content. The form/audit/compliance tabs render conditionally (see
+          KeepAliveTabs' note); everything else is kept alive so revisits don't
+          refetch. Exactly one is ever visible at a time. */}
       <div className="cd-tab-pane">
-        {tab === 'info'        && <ClientInfoTab />}
-        {tab === 'contacts'    && <ContactsTab registerSave={registerTabSave} onDirtyChange={setTabDirty} />}
-        {tab === 'tax'         && <TaxRegistrationTab />}
-        {tab === 'services'    && <ClientServicesTab clientId={clientId} />}
-        {tab === 'kyc'         && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
-        {tab === 'directors'   && <DirectorsTab clientId={clientId} canEdit={editable} />}
-        {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
-        {tab === 'documents'   && <ClientDocuments clientId={clientId} />}
-        {tab === 'invoices'    && <InvoiceList clientId={clientId} />}
-        {tab === 'financials'  && <FinancialsTab clientId={clientId} />}
-        {tab === 'customer_billing' && <ClientBillingTab clientId={clientId} />}
-        {tab === 'reports'     && <ClientReportsTab clientId={clientId} />}
-        {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
-        {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} client={client} />}
-        {tab === 'emails'      && <ClientEmails clientId={clientId} />}
-        {tab === 'time'        && <TimeTab clientId={clientId} clientName={client.name} />}
-        {tab === 'notes'       && <NotesTab />}
-        {tab === 'audit'       && <AuditTab clientId={clientId} />}
-        {tab === 'accounts'    && <ChartOfAccounts clientId={clientId} />}
-        {tab === 'patterns'    && <VendorPatterns clientId={clientId} />}
+        {tab === 'info'       && <ClientInfoTab />}
+        {tab === 'contacts'   && <ContactsTab registerSave={registerTabSave} onDirtyChange={setTabDirty} />}
+        {tab === 'tax'        && <TaxRegistrationTab />}
+        {tab === 'notes'      && <NotesTab />}
+        {tab === 'audit'      && <AuditTab clientId={clientId} />}
+        {tab === 'compliance' && <ComplianceTab clientId={clientId} />}
+        {/* key by clientId: Prev/Next to another client remounts this fresh so
+            only the active tab loads, instead of refetching every
+            previously-visited tab for the new client. */}
+        <KeepAliveTabs
+          key={clientId}
+          activeTab={tab}
+          clientId={clientId}
+          editable={editable}
+          client={client}
+          clientName={client.name}
+          onRefresh={loadClient}
+        />
       </div>
 
       {showApplyTemplate && (
