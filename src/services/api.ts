@@ -156,22 +156,35 @@ const seedingPromises = new Map<number, Promise<void>>();
 // Load the folder template from the DB (migration 091). If the table doesn't
 // exist yet or the read fails, fall back to the hardcoded arrays so the app
 // keeps seeding correctly during/before the migration is applied.
-async function loadFolderTemplate(): Promise<{
+//
+// Cached for the session: the template is firm-wide static data, and seeding
+// (its only caller now) would otherwise re-fetch it for every new client.
+type FolderTemplate = {
   top: { name: string; category_key: string }[];
   sub: { name: string; category_key: string }[];
-}> {
-  try {
-    const { data, error } = await supabase.from('folder_template')
-      .select('category_key, name, parent_key, is_active, sort_order')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
-    if (error || !data || data.length === 0) throw new Error('empty');
-    const top = data.filter((r: any) => !r.parent_key).map((r: any) => ({ name: r.name, category_key: r.category_key }));
-    const sub = data.filter((r: any) =>  r.parent_key === 'scanned').map((r: any) => ({ name: r.name, category_key: r.category_key }));
-    return { top, sub };
-  } catch {
-    return { top: SYSTEM_FOLDERS, sub: JOURNAL_SUBFOLDERS };
-  }
+};
+let folderTemplateCache: Promise<FolderTemplate> | null = null;
+
+async function loadFolderTemplate(): Promise<FolderTemplate> {
+  if (folderTemplateCache) return folderTemplateCache;
+  folderTemplateCache = (async () => {
+    try {
+      const { data, error } = await supabase.from('folder_template')
+        .select('category_key, name, parent_key, is_active, sort_order')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+      if (error || !data || data.length === 0) throw new Error('empty');
+      const top = data.filter((r: any) => !r.parent_key).map((r: any) => ({ name: r.name, category_key: r.category_key }));
+      const sub = data.filter((r: any) =>  r.parent_key === 'scanned').map((r: any) => ({ name: r.name, category_key: r.category_key }));
+      return { top, sub };
+    } catch {
+      // Don't pin the fallback for the whole session — if the table appears
+      // later (migration just applied), the next call retries the DB.
+      folderTemplateCache = null;
+      return { top: SYSTEM_FOLDERS, sub: JOURNAL_SUBFOLDERS };
+    }
+  })();
+  return folderTemplateCache;
 }
 
 async function seedSystemFolders(clientId: number): Promise<void> {
@@ -2016,10 +2029,20 @@ export const api = {
 
   // --------- Folders ---------
   async getFolders(clientId: number) {
-    await seedSystemFolders(clientId);
-    const { data, error } = await supabase.from('folders').select('*')
+    // Read first, seed only when needed. Seeding used to run on EVERY open —
+    // two extra round trips (plus the template fetch) to create folders that,
+    // for any client used before, already exist. If the read comes back with
+    // system folders, this client is seeded and we skip it entirely.
+    const readFolders = () => supabase.from('folders').select('*')
       .eq('client_id', clientId).order('is_system', { ascending: false }).order('name');
+
+    let { data, error } = await readFolders();
     if (error) throw new Error(error.message);
+    if (!(data || []).some((f: any) => f.is_system)) {
+      await seedSystemFolders(clientId);
+      ({ data, error } = await readFolders());
+      if (error) throw new Error(error.message);
+    }
 
     // Defensive dedupe: keep one system folder per category_key (lowest id wins),
     // and remap any subfolder parent_ids that point to a duplicate over to the canonical id.
@@ -2045,14 +2068,17 @@ export const api = {
       if (f.parent_id && idRemap.has(f.parent_id)) f.parent_id = idRemap.get(f.parent_id);
     }
 
-    // Attach doc count
-    const out: any[] = [];
-    for (const f of deduped) {
-      const { count } = await supabase.from('documents')
-        .select('*', { count: 'exact', head: true }).eq('folder_id', f.id);
-      out.push({ ...f, doc_count: count || 0 });
+    // Attach doc count. This was one count() query PER FOLDER, run in sequence
+    // — ~15+ round trips on a seeded client, and the main cause of the tab's
+    // lag. Replaced with a single read of every document's folder_id, tallied
+    // in memory. (documents rows are light — no OCR text or blobs.)
+    const { data: docRows } = await supabase.from('documents')
+      .select('folder_id').eq('client_id', clientId);
+    const countByFolder = new Map<number, number>();
+    for (const d of (docRows || []) as any[]) {
+      if (d.folder_id != null) countByFolder.set(d.folder_id, (countByFolder.get(d.folder_id) || 0) + 1);
     }
-    return out;
+    return deduped.map(f => ({ ...f, doc_count: countByFolder.get(f.id) || 0 }));
   },
 
   async createFolder(data: { client_id: number; parent_id?: number | null; name: string }) {
