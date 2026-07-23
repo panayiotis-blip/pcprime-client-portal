@@ -68,14 +68,19 @@ export default function InvoiceList({ clientId: propClientId }: InvoiceListProps
   };
 
   const unExport = async (inv: any) => {
+    // updateInvoice REPLACES the invoice's journal_lines with whatever we pass,
+    // so we must send them back. The context list no longer carries lines (kept
+    // out of the boot payload) — fetch the full invoice so un-export can't wipe
+    // them by sending an empty array.
+    const full = await api.getInvoice(inv.id);
     await api.updateInvoice(inv.id, {
       ...inv, status: 'draft',
-      journal_lines: inv.journal_lines?.map((l: any) => ({
+      journal_lines: (full.journal_lines || []).map((l: any) => ({
         debit_account: l.debit_account, credit_account: l.credit_account, amount: l.amount,
         vat_code: l.vat_code, vat_amount: l.vat_amount, details: l.details,
         t_analysis_1: l.t_analysis_1, t_analysis_2: l.t_analysis_2, t_analysis_3: l.t_analysis_3,
         t_analysis_4: l.t_analysis_4, t_analysis_5: l.t_analysis_5,
-      })) || []
+      })),
     });
     await refreshInvoices();
   };

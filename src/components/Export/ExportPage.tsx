@@ -30,11 +30,17 @@ export default function ExportPage() {
     if (selected.length === 0) { alert('Select at least one invoice.'); return; }
     setExporting(true);
     try {
+      // journal_lines are no longer in the context list (kept out of the boot
+      // payload) — fetch them for the selected invoices. Keyed by id so the
+      // scalar fields below still come from the same context rows as before;
+      // only the lines are sourced fresh, preserving order and output.
+      const withLines = await api.getInvoicesWithLines(selected.map((i: any) => i.id));
+      const linesById = new Map<number, any[]>(withLines.map((inv: any) => [inv.id, inv.journal_lines || []]));
       // Convert API format to export format
       const exportData = selected.map((inv: any) => ({
         journal: inv.journal, reference: inv.reference, invoiceDate: inv.invoice_date,
         totalAmount: inv.total_amount, currency: inv.currency, currencyRate: inv.currency_rate,
-        journalLines: (inv.journal_lines || []).map((l: any) => ({
+        journalLines: (linesById.get(inv.id) || []).map((l: any) => ({
           debitAccount: l.debit_account, creditAccount: l.credit_account, amount: l.amount,
           vatCode: l.vat_code, vatAmount: l.vat_amount, details: l.details,
           tAnalysis1: l.t_analysis_1, tAnalysis2: l.t_analysis_2, tAnalysis3: l.t_analysis_3,

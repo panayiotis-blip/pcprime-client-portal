@@ -1483,9 +1483,15 @@ export const api = {
   },
 
   // --------- Invoices ---------
+  // List fetch (populates AppContext.invoices at login). Deliberately does NOT
+  // include journal_lines: pulling every accounting line for every invoice was
+  // the app's largest boot payload, and only two actions actually need the
+  // lines — the BTMS export and un-export — which now fetch them on demand via
+  // getInvoicesWithLines / getInvoice. The `*` still carries every scalar
+  // invoice field; the client-name join is one string per row.
   async getInvoices(params?: Record<string, string>) {
     let q = supabase.from('invoices')
-      .select('*, client:clients(name), journal_lines(*)')
+      .select('*, client:clients(name)')
       .order('created_at', { ascending: false });
     if (params?.client_id) q = q.eq('client_id', Number(params.client_id));
     if (params?.status === 'not-exported') q = q.neq('status', 'exported');
@@ -1494,6 +1500,22 @@ export const api = {
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     return (data || []).map((i: any) => ({ ...i, client_name: i.client?.name || null }));
+  },
+
+  // Full invoices WITH journal_lines, for the selected set only (BTMS export).
+  // Chunked so the .in() URL stays bounded on a large batch.
+  async getInvoicesWithLines(ids: number[]) {
+    if (!ids.length) return [] as any[];
+    const CHUNK = 200;
+    const out: any[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { data, error } = await supabase.from('invoices')
+        .select('*, client:clients(name), journal_lines(*)')
+        .in('id', ids.slice(i, i + CHUNK));
+      if (error) throw new Error(error.message);
+      out.push(...(data || []).map((inv: any) => ({ ...inv, client_name: inv.client?.name || null })));
+    }
+    return out;
   },
 
   async getInvoice(id: number) {
