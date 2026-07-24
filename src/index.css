@@ -2638,7 +2638,7 @@ h4 { font-size: 14px; font-weight: 600; }
 .about-split {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
-  align-items: center;
+  align-items: stretch;   /* copy box and photo share the same height */
   gap: 48px;
 }
 .about-copy {
@@ -2646,14 +2646,19 @@ h4 { font-size: 14px; font-weight: 600; }
   border: 1px solid #eef2f7;
   border-radius: 14px;
   padding: 32px 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.about-copy h3 { text-align: left; }
-.about-copy h3::after { margin-left: 0; margin-right: 0; }
+/* Heading shrinks to its text so the underline can span the whole sentence */
+.about-copy h3 { text-align: left; align-self: flex-start; }
+.about-copy h3::after { margin-left: 0; margin-right: 0; width: 100%; }
 .about-copy p:last-child { margin-bottom: 0; }
+.about-media { display: flex; }
 .about-media img {
   width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 3;
+  height: 100%;
+  min-height: 300px;
   object-fit: cover;
   border-radius: 16px;
   box-shadow: 0 24px 50px rgba(15, 31, 61, 0.16);
