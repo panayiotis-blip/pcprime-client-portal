@@ -105,7 +105,7 @@ export default function ClientEmails({ clientId }: Props) {
     if (openEmail.body_html) {
       return DOMPurify.sanitize(openEmail.body_html, {
         FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
-        FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'style'],
+        FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
         ALLOW_DATA_ATTR: false,
       });
     }

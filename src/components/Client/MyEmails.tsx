@@ -9,7 +9,7 @@ import { api } from '../../services/api';
 // Inbound email bodies are attacker-controlled, so sanitise before rendering.
 const SANITISE_OPTS = {
   FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
-  FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'style'],
+  FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
   ALLOW_DATA_ATTR: false,
 };
 const escapeHtml = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] || c));

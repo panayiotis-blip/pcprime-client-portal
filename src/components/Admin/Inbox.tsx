@@ -131,7 +131,7 @@ const escapeHtml = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<':
 // Sanitiser for DISPLAYING received mail (strict — no inline styles / scripts).
 const SANITISE_OPTS = {
   FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button'],
-  FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur', 'style'],
+  FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
   ALLOW_DATA_ATTR: false,
 };
 const sanitiseBody = (msg: { body_html: string | null; body_plain: string | null }) =>
