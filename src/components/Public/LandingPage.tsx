@@ -7,7 +7,7 @@ import { normaliseServices, DEFAULT_SOCIAL, copyText } from './landingDefaults';
 // Company Settings → Landing page; anything left blank falls back to these.
 const DEFAULTS = {
   logo_url: '/logo.png',
-  landing_headline: 'Professional Accounting, Tax & Business Consultancy Services',
+  landing_headline: 'Professional Accounting, Tax &\nBusiness Consultancy Services',
   landing_subtext:
     'At Prime & Calculate Consultants, we empower individuals and businesses in Cyprus ' +
     'to achieve financial clarity. Whether you need hands-on accounting, proactive tax ' +

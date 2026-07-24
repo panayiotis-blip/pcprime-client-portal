@@ -2501,7 +2501,7 @@ h4 { font-size: 14px; font-weight: 600; }
 .landing-hero-row { /* single column by default (no photo) */ }
 .landing-hero--split { text-align: left; }
 .landing-hero--split .landing-hero-inner { max-width: 1180px; }
-.landing-hero--split h2 { max-width: 100%; margin-left: auto; margin-right: auto; text-align: center; }
+.landing-hero--split h2 { width: fit-content; max-width: 100%; margin-left: auto; margin-right: auto; text-align: center; }
 .landing-hero--split h2::after { margin-left: auto; margin-right: auto; }
 .landing-hero--split .landing-hero-row {
   display: grid;
@@ -2530,7 +2530,8 @@ h4 { font-size: 14px; font-weight: 600; }
   letter-spacing: -0.02em;
   line-height: 1.1;
   margin: 0 auto 8px;
-  max-width: 100%;      /* full hero width → wraps to two lines, not three */
+  width: fit-content;   /* shrink to the text so the block (and underline) is tidy */
+  max-width: 100%;
   text-align: center;   /* hero header always centred, regardless of section alignment */
 }
 .landing-hero h2::after {
