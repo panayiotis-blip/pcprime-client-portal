@@ -31,12 +31,12 @@ export const DEFAULT_COPY: Record<string, string> = {
   nav_contact: 'Contact',
   nav_portal: 'Client Portal',
   // Main website home — clicking the landing logo goes here.
-  home_url: 'https://primeandcalculate.com',
+  home_url: 'https://primeandcalculate.com/',
   // External links (shown in the nav) — the firm's marketing website.
   nav_blog: 'Blog',
   blog_url: 'https://primeandcalculate.com/blog',
   nav_news: 'News',
-  news_url: 'https://primeandcalculate.com/news',
+  news_url: 'https://primeandcalculate.com/',
   // Hero call-to-action cards
   cta_login_title: 'Client Portal Login',
   cta_login_sub: 'Access your documents, invoices and reports',
