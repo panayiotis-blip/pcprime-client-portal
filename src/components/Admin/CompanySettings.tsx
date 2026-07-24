@@ -10,6 +10,7 @@ import PrintLetterhead from '../shared/PrintLetterhead';
 import { Link } from 'react-router-dom';
 import CollapsibleSection from './CollapsibleSection';
 import PlatformSitesSection from './PlatformSitesSection';
+import { DEFAULT_SERVICES, type LandingService } from '../Public/landingDefaults';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
 // migration 045 / Timesheet.tsx.
@@ -122,6 +123,14 @@ export default function CompanySettings() {
         landing_subtext:           form.landing_subtext || null,
         landing_about:             form.landing_about || null,
         landing_hero_image_url:    form.landing_hero_image_url || null,
+        // Service cards + social links (migration 140). Only keep rows that
+        // have some content, so an all-blank row doesn't render an empty card.
+        landing_services: (Array.isArray(form.landing_services) ? form.landing_services : [])
+          .map((s: LandingService) => ({ title: (s.title || '').trim(), text: (s.text || '').trim() }))
+          .filter((s: LandingService) => s.title || s.text),
+        facebook_url:              form.facebook_url || null,
+        instagram_url:             form.instagram_url || null,
+        linkedin_url:              form.linkedin_url || null,
       });
       await load();
       setEditing(false);
@@ -178,6 +187,22 @@ export default function CompanySettings() {
       setUploading(false);
       if (heroInputRef.current) heroInputRef.current.value = '';
     }
+  };
+
+  // Service cards (migration 140). Before anything is saved the stored value
+  // is an empty array, so we start the editor from the built-in defaults.
+  const baseServices = (): LandingService[] =>
+    (Array.isArray(form?.landing_services) && form.landing_services.length
+      ? form.landing_services
+      : DEFAULT_SERVICES).map((s: LandingService) => ({ title: s.title || '', text: s.text || '' }));
+  const setServices = (next: LandingService[]) =>
+    setForm((prev: any) => ({ ...prev, landing_services: next }));
+  const updateService = (i: number, key: keyof LandingService, value: string) => {
+    const next = baseServices(); next[i] = { ...next[i], [key]: value }; setServices(next);
+  };
+  const addService = () => setServices([...baseServices(), { title: '', text: '' }]);
+  const removeService = (i: number) => {
+    const next = baseServices(); next.splice(i, 1); setServices(next);
   };
 
   if (loading) return <div className="loading-screen">Loading…</div>;
@@ -415,6 +440,65 @@ export default function CompanySettings() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Service cards */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '20px 0 6px' }}>Service cards</label>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px' }}>
+          The cards shown under “Our Services”. Add, remove or reorder by editing the rows below.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {baseServices().map((s, i) => (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: 8, alignItems: 'start',
+              padding: 10, border: '1px solid var(--border)', borderRadius: 8, background: '#f8fafc',
+            }}>
+              <input
+                type="text" className="form-input" placeholder="Title"
+                value={s.title} onChange={e => updateService(i, 'title', e.target.value)}
+                disabled={!canEdit}
+              />
+              <textarea
+                className="form-input" rows={2} placeholder="Short description"
+                value={s.text} onChange={e => updateService(i, 'text', e.target.value)}
+                disabled={!canEdit}
+              />
+              {canEdit && (
+                <button
+                  type="button" className="btn btn-secondary btn-sm"
+                  onClick={() => removeService(i)} title="Remove this card"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={addService}>
+            + Add service card
+          </button>
+        )}
+
+        {/* Social links */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '20px 0 6px' }}>Social links</label>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px' }}>
+          Full URLs. Leave a field blank to hide that link (Facebook &amp; Instagram fall back to your current profiles).
+        </p>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Facebook URL</label>
+            <input type="url" className="form-input" value={form.facebook_url || ''} onChange={e => handleChange('facebook_url', e.target.value)} disabled={!canEdit} placeholder="https://www.facebook.com/…" />
+          </div>
+          <div className="form-group">
+            <label>Instagram URL</label>
+            <input type="url" className="form-input" value={form.instagram_url || ''} onChange={e => handleChange('instagram_url', e.target.value)} disabled={!canEdit} placeholder="https://www.instagram.com/…" />
+          </div>
+          <div className="form-group">
+            <label>LinkedIn URL</label>
+            <input type="url" className="form-input" value={form.linkedin_url || ''} onChange={e => handleChange('linkedin_url', e.target.value)} disabled={!canEdit} placeholder="https://www.linkedin.com/company/…" />
+          </div>
         </div>
 
         <p style={{ fontSize: 11, color: '#64748b', margin: '14px 0 0' }}>

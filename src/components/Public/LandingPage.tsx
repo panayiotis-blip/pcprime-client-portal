@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { normaliseServices, DEFAULT_SOCIAL } from './landingDefaults';
 
 // Built-in defaults. The owner can override the editable fields under
 // Company Settings → Landing page; anything left blank falls back to these.
@@ -42,9 +43,12 @@ export default function LandingPage() {
   const val = (k: keyof typeof DEFAULTS) => (c[k] && String(c[k]).trim()) || DEFAULTS[k];
   const companyName = (c.name && String(c.name).trim()) || COMPANY_NAME;
 
-  const logoUrl = val('logo_url');
   const heroImage = (c.landing_hero_image_url && String(c.landing_hero_image_url).trim()) || '';
   const aboutParas = val('landing_about').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+  const services = normaliseServices((c as any).landing_services);
+  const facebook = (c.facebook_url && String(c.facebook_url).trim()) || DEFAULT_SOCIAL.facebook_url;
+  const instagram = (c.instagram_url && String(c.instagram_url).trim()) || DEFAULT_SOCIAL.instagram_url;
+  const linkedin = (c.linkedin_url && String(c.linkedin_url).trim()) || '';
 
   return (
     <div className="landing">
@@ -52,9 +56,9 @@ export default function LandingPage() {
         <header className="landing-nav">
           <div className="landing-brand">
             <img
-              src={logoUrl}
+              src="/logo.png"
               alt={companyName}
-              style={{ height: 96, width: 'auto', display: 'block' }}
+              style={{ height: 128, width: 'auto', display: 'block' }}
             />
           </div>
           <nav className="landing-nav-links">
@@ -106,30 +110,12 @@ export default function LandingPage() {
         <div className="landing-section-inner">
           <h3>Our Services</h3>
           <div className="services-grid">
-            <div className="service-card">
-              <h4>Accounting &amp; Bookkeeping</h4>
-              <p>Monthly bookkeeping, management accounts and year-end financial statements.</p>
-            </div>
-            <div className="service-card">
-              <h4>Tax Compliance &amp; Planning</h4>
-              <p>VAT and tax filings via TAXISnet, planning, and ongoing compliance support.</p>
-            </div>
-            <div className="service-card">
-              <h4>Payroll &amp; Social Insurance</h4>
-              <p>Monthly payroll, Ergani submissions and Social Insurance reporting.</p>
-            </div>
-            <div className="service-card">
-              <h4>Financial Reporting</h4>
-              <p>Clear management reports and year-end financial statements you can act on.</p>
-            </div>
-            <div className="service-card">
-              <h4>Cashflow &amp; Forecasting</h4>
-              <p>Cashflow tracking and forward-looking forecasts for confident decisions.</p>
-            </div>
-            <div className="service-card">
-              <h4>Business Consultancy</h4>
-              <p>Structuring, growth planning and operational efficiency for Cyprus businesses.</p>
-            </div>
+            {services.map((s, i) => (
+              <div className="service-card" key={i}>
+                {s.title && <h4>{s.title}</h4>}
+                {s.text && <p>{s.text}</p>}
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -161,8 +147,9 @@ export default function LandingPage() {
           </div>
           <div>
             <h5>Connect</h5>
-            <p><a href="https://www.facebook.com/profile.php?id=61574558002847" target="_blank" rel="noopener noreferrer">Facebook</a></p>
-            <p><a href="https://www.instagram.com/pcprime.official/" target="_blank" rel="noopener noreferrer">Instagram</a></p>
+            {facebook && <p><a href={facebook} target="_blank" rel="noopener noreferrer">Facebook</a></p>}
+            {instagram && <p><a href={instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
+            {linkedin && <p><a href={linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
             <p><Link to="/login">Client Portal</Link></p>
             <p><Link to="/tax">Tax Calculator</Link></p>
           </div>
