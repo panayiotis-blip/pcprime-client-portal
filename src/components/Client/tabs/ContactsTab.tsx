@@ -17,6 +17,26 @@ type Draft = Partial<ClientAddress> & { _dirty?: boolean };
 const isCompanyLike = (cat: string) =>
   cat === 'company' || cat === 'partnership' || cat === 'sole_trader';
 
+// Cyprus + English legal-form designators, normalised (dots/spaces removed).
+const LEGAL_SUFFIXES = ['ΔΕΠΕ', 'ΛΤΔ', 'ΕΠΕ', 'LIMITED', 'LTD', 'PLC', 'LLC'];
+
+// Drop trailing legal-form suffixes from a company name, e.g.
+// "ΑΧΙΛΛΕΥΣ Δ.Ε.Π.Ε." → "ΑΧΙΛΛΕΥΣ", "Acme Trading Ltd." → "Acme Trading".
+const stripLegalSuffix = (raw: string): string => {
+  let s = (raw || '').trim();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const suf of LEGAL_SUFFIXES) {
+      // Allow dots/spaces between each letter (Δ.Ε.Π.Ε.), plus a trailing dot.
+      const re = new RegExp('[\\s,]*' + suf.split('').join('[\\.\\s]*') + '[\\.\\s]*$', 'iu');
+      const next = s.replace(re, '').trim();
+      if (next !== s && next.length > 0) { s = next; changed = true; }
+    }
+  }
+  return s || (raw || '').trim();
+};
+
 type ContactsTabProps = {
   /** Hand the address saver to ClientDetail so the header Save commits it too. */
   registerSave?: (fn: (() => Promise<void>) | null) => void;
@@ -55,9 +75,11 @@ export default function ContactsTab({ registerSave, onDirtyChange }: ContactsTab
 
   // Save the current values of an address block to the reusable book.
   const handleSaveToBook = async (values: Partial<ClientAddress>) => {
-    // Default the label to the client's (short) name, so the book reads by
-    // who it belongs to rather than a street line.
-    const suggested = (client?.name && String(client.name).trim())
+    // Default the label to "<client code> — <name without legal suffix>",
+    // so the book reads by who it belongs to rather than a street line.
+    const shortName = stripLegalSuffix((client?.name || '') as string);
+    const code = ((client as any)?.client_code || '').trim();
+    const suggested = [code, shortName].filter(Boolean).join(' — ')
       || values.line1 || values.city || 'Saved address';
     const label = window.prompt('Save this address to the address book as:', suggested);
     if (label == null) return;
