@@ -73,6 +73,7 @@ export interface ClientAddress {
 // A reusable address saved to the firm-wide address book (migration 143).
 export interface SavedAddress {
   id: number;
+  code: string | null;
   label: string;
   line1: string | null;
   line2: string | null;
@@ -4659,6 +4660,17 @@ export const api = {
 
   async updateSavedAddressLabel(id: number, label: string) {
     const { error } = await supabase.from('saved_addresses').update({ label }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async updateSavedAddress(id: number, a: Partial<SavedAddress>) {
+    const payload: Record<string, any> = {};
+    for (const k of ['label', 'line1', 'line2', 'line3', 'office', 'city', 'postal_code', 'country', 'notes'] as const) {
+      if (k in a) payload[k] = (a as any)[k] || null;
+    }
+    if ('label' in payload && !payload.label) throw new Error('A label is required.');
+    if ('country' in payload && !payload.country) payload.country = 'Cyprus';
+    const { error } = await supabase.from('saved_addresses').update(payload).eq('id', id);
     if (error) throw new Error(error.message);
   },
 

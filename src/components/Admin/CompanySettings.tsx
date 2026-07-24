@@ -10,7 +10,6 @@ import PrintLetterhead from '../shared/PrintLetterhead';
 import { Link } from 'react-router-dom';
 import CollapsibleSection from './CollapsibleSection';
 import PlatformSitesSection from './PlatformSitesSection';
-import SavedAddresses from './SavedAddresses';
 import { DEFAULT_SERVICES, DEFAULT_COPY, type LandingService } from '../Public/landingDefaults';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
@@ -1153,9 +1152,6 @@ export default function CompanySettings() {
 
       {/* Cities admin — self-contained, saves independently */}
       <Cities />
-
-      {/* Saved (reusable) address book — self-contained */}
-      <SavedAddresses />
 
       {/* Maintenance tools — self-contained, leadership-only */}
       <Maintenance />

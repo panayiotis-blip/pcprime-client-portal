@@ -28,6 +28,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const ScannerPage = lazy(() => import('./components/Scanner/ScannerPage'));
 const InvoiceEditor = lazy(() => import('./components/Invoice/InvoiceEditor'));
 const ClientManager = lazy(() => import('./components/Client/ClientManager'));
+const AddressBook = lazy(() => import('./components/Client/AddressBook'));
 const ClientDetail = lazy(() => import('./components/Client/ClientDetail'));
 const ClientCardPrint = lazy(() => import('./components/Client/ClientCardPrint'));
 const SmartImport = lazy(() => import('./components/Admin/SmartImport'));
@@ -130,6 +131,7 @@ function AuthedApp() {
             <Route path="/clients/smart-import" element={<SmartImport />} />
             <Route path="/clients/duplicates" element={<DuplicateFinder />} />
             <Route path="/clients/unlinked-directors" element={<UnlinkedDirectors />} />
+            <Route path="/clients/address-book" element={<AddressBook />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/export" element={<ExportPage />} />
