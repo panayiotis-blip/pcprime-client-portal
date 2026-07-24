@@ -2641,11 +2641,9 @@ h4 { font-size: 14px; font-weight: 600; }
 .landing-about--split { text-align: left; }
 .about-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;   /* equal, so both cells read as squares */
+  grid-template-columns: 1fr 1fr;   /* equal cells; each stays square */
   align-items: stretch;             /* copy box and photo share the same height */
-  gap: 40px;
-  max-width: 960px;                 /* narrower → cells stay square, not wide */
-  margin: 0 auto;
+  gap: 40px;                        /* full section width to match the rest of the page */
 }
 .about-copy {
   background: #f8fafc;
