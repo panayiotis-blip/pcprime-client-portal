@@ -709,13 +709,16 @@ h4 { font-size: 14px; font-weight: 600; }
 
 /* ===== Text links ===== */
 /* One link colour app-wide; no browser blue/purple :visited state.
-   Buttons are excluded: a plain `a { color }` (0,0,1) loses to `.btn-primary`
-   (0,1,0), but `a:visited` (0,1,1) BEATS it — so once a button-link's target
-   had been visited (e.g. "+ Scan New" → /scan), its label snapped back to the
-   navy link colour, i.e. navy-on-navy and invisible. Excluding .btn/.pc-btn
-   here lets each button's own colour rule apply cleanly, for every variant. */
-a:not(.btn):not(.pc-btn) { color: var(--link); }
-a:not(.btn):not(.pc-btn):visited { color: var(--link); }
+   Wrapped in :where() so BOTH rules carry ZERO specificity — any element with
+   its own `color` (buttons, CTAs, nav links) always wins, in every state
+   including :visited. This is what keeps button-links (e.g. "+ Scan New", the
+   "Client Portal" CTA) from snapping to navy-on-navy: previously the
+   `a:not(.btn)...:visited` rule (0,1,1)/(0,2,1) out-specified a CTA's own
+   colour (0,1,0). Zero-specificity fixes every colored link-button at once,
+   with no class list to maintain, while plain <a> text links still get
+   --link. */
+:where(a) { color: var(--link); }
+:where(a:visited) { color: var(--link); }
 
 /* ===== Buttons ===== */
 .btn {
