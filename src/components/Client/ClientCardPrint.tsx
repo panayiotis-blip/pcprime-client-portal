@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import PrintLetterhead from '../shared/PrintLetterhead';
 import { EmailLinks } from '../shared/MultiEmail';
 import { vatCategoryLabel, vatPeriods } from '../../services/vatCategories';
 import PrintToolbar from '../shared/PrintToolbar';
@@ -162,18 +163,20 @@ export default function ClientCardPrint() {
           const website = co.website || 'primeandcalculate.com';
           return (
             <header className="pc-header">
-              <div className="pc-header-brand">
-                <img src={logoSrc} alt={firmName} className="pc-logo" />
-              </div>
-              <div className="pc-header-details">
-                <div className="pc-firm-name">{firmName}</div>
-                {tagline && <div className="pc-tagline">{tagline}</div>}
-                <div className="pc-firm-contact">
-                  <div>{addressLine}</div>
-                  <div>{contactLine}</div>
-                  {website && <div>{website}</div>}
-                </div>
-              </div>
+              <PrintLetterhead
+                name={firmName}
+                logoUrl={logoSrc}
+                position={co.letterhead_logo_position}
+                height={co.letterhead_logo_height}
+                meta={
+                  <div className="pc-firm-contact">
+                    {tagline && <div className="pc-tagline">{tagline}</div>}
+                    <div>{addressLine}</div>
+                    <div>{contactLine}</div>
+                    {website && <div>{website}</div>}
+                  </div>
+                }
+              />
             </header>
           );
         })()}

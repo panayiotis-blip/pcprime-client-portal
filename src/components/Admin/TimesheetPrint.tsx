@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import PrintLetterhead from '../shared/PrintLetterhead';
 import PrintToolbar from '../shared/PrintToolbar';
 import { formatDate } from '../../services/dates';
 
@@ -151,27 +152,31 @@ export default function TimesheetPrint() {
 
       {/* Letterhead */}
       <header className="ts-header">
-        {co.logo_url && <img src={co.logo_url} alt={co.name || 'Company logo'} />}
-        <div style={{ flex: 1 }}>
-          <div className="ts-firm-name">{co.name || co.legal_name || '—'}</div>
-          {co.tagline && <div className="ts-firm-tag">{co.tagline}</div>}
-          <div className="ts-firm-meta">
-            {addressLines.length > 0 && <div>{addressLines.join(', ')}</div>}
-            <div>
-              {co.phone && <span>{co.phone}</span>}
-              {co.phone && co.email && <span> · </span>}
-              {co.email && <span>{co.email}</span>}
-            </div>
-            {co.website && <div>{co.website}</div>}
-            {(co.vat_number || co.registration_number) && (
+        <PrintLetterhead
+          name={co.name || co.legal_name || '—'}
+          logoUrl={co.logo_url}
+          position={co.letterhead_logo_position}
+          height={co.letterhead_logo_height}
+          meta={
+            <div className="ts-firm-meta">
+              {co.tagline && <div className="ts-firm-tag">{co.tagline}</div>}
+              {addressLines.length > 0 && <div>{addressLines.join(', ')}</div>}
               <div>
-                {co.registration_number && <span>Reg: {co.registration_number}</span>}
-                {co.registration_number && co.vat_number && <span> · </span>}
-                {co.vat_number && <span>VAT: {co.vat_number}</span>}
+                {co.phone && <span>{co.phone}</span>}
+                {co.phone && co.email && <span> · </span>}
+                {co.email && <span>{co.email}</span>}
               </div>
-            )}
-          </div>
-        </div>
+              {co.website && <div>{co.website}</div>}
+              {(co.vat_number || co.registration_number) && (
+                <div>
+                  {co.registration_number && <span>Reg: {co.registration_number}</span>}
+                  {co.registration_number && co.vat_number && <span> · </span>}
+                  {co.vat_number && <span>VAT: {co.vat_number}</span>}
+                </div>
+              )}
+            </div>
+          }
+        />
       </header>
 
       <h1 className="ts-doc-title">Timesheet</h1>

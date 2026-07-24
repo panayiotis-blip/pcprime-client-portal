@@ -53,6 +53,8 @@ export type EngagementLetterData = {
     bank_name?: string | null;
     logo_url?: string | null;
     logo_data_url?: string | null;  // pre-fetched data URL (set by caller)
+    letterhead_logo_position?: string | null;  // name_only|logo_left|logo_right|logo_above|logo_only
+    letterhead_logo_height?: string | null;    // small|medium|large
   };
   version: number;
   effective_from?: string | null;
@@ -161,34 +163,61 @@ export function generateEngagementLetterPdf(
   // Draws the firm logo (proportionally scaled, capped to a tidy box) and
   // the firm details. Page 2+ uses a lighter header instead.
   const drawLetterhead = (y: number): number => {
-    // Logo — preserve aspect ratio. Cap to a 32×16 mm box in the top-right.
-    if (data.firm.logo_data_url) {
+    // Name + logo lockup, arranged per the firm's letterhead_logo_position /
+    // _height settings (same options as the HTML print documents).
+    const pos = data.firm.letterhead_logo_position || 'logo_right';
+    const szKey = data.firm.letterhead_logo_height || 'medium';
+    const maxH = szKey === 'small' ? 11 : szKey === 'large' ? 20 : 15;
+    const maxW = 65;
+    const name = data.firm.name || data.firm.legal_name || '';
+    const showName = pos !== 'logo_only';
+    const wantLogo = pos !== 'name_only' && !!data.firm.logo_data_url;
+
+    // Aspect-fit the logo inside the size box.
+    let lw = 0, lh = 0, safeFmt = 'PNG';
+    if (wantLogo) {
       try {
         const props = (doc as any).getImageProperties
-          ? (doc as any).getImageProperties(data.firm.logo_data_url)
-          : null;
-        const maxW = 32;
-        const maxH = 16;
-        let w = maxW, h = maxH;
+          ? (doc as any).getImageProperties(data.firm.logo_data_url) : null;
+        lw = maxW; lh = maxH;
         if (props && props.width && props.height) {
           const ratio = props.width / props.height;
-          // Fit inside the box without stretching.
-          if (ratio > maxW / maxH) { w = maxW; h = maxW / ratio; }
-          else                     { h = maxH; w = maxH * ratio; }
+          if (ratio > maxW / maxH) { lw = maxW; lh = maxW / ratio; }
+          else                     { lh = maxH; lw = maxH * ratio; }
         }
-        // Anchor top-right. Slight visual lift so the cap-height aligns with
-        // the firm name baseline below.
-        const fmt = (data.firm.logo_data_url.match(/^data:image\/([^;]+)/)?.[1] || 'PNG').toUpperCase();
-        const safeFmt = fmt === 'JPG' ? 'JPEG' : (['PNG','JPEG','WEBP'].includes(fmt) ? fmt : 'PNG');
-        doc.addImage(data.firm.logo_data_url, safeFmt as any, W - M - w, M - 2, w, h, undefined, 'FAST');
-      } catch {
-        // Bad data URL or unsupported format — skip silently.
-      }
+        const fmt = (data.firm.logo_data_url!.match(/^data:image\/([^;]+)/)?.[1] || 'PNG').toUpperCase();
+        safeFmt = fmt === 'JPG' ? 'JPEG' : (['PNG','JPEG','WEBP'].includes(fmt) ? fmt : 'PNG');
+      } catch { lw = 0; lh = 0; }
     }
+    const hasLogo = lw > 0;
+
     doc.setFontSize(16);
     setColor(NAVY);
-    doc.text(data.firm.name || data.firm.legal_name || '', M, y);
-    y += 5;
+    const nameW = showName ? doc.getTextWidth(name) : 0;
+    const gap = 4;
+
+    if (pos === 'logo_above' && hasLogo) {
+      doc.addImage(data.firm.logo_data_url!, safeFmt as any, M, y, lw, lh, undefined, 'FAST');
+      y += lh + 4;
+      if (showName) { doc.text(name, M, y); y += 5; }
+    } else {
+      // Row layouts — align the logo top near the name's cap height.
+      const logoTop = y - 4;
+      if (pos === 'logo_left' && hasLogo) {
+        doc.addImage(data.firm.logo_data_url!, safeFmt as any, M, logoTop, lw, lh, undefined, 'FAST');
+        if (showName) doc.text(name, M + lw + gap, y);
+      } else if (pos === 'logo_right' && hasLogo) {
+        if (showName) doc.text(name, M, y);
+        doc.addImage(data.firm.logo_data_url!, safeFmt as any, M + nameW + gap, logoTop, lw, lh, undefined, 'FAST');
+      } else if (pos === 'logo_only' && hasLogo) {
+        doc.addImage(data.firm.logo_data_url!, safeFmt as any, M, logoTop, lw, lh, undefined, 'FAST');
+      } else if (showName) {
+        doc.text(name, M, y);
+      }
+      // Advance below the taller of the name (~5mm) or the logo bottom.
+      y += Math.max(5, hasLogo ? (logoTop + lh) - y + 2 : 0);
+    }
+
     doc.setFontSize(9);
     setColor(GREY);
     const firmLines = [

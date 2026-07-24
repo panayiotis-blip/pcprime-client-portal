@@ -6,6 +6,7 @@ import FolderTemplates from './FolderTemplates';
 import ClientCategories from './ClientCategories';
 import Cities from './Cities';
 import Maintenance from './Maintenance';
+import PrintLetterhead from '../shared/PrintLetterhead';
 import { Link } from 'react-router-dom';
 import CollapsibleSection from './CollapsibleSection';
 import PlatformSitesSection from './PlatformSitesSection';
@@ -96,6 +97,8 @@ export default function CompanySettings() {
         brand_secondary_colour:       form.brand_secondary_colour || '#b8963e',
         letterhead_background_colour: form.letterhead_background_colour || '#ffffff',
         letterhead_text_colour:       form.letterhead_text_colour || '#0d1b2e',
+        letterhead_logo_position:     form.letterhead_logo_position || 'logo_right',
+        letterhead_logo_height:       form.letterhead_logo_height || 'medium',
         default_service_rates: rates,
         autoreply_enabled: form.autoreply_enabled ?? true,
         office_open_hour:  Number(form.office_open_hour ?? 8),
@@ -232,6 +235,57 @@ export default function CompanySettings() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Letterhead layout — how the logo and name lock up on printed docs */}
+        <div className="form-grid" style={{ marginTop: 16 }}>
+          <div className="form-group">
+            <label>Logo layout on printed documents</label>
+            <select
+              className="form-input"
+              value={form.letterhead_logo_position || 'logo_right'}
+              onChange={e => handleChange('letterhead_logo_position', e.target.value)}
+              disabled={!canEdit}
+            >
+              <option value="logo_right">Logo to the right of the name</option>
+              <option value="logo_left">Logo to the left of the name</option>
+              <option value="logo_above">Logo above the name</option>
+              <option value="name_only">Company name only (no logo)</option>
+              <option value="logo_only">Logo only (no name)</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Logo size</label>
+            <select
+              className="form-input"
+              value={form.letterhead_logo_height || 'medium'}
+              onChange={e => handleChange('letterhead_logo_height', e.target.value)}
+              disabled={!canEdit}
+            >
+              <option value="small">Small</option>
+              <option value="medium">Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <label style={{ fontSize: 12, color: '#64748b' }}>Preview</label>
+          <div
+            style={{
+              marginTop: 4, padding: 16, border: '1px solid var(--border)', borderRadius: 8,
+              background: '#fff',
+              // Preview reflects the chosen brand colour for the name.
+              ['--brand-primary' as any]: form.brand_primary_colour || '#1a2e4a',
+            }}
+          >
+            <PrintLetterhead
+              name={form.name || form.legal_name || 'Company name'}
+              logoUrl={form.logo_url}
+              position={form.letterhead_logo_position || 'logo_right'}
+              height={form.letterhead_logo_height || 'medium'}
+              meta={<div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>Address · phone · email — shown under the lockup on each document</div>}
+            />
+          </div>
         </div>
 
         <div className="form-grid" style={{ marginTop: 16 }}>
