@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Field, useFieldCtx } from '../fieldContext';
 import { EmailLinks, isValidEmailList } from '../../shared/MultiEmail';
-import { api, type ClientAddress } from '../../../services/api';
+import { api, type ClientAddress, type SavedAddress } from '../../../services/api';
 import AddressBlock from '../AddressBlock';
 import { PanelSkeleton } from '../../ui';
 
@@ -42,12 +42,36 @@ export default function ContactsTab({ registerSave, onDirtyChange }: ContactsTab
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
   const [cities, setCities]   = useState<string[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+
+  const loadSaved = () => api.getSavedAddresses().then(setSavedAddresses).catch(() => {});
 
   useEffect(() => {
     api.getCities()
       .then(rows => setCities((rows as any[]).map(r => r.name)))
       .catch(() => {});
+    loadSaved();
   }, []);
+
+  // Save the current values of an address block to the reusable book.
+  const handleSaveToBook = async (values: Partial<ClientAddress>) => {
+    const suggested = values.line1 || values.city || 'Saved address';
+    const label = window.prompt('Save this address to the address book as:', suggested);
+    if (label == null) return;
+    const trimmed = label.trim();
+    if (!trimmed) { alert('Please enter a label for the saved address.'); return; }
+    try {
+      await api.createSavedAddress({
+        label: trimmed,
+        line1: values.line1, line2: values.line2, line3: values.line3, office: values.office,
+        city: values.city, postal_code: values.postal_code, country: values.country, notes: values.notes,
+      });
+      await loadSaved();
+      alert('Address saved to the address book — you can now reuse it on other clients.');
+    } catch (err: any) {
+      alert('Could not save the address: ' + err.message);
+    }
+  };
 
   const load = async () => {
     if (!client?.id) return;
@@ -197,6 +221,8 @@ export default function ContactsTab({ registerSave, onDirtyChange }: ContactsTab
                 cities={cities}
                 primaryAddress={isPrimary ? null : drafts[primaryType]}
                 primaryLabel={`Same as ${titles[primaryType]}`}
+                savedAddresses={savedAddresses}
+                onSaveToBook={handleSaveToBook}
               />
             );
           })}

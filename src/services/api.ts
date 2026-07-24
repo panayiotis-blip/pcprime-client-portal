@@ -70,6 +70,23 @@ export interface ClientAddress {
   updated_at: string;
 }
 
+// A reusable address saved to the firm-wide address book (migration 143).
+export interface SavedAddress {
+  id: number;
+  label: string;
+  line1: string | null;
+  line2: string | null;
+  line3: string | null;
+  office: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // One file attached to a client onboarding submission (migration 123).
 export interface IntakeAttachment {
   name: string;
@@ -4611,6 +4628,42 @@ export const api = {
 
   async deleteClientAddress(id: number) {
     const { error } = await supabase.from('client_addresses').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  // --------- Saved (reusable) address book (migration 143) ---------
+  async getSavedAddresses() {
+    const { data, error } = await supabase.from('saved_addresses')
+      .select('*').order('label');
+    if (error) throw new Error(error.message);
+    return (data || []) as SavedAddress[];
+  },
+
+  async createSavedAddress(a: Omit<Partial<SavedAddress>, 'id'> & { label: string }) {
+    const payload = {
+      label:       a.label,
+      line1:       a.line1 || null,
+      line2:       a.line2 || null,
+      line3:       a.line3 || null,
+      office:      a.office || null,
+      city:        a.city || null,
+      postal_code: a.postal_code || null,
+      country:     a.country || 'Cyprus',
+      notes:       a.notes || null,
+    };
+    const { data, error } = await supabase.from('saved_addresses')
+      .insert(payload).select().single();
+    if (error) throw new Error(error.message);
+    return data as SavedAddress;
+  },
+
+  async updateSavedAddressLabel(id: number, label: string) {
+    const { error } = await supabase.from('saved_addresses').update({ label }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  async deleteSavedAddress(id: number) {
+    const { error } = await supabase.from('saved_addresses').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
 

@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { ClientAddress } from '../../services/api';
+import type { ClientAddress, SavedAddress } from '../../services/api';
 
 // Reusable address block — used by ContactsTab for the 2-3 typed addresses
 // per client (registered / trading / postal / home). Owns no state; pure
@@ -15,6 +15,10 @@ type Props = {
   // that this block can optionally link to. When null, the linked-checkbox is hidden.
   primaryAddress?: Partial<ClientAddress> | null;
   primaryLabel?: string;     // e.g. "Same as Registered"
+  // Reusable address book (migration 143). When provided, an editing block
+  // can pick a saved address (copies its text in) or save its current values.
+  savedAddresses?: SavedAddress[];
+  onSaveToBook?: (values: Partial<ClientAddress>) => void;
 };
 
 const fmtMultiline = (a: Partial<ClientAddress>) => {
@@ -28,6 +32,7 @@ const fmtMultiline = (a: Partial<ClientAddress>) => {
 
 export default function AddressBlock({
   editing, value, onChange, title, cities = [], primaryAddress, primaryLabel,
+  savedAddresses, onSaveToBook,
 }: Props) {
   const linked = !!value.is_linked_to_registered && !!primaryAddress;
   // Unique per instance — ContactsTab renders two or three of these at once.
@@ -52,16 +57,45 @@ export default function AddressBlock({
     <div className="form-section" style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
-        {primaryAddress && editing && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569' }}>
-            <input
-              type="checkbox"
-              checked={linked}
-              onChange={e => onChange({ is_linked_to_registered: e.target.checked })}
-            />
-            {primaryLabel || 'Same as primary'}
-          </label>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {editing && !linked && savedAddresses && savedAddresses.length > 0 && (
+            <select
+              className="form-input"
+              style={{ width: 'auto', fontSize: 13, padding: '4px 8px' }}
+              value=""
+              onChange={e => {
+                const a = savedAddresses.find(s => s.id === Number(e.target.value));
+                if (a) onChange({
+                  line1: a.line1, line2: a.line2, line3: a.line3, office: a.office,
+                  city: a.city, postal_code: a.postal_code, country: a.country, notes: a.notes,
+                });
+              }}
+              title="Copy a saved address into this block"
+            >
+              <option value="">Use saved address…</option>
+              {savedAddresses.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          )}
+          {editing && !linked && onSaveToBook && (
+            <button
+              type="button" className="btn btn-secondary btn-sm"
+              onClick={() => onSaveToBook(display)}
+              title="Save this address to the reusable address book"
+            >
+              Save to book
+            </button>
+          )}
+          {primaryAddress && editing && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569' }}>
+              <input
+                type="checkbox"
+                checked={linked}
+                onChange={e => onChange({ is_linked_to_registered: e.target.checked })}
+              />
+              {primaryLabel || 'Same as primary'}
+            </label>
+          )}
+        </div>
       </div>
 
       {editing ? (
