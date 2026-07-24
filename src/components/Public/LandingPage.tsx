@@ -87,7 +87,7 @@ export default function LandingPage() {
       </div>
 
       <section className={`landing-hero${heroImage ? ' landing-hero--split' : ''}`}>
-        <div className={`landing-hero-inner ${alignClass}`}>
+        <div className="landing-hero-inner">
           <h2>{val('landing_headline')}</h2>
           <div className="landing-hero-row">
             <div className="landing-hero-copy">
