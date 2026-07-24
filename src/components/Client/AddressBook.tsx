@@ -92,7 +92,7 @@ export default function AddressBook() {
   };
 
   const remove = async (r: SavedAddress) => {
-    if (!confirm(`Delete saved address “${r.label}” (${r.code})?\n\nClients already using it keep their own copy — only the reusable entry is removed.`)) return;
+    if (!confirm(`Delete saved address “${r.label}”${r.code ? ` (${r.code})` : ''}?\n\nClients already using it keep their own copy — only the reusable entry is removed.`)) return;
     try { await api.deleteSavedAddress(r.id); load(); }
     catch (e: any) { alert('Delete failed: ' + e.message); }
   };
