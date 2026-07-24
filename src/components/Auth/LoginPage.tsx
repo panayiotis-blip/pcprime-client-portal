@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
 
 export default function LoginPage() {
-  const { login, sendMagicLink } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,14 +23,14 @@ export default function LoginPage() {
     }
   };
 
-  const handleMagicLink = async () => {
-    if (!email) { setError('Enter your email first'); return; }
+  const handleForgotPassword = async () => {
+    if (!email) { setError('Enter your email above first, then click "Forgot password?".'); return; }
     setError(''); setInfo(''); setLoading(true);
     try {
-      await sendMagicLink(email);
-      setInfo('Magic link sent — check your inbox.');
+      await api.sendPasswordReset(email);
+      setInfo('If an account exists for that email, a password-reset link is on its way — check your inbox.');
     } catch (err: any) {
-      setError(err.message || 'Could not send magic link');
+      setError(err.message || 'Could not send the reset email.');
     } finally {
       setLoading(false);
     }
@@ -62,24 +63,24 @@ export default function LoginPage() {
             <input
               type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               className="form-input"
-              placeholder="— or leave blank to use a magic link"
+              placeholder="Your password"
             />
           </div>
           <button type="submit" className="btn btn-primary login-btn" disabled={loading || !email || !password}>
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
-          <button
-            type="button" onClick={handleMagicLink}
-            className="btn login-btn"
-            style={{ marginTop: 8, background: 'transparent', border: '1px solid #ccc' }}
-            disabled={loading || !email}
-          >
-            Email me a magic link instead
-          </button>
+          <div style={{ marginTop: 10, textAlign: 'center' }}>
+            <button
+              type="button" onClick={handleForgotPassword} disabled={loading}
+              style={{ background: 'none', border: 'none', color: '#9b861f', fontSize: 14, cursor: 'pointer', padding: 0 }}
+            >
+              Forgot password?
+            </button>
+          </div>
         </form>
-        <div style={{ marginTop: 16, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ marginTop: 16, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid #eef1f5', paddingTop: 14 }}>
           <Link to="/signup" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
-            New client? Apply for an account
+            New client? Request an account →
           </Link>
           <Link to="/" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
             ← Back to Home

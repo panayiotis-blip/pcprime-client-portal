@@ -90,6 +90,7 @@ const MergeClients = lazy(() => import('./components/Client/MergeClients'));
 const TaxCalculator = lazy(() => import('./components/Public/TaxCalculator'));
 const PrivacyNotice = lazy(() => import('./components/Public/PrivacyNotice'));
 const SignupApplication = lazy(() => import('./components/Public/SignupApplication'));
+const ResetPasswordPage = lazy(() => import('./components/Auth/ResetPasswordPage'));
 const EngagementAcceptPage = lazy(() => import('./components/Public/EngagementAcceptPage'));
 const ClientIntakePage = lazy(() => import('./components/Public/ClientIntakePage'));
 const Applications = lazy(() => import('./components/Admin/Applications'));
@@ -225,6 +226,7 @@ function AppRoutes() {
       <Route path="/accept-engagement/:token" element={<EngagementAcceptPage />} />
       <Route path="/client-intake/:token" element={<ClientIntakePage />} />
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Everything else: authed → real app, anonymous → landing */}
       <Route path="/*" element={user ? <AuthedApp /> : <PublicApp />} />

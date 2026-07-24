@@ -618,6 +618,21 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // Send a password-reset email. The link returns the user to /reset-password
+  // with a recovery session, where updateMyPassword sets the new one. The
+  // redirect URL must be on Supabase's allow-list (Auth → URL Configuration).
+  async sendPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password',
+    });
+    if (error) throw new Error(error.message);
+  },
+
+  async updateMyPassword(newPassword: string) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
+  },
+
   async logout() {
     // Reference data is firm-wide, but RLS still scopes what a session can see —
     // don't let the next user on this browser inherit the previous one's rows.
