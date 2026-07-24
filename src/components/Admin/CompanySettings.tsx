@@ -518,13 +518,16 @@ export default function CompanySettings() {
 
         <div className="form-group" style={{ marginTop: 16 }}>
           <label>Hero headline</label>
-          <input
-            type="text" className="form-input"
+          <textarea
+            className="form-input" rows={2}
             value={form.landing_headline || ''}
             onChange={e => handleChange('landing_headline', e.target.value)}
             disabled={!canEdit}
             placeholder="Professional Accounting, Tax & Business Consultancy Services"
           />
+          <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+            Press Enter to force a line break where you want the second line to start.
+          </p>
         </div>
 
         <div className="form-group">

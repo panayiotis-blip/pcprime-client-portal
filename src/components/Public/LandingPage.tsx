@@ -88,7 +88,7 @@ export default function LandingPage() {
 
       <section className={`landing-hero${heroImage ? ' landing-hero--split' : ''}`}>
         <div className="landing-hero-inner">
-          <h2>{val('landing_headline')}</h2>
+          <h2>{val('landing_headline').split('\n').flatMap((line, i) => (i === 0 ? [line] : [<br key={i} />, line]))}</h2>
           <div className="landing-hero-row">
             <div className="landing-hero-copy">
               <p className="landing-tagline">{val('landing_subtext')}</p>
