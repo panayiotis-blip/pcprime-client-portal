@@ -527,10 +527,35 @@ h4 { font-size: 14px; font-weight: 600; }
 }
 
 /* ===== Quick Actions FAB (UI polish part 2) ===== */
+/* Quick-actions customiser modal */
+.fab-customize-backdrop {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 95;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.fab-customize {
+  background: #fff; border-radius: 12px; padding: 20px; width: min(380px, 100%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+.fab-customize h3 { margin: 0 0 4px; font-size: 17px; color: var(--pc-navy, #1a365d); }
+.fab-customize-hint { font-size: 12px; color: #64748b; margin: 0 0 12px; }
+.fab-customize ul { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fab-customize li {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc;
+}
+.fab-customize li label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; margin: 0; }
+.fab-customize-move { display: flex; gap: 4px; }
+.fab-customize-move button {
+  width: 26px; height: 26px; border: 1px solid #cbd5e1; background: #fff; border-radius: 6px;
+  cursor: pointer; line-height: 1;
+}
+.fab-customize-move button:disabled { opacity: 0.4; cursor: default; }
+.fab-customize-actions { display: flex; justify-content: space-between; gap: 8px; }
+
 .fab-container {
   position: fixed;
   right: 24px;
-  bottom: 24px;
+  bottom: 72px;
   z-index: 90;
   display: flex;
   flex-direction: column;
