@@ -43,7 +43,9 @@ export default function LandingPage() {
   const val = (k: keyof typeof DEFAULTS) => (c[k] && String(c[k]).trim()) || DEFAULTS[k];
   const companyName = (c.name && String(c.name).trim()) || COMPANY_NAME;
 
+  const landingLogo = (c.landing_logo_url && String(c.landing_logo_url).trim()) || '/logo.png';
   const heroImage = (c.landing_hero_image_url && String(c.landing_hero_image_url).trim()) || '';
+  const aboutImage = (c.landing_about_image_url && String(c.landing_about_image_url).trim()) || '';
   const aboutParas = val('landing_about').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
   const services = normaliseServices((c as any).landing_services);
   const facebook = (c.facebook_url && String(c.facebook_url).trim()) || DEFAULT_SOCIAL.facebook_url;
@@ -56,7 +58,7 @@ export default function LandingPage() {
         <header className="landing-nav">
           <div className="landing-brand">
             <img
-              src="/logo.png"
+              src={landingLogo}
               alt={companyName}
               style={{ height: 128, width: 'auto', display: 'block' }}
             />
@@ -72,38 +74,52 @@ export default function LandingPage() {
 
       <section className={`landing-hero${heroImage ? ' landing-hero--split' : ''}`}>
         <div className="landing-hero-inner">
-          <div className="landing-hero-copy">
-            <h2>{val('landing_headline')}</h2>
-            <p className="landing-tagline">{val('landing_subtext')}</p>
+          <h2>{val('landing_headline')}</h2>
+          <div className="landing-hero-row">
+            <div className="landing-hero-copy">
+              <p className="landing-tagline">{val('landing_subtext')}</p>
 
-            <div className="landing-ctas">
-              <Link to="/login" className="landing-cta landing-cta-primary">
-                <div className="cta-title">Client Portal Login</div>
-                <div className="cta-sub">Access your documents, invoices and reports</div>
-                <div className="cta-arrow">→</div>
-              </Link>
+              <div className="landing-ctas">
+                <Link to="/login" className="landing-cta landing-cta-primary">
+                  <div className="cta-title">Client Portal Login</div>
+                  <div className="cta-sub">Access your documents, invoices and reports</div>
+                  <div className="cta-arrow">→</div>
+                </Link>
 
-              <Link to="/tax" className="landing-cta landing-cta-secondary">
-                <div className="cta-title">Tax Calculator</div>
-                <div className="cta-sub">Estimate your Cyprus income tax in minutes</div>
-                <div className="cta-arrow">→</div>
-              </Link>
+                <Link to="/tax" className="landing-cta landing-cta-secondary">
+                  <div className="cta-title">Tax Calculator</div>
+                  <div className="cta-sub">Estimate your Cyprus income tax in minutes</div>
+                  <div className="cta-arrow">→</div>
+                </Link>
+              </div>
             </div>
+
+            {heroImage && (
+              <div className="landing-hero-media">
+                <img src={heroImage} alt="" />
+              </div>
+            )}
           </div>
-
-          {heroImage && (
-            <div className="landing-hero-media">
-              <img src={heroImage} alt="" />
-            </div>
-          )}
         </div>
       </section>
 
-      <section id="about" className="landing-about">
-        <div className="landing-section-inner about-inner">
-          <h3>About our company</h3>
-          {aboutParas.map((p, i) => <p key={i}>{p}</p>)}
-        </div>
+      <section id="about" className={`landing-about${aboutImage ? ' landing-about--split' : ''}`}>
+        {aboutImage ? (
+          <div className="landing-section-inner about-split">
+            <div className="about-copy">
+              <h3>About our company</h3>
+              {aboutParas.map((p, i) => <p key={i}>{p}</p>)}
+            </div>
+            <div className="about-media">
+              <img src={aboutImage} alt="" />
+            </div>
+          </div>
+        ) : (
+          <div className="landing-section-inner about-inner">
+            <h3>About our company</h3>
+            {aboutParas.map((p, i) => <p key={i}>{p}</p>)}
+          </div>
+        )}
       </section>
 
       <section id="services" className="landing-services">

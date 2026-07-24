@@ -40,6 +40,8 @@ export default function CompanySettings() {
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const heroInputRef = useRef<HTMLInputElement>(null);
+  const landingLogoInputRef = useRef<HTMLInputElement>(null);
+  const aboutInputRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
 
   const load = async () => {
@@ -119,10 +121,12 @@ export default function CompanySettings() {
         default_sow_intro_text:    form.default_sow_intro_text || null,
         default_terms_text:        form.default_terms_text || null,
         // Public landing page content (migration 139)
+        landing_logo_url:          form.landing_logo_url || null,
         landing_headline:          form.landing_headline || null,
         landing_subtext:           form.landing_subtext || null,
         landing_about:             form.landing_about || null,
         landing_hero_image_url:    form.landing_hero_image_url || null,
+        landing_about_image_url:   form.landing_about_image_url || null,
         // Service cards + social links (migration 140). Only keep rows that
         // have some content, so an all-blank row doesn't render an empty card.
         landing_services: (Array.isArray(form.landing_services) ? form.landing_services : [])
@@ -186,6 +190,38 @@ export default function CompanySettings() {
     } finally {
       setUploading(false);
       if (heroInputRef.current) heroInputRef.current.value = '';
+    }
+  };
+
+  const handleLandingLogoUpload = async (file: File) => {
+    if (!canEdit) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Logo must be under 5 MB'); return; }
+    setUploading(true);
+    try {
+      const url = await api.uploadLandingLogo(file);
+      await api.updateCompanySettings({ landing_logo_url: url });
+      setForm((prev: any) => ({ ...prev, landing_logo_url: url }));
+    } catch (err: any) {
+      alert('Logo upload failed: ' + err.message);
+    } finally {
+      setUploading(false);
+      if (landingLogoInputRef.current) landingLogoInputRef.current.value = '';
+    }
+  };
+
+  const handleAboutUpload = async (file: File) => {
+    if (!canEdit) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB'); return; }
+    setUploading(true);
+    try {
+      const url = await api.uploadLandingAboutImage(file);
+      await api.updateCompanySettings({ landing_about_image_url: url });
+      setForm((prev: any) => ({ ...prev, landing_about_image_url: url }));
+    } catch (err: any) {
+      alert('Image upload failed: ' + err.message);
+    } finally {
+      setUploading(false);
+      if (aboutInputRef.current) aboutInputRef.current.value = '';
     }
   };
 
@@ -355,7 +391,54 @@ export default function CompanySettings() {
           Leave a field blank to use the built-in default text.
         </p>
 
-        <div className="form-group">
+        {/* Website logo — separate from the app/print logo above */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '0 0 6px' }}>Website logo</label>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 8px' }}>
+          Shown in the landing-page header. Independent of the app / letterhead logo — use whichever logo suits your website.
+        </p>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{
+            width: 240, height: 100, border: '1px dashed var(--border)', borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden',
+          }}>
+            {form.landing_logo_url ? (
+              <img src={form.landing_logo_url} alt="Website logo" style={{ maxWidth: '100%', maxHeight: '100%' }} />
+            ) : (
+              <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 8 }}>
+                Using the default app logo
+              </span>
+            )}
+          </div>
+          {canEdit && (
+            <div>
+              <input
+                ref={landingLogoInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleLandingLogoUpload(f); }}
+                style={{ display: 'block', marginBottom: 8 }}
+                disabled={uploading}
+              />
+              <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                PNG / JPG / SVG / WebP, under 5 MB. Leave unset to use the app's default logo.
+              </p>
+              {form.landing_logo_url && (
+                <button
+                  type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    if (!confirm('Remove the website logo and fall back to the default?')) return;
+                    await api.updateCompanySettings({ landing_logo_url: null });
+                    setForm((prev: any) => ({ ...prev, landing_logo_url: null }));
+                  }}
+                >
+                  Remove website logo
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="form-group" style={{ marginTop: 16 }}>
           <label>Hero headline</label>
           <input
             type="text" className="form-input"
@@ -433,6 +516,51 @@ export default function CompanySettings() {
                     if (!confirm('Remove the hero photo?')) return;
                     await api.updateCompanySettings({ landing_hero_image_url: null });
                     setForm((prev: any) => ({ ...prev, landing_hero_image_url: null }));
+                  }}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* About-section photo */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '20px 0 6px' }}>About-section photo</label>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 8px' }}>
+          A second photo, shown to the right of the “About our company” text as a framed block. Leave unset for a plain centred About section.
+        </p>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{
+            width: 240, height: 160, border: '1px dashed var(--border)', borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden',
+          }}>
+            {form.landing_about_image_url ? (
+              <img src={form.landing_about_image_url} alt="About" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 8 }}>No photo</span>
+            )}
+          </div>
+          {canEdit && (
+            <div>
+              <input
+                ref={aboutInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleAboutUpload(f); }}
+                style={{ display: 'block', marginBottom: 8 }}
+                disabled={uploading}
+              />
+              <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                JPG / PNG / WebP, under 5 MB. A landscape photo (roughly 4:3) works best.
+              </p>
+              {form.landing_about_image_url && (
+                <button
+                  type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    if (!confirm('Remove the About-section photo?')) return;
+                    await api.updateCompanySettings({ landing_about_image_url: null });
+                    setForm((prev: any) => ({ ...prev, landing_about_image_url: null }));
                   }}
                 >
                   Remove photo

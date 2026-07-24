@@ -3628,6 +3628,34 @@ export const api = {
     return pub.publicUrl;
   },
 
+  // Upload a landing-page logo (distinct from the print/app logo) to the
+  // public 'company-assets' bucket. Persist via updateCompanySettings({ landing_logo_url }).
+  async uploadLandingLogo(file: File): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'svg', 'webp'].includes(ext) ? ext : 'png';
+    const key = `landing-logo-${Date.now()}.${safeExt}`;
+    const { error } = await supabase.storage
+      .from('company-assets')
+      .upload(key, file, { upsert: true, contentType: file.type || 'image/png' });
+    if (error) throw new Error(error.message);
+    const { data: pub } = supabase.storage.from('company-assets').getPublicUrl(key);
+    return pub.publicUrl;
+  },
+
+  // Upload the landing About-section photo to the public 'company-assets'
+  // bucket. Persist via updateCompanySettings({ landing_about_image_url }).
+  async uploadLandingAboutImage(file: File): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? ext : 'jpg';
+    const key = `about-${Date.now()}.${safeExt}`;
+    const { error } = await supabase.storage
+      .from('company-assets')
+      .upload(key, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+    if (error) throw new Error(error.message);
+    const { data: pub } = supabase.storage.from('company-assets').getPublicUrl(key);
+    return pub.publicUrl;
+  },
+
   // Public landing-page content (safe fields only), readable without auth
   // via the get_landing_content() SECURITY DEFINER RPC (migration 139).
   async getLandingContent() {
