@@ -2415,11 +2415,30 @@ h4 { font-size: 14px; font-weight: 600; }
   padding: 0 32px;
 }
 
-/* Top nav */
+/* Heading alignment (owner-configurable): applied to a section's inner
+   wrapper; controls both the text and the position of the ::after underline. */
+.landing .ta-left   { text-align: left; }
+.landing .ta-center { text-align: center; }
+.landing .ta-right  { text-align: right; }
+.landing .ta-left   h2::after, .landing .ta-left   h3::after { margin-left: 0;    margin-right: auto; }
+.landing .ta-center h2::after, .landing .ta-center h3::after { margin-left: auto; margin-right: auto; }
+.landing .ta-right  h2::after, .landing .ta-right  h3::after { margin-left: auto; margin-right: 0; }
+/* When right/left aligned, let the hero tagline follow the heading too. */
+.landing .ta-left   .landing-tagline { margin-left: 0;    margin-right: auto; }
+.landing .ta-right  .landing-tagline { margin-left: auto; margin-right: 0; }
+
+/* Top nav — sticky so in-page anchors (About/Services/Contact) don't scroll
+   the header out of view. Anchor targets get scroll-margin-top so their
+   heading isn't hidden under the sticky bar. */
 .landing-topbar {
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
+.landing section[id],
+.landing footer[id] { scroll-margin-top: 176px; }
 .landing-nav {
   display: flex;
   align-items: center;
@@ -2514,7 +2533,7 @@ h4 { font-size: 14px; font-weight: 600; }
 .landing-hero h2::after {
   content: "";
   display: block;
-  width: 64px;
+  width: 104px;
   height: 3px;
   background: #9b861f;
   margin: 18px auto 0;
@@ -2602,7 +2621,7 @@ h4 { font-size: 14px; font-weight: 600; }
 .landing-about h3::after {
   content: "";
   display: block;
-  width: 48px;
+  width: 84px;
   height: 2px;
   background: #9b861f;
   margin: 14px auto 24px;
@@ -2662,7 +2681,7 @@ h4 { font-size: 14px; font-weight: 600; }
 .landing-services h3::after {
   content: "";
   display: block;
-  width: 48px;
+  width: 84px;
   height: 2px;
   background: #9b861f;
   margin: 14px auto 36px;

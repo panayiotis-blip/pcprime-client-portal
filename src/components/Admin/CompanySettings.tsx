@@ -10,7 +10,7 @@ import PrintLetterhead from '../shared/PrintLetterhead';
 import { Link } from 'react-router-dom';
 import CollapsibleSection from './CollapsibleSection';
 import PlatformSitesSection from './PlatformSitesSection';
-import { DEFAULT_SERVICES, type LandingService } from '../Public/landingDefaults';
+import { DEFAULT_SERVICES, DEFAULT_COPY, type LandingService } from '../Public/landingDefaults';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
 // migration 045 / Timesheet.tsx.
@@ -26,6 +26,64 @@ const BRAND_COLOURS = [
   { field: 'letterhead_background_colour', label: 'Letterhead background',  def: '#ffffff' },
   { field: 'letterhead_text_colour',       label: 'Letterhead text',        def: '#0d1b2e' },
 ] as const;
+
+// Landing-page copy fields (stored in the landing_copy jsonb blob), grouped
+// for the editor. `area` = 'text' renders a textarea, otherwise a single line.
+const LANDING_COPY_GROUPS: { title: string; fields: { key: string; label: string; area?: boolean }[] }[] = [
+  {
+    title: 'Top navigation',
+    fields: [
+      { key: 'nav_about', label: 'About link' },
+      { key: 'nav_services', label: 'Services link' },
+      { key: 'nav_contact', label: 'Contact link' },
+      { key: 'nav_portal', label: 'Portal button' },
+    ],
+  },
+  {
+    title: 'External links (Blog / News) — full URL to your website; leave blank to hide',
+    fields: [
+      { key: 'home_url', label: 'Website home URL (logo click)' },
+      { key: 'nav_blog', label: 'Blog label' },
+      { key: 'blog_url', label: 'Blog URL' },
+      { key: 'nav_news', label: 'News label' },
+      { key: 'news_url', label: 'News URL' },
+    ],
+  },
+  {
+    title: 'Hero buttons',
+    fields: [
+      { key: 'cta_login_title', label: 'Portal card — title' },
+      { key: 'cta_login_sub', label: 'Portal card — subtitle' },
+      { key: 'cta_tax_title', label: 'Tax card — title' },
+      { key: 'cta_tax_sub', label: 'Tax card — subtitle' },
+    ],
+  },
+  {
+    title: 'Section headings',
+    fields: [
+      { key: 'about_heading', label: 'About heading' },
+      { key: 'services_heading', label: 'Services heading' },
+    ],
+  },
+  {
+    title: 'Portal-promo strip',
+    fields: [
+      { key: 'promo_heading', label: 'Heading' },
+      { key: 'promo_button', label: 'Button label' },
+      { key: 'promo_text', label: 'Text', area: true },
+    ],
+  },
+  {
+    title: 'Footer',
+    fields: [
+      { key: 'footer_contact_heading', label: 'Contact column heading' },
+      { key: 'footer_office_heading', label: 'Office column heading' },
+      { key: 'footer_connect_heading', label: 'Connect column heading' },
+      { key: 'hours_line1', label: 'Office hours line 1' },
+      { key: 'hours_line2', label: 'Office hours line 2' },
+    ],
+  },
+];
 
 export default function CompanySettings() {
   const { user } = useAuth();
@@ -135,6 +193,7 @@ export default function CompanySettings() {
         facebook_url:              form.facebook_url || null,
         instagram_url:             form.instagram_url || null,
         linkedin_url:              form.linkedin_url || null,
+        landing_copy:              (form.landing_copy && typeof form.landing_copy === 'object') ? form.landing_copy : {},
       });
       await load();
       setEditing(false);
@@ -240,6 +299,16 @@ export default function CompanySettings() {
   const removeService = (i: number) => {
     const next = baseServices(); next.splice(i, 1); setServices(next);
   };
+
+  // Landing copy blob (nav labels, headings, promo, footer, alignment — migration 142).
+  const copyBlob = (): Record<string, string> =>
+    (form?.landing_copy && typeof form.landing_copy === 'object') ? form.landing_copy : {};
+  const copyVal = (k: string): string => {
+    const v = copyBlob()[k];
+    return v == null ? '' : String(v);
+  };
+  const setCopy = (k: string, value: string) =>
+    setForm((prev: any) => ({ ...prev, landing_copy: { ...copyBlob(), [k]: value } }));
 
   if (loading) return <div className="loading-screen">Loading…</div>;
   if (!form) return <div className="empty-state"><p>Could not load company settings.</p></div>;
@@ -628,6 +697,55 @@ export default function CompanySettings() {
             <input type="url" className="form-input" value={form.linkedin_url || ''} onChange={e => handleChange('linkedin_url', e.target.value)} disabled={!canEdit} placeholder="https://www.linkedin.com/company/…" />
           </div>
         </div>
+
+        {/* Heading alignment */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '20px 0 6px' }}>Heading alignment</label>
+        <div className="form-group" style={{ maxWidth: 280 }}>
+          <select
+            className="form-input"
+            value={copyVal('heading_align') || DEFAULT_COPY.heading_align}
+            onChange={e => setCopy('heading_align', e.target.value)}
+            disabled={!canEdit}
+          >
+            <option value="left">Left</option>
+            <option value="center">Centre</option>
+            <option value="right">Right</option>
+          </select>
+          <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+            Aligns the section headings and the gold underline beneath them.
+          </p>
+        </div>
+
+        {/* All remaining editable text */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '20px 0 4px' }}>Page text &amp; labels</label>
+        <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 12px' }}>
+          Every other piece of text on the landing page. Leave a field blank to use the built-in wording.
+        </p>
+        {LANDING_COPY_GROUPS.map(group => (
+          <div key={group.title} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#475569', margin: '0 0 6px' }}>{group.title}</div>
+            <div className="form-grid">
+              {group.fields.map(f => (
+                <div className="form-group" key={f.key} style={f.area ? { gridColumn: '1 / -1' } : undefined}>
+                  <label>{f.label}</label>
+                  {f.area ? (
+                    <textarea
+                      className="form-input" rows={2}
+                      value={copyVal(f.key)} onChange={e => setCopy(f.key, e.target.value)}
+                      disabled={!canEdit} placeholder={DEFAULT_COPY[f.key] || ''}
+                    />
+                  ) : (
+                    <input
+                      type="text" className="form-input"
+                      value={copyVal(f.key)} onChange={e => setCopy(f.key, e.target.value)}
+                      disabled={!canEdit} placeholder={DEFAULT_COPY[f.key] || ''}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
 
         <p style={{ fontSize: 11, color: '#64748b', margin: '14px 0 0' }}>
           The landing page also uses your logo, and the contact details (email, phone, address)

@@ -19,6 +19,53 @@ export const DEFAULT_SOCIAL = {
   linkedin_url: '',
 };
 
+// The long tail of landing-page copy — everything that isn't a big primary
+// field or an image — lives in one jsonb blob (landing_copy) so new text bits
+// don't each need their own column/migration. Keys map to defaults here.
+export const DEFAULT_COPY: Record<string, string> = {
+  // 'left' | 'center' | 'right' — alignment of section headings + underlines
+  heading_align: 'center',
+  // Top navigation
+  nav_about: 'About',
+  nav_services: 'Services',
+  nav_contact: 'Contact',
+  nav_portal: 'Client Portal',
+  // Main website home — when set, clicking the landing logo goes here.
+  home_url: '',
+  // External links (shown in the nav only when a URL is set) — e.g. your
+  // main marketing website's Blog / News pages.
+  nav_blog: 'Blog',
+  blog_url: '',
+  nav_news: 'News',
+  news_url: '',
+  // Hero call-to-action cards
+  cta_login_title: 'Client Portal Login',
+  cta_login_sub: 'Access your documents, invoices and reports',
+  cta_tax_title: 'Tax Calculator',
+  cta_tax_sub: 'Estimate your Cyprus income tax in minutes',
+  // Section headings
+  about_heading: 'About our company',
+  services_heading: 'Our Services',
+  // Portal-promo strip
+  promo_heading: 'Already a client?',
+  promo_text: 'Sign in to your secure portal to upload documents, review invoices and follow up on filings.',
+  promo_button: 'Sign in →',
+  // Footer
+  footer_contact_heading: 'Contact',
+  footer_office_heading: 'Office',
+  footer_connect_heading: 'Connect',
+  hours_line1: 'Mon–Fri · 08:00–18:00',
+  hours_line2: 'Sat · By appointment',
+};
+
+// Read a copy key from a stored blob, falling back to the default.
+export function copyText(blob: unknown, key: keyof typeof DEFAULT_COPY | string): string {
+  const b = (blob && typeof blob === 'object') ? (blob as Record<string, unknown>) : {};
+  const v = b[key];
+  const s = (v == null ? '' : String(v)).trim();
+  return s || DEFAULT_COPY[key] || '';
+}
+
 // Coerce whatever comes back from the RPC into a clean LandingService[].
 export function normaliseServices(raw: unknown): LandingService[] {
   if (!Array.isArray(raw)) return DEFAULT_SERVICES;

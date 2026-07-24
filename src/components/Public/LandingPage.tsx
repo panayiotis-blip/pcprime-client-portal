@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { normaliseServices, DEFAULT_SOCIAL } from './landingDefaults';
+import { normaliseServices, DEFAULT_SOCIAL, copyText } from './landingDefaults';
 
 // Built-in defaults. The owner can override the editable fields under
 // Company Settings → Landing page; anything left blank falls back to these.
@@ -52,28 +52,42 @@ export default function LandingPage() {
   const instagram = (c.instagram_url && String(c.instagram_url).trim()) || DEFAULT_SOCIAL.instagram_url;
   const linkedin = (c.linkedin_url && String(c.linkedin_url).trim()) || '';
 
+  // Editable copy blob (nav labels, headings, promo, footer, etc.) + alignment.
+  const t = (k: string) => copyText((c as any).landing_copy, k);
+  const rawAlign = t('heading_align');
+  const align = ['left', 'center', 'right'].includes(rawAlign) ? rawAlign : 'center';
+  const alignClass = `ta-${align}`;
+
   return (
     <div className="landing">
       <div className="landing-topbar">
         <header className="landing-nav">
           <div className="landing-brand">
-            <img
-              src={landingLogo}
-              alt={companyName}
-              style={{ height: 128, width: 'auto', display: 'block' }}
-            />
+            {t('home_url') ? (
+              <a href={t('home_url')} aria-label={companyName}>
+                <img src={landingLogo} alt={companyName} style={{ height: 128, width: 'auto', display: 'block' }} />
+              </a>
+            ) : (
+              <img src={landingLogo} alt={companyName} style={{ height: 128, width: 'auto', display: 'block' }} />
+            )}
           </div>
           <nav className="landing-nav-links">
-            <a href="#about">About</a>
-            <a href="#services">Services</a>
-            <a href="#contact">Contact</a>
-            <Link to="/login" className="landing-nav-cta">Client Portal</Link>
+            <a href="#about">{t('nav_about')}</a>
+            <a href="#services">{t('nav_services')}</a>
+            <a href="#contact">{t('nav_contact')}</a>
+            {t('blog_url') && (
+              <a href={t('blog_url')} target="_blank" rel="noopener noreferrer">{t('nav_blog')}</a>
+            )}
+            {t('news_url') && (
+              <a href={t('news_url')} target="_blank" rel="noopener noreferrer">{t('nav_news')}</a>
+            )}
+            <Link to="/login" className="landing-nav-cta">{t('nav_portal')}</Link>
           </nav>
         </header>
       </div>
 
       <section className={`landing-hero${heroImage ? ' landing-hero--split' : ''}`}>
-        <div className="landing-hero-inner">
+        <div className={`landing-hero-inner ${alignClass}`}>
           <h2>{val('landing_headline')}</h2>
           <div className="landing-hero-row">
             <div className="landing-hero-copy">
@@ -81,14 +95,14 @@ export default function LandingPage() {
 
               <div className="landing-ctas">
                 <Link to="/login" className="landing-cta landing-cta-primary">
-                  <div className="cta-title">Client Portal Login</div>
-                  <div className="cta-sub">Access your documents, invoices and reports</div>
+                  <div className="cta-title">{t('cta_login_title')}</div>
+                  <div className="cta-sub">{t('cta_login_sub')}</div>
                   <div className="cta-arrow">→</div>
                 </Link>
 
                 <Link to="/tax" className="landing-cta landing-cta-secondary">
-                  <div className="cta-title">Tax Calculator</div>
-                  <div className="cta-sub">Estimate your Cyprus income tax in minutes</div>
+                  <div className="cta-title">{t('cta_tax_title')}</div>
+                  <div className="cta-sub">{t('cta_tax_sub')}</div>
                   <div className="cta-arrow">→</div>
                 </Link>
               </div>
@@ -107,7 +121,7 @@ export default function LandingPage() {
         {aboutImage ? (
           <div className="landing-section-inner about-split">
             <div className="about-copy">
-              <h3>About our company</h3>
+              <h3>{t('about_heading')}</h3>
               {aboutParas.map((p, i) => <p key={i}>{p}</p>)}
             </div>
             <div className="about-media">
@@ -115,16 +129,16 @@ export default function LandingPage() {
             </div>
           </div>
         ) : (
-          <div className="landing-section-inner about-inner">
-            <h3>About our company</h3>
+          <div className={`landing-section-inner about-inner ${alignClass}`}>
+            <h3>{t('about_heading')}</h3>
             {aboutParas.map((p, i) => <p key={i}>{p}</p>)}
           </div>
         )}
       </section>
 
       <section id="services" className="landing-services">
-        <div className="landing-section-inner">
-          <h3>Our Services</h3>
+        <div className={`landing-section-inner ${alignClass}`}>
+          <h3>{t('services_heading')}</h3>
           <div className="services-grid">
             {services.map((s, i) => (
               <div className="service-card" key={i}>
@@ -139,30 +153,30 @@ export default function LandingPage() {
       <section className="landing-portal-promo">
         <div className="landing-section-inner promo-inner">
           <div>
-            <h3>Already a client?</h3>
-            <p>Sign in to your secure portal to upload documents, review invoices and follow up on filings.</p>
+            <h3>{t('promo_heading')}</h3>
+            <p>{t('promo_text')}</p>
           </div>
-          <Link to="/login" className="btn-large">Sign in →</Link>
+          <Link to="/login" className="btn-large">{t('promo_button')}</Link>
         </div>
       </section>
 
       <footer id="contact" className="landing-footer">
         <div className="landing-section-inner footer-grid">
           <div>
-            <h5>Contact</h5>
+            <h5>{t('footer_contact_heading')}</h5>
             <p><a href={`mailto:${val('email')}`}>{val('email')}</a></p>
             <p><a href={`tel:${String(val('phone')).replace(/\s+/g, '')}`}>{val('phone')}</a></p>
           </div>
           <div>
-            <h5>Office</h5>
+            <h5>{t('footer_office_heading')}</h5>
             <p>{val('address_line1')}</p>
             {c.address_line2 && <p>{c.address_line2}</p>}
             <p>{val('city')}</p>
-            <p>Mon–Fri · 08:00–18:00</p>
-            <p>Sat · By appointment</p>
+            {t('hours_line1') && <p>{t('hours_line1')}</p>}
+            {t('hours_line2') && <p>{t('hours_line2')}</p>}
           </div>
           <div>
-            <h5>Connect</h5>
+            <h5>{t('footer_connect_heading')}</h5>
             {facebook && <p><a href={facebook} target="_blank" rel="noopener noreferrer">Facebook</a></p>}
             {instagram && <p><a href={instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
             {linkedin && <p><a href={linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
