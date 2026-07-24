@@ -66,7 +66,16 @@ const LANDING_COPY_GROUPS: { title: string; fields: { key: string; label: string
     ],
   },
   {
-    title: 'Portal-promo strip',
+    title: '“Become a client” strip (new visitors) — URL blank = in-app request-an-account (/signup)',
+    fields: [
+      { key: 'become_heading', label: 'Heading' },
+      { key: 'become_button', label: 'Button label' },
+      { key: 'become_url', label: 'Button URL (optional)' },
+      { key: 'become_text', label: 'Text', area: true },
+    ],
+  },
+  {
+    title: 'Portal-promo strip (existing clients)',
     fields: [
       { key: 'promo_heading', label: 'Heading' },
       { key: 'promo_button', label: 'Button label' },

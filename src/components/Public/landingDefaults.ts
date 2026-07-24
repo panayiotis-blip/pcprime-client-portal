@@ -46,6 +46,11 @@ export const DEFAULT_COPY: Record<string, string> = {
   // Section headings
   about_heading: 'About our company',
   services_heading: 'Our Services',
+  // "Become a client" strip (for new visitors)
+  become_heading: 'New here? Become a client',
+  become_text: "Tell us about your business and we'll set you up with secure portal access to work alongside our team.",
+  become_button: 'Become a client →',
+  become_url: '', // blank → the in-app request-an-account flow (/signup)
   // Portal-promo strip
   promo_heading: 'Already a client?',
   promo_text: 'Sign in to your secure portal to upload documents, review invoices and follow up on filings.',

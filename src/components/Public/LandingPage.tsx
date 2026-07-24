@@ -150,6 +150,20 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="landing-join">
+        <div className="landing-section-inner join-inner">
+          <div>
+            <h3>{t('become_heading')}</h3>
+            <p>{t('become_text')}</p>
+          </div>
+          {/^https?:\/\//i.test(t('become_url')) ? (
+            <a href={t('become_url')} className="btn-large" target="_blank" rel="noopener noreferrer">{t('become_button')}</a>
+          ) : (
+            <Link to={t('become_url') || '/signup'} className="btn-large">{t('become_button')}</Link>
+          )}
+        </div>
+      </section>
+
       <section className="landing-portal-promo">
         <div className="landing-section-inner promo-inner">
           <div>

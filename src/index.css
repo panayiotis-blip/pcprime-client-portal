@@ -2729,6 +2729,21 @@ h4 { font-size: 14px; font-weight: 600; }
   margin: 0;
 }
 
+/* "Become a client" strip — light gold, pairs with the navy sign-in strip */
+.landing-join {
+  background: #fdf9eb;
+  border-top: 1px solid #f0e6c8;
+  padding: 56px 0;
+}
+.join-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+.landing-join h3 { font-size: 26px; margin: 0 0 6px; color: #1a365d; }
+.landing-join p { margin: 0; color: #6b5e2e; max-width: 660px; line-height: 1.55; }
+
 /* Portal promo strip */
 .landing-portal-promo {
   background: #1a365d;
@@ -2800,7 +2815,8 @@ h4 { font-size: 14px; font-weight: 600; }
   .landing-hero-media { order: -1; max-width: 520px; margin: 0 auto; }
   .landing-ctas { grid-template-columns: 1fr; }
   .services-grid { grid-template-columns: 1fr 1fr; }
-  .promo-inner { flex-direction: column; align-items: flex-start; text-align: left; }
+  .promo-inner,
+  .join-inner { flex-direction: column; align-items: flex-start; text-align: left; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
   .landing-nav-links a:not(.landing-nav-cta) { display: none; }
 }
