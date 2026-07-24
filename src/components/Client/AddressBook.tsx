@@ -11,9 +11,9 @@ type Draft = Partial<SavedAddress>;
 
 const BLANK: Draft = { label: '', country: 'Cyprus' };
 
-const fmtAddress = (a: SavedAddress) =>
-  [a.office, a.line1, a.line2, a.line3, [a.postal_code, a.city].filter(Boolean).join(' ')]
-    .filter(Boolean).join(', ');
+// Street lines only — city / postal code / country get their own columns.
+const fmtStreet = (a: SavedAddress) =>
+  [a.office, a.line1, a.line2, a.line3].filter(Boolean).join(', ');
 
 export default function AddressBook() {
   const [rows, setRows] = useState<SavedAddress[]>([]);
@@ -103,6 +103,7 @@ export default function AddressBook() {
                 <th>Label</th>
                 <th>Address</th>
                 <th>City</th>
+                <th>Postal code</th>
                 <th>Country</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -112,8 +113,9 @@ export default function AddressBook() {
                 <tr key={r.id}>
                   <td style={{ fontFamily: 'monospace', fontWeight: 600, whiteSpace: 'nowrap' }}>{r.code || '—'}</td>
                   <td style={{ fontWeight: 600, color: '#1a365d' }}>{r.label}</td>
-                  <td style={{ color: '#475569' }}>{fmtAddress(r) || '—'}</td>
+                  <td style={{ color: '#475569' }}>{fmtStreet(r) || '—'}</td>
                   <td>{r.city || '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.postal_code || '—'}</td>
                   <td>{r.country || '—'}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn btn-secondary btn-sm" onClick={() => setDraft({ ...r })}>Edit</button>{' '}

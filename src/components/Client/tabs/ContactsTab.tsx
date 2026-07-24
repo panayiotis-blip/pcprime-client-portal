@@ -55,7 +55,10 @@ export default function ContactsTab({ registerSave, onDirtyChange }: ContactsTab
 
   // Save the current values of an address block to the reusable book.
   const handleSaveToBook = async (values: Partial<ClientAddress>) => {
-    const suggested = values.line1 || values.city || 'Saved address';
+    // Default the label to the client's (short) name, so the book reads by
+    // who it belongs to rather than a street line.
+    const suggested = (client?.name && String(client.name).trim())
+      || values.line1 || values.city || 'Saved address';
     const label = window.prompt('Save this address to the address book as:', suggested);
     if (label == null) return;
     const trimmed = label.trim();
