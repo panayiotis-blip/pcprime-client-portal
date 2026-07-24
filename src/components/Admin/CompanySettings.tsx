@@ -38,6 +38,7 @@ export default function CompanySettings() {
   // separate state so the input fields stay strings (allows clearing/typing).
   const [rateInputs, setRateInputs] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const heroInputRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
 
   const load = async () => {
@@ -116,6 +117,11 @@ export default function CompanySettings() {
         default_cover_letter_text: form.default_cover_letter_text || null,
         default_sow_intro_text:    form.default_sow_intro_text || null,
         default_terms_text:        form.default_terms_text || null,
+        // Public landing page content (migration 139)
+        landing_headline:          form.landing_headline || null,
+        landing_subtext:           form.landing_subtext || null,
+        landing_about:             form.landing_about || null,
+        landing_hero_image_url:    form.landing_hero_image_url || null,
       });
       await load();
       setEditing(false);
@@ -155,6 +161,22 @@ export default function CompanySettings() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleHeroUpload = async (file: File) => {
+    if (!canEdit) return;
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5 MB'); return; }
+    setUploading(true);
+    try {
+      const url = await api.uploadLandingHeroImage(file);
+      await api.updateCompanySettings({ landing_hero_image_url: url });
+      setForm((prev: any) => ({ ...prev, landing_hero_image_url: url }));
+    } catch (err: any) {
+      alert('Image upload failed: ' + err.message);
+    } finally {
+      setUploading(false);
+      if (heroInputRef.current) heroInputRef.current.value = '';
     }
   };
 
@@ -298,6 +320,107 @@ export default function CompanySettings() {
             <input type="text" className="form-input" value={form.tagline || ''} onChange={e => handleChange('tagline', e.target.value)} disabled={!canEdit} placeholder="e.g. Strategic Calculations for Business Growth" />
           </div>
         </div>
+      </div>
+
+      {/* Public landing page (migration 139) */}
+      <div className="form-section">
+        <h3>Landing page</h3>
+        <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 16px' }}>
+          Controls the public home page at your site's address (the page visitors see before signing in).
+          Leave a field blank to use the built-in default text.
+        </p>
+
+        <div className="form-group">
+          <label>Hero headline</label>
+          <input
+            type="text" className="form-input"
+            value={form.landing_headline || ''}
+            onChange={e => handleChange('landing_headline', e.target.value)}
+            disabled={!canEdit}
+            placeholder="Professional Accounting, Tax & Business Consultancy Services"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Hero sub-text</label>
+          <textarea
+            className="form-input" rows={3}
+            value={form.landing_subtext || ''}
+            onChange={e => handleChange('landing_subtext', e.target.value)}
+            disabled={!canEdit}
+            placeholder="A short sentence or two introducing the firm…"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>About section</label>
+          <textarea
+            className="form-input" rows={5}
+            value={form.landing_about || ''}
+            onChange={e => handleChange('landing_about', e.target.value)}
+            disabled={!canEdit}
+            placeholder={'First paragraph…\n\nLeave a blank line to start a new paragraph.'}
+          />
+          <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+            Separate paragraphs with a blank line.
+          </p>
+        </div>
+
+        {/* Hero photo */}
+        <label style={{ fontSize: 13, fontWeight: 600, display: 'block', margin: '8px 0 6px' }}>Hero photo</label>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{
+            width: 240, height: 160, border: '1px dashed var(--border)', borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#f8fafc', overflow: 'hidden',
+          }}>
+            {form.landing_hero_image_url ? (
+              <img src={form.landing_hero_image_url} alt="Hero" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: 8 }}>
+                No photo — a centred text hero is shown
+              </span>
+            )}
+          </div>
+          {canEdit && (
+            <div>
+              <input
+                ref={heroInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) handleHeroUpload(f);
+                }}
+                style={{ display: 'block', marginBottom: 8 }}
+                disabled={uploading}
+              />
+              <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>
+                JPG / PNG / WebP, under 5 MB. A landscape photo (roughly 4:3) works best.
+                When set, the hero shows your text on the left and the photo on the right.
+              </p>
+              {form.landing_hero_image_url && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ marginTop: 8 }}
+                  onClick={async () => {
+                    if (!confirm('Remove the hero photo?')) return;
+                    await api.updateCompanySettings({ landing_hero_image_url: null });
+                    setForm((prev: any) => ({ ...prev, landing_hero_image_url: null }));
+                  }}
+                >
+                  Remove photo
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <p style={{ fontSize: 11, color: '#64748b', margin: '14px 0 0' }}>
+          The landing page also uses your logo, and the contact details (email, phone, address)
+          from the sections below — edit those there.
+        </p>
       </div>
 
       {/* Legal */}

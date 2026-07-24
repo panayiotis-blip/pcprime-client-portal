@@ -1,15 +1,60 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../../services/api';
+
+// Built-in defaults. The owner can override the editable fields under
+// Company Settings → Landing page; anything left blank falls back to these.
+const DEFAULTS = {
+  logo_url: '/logo.png',
+  landing_headline: 'Professional Accounting, Tax & Business Consultancy Services',
+  landing_subtext:
+    'At Prime & Calculate Consultants, we empower individuals and businesses in Cyprus ' +
+    'to achieve financial clarity. Whether you need hands-on accounting, proactive tax ' +
+    'planning, or strategic consultancy, we deliver results — not just reports.',
+  landing_about:
+    'With over 30 years of combined experience, our team delivers accounting, tax and ' +
+    'consultancy services that help Cyprus-based individuals and businesses stay ' +
+    'compliant and grow with confidence.\n\n' +
+    'We pair technical accuracy with hands-on partnership — so you always know where ' +
+    'you stand, and what to do next.',
+  email: 'info@primeandcalculate.com',
+  phone: '+357 24 258346',
+  address_line1: 'Dikomou 12, Office 201',
+  city: 'Kiti, Larnaca, Cyprus',
+};
+
+const COMPANY_NAME = 'PC Prime & Calculate Consultants Ltd';
+
+type Content = Record<string, string | null>;
 
 export default function LandingPage() {
+  const [c, setC] = useState<Content>({});
+
+  useEffect(() => {
+    let alive = true;
+    api.getLandingContent()
+      .then((data) => { if (alive) setC(data || {}); })
+      .catch(() => { /* fall back to built-in defaults */ });
+    return () => { alive = false; };
+  }, []);
+
+  // Helper: prefer the saved value, else the built-in default.
+  const val = (k: keyof typeof DEFAULTS) => (c[k] && String(c[k]).trim()) || DEFAULTS[k];
+  const companyName = (c.name && String(c.name).trim()) || COMPANY_NAME;
+
+  const logoUrl = val('logo_url');
+  const heroImage = (c.landing_hero_image_url && String(c.landing_hero_image_url).trim()) || '';
+  const aboutParas = val('landing_about').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
+
   return (
     <div className="landing">
       <div className="landing-topbar">
         <header className="landing-nav">
           <div className="landing-brand">
             <img
-              src="/logo.png"
-              alt="PC Prime & Calculate Consultants Ltd"
-              style={{ height: 128, width: 'auto', display: 'block' }}
+              src={logoUrl}
+              alt={companyName}
+              style={{ height: 96, width: 'auto', display: 'block' }}
             />
           </div>
           <nav className="landing-nav-links">
@@ -21,43 +66,39 @@ export default function LandingPage() {
         </header>
       </div>
 
-      <section className="landing-hero">
+      <section className={`landing-hero${heroImage ? ' landing-hero--split' : ''}`}>
         <div className="landing-hero-inner">
-          <h2>Professional Accounting, Tax &amp; Business Consultancy Services</h2>
-          <p className="landing-tagline">
-            At Prime &amp; Calculate Consultants, we empower individuals and businesses in Cyprus
-            to achieve financial clarity. Whether you need hands-on accounting, proactive tax
-            planning, or strategic consultancy, we deliver results — not just reports.
-          </p>
+          <div className="landing-hero-copy">
+            <h2>{val('landing_headline')}</h2>
+            <p className="landing-tagline">{val('landing_subtext')}</p>
 
-          <div className="landing-ctas">
-            <Link to="/login" className="landing-cta landing-cta-primary">
-              <div className="cta-title">Client Portal Login</div>
-              <div className="cta-sub">Access your documents, invoices and reports</div>
-              <div className="cta-arrow">→</div>
-            </Link>
+            <div className="landing-ctas">
+              <Link to="/login" className="landing-cta landing-cta-primary">
+                <div className="cta-title">Client Portal Login</div>
+                <div className="cta-sub">Access your documents, invoices and reports</div>
+                <div className="cta-arrow">→</div>
+              </Link>
 
-            <Link to="/tax" className="landing-cta landing-cta-secondary">
-              <div className="cta-title">Tax Calculator</div>
-              <div className="cta-sub">Estimate your Cyprus income tax in minutes</div>
-              <div className="cta-arrow">→</div>
-            </Link>
+              <Link to="/tax" className="landing-cta landing-cta-secondary">
+                <div className="cta-title">Tax Calculator</div>
+                <div className="cta-sub">Estimate your Cyprus income tax in minutes</div>
+                <div className="cta-arrow">→</div>
+              </Link>
+            </div>
           </div>
+
+          {heroImage && (
+            <div className="landing-hero-media">
+              <img src={heroImage} alt="" />
+            </div>
+          )}
         </div>
       </section>
 
       <section id="about" className="landing-about">
         <div className="landing-section-inner about-inner">
           <h3>About our company</h3>
-          <p>
-            With over 30 years of combined experience, our team delivers accounting, tax and
-            consultancy services that help Cyprus-based individuals and businesses stay
-            compliant and grow with confidence.
-          </p>
-          <p>
-            We pair technical accuracy with hands-on partnership — so you always know where
-            you stand, and what to do next.
-          </p>
+          {aboutParas.map((p, i) => <p key={i}>{p}</p>)}
         </div>
       </section>
 
@@ -107,14 +148,14 @@ export default function LandingPage() {
         <div className="landing-section-inner footer-grid">
           <div>
             <h5>Contact</h5>
-            <p><a href="mailto:info@primeandcalculate.com">info@primeandcalculate.com</a></p>
-            <p><a href="mailto:christina@primeandcalculate.com">christina@primeandcalculate.com</a></p>
-            <p><a href="tel:+35724258346">+357 24 258346</a></p>
+            <p><a href={`mailto:${val('email')}`}>{val('email')}</a></p>
+            <p><a href={`tel:${String(val('phone')).replace(/\s+/g, '')}`}>{val('phone')}</a></p>
           </div>
           <div>
             <h5>Office</h5>
-            <p>Dikomou 12, Office 201</p>
-            <p>Kiti, Larnaca, Cyprus</p>
+            <p>{val('address_line1')}</p>
+            {c.address_line2 && <p>{c.address_line2}</p>}
+            <p>{val('city')}</p>
             <p>Mon–Fri · 08:00–18:00</p>
             <p>Sat · By appointment</p>
           </div>
@@ -127,7 +168,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="landing-section-inner footer-bottom">
-          <span>© {new Date().getFullYear()} PC Prime &amp; Calculate Consultants Ltd</span>
+          <span>© {new Date().getFullYear()} {companyName}</span>
           <span style={{ marginLeft: 16 }}>
             <Link to="/privacy" style={{ color: 'inherit' }}>Privacy Notice</Link>
           </span>

@@ -3614,6 +3614,28 @@ export const api = {
     return pub.publicUrl;
   },
 
+  // Upload a landing-page hero image to the public 'company-assets' bucket
+  // and return its public URL. Persist via updateCompanySettings({ landing_hero_image_url }).
+  async uploadLandingHeroImage(file: File): Promise<string> {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? ext : 'jpg';
+    const key = `hero-${Date.now()}.${safeExt}`;
+    const { error } = await supabase.storage
+      .from('company-assets')
+      .upload(key, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+    if (error) throw new Error(error.message);
+    const { data: pub } = supabase.storage.from('company-assets').getPublicUrl(key);
+    return pub.publicUrl;
+  },
+
+  // Public landing-page content (safe fields only), readable without auth
+  // via the get_landing_content() SECURITY DEFINER RPC (migration 139).
+  async getLandingContent() {
+    const { data, error } = await supabase.rpc('get_landing_content');
+    if (error) throw new Error(error.message);
+    return (data || {}) as Record<string, string | null>;
+  },
+
   // --------- Per-staff service rates ---------
   async getStaffServiceRates(userId: string) {
     const { data, error } = await supabase.from('staff_service_rates')
