@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 // (Link is also used below for the "deleted clients" affordance)
-import { Hash, Trash2, AlertTriangle, GitMerge, Printer } from 'lucide-react';
+import { Hash, Trash2, AlertTriangle, GitMerge, Printer, MoreHorizontal } from 'lucide-react';
 import SearchableSelect from '../common/SearchableSelect';
 import { toClientOptions } from '../../services/clientOptions';
 import { useApp } from '../../context/AppContext';
@@ -16,7 +16,7 @@ import { jsPDF } from 'jspdf';
 // Registers Roboto Regular + Bold + Italic on every jsPDF instance — needed
 // so Greek client names render correctly in the printed client list.
 import { registerRobotoFont } from '../../assets/fonts/Roboto-Regular-normal.js';
-import { Modal, Button } from '../ui';
+import { Modal, Button, Menu, type MenuItem } from '../ui';
 import { formatDate } from '../../services/dates';
 
 type SortKey = 'client_code' | 'name' | 'tax_number' | 'invoice_count';
@@ -84,6 +84,7 @@ export default function ClientManager() {
   const { clients, refreshClients, invoices } = useApp();
   const { user } = useAuth();
   const { runWith } = useMFAStepUp();
+  const navigate = useNavigate();
   // Supervisor+ only: viewing the deleted-clients list, merging duplicates,
   // and the unlinked-directors fix-up. Everyone else can still edit / add
   // clients and use everything else on this page.
@@ -996,32 +997,17 @@ export default function ClientManager() {
       <div className="list-header">
         <h2>Clients ({clients.filter((c: any) => c.client_category !== 'vendor_only').length})</h2>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={handleGenerateMissing} title="Auto-generate codes for clients without one">
-            <Hash size={15} aria-hidden /> Gen Codes
-          </button>
-          {canSeeDeleted && <Link to="/clients/deleted" className="btn btn-secondary"><Trash2 size={15} aria-hidden /> Deleted</Link>}
-          {isSupervisor && unlinkedCount > 0 && (
-            <Link
-              to="/clients/unlinked-directors"
-              className="btn btn-secondary"
-              style={{ borderColor: 'var(--warn)', color: 'var(--warn)' }}
-              title="Director rows without a linked client"
-            >
-              <AlertTriangle size={15} aria-hidden /> Unlinked Directors
-              <span style={{
-                background: 'var(--warn)', color: '#fff', borderRadius: 999,
-                padding: '0 7px', marginLeft: 4, fontSize: 12, fontWeight: 700,
-              }}>{unlinkedCount}</span>
-            </Link>
-          )}
-          {isSupervisor && (
-            <button className="btn btn-secondary" onClick={() => setShowMerge(!showMerge)}>
-              {showMerge ? 'Cancel' : <><GitMerge size={15} aria-hidden /> Merge Duplicates</>}
-            </button>
-          )}
-          <button className="btn btn-secondary" onClick={() => { setPrintScope('all'); setShowPrintModal(true); }} title="Print, Excel or CSV export of the current filtered client list">
-            <Printer size={15} aria-hidden /> Print / Export
-          </button>
+          <Menu
+            label={<><MoreHorizontal size={15} aria-hidden /> More</>}
+            buttonClassName="btn btn-secondary"
+            items={[
+              { key: 'gen-codes', label: 'Generate missing codes', icon: <Hash size={15} />, onSelect: handleGenerateMissing, title: 'Auto-generate codes for clients without one' },
+              { key: 'print', label: 'Print / Export', icon: <Printer size={15} />, onSelect: () => { setPrintScope('all'); setShowPrintModal(true); }, title: 'Print, Excel or CSV export of the current filtered client list' },
+              ...(isSupervisor ? [{ key: 'merge', label: 'Merge duplicates', icon: <GitMerge size={15} />, onSelect: () => setShowMerge(true) }] : []),
+              ...(canSeeDeleted ? [{ key: 'deleted', label: 'Deleted clients', icon: <Trash2 size={15} />, onSelect: () => navigate('/clients/deleted'), separatorBefore: true }] : []),
+              ...(isSupervisor && unlinkedCount > 0 ? [{ key: 'unlinked', label: `Unlinked directors (${unlinkedCount})`, icon: <AlertTriangle size={15} />, onSelect: () => navigate('/clients/unlinked-directors') }] : []),
+            ] as MenuItem[]}
+          />
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
             {showForm ? 'Cancel' : '+ Add Client'}
           </button>
@@ -1031,6 +1017,9 @@ export default function ClientManager() {
       {/* Merge UI */}
       {showMerge && (
         <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowMerge(false)}>✕ Close</button>
+          </div>
           <MergeClients onDone={() => setShowMerge(false)} />
         </div>
       )}
