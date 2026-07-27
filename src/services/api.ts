@@ -3635,6 +3635,13 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // Run the retention purge now (migration 146). Returns a { category: count } summary.
+  async runRetentionPurge() {
+    const { data, error } = await supabase.rpc('purge_by_retention');
+    if (error) throw new Error(error.message);
+    return (data || {}) as Record<string, number>;
+  },
+
   // Upload a logo file to the public 'company-assets' bucket and return its
   // public URL. Caller is responsible for persisting the URL via
   // updateCompanySettings({ logo_url }).
