@@ -40,6 +40,8 @@ export default function ClientIntakePage() {
   const [done, setDone] = useState(false);
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [uploadMsg, setUploadMsg] = useState('');
+  const [declareTrue, setDeclareTrue] = useState(false);
+  const [privacyOk, setPrivacyOk] = useState(false);
 
   useEffect(() => {
     if (!token) { setError('Invalid link.'); setLoading(false); return; }
@@ -84,6 +86,10 @@ export default function ClientIntakePage() {
 
   const submit = async () => {
     if (!token) return;
+    if (!declareTrue || !privacyOk) {
+      setError('Please confirm the declaration and privacy consent before submitting.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -95,7 +101,13 @@ export default function ClientIntakePage() {
         await api.uploadIntakeFile(token, files[i].file, files[i].kind);
       }
       setUploadMsg('');
-      const payload = { ...form, ...lists, _submitted_at: new Date().toISOString() };
+      const payload = {
+        ...form, ...lists,
+        declaration_confirmed: true,
+        privacy_accepted: true,
+        consent_at: new Date().toISOString(),
+        _submitted_at: new Date().toISOString(),
+      };
       const res = await api.submitClientIntake(token, payload);
       if (!res.ok) { setError(res.error || 'Could not submit.'); return; }
       setDone(true);
@@ -247,11 +259,28 @@ export default function ClientIntakePage() {
         </label>
       </div>
 
+      {/* Declaration & consent — required before submitting */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+        <h3 style={{ color: C.navy, margin: '0 0 10px', fontSize: 18 }}>Declaration &amp; consent</h3>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14, marginBottom: 10, cursor: 'pointer' }}>
+          <input type="checkbox" checked={declareTrue} onChange={(e) => setDeclareTrue(e.target.checked)} style={{ marginTop: 3 }} />
+          <span>I confirm that the information I have provided is true, accurate and complete to the best of my knowledge, and I will inform {info?.firm_name || 'the firm'} of any changes.</span>
+        </label>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 14, cursor: 'pointer' }}>
+          <input type="checkbox" checked={privacyOk} onChange={(e) => setPrivacyOk(e.target.checked)} style={{ marginTop: 3 }} />
+          <span>
+            I have read and understood the{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: C.gold, fontWeight: 600 }}>Privacy Notice</a>{' '}
+            and consent to {info?.firm_name || 'the firm'} processing my personal data as described.
+          </span>
+        </label>
+      </div>
+
       {error && <p style={{ color: '#b91c1c', fontSize: 14 }}>{error}</p>}
       {uploadMsg && <p style={{ color: C.navy, fontSize: 13, textAlign: 'right' }}>{uploadMsg}</p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8, marginBottom: 40 }}>
-        <button onClick={submit} disabled={submitting}
-          style={{ background: C.navy, color: '#fff', border: 'none', borderRadius: 8, padding: '12px 28px', fontSize: 15, fontWeight: 600, cursor: submitting ? 'wait' : 'pointer', opacity: submitting ? 0.7 : 1 }}>
+        <button onClick={submit} disabled={submitting || !declareTrue || !privacyOk}
+          style={{ background: C.navy, color: '#fff', border: 'none', borderRadius: 8, padding: '12px 28px', fontSize: 15, fontWeight: 600, cursor: submitting ? 'wait' : (!declareTrue || !privacyOk ? 'not-allowed' : 'pointer'), opacity: (submitting || !declareTrue || !privacyOk) ? 0.6 : 1 }}>
           {submitting ? 'Submitting…' : 'Submit my information'}
         </button>
       </div>
