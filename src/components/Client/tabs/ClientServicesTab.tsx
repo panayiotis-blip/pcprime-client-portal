@@ -28,7 +28,8 @@ function monthsLabel(active: number[] | null): string {
   return active.slice().sort((a, b) => a - b).map(m => MONTH_SHORT[m - 1] || m).join(', ');
 }
 type ClientService = {
-  id: number; client_id: number; service_id: number; enabled: boolean; notes: string | null;
+  id: number; client_id: number; service_id: number | null; enabled: boolean;
+  notes: string | null; custom_label: string | null;
 };
 type Override = {
   id: number; client_service_id: number; service_stage_id: number;
@@ -43,6 +44,10 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
   const [overrides, setOverrides] = useState<Record<number, Override[]>>({});
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [newLabel, setNewLabel] = useState('');
+  const [newNotes, setNewNotes] = useState('');
+  const [adding, setAdding] = useState(false);
+  const canEdit = isStaffRole(user);
 
   const load = async () => {
     setLoading(true);
@@ -99,9 +104,33 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
     }
   };
 
+  const addCustom = async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    setAdding(true);
+    try {
+      await api.addCustomClientService(clientId, label, newNotes.trim() || null);
+      setNewLabel(''); setNewNotes('');
+      await load();
+    } catch (err: any) {
+      alert('Failed to add service: ' + (err?.message || String(err)));
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const removeCustom = async (cs: ClientService) => {
+    if (!confirm(`Remove custom service “${cs.custom_label}” from this client?`)) return;
+    try { await api.deleteClientService(cs.id); await load(); }
+    catch (err: any) { alert('Failed: ' + (err?.message || String(err))); }
+  };
+
   if (loading) {
     return <div className="client-tab-content" style={{ padding: 16 }}><p>Loading services…</p></div>;
   }
+
+  // Custom (ad-hoc) services are client_services rows with no catalogue link.
+  const customServices = clientServices.filter(c => c.service_id == null);
 
   // Helper — find the current override for a stage (if any).
   const getOverride = (csId: number, stageId: number): Override | undefined =>
@@ -233,6 +262,57 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
             </div>
           );
         })}
+
+        {/* Custom (ad-hoc) services — specific to this client, no automation. */}
+        <div style={{ marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+          <h4 style={{ margin: '0 0 4px', color: '#1a365d' }}>Custom services</h4>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
+            One-off services specific to this client that aren't in the catalogue. Record-only —
+            no automated stages, emails or tasks. For a service with automation, add it in{' '}
+            <Link to="/settings/services">Service Settings</Link> instead.
+          </p>
+
+          {customServices.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {customServices.map(cs => (
+                <div key={cs.id} style={{
+                  display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10,
+                  padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc',
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: '#1a365d' }}>{cs.custom_label}</div>
+                    {cs.notes && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{cs.notes}</div>}
+                  </div>
+                  {canEdit && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => removeCustom(cs)}>Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {canEdit ? (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <input
+                className="form-input" placeholder="Service name"
+                value={newLabel} onChange={e => setNewLabel(e.target.value)}
+                style={{ maxWidth: 240 }}
+                onKeyDown={e => { if (e.key === 'Enter') addCustom(); }}
+              />
+              <input
+                className="form-input" placeholder="Notes (optional)"
+                value={newNotes} onChange={e => setNewNotes(e.target.value)}
+                style={{ maxWidth: 280 }}
+                onKeyDown={e => { if (e.key === 'Enter') addCustom(); }}
+              />
+              <button className="btn btn-primary btn-sm" onClick={addCustom} disabled={!newLabel.trim() || adding}>
+                {adding ? 'Adding…' : '＋ Add service'}
+              </button>
+            </div>
+          ) : customServices.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>None.</p>
+          ) : null}
+        </div>
       </div>
     </div>
   );

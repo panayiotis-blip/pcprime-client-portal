@@ -1322,6 +1322,25 @@ export const api = {
               { onConflict: 'client_id,service_id' });
     if (error) throw new Error(error.message);
   },
+  // Custom (ad-hoc) per-client service — no catalogue link, no automation (migration 145).
+  async addCustomClientService(clientId: number, label: string, notes?: string | null) {
+    const { data, error } = await supabase.from('client_services')
+      .insert({ client_id: clientId, service_id: null, custom_label: label, notes: notes || null, enabled: true })
+      .select().single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+  async updateCustomClientService(id: number, patch: { custom_label?: string; notes?: string | null }) {
+    const payload: Record<string, any> = { updated_at: new Date().toISOString() };
+    if ('custom_label' in patch) payload.custom_label = patch.custom_label;
+    if ('notes' in patch) payload.notes = patch.notes || null;
+    const { error } = await supabase.from('client_services').update(payload).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteClientService(id: number) {
+    const { error } = await supabase.from('client_services').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
   async getClientStageOverrides(clientServiceId: number) {
     const { data, error } = await supabase
       .from('client_service_stage_overrides').select('*')
