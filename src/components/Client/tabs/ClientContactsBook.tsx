@@ -6,7 +6,7 @@ import { api } from '../../../services/api';
 // existing `customer` table; suppliers use `supplier` (migration 154).
 
 type Contact = {
-  id: number; owner_client_id: number; name: string;
+  id: number; owner_client_id: number; name: string; code: string | null;
   contact_person: string | null; email: string | null; phone: string | null;
   vat_number: string | null; address: string | null; notes: string | null; active: boolean;
 };
@@ -57,13 +57,14 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
     let added = 0, skipped = 0;
     for (const line of lines) {
       const parts = line.split(/[,\t;]/).map(p => p.trim());
-      const name = parts[0];
-      const email = parts.find(p => p.includes('@')) || null;
-      const phone = parts.slice(1).find(p => p && !p.includes('@')) || null;
-      // Skip a header row like "Name, Email".
-      if (!name || (/^name$/i.test(name) && !email)) { skipped++; continue; }
-      try { await save({ owner_client_id: clientId, name, email, phone }); added++; }
-      catch { skipped++; }
+      const [code = '', name = '', email = '', phone = ''] = parts;
+      if (!name) { skipped++; continue; }
+      // Skip a header row (e.g. "Code, Name, Email, Telephone").
+      if (/^name$/i.test(name) || /^code$/i.test(code)) { skipped++; continue; }
+      try {
+        await save({ owner_client_id: clientId, code: code || null, name, email: email || null, phone: phone || null });
+        added++;
+      } catch { skipped++; }
     }
     setImportBusy(false); setImportOpen(false); setImportText(''); load();
     alert(`Imported ${added} ${kind}${added === 1 ? '' : 's'}.` + (skipped ? ` ${skipped} row(s) skipped.` : ''));
@@ -102,15 +103,15 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
                     onChange={e => setSel(e.target.checked ? new Set(withEmail.map(r => r.id)) : new Set())}
                     title="Select all with an email" />
                 </th>
-                <th>Name</th><th>Contact</th><th>Email</th><th>Phone</th><th></th>
+                <th style={{ whiteSpace: 'nowrap' }}>Code</th><th>Name</th><th>Email</th><th>Telephone</th><th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map(c => (
                 <tr key={c.id}>
                   <td><input type="checkbox" checked={sel.has(c.id)} disabled={!c.email} onChange={() => toggle(c.id)} /></td>
+                  <td style={{ whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{c.code || '—'}</td>
                   <td style={{ fontWeight: 600 }}>{c.name}</td>
-                  <td>{c.contact_person || '—'}</td>
                   <td>{c.email || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                   <td>{c.phone || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
@@ -127,7 +128,7 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
       {draft && (
         <Modal title={draft.id ? `Edit ${kind}` : `New ${kind}`} onClose={() => setDraft(null)}>
           <div className="form-grid">
-            {([['name', 'Name *'], ['contact_person', 'Contact person'], ['email', 'Email'], ['phone', 'Phone'], ['vat_number', 'VAT number'], ['address', 'Address']] as const).map(([k, label]) => (
+            {([['code', 'Code'], ['name', 'Name *'], ['email', 'Email'], ['phone', 'Telephone'], ['contact_person', 'Contact person'], ['vat_number', 'VAT number'], ['address', 'Address']] as const).map(([k, label]) => (
               <div className="form-group" key={k} style={k === 'address' ? { gridColumn: '1 / -1' } : undefined}>
                 <label>{label}</label>
                 <input className="form-input" value={(draft as any)[k] || ''} onChange={e => setDraft(d => ({ ...d, [k]: e.target.value }))} />
@@ -156,13 +157,13 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
       {importOpen && (
         <Modal title={`Import ${kind}s`} onClose={() => setImportOpen(false)}>
           <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
-            One per line as <code>Name, email, phone</code> (email and phone optional). Commas, tabs or
-            semicolons all work — paste straight from a spreadsheet column.
+            Four columns per line — <code>Code, Name, Email, Telephone</code> (only Name is required).
+            Commas, tabs or semicolons all work — paste straight from a spreadsheet.
           </p>
           <textarea
             className="form-input" rows={10} value={importText}
             onChange={e => setImportText(e.target.value)}
-            placeholder={'ACME Ltd, accounts@acme.com, 99123456\nBeta Trading, info@beta.com'}
+            placeholder={'SUP001, ACME Ltd, accounts@acme.com, 99123456\nSUP002, Beta Trading, info@beta.com, 99765432'}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
             <button className="btn btn-secondary" onClick={() => setImportOpen(false)} disabled={importBusy}>Cancel</button>

@@ -2850,7 +2850,7 @@ export const api = {
     return data || [];
   },
   async saveCustomer(row: {
-    id?: number; owner_client_id: number; name: string;
+    id?: number; owner_client_id: number; name: string; code?: string | null;
     contact_person?: string | null; email?: string | null; phone?: string | null;
     vat_number?: string | null; address?: string | null; notes?: string | null; active?: boolean;
   }) {
@@ -2877,7 +2877,7 @@ export const api = {
     return data || [];
   },
   async saveSupplier(row: {
-    id?: number; owner_client_id: number; name: string;
+    id?: number; owner_client_id: number; name: string; code?: string | null;
     contact_person?: string | null; email?: string | null; phone?: string | null;
     vat_number?: string | null; address?: string | null; notes?: string | null; active?: boolean;
   }) {
