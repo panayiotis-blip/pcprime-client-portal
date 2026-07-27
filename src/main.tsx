@@ -7,23 +7,24 @@ import './styles/design-system.css';
 
 initSentry();
 
-// Unregister any stuck service workers from previous PWA builds
+// Clean up any leftover service worker / caches from previous PWA builds.
+// A stale SW paints the OLD cached app first, then the new bundle swaps in —
+// which looks like the page "loads old then renews". So when we actually find
+// and remove a stale SW, we reload ONCE (guarded against a loop) so the fresh
+// app loads cleanly instead of flashing the old one.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const reg of registrations) {
-      reg.unregister();
-      console.log('Unregistered old service worker:', reg.scope);
+  navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+    if (registrations.length === 0) return;
+    await Promise.all(registrations.map((reg) => reg.unregister()));
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map((name) => caches.delete(name)));
     }
-  });
-  // Clear all caches
-  if ('caches' in window) {
-    caches.keys().then((names) => {
-      for (const name of names) {
-        caches.delete(name);
-        console.log('Deleted cache:', name);
-      }
-    });
-  }
+    if (!sessionStorage.getItem('pc_sw_cleaned')) {
+      sessionStorage.setItem('pc_sw_cleaned', '1');
+      window.location.reload();
+    }
+  }).catch(() => { /* best-effort */ });
 }
 
 function ErrorFallback() {
