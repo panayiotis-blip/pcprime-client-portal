@@ -1420,6 +1420,17 @@ export const api = {
     return { created_runs: row?.created_runs ?? 0, created_tasks: row?.created_tasks ?? 0 };
   },
 
+  // Send the task-reminder digests now (staff-triggered test of the daily
+  // cron). Emails each assignee their overdue + due-soon tasks via info@.
+  async runTaskReminders(daysAhead?: number): Promise<{ recipients: number; sent: number; failures?: string[] }> {
+    const body: any = {};
+    if (Number.isFinite(daysAhead as number)) body.days_ahead = daysAhead;
+    const { data, error } = await supabase.functions.invoke('task-reminders', { body });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Reminder run failed.');
+    return { recipients: data.recipients ?? 0, sent: data.sent ?? 0, failures: data.failures };
+  },
+
   // Dry-run: returns the stage firings that WOULD happen for the given
   // date + filters. Used by the Run Schedules modal to preview before
   // committing. already_fired=true rows show what's already been processed

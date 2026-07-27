@@ -81,6 +81,7 @@ export default function StaffTasks() {
   // junior staff from removing other people's tasks.
   const canDelete = isSupervisorOrHigher(user);
   const [generating, setGenerating] = useState(false);
+  const [reminding, setReminding] = useState(false);
   const { clients } = useApp();
   const location = useLocation();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -376,6 +377,30 @@ export default function StaffTasks() {
               }}
             >
               {generating ? 'Generating…' : '⟳ Generate now'}
+            </button>
+          )}
+          {isSupervisorOrHigher(user) && (
+            <button
+              className="btn btn-secondary"
+              style={{ marginLeft: 6 }}
+              disabled={reminding}
+              title="Email each staff member their overdue + due-soon tasks now — normally runs automatically every morning"
+              onClick={async () => {
+                if (!confirm('Email every staff member a digest of their overdue and due-soon tasks now?\n\nThese go to staff only — no client emails.')) return;
+                setReminding(true);
+                try {
+                  const r = await api.runTaskReminders();
+                  let msg = `Reminder digests sent to ${r.sent} of ${r.recipients} staff member(s) with due tasks.`;
+                  if (r.failures && r.failures.length) msg += `\n\nSkipped/failed:\n` + r.failures.join('\n');
+                  alert(msg);
+                } catch (e: any) {
+                  alert('Reminders failed: ' + (e?.message || e));
+                } finally {
+                  setReminding(false);
+                }
+              }}
+            >
+              {reminding ? 'Sending…' : '🔔 Send reminders'}
             </button>
           )}
           <button
