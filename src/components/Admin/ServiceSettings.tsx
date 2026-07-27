@@ -53,6 +53,10 @@ export default function ServiceSettings() {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [templates, setTemplates] = useState<Record<number, Template>>({});
   const [loading, setLoading] = useState(true);
+  // Edit-schedule modal: change an existing stage's cadence + which months it
+  // fires (e.g. an "annual" stage that was firing every month → once a year).
+  const [schedStage, setSchedStage] = useState<Stage | null>(null);
+  const [schedDraft, setSchedDraft] = useState({ cadence: 'monthly', months: '', day: '', last_day: false });
   // Master–detail: the catalogue used to render every service fully expanded,
   // which on seven services was a wall of dense tables with nothing in focus.
   // One service is shown at a time now.
@@ -115,6 +119,40 @@ export default function ServiceSettings() {
       await load();
     } catch (err: any) {
       alert('Failed: ' + (err?.message || String(err)));
+    }
+  };
+
+  const openEditSchedule = (stage: Stage) => {
+    setSchedDraft({
+      cadence: stage.cadence || 'monthly',
+      months: (stage.active_months && stage.active_months.length) ? stage.active_months.slice().sort((a, b) => a - b).join(',') : '',
+      day: stage.default_day_of_month == null ? '' : String(stage.default_day_of_month),
+      last_day: stage.default_use_last_day,
+    });
+    setSchedStage(stage);
+  };
+
+  const saveSchedule = async () => {
+    if (!schedStage) return;
+    const months = schedDraft.months.trim()
+      ? schedDraft.months.split(',').map(s => parseInt(s.trim())).filter(n => n >= 1 && n <= 12)
+      : null;
+    // A quarterly/annual stage with no months never fires — guard against it.
+    if (schedDraft.cadence !== 'monthly' && (!months || months.length === 0)) {
+      alert('A ' + schedDraft.cadence + ' stage needs at least one active month, or it will never generate a task.\n\nFor a yearly task, enter the month it runs (e.g. 12 for December).');
+      return;
+    }
+    try {
+      await api.updateServiceStage(schedStage.id, {
+        cadence: schedDraft.cadence,
+        active_months: months,
+        default_day_of_month: schedDraft.last_day ? null : (schedDraft.day === '' ? null : Number(schedDraft.day)),
+        default_use_last_day: schedDraft.last_day,
+      });
+      setSchedStage(null);
+      await load();
+    } catch (err: any) {
+      alert('Save failed: ' + (err?.message || String(err)));
     }
   };
 
@@ -371,7 +409,18 @@ export default function ServiceSettings() {
                 {stagesForSvc.map(stage => (
                   <tr key={stage.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '8px 10px', color: '#1a365d', fontWeight: 500 }}>{stage.label}</td>
-                    <td style={{ padding: '8px 10px', color: '#64748b', fontSize: 12 }}>{monthsLabel(stage.active_months)}</td>
+                    <td style={{ padding: '8px 10px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm"
+                        onClick={() => openEditSchedule(stage)}
+                        title="Edit how often this stage runs"
+                        style={{ padding: 0, fontSize: 12, textAlign: 'left', color: '#1e40af' }}
+                      >
+                        <span style={{ color: '#64748b' }}>{monthsLabel(stage.active_months)}</span>
+                        <span style={{ color: '#94a3b8' }}> · {stage.cadence}</span> ✎
+                      </button>
+                    </td>
                     <td style={{ padding: '8px 10px' }}>
                       <input
                         type="number" min={1} max={31}
@@ -607,6 +656,54 @@ export default function ServiceSettings() {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
               <button className="btn btn-secondary" onClick={() => setAddStageForServiceId(null)}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSaveNewStage}>Create stage</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit schedule modal — change an existing stage's cadence + months */}
+      {schedStage != null && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        }} onClick={() => setSchedStage(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 8, padding: 20, width: '100%', maxWidth: 520,
+          }}>
+            <h3 style={{ marginTop: 0, color: '#1a365d' }}>Schedule — {schedStage.label}</h3>
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
+              Controls when this stage generates a task. For a <strong>yearly</strong> task, set cadence to
+              <em> annual</em> and enter the single month it runs (e.g. <code>12</code> for December).
+              Leave months blank only for a <em>monthly</em> stage that runs every month.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Cadence</label>
+                <select value={schedDraft.cadence} onChange={(e) => setSchedDraft(s => ({ ...s, cadence: e.target.value }))} className="form-input">
+                  <option value="monthly">monthly</option>
+                  <option value="quarterly">quarterly</option>
+                  <option value="annual">annual (yearly)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Active months (e.g. 12 or 3,9)</label>
+                <input type="text" value={schedDraft.months} onChange={(e) => setSchedDraft(s => ({ ...s, months: e.target.value }))} className="form-input"
+                  placeholder={schedDraft.cadence === 'monthly' ? 'blank = every month' : 'e.g. 12'} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 4 }}>Default day of month</label>
+                <input type="number" min={1} max={31} value={schedDraft.day} onChange={(e) => setSchedDraft(s => ({ ...s, day: e.target.value }))} disabled={schedDraft.last_day} className="form-input" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, marginTop: 18 }}>
+                  <input type="checkbox" checked={schedDraft.last_day} onChange={(e) => setSchedDraft(s => ({ ...s, last_day: e.target.checked }))} />
+                  Use last day of month
+                </label>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
+              <button className="btn btn-secondary" onClick={() => setSchedStage(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveSchedule}>Save schedule</button>
             </div>
           </div>
         </div>
