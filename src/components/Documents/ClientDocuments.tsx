@@ -65,6 +65,10 @@ export default function ClientDocuments({ clientId }: Props) {
   // "there's nothing here" rather than "still loading".
   const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
+  // When the initial load speculatively fetched the default folder's documents
+  // in parallel, this marks that folder so the reactive effect below doesn't
+  // immediately re-fetch it (avoids a double round trip).
+  const preloadedRef = useRef<{ folderId: number } | null>(null);
 
   const buildTree = (flat: FolderNode[]): FolderNode[] => {
     const map = new Map(flat.map(f => [f.id, { ...f, children: [] as FolderNode[] }]));
@@ -110,11 +114,50 @@ export default function ClientDocuments({ clientId }: Props) {
     try { setDocuments(await api.getDocuments(params)); } catch {}
   };
 
-  useEffect(() => { setLoading(true); loadFolders(); }, [clientId]);
+  // Initial load. Fetch the folder tree AND the likely-default folder's
+  // documents (the 'scanned' system folder) in PARALLEL, instead of waiting
+  // for the tree to name the default before the second round trip. When the
+  // resolved default is indeed 'scanned', reuse the speculative result.
+  useEffect(() => {
+    setLoading(true);
+    preloadedRef.current = null;
+    let cancelled = false;
+    (async () => {
+      const scannedDocsP = api
+        .getDocuments({ client_id: String(clientId), category: 'scanned' })
+        .catch(() => null);
+      let flat: any[] | null = null;
+      try { flat = await api.getFolders(clientId); } catch { /* handled below */ }
+      if (cancelled) return;
+      if (!flat) { setLoading(false); return; }
+      const tree = buildTree(flat);
+      setFolders(tree);
+      if (tree.length === 0) { setActiveFolder(null); setDocuments([]); setLoading(false); return; }
+      const scanned = flat.find((f: any) => f.category_key === 'scanned');
+      const def = scanned || tree[0];
+      if (scanned && def.id === scanned.id) {
+        const docs = await scannedDocsP;
+        if (cancelled) return;
+        if (docs) { preloadedRef.current = { folderId: def.id }; setDocuments(docs); }
+      }
+      // Setting the active folder lets the reactive effect below finish the
+      // load — it either uses the preloaded docs (skip) or fetches this folder.
+      setActiveFolder(def);
+    })();
+    return () => { cancelled = true; };
+  }, [clientId]);
+
   useEffect(() => {
     // Wait for the folder tree to pick a default before fetching documents;
     // loadDocuments would otherwise no-op and clear the gate too early.
     if (!activeFolder) return;
+    // Skip the re-fetch for a folder the initial load already fetched in
+    // parallel (only at the default year/month — any filter change re-fetches).
+    if (preloadedRef.current && preloadedRef.current.folderId === activeFolder.id && !activeYear && !activeMonth) {
+      preloadedRef.current = null;
+      setLoading(false);
+      return;
+    }
     loadDocuments().finally(() => setLoading(false));
   }, [clientId, activeFolder, activeYear, activeMonth]);
 
