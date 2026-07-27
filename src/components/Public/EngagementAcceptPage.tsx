@@ -73,6 +73,8 @@ export default function EngagementAcceptPage() {
         bank_name: letter.firm_bank_name,
         logo_url: letter.firm_logo_url,
         logo_data_url: logoDataUrl,
+        letterhead_logo_position: letter.firm_logo_position,
+        letterhead_logo_height: letter.firm_logo_height,
       },
       version: letter.version,
       effective_from: letter.effective_from,
