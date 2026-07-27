@@ -62,6 +62,7 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/compliance',  label: 'Compliance',  icon: '✓' },
       { path: '/tax-filings', label: 'Tax Filings', icon: '⎙' },
       { path: '/services-summary', label: 'Services', icon: '🧩', requires: (u) => isSupervisorOrHigher(u) },
+      { path: '/service-tasks', label: 'Service Tasks', icon: '🗓' },
     ],
   },
   {
