@@ -201,13 +201,18 @@ export function generateEngagementLetterPdf(
       y += lh + 4;
       if (showName) { doc.text(name, M, y); y += 5; }
     } else {
-      // Row layouts — align the logo top near the name's cap height.
-      const logoTop = y - 4;
+      // Row layouts — logo anchored at the block top; the name is vertically
+      // centred against the (taller) logo so the lockup matches the HTML
+      // preview instead of the name hugging the logo's top edge.
+      const logoTop = y;
+      // Baseline that puts the name's visual centre level with the logo centre.
+      const capOffset = doc.getFontSize() * 0.352778 * 0.35; // ~cap-height/2 in mm
+      const nameBaseline = hasLogo ? logoTop + lh / 2 + capOffset : y;
       if (pos === 'logo_left' && hasLogo) {
         doc.addImage(data.firm.logo_data_url!, safeFmt as any, M, logoTop, lw, lh, undefined, 'FAST');
-        if (showName) doc.text(name, M + lw + gap, y);
+        if (showName) doc.text(name, M + lw + gap, nameBaseline);
       } else if (pos === 'logo_right' && hasLogo) {
-        if (showName) doc.text(name, M, y);
+        if (showName) doc.text(name, M, nameBaseline);
         doc.addImage(data.firm.logo_data_url!, safeFmt as any, M + nameW + gap, logoTop, lw, lh, undefined, 'FAST');
       } else if (pos === 'logo_only' && hasLogo) {
         doc.addImage(data.firm.logo_data_url!, safeFmt as any, M, logoTop, lw, lh, undefined, 'FAST');
@@ -215,7 +220,7 @@ export function generateEngagementLetterPdf(
         doc.text(name, M, y);
       }
       // Advance below the taller of the name (~5mm) or the logo bottom.
-      y += Math.max(5, hasLogo ? (logoTop + lh) - y + 2 : 0);
+      y += Math.max(5, hasLogo ? lh + 2 : 0);
     }
 
     doc.setFontSize(9);
