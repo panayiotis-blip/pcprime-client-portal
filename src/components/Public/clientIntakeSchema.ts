@@ -161,16 +161,24 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
   },
   {
     id: 'directors',
-    title: 'Directors & shareholders',
+    title: 'Directors, shareholders & officers',
+    description: 'List each director, shareholder, company secretary and beneficial owner. Tick every role that applies to each person.',
     when: isCompanyLike,
     repeatable: {
       listKey: 'directors', itemLabel: 'Person', addLabel: '+ Add director / shareholder',
       fields: [
-        { key: 'name', label: 'Name', type: 'text' },
-        { key: 'role', label: 'Role', type: 'text', half: true },
-        { key: 'id_number', label: 'ID number', type: 'text', half: true },
+        { key: 'name', label: 'Full name', type: 'text' },
+        { key: 'date_of_birth', label: 'Date of birth', type: 'date', half: true },
         { key: 'nationality', label: 'Nationality', type: 'text', half: true },
+        { key: 'id_number', label: 'ID / passport number', type: 'text', half: true },
+        { key: 'tic', label: 'Tax Identification Code (TIC)', type: 'text', half: true },
         { key: 'shareholding', label: 'Shareholding %', type: 'number', half: true },
+        // Role(s) — tick all that apply; mirror the client_directors flags.
+        { key: 'is_director', label: 'Director', type: 'checkbox', half: true },
+        { key: 'is_shareholder', label: 'Shareholder', type: 'checkbox', half: true },
+        { key: 'is_secretary', label: 'Company secretary', type: 'checkbox', half: true },
+        { key: 'is_signatory', label: 'Authorised signatory', type: 'checkbox', half: true },
+        { key: 'is_ubo', label: 'Ultimate beneficial owner (UBO)', type: 'checkbox', half: true },
       ],
     },
   },
