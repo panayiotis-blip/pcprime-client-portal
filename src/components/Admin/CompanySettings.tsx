@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import CollapsibleSection from './CollapsibleSection';
 import PlatformSitesSection from './PlatformSitesSection';
 import DataRetention from './DataRetention';
+import AiSettings from './AiSettings';
 import { DEFAULT_SERVICES, DEFAULT_COPY, type LandingService } from '../Public/landingDefaults';
 
 // Picklist mirrors the timesheet CHECK constraint. Keep in sync with
@@ -1153,6 +1154,9 @@ export default function CompanySettings() {
 
       {/* Cities admin — self-contained, saves independently */}
       <Cities />
+
+      {/* AI & data transfers (GDPR) — self-contained, leadership-only */}
+      <AiSettings />
 
       {/* Data-retention schedule (GDPR) — self-contained, leadership-only */}
       <DataRetention />

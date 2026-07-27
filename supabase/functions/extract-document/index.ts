@@ -107,6 +107,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // GDPR control: the firm can disable AI extraction (the only EU→US
+    // transfer). Read via the service role so it also applies to client-role
+    // callers, who can't read company_settings themselves. On read failure we
+    // fall through — the setting defaults to enabled.
+    try {
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (serviceKey) {
+        const admin = createClient(Deno.env.get('SUPABASE_URL') ?? '', serviceKey);
+        const { data: cs } = await admin
+          .from('company_settings').select('ai_extract_enabled').eq('id', 1).maybeSingle();
+        if (cs && cs.ai_extract_enabled === false) {
+          return json({ ok: false, error: 'AI document extraction is disabled in your firm settings.' });
+        }
+      }
+    } catch (_e) { /* fall through — default enabled */ }
+
     const key = Deno.env.get('ANTHROPIC_API_KEY');
     if (!key) return json({ ok: false, error: 'AI extraction is not configured — ANTHROPIC_API_KEY is missing.' });
 
