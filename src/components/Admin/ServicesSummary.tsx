@@ -179,21 +179,20 @@ export default function ServicesSummary() {
       ) : rows.length === 0 ? (
         <div className="empty-state"><p>No clients match your search.</p></div>
       ) : (
-        <div className="compliance-table-wrapper">
-          <table className="compliance-table" style={{ fontSize: 13 }}>
+        <div className="svc-matrix-wrap">
+          <table className="svc-matrix">
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', minWidth: 220 }}>Client</th>
-                <th style={{ textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap', borderRight: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: 12 }}>All</div>
-                  <div style={{ fontSize: 10, color: '#64748b' }}>per client</div>
+                <th className="svc-col-client">Client</th>
+                <th className="svc-col-all">
+                  All<div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>per client</div>
                 </th>
                 {services.map(s => {
                   const st = columnState(s.id);
                   return (
-                    <th key={s.id} style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '6px 10px' }}>
-                      <div style={{ fontSize: 12 }}>{s.label}</div>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#64748b', marginTop: 2, cursor: 'pointer' }}
+                    <th key={s.id} className="svc-col">
+                      <div style={{ marginBottom: 3 }}>{s.label}</div>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#64748b', fontWeight: 400, cursor: 'pointer' }}
                         title={`Set “${s.label}” for all ${rows.length} shown clients`}>
                         <input
                           type="checkbox"
@@ -212,13 +211,13 @@ export default function ServicesSummary() {
             <tbody>
               {rows.map(c => (
                 <tr key={c.id}>
-                  <td className="tf-client-cell">
+                  <td className="svc-col-client">
                     <Link to={`/clients/${c.id}`}>
                       {c.client_code ? <span className="client-code-inline">{c.client_code}</span> : null}
                       {c.name || `Client #${c.id}`}
                     </Link>
                   </td>
-                  <td style={{ textAlign: 'center', borderRight: '1px solid #e2e8f0' }}>
+                  <td className="svc-col-all">
                     <input
                       type="checkbox"
                       checked={rowState(c.id) === 'all'}
@@ -230,7 +229,7 @@ export default function ServicesSummary() {
                     />
                   </td>
                   {services.map(s => (
-                    <td key={s.id} style={{ textAlign: 'center' }}>
+                    <td key={s.id} className="svc-col">
                       <input
                         type="checkbox"
                         checked={has(c.id, s.id)}

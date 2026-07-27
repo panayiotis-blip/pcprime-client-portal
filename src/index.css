@@ -2914,6 +2914,45 @@ h4 { font-size: 14px; font-weight: 600; }
 }
 
 /* ---------- Compliance dashboard ---------- */
+/* Cross-client services matrix — sticky header row + sticky client columns,
+   even service columns with wrapping headers, scrolls both directions. */
+.svc-matrix-wrap {
+  margin-top: 12px;
+  overflow: auto;
+  max-height: 72vh;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+.svc-matrix { border-collapse: separate; border-spacing: 0; background: #fff; font-size: 13px; }
+.svc-matrix th, .svc-matrix td { border-bottom: 1px solid #eef2f7; padding: 8px; }
+/* Header row sticks to the top of the scroll box */
+.svc-matrix thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: #f1f5f9; vertical-align: bottom; font-weight: 600;
+  border-bottom: 1px solid #d9dee6;
+}
+/* Client + All columns stick to the left when scrolling sideways */
+.svc-matrix .svc-col-client {
+  position: sticky; left: 0; z-index: 1; background: #fff; text-align: left;
+  width: 220px; min-width: 220px; max-width: 220px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.svc-matrix .svc-col-all {
+  position: sticky; left: 220px; z-index: 1; background: #fff; text-align: center;
+  width: 58px; min-width: 58px; border-right: 1px solid #e2e8f0;
+}
+/* Corner cells (sticky top AND left) must sit above the rest */
+.svc-matrix thead th.svc-col-client,
+.svc-matrix thead th.svc-col-all { z-index: 3; background: #f1f5f9; }
+/* Service columns — uniform width, header wraps onto two lines */
+.svc-matrix .svc-col {
+  width: 104px; min-width: 104px; text-align: center;
+  white-space: normal; word-break: break-word; line-height: 1.2;
+}
+.svc-matrix tbody tr:hover td { background: #f8fafc; }
+.svc-matrix tbody tr:hover .svc-col-client,
+.svc-matrix tbody tr:hover .svc-col-all { background: #f8fafc; }
+
 .compliance-table-wrapper { overflow-x: auto; margin-top: 12px; }
 .compliance-table {
   width: 100%; border-collapse: collapse; background: white;
