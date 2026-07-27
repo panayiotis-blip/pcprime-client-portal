@@ -111,6 +111,39 @@ export default function ServicesSummary() {
     }
   };
 
+  // Per-client state across all services: all / some / none.
+  const rowState = (clientId: number): 'all' | 'some' | 'none' => {
+    if (services.length === 0) return 'none';
+    let on = 0;
+    for (const s of services) if (has(clientId, s.id)) on++;
+    return on === 0 ? 'none' : on === services.length ? 'all' : 'some';
+  };
+
+  // Bulk set every service on/off for one client in a single upsert.
+  const toggleRow = async (clientId: number) => {
+    if (!canEdit || busy) return;
+    const next = rowState(clientId) !== 'all'; // any off → turn all on; all on → clear
+    const affected = services.filter(s => has(clientId, s.id) !== next);
+    if (!affected.length) return;
+    const cname = (rows.find(c => c.id === clientId)?.name) || `#${clientId}`;
+    if (!confirm(`${next ? 'Add all' : 'Remove all'} ${affected.length} service${affected.length === 1 ? '' : 's'} ${next ? 'to' : 'from'} ${cname}?`)) return;
+    setBusy(true);
+    const snapshot = new Set(enabled);
+    setEnabled(prev => {
+      const s = new Set(prev);
+      for (const svc of affected) { const k = key(clientId, svc.id); next ? s.add(k) : s.delete(k); }
+      return s;
+    });
+    try {
+      await api.setClientServiceBulk(affected.map(svc => ({ client_id: clientId, service_id: svc.id, enabled: next })));
+    } catch (e: any) {
+      setEnabled(snapshot);
+      alert('Update failed: ' + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!canEdit) {
     return <div className="empty-state"><p>This screen is available to owners and supervisors only.</p></div>;
   }
@@ -151,6 +184,10 @@ export default function ServicesSummary() {
             <thead>
               <tr>
                 <th style={{ textAlign: 'left', minWidth: 220 }}>Client</th>
+                <th style={{ textAlign: 'center', padding: '6px 10px', whiteSpace: 'nowrap', borderRight: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 12 }}>All</div>
+                  <div style={{ fontSize: 10, color: '#64748b' }}>per client</div>
+                </th>
                 {services.map(s => {
                   const st = columnState(s.id);
                   return (
@@ -180,6 +217,17 @@ export default function ServicesSummary() {
                       {c.client_code ? <span className="client-code-inline">{c.client_code}</span> : null}
                       {c.name || `Client #${c.id}`}
                     </Link>
+                  </td>
+                  <td style={{ textAlign: 'center', borderRight: '1px solid #e2e8f0' }}>
+                    <input
+                      type="checkbox"
+                      checked={rowState(c.id) === 'all'}
+                      ref={el => { if (el) el.indeterminate = rowState(c.id) === 'some'; }}
+                      onChange={() => toggleRow(c.id)}
+                      disabled={busy}
+                      title={`Toggle all services for ${c.name || `#${c.id}`}`}
+                      aria-label={`All services for ${c.name || c.id}`}
+                    />
                   </td>
                   {services.map(s => (
                     <td key={s.id} style={{ textAlign: 'center' }}>
