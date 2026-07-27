@@ -75,13 +75,16 @@ export default function CommandPalette() {
   const tasksLoaded = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Lazily load open tasks the first time a staff user opens the palette
-  // (they aren't in AppContext). Cached for the rest of the session.
+  // Lazily load active (open + in-progress) tasks the first time a staff user
+  // opens the palette (they aren't in AppContext). Cached for the session.
   useEffect(() => {
     if (!open || !isStaffRole(user) || tasksLoaded.current) return;
     tasksLoaded.current = true;
-    api.getStaffTasks({ status: 'open' })
-      .then((rows: any[]) => setTasks(rows.map(t => ({
+    Promise.all([
+      api.getStaffTasks({ status: 'open' }),
+      api.getStaffTasks({ status: 'in_progress' }),
+    ])
+      .then(([a, b]: any[][]) => setTasks([...a, ...b].map(t => ({
         id: t.id, title: t.title || `Task #${t.id}`,
         client_id: t.client_id ?? null, client_name: t.client_name ?? null, client_code: t.client_code ?? null,
       }))))
