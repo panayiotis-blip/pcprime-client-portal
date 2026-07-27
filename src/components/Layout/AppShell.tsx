@@ -422,7 +422,7 @@ export default function AppShell() {
             <Link to="/" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>
               <img src="/logo.png" alt="PC Prime & Calculate Consultants Ltd" style={{ width: '100%', height: 'auto', display: 'block' }} />
             </Link>
-            <p className="sidebar-subtitle">Client Portal</p>
+            <p className="sidebar-subtitle">Management Portal</p>
           </div>
           <ul className="sidebar-nav-list">
             <li>
@@ -571,7 +571,7 @@ export default function AppShell() {
           <Link to="/" onClick={() => setSidebarOpen(false)} style={{ display: 'block' }}>
             <img src="/logo.png" alt="PC Prime & Calculate Consultants Ltd" style={{ width: '100%', height: 'auto', display: 'block' }} />
           </Link>
-          <p className="sidebar-subtitle">Client Portal</p>
+          <p className="sidebar-subtitle">Management Portal</p>
         </div>
         <button type="button" className="nav-collapse-toggle" onClick={() => setNavCollapsed(true)} title="Collapse the menu for a wider view">« Collapse menu</button>
 
