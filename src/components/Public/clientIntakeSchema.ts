@@ -187,11 +187,9 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
   {
     id: 'kyc',
     title: 'Compliance (KYC / AML)',
-    description: 'Required of us as regulated accountants. Your details are kept confidential.',
+    description: 'Required of us as regulated accountants. Your details are kept confidential. Your ID / passport number is taken from the details you gave above.',
     fields: [
-      { key: 'id_doc_type', label: 'ID document type', type: 'select', options: ['ID card', 'Passport', 'Residence permit', 'Other'], half: true },
-      { key: 'id_doc_number', label: 'ID document number', type: 'text', half: true },
-      { key: 'id_doc_expiry', label: 'ID document expiry', type: 'date', half: true },
+      { key: 'id_doc_expiry', label: 'ID / passport expiry date', type: 'date', half: true, when: isIndividual, help: 'Expiry of the ID card or passport you entered above.' },
       { key: 'source_of_funds', label: 'Main source of funds / income', type: 'select',
         options: ['Employment', 'Business / self-employment', 'Pension', 'Investments', 'Rental', 'Inheritance / gift', 'Savings', 'Other'], half: true },
       { key: 'source_of_wealth', label: 'Source of wealth (brief description)', type: 'textarea' },
