@@ -2934,11 +2934,11 @@ h4 { font-size: 14px; font-weight: 600; }
 /* Client + All columns stick to the left when scrolling sideways */
 .svc-matrix .svc-col-client {
   position: sticky; left: 0; z-index: 1; background: #fff; text-align: left;
-  width: 220px; min-width: 220px; max-width: 220px;
+  width: 320px; min-width: 320px; max-width: 320px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .svc-matrix .svc-col-all {
-  position: sticky; left: 220px; z-index: 1; background: #fff; text-align: center;
+  position: sticky; left: 320px; z-index: 1; background: #fff; text-align: center;
   width: 58px; min-width: 58px; border-right: 1px solid #e2e8f0;
 }
 /* Corner cells (sticky top AND left) must sit above the rest */
