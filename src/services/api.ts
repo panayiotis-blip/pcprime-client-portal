@@ -1331,6 +1331,23 @@ export const api = {
               { onConflict: 'client_id,service_id' });
     if (error) throw new Error(error.message);
   },
+  // All catalogue-service opt-ins across every client the user can access —
+  // powers the cross-client services matrix.
+  async getAllClientServices() {
+    const { data, error } = await supabase.from('client_services')
+      .select('client_id, service_id, enabled');
+    if (error) throw new Error(error.message);
+    return (data || []) as { client_id: number; service_id: number | null; enabled: boolean }[];
+  },
+  // Enable/disable one catalogue service for many clients in a single upsert.
+  async setClientServiceBulk(rows: { client_id: number; service_id: number; enabled: boolean }[]) {
+    if (!rows.length) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase.from('client_services')
+      .upsert(rows.map(r => ({ ...r, updated_at: now })), { onConflict: 'client_id,service_id' });
+    if (error) throw new Error(error.message);
+  },
+
   // Custom (ad-hoc) per-client service — no catalogue link, no automation (migration 145).
   async addCustomClientService(clientId: number, label: string, notes?: string | null) {
     const { data, error } = await supabase.from('client_services')

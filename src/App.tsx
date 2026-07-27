@@ -34,6 +34,7 @@ const ClientCardPrint = lazy(() => import('./components/Client/ClientCardPrint')
 const SmartImport = lazy(() => import('./components/Admin/SmartImport'));
 const DuplicateFinder = lazy(() => import('./components/Admin/DuplicateFinder'));
 const TaxFilingsPage = lazy(() => import('./components/Admin/TaxFilingsPage'));
+const ServicesSummary = lazy(() => import('./components/Admin/ServicesSummary'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
 const ExportPage = lazy(() => import('./components/Export/ExportPage'));
@@ -139,6 +140,7 @@ function AuthedApp() {
             <Route path="/users" element={<UserManagement />} />
             <Route path="/compliance" element={<ComplianceDashboard />} />
             <Route path="/tax-filings" element={<TaxFilingsPage />} />
+            <Route path="/services-summary" element={<ServicesSummary />} />
             <Route path="/credentials" element={<CredentialsVault />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/applications" element={<Applications />} />
