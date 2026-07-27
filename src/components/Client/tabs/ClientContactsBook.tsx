@@ -203,7 +203,10 @@ function BulkEmail({ kind, clientName, recipients, onClose }: { kind: Kind; clie
       setProgress(`Sending ${i + 1} of ${recipients.length}…`);
       const person = (r.contact_person || r.name || '').trim();
       const text = body.replace(/\{contact\}/gi, person).replace(/\{name\}/gi, r.name || '').replace(/\{client\}/gi, clientName);
-      const html = `<div style="font-family:system-ui,Arial,sans-serif;white-space:pre-wrap">${text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))}</div>`;
+      // Convert the plain text to HTML with real line breaks — email clients
+      // strip white-space:pre-wrap, so newlines must become <br> to render.
+      const escaped = text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+      const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111">${escaped.replace(/\r?\n/g, '<br>')}</div>`;
       try {
         await api.sendViaOutlook({ from_firm: true, to: r.email!, subject: subject.replace(/\{client\}/gi, clientName), body: text, html });
         sent++;
