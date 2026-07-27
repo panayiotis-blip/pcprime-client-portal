@@ -11,6 +11,10 @@
 
 begin;
 
+-- Adding two output columns changes the return type, which CREATE OR REPLACE
+-- cannot do — drop first, then recreate. (Re-granted below.)
+drop function if exists public.get_engagement_letter_for_acceptance(text);
+
 create or replace function public.get_engagement_letter_for_acceptance(p_token text)
 returns table (
   -- Letter
