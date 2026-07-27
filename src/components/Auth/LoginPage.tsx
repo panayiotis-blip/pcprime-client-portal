@@ -43,9 +43,8 @@ export default function LoginPage() {
           <img
             src="/logo.png"
             alt="PC Prime & Calculate Consultants Ltd"
-            style={{ maxWidth: 520, width: '100%', height: 'auto', display: 'block', margin: '0 auto 12px' }}
+            style={{ maxWidth: 520, width: '100%', height: 'auto', display: 'block', margin: '0 auto' }}
           />
-          <p>Client Portal</p>
         </div>
         <form onSubmit={handleSubmit}>
           {error && <div className="login-error">{error}</div>}
