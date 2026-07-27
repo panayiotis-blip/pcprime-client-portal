@@ -1563,7 +1563,7 @@ export default function ClientManager() {
       ) : filtered.length === 0 ? (
         <div className="empty-state"><p>No clients match your search.</p></div>
       ) : (
-        <div className="export-table-wrapper">
+        <div className="export-table-wrapper client-list-scroll">
           <table className="export-table sortable-table">
             <thead>
               <tr>
