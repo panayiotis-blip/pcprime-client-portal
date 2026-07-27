@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { isStaffRole, hasPermission } from '../../services/api';
+import { api, isStaffRole, hasPermission } from '../../services/api';
 
 // Ctrl/Cmd+K "jump to" palette — search clients (already loaded in AppContext,
 // so RLS-safe with no extra query) and the app's main destinations.
@@ -55,10 +55,14 @@ const CLIENT_ROUTES: RouteItem[] = [
 ];
 
 const MAX_CLIENTS = 7;
+const MAX_TASKS = 6;
+
+type TaskLite = { id: number; title: string; client_id: number | null; client_name: string | null; client_code: string | null };
 
 type Result =
   | { kind: 'route'; path: string; label: string }
-  | { kind: 'client'; id: number; name: string; code: string | null };
+  | { kind: 'client'; id: number; name: string; code: string | null }
+  | { kind: 'task'; id: number; title: string; clientId: number | null; clientName: string | null };
 
 export default function CommandPalette() {
   const navigate = useNavigate();
@@ -67,7 +71,22 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
+  const [tasks, setTasks] = useState<TaskLite[]>([]);
+  const tasksLoaded = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Lazily load open tasks the first time a staff user opens the palette
+  // (they aren't in AppContext). Cached for the rest of the session.
+  useEffect(() => {
+    if (!open || !isStaffRole(user) || tasksLoaded.current) return;
+    tasksLoaded.current = true;
+    api.getStaffTasks({ status: 'open' })
+      .then((rows: any[]) => setTasks(rows.map(t => ({
+        id: t.id, title: t.title || `Task #${t.id}`,
+        client_id: t.client_id ?? null, client_name: t.client_name ?? null, client_code: t.client_code ?? null,
+      }))))
+      .catch(() => { tasksLoaded.current = false; });
+  }, [open, user]);
 
   // Global Ctrl/Cmd+K toggles the palette. preventDefault stops the browser's
   // own Ctrl+K (focus address/search bar) from swallowing it.
@@ -116,8 +135,16 @@ export default function CommandPalette() {
         .slice(0, MAX_CLIENTS)
         .map<Result>(c => ({ kind: 'client', id: c.id, name: c.name || `Client #${c.id}`, code: c.client_code || null }));
     }
-    return [...routeMatches, ...clientMatches];
-  }, [query, routes, clients, user]);
+
+    let taskMatches: Result[] = [];
+    if (q && isStaffRole(user)) {
+      taskMatches = tasks
+        .filter(t => `${t.title} ${t.client_name || ''} ${t.client_code || ''}`.toLowerCase().includes(q))
+        .slice(0, MAX_TASKS)
+        .map<Result>(t => ({ kind: 'task', id: t.id, title: t.title, clientId: t.client_id, clientName: t.client_name }));
+    }
+    return [...routeMatches, ...clientMatches, ...taskMatches];
+  }, [query, routes, clients, tasks, user]);
 
   // Keep the highlight in range as results change.
   useEffect(() => { setActive(0); }, [query]);
@@ -126,7 +153,9 @@ export default function CommandPalette() {
 
   const go = (r: Result) => {
     setOpen(false);
-    navigate(r.kind === 'client' ? `/clients/${r.id}` : r.path);
+    if (r.kind === 'client') navigate(`/clients/${r.id}`);
+    else if (r.kind === 'task') navigate(r.clientId ? `/clients/${r.clientId}` : '/tasks');
+    else navigate(r.path);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -136,8 +165,9 @@ export default function CommandPalette() {
     else if (e.key === 'Enter') { e.preventDefault(); if (results[active]) go(results[active]); }
   };
 
-  // First client in the flat list marks where the "Clients" section starts.
+  // First client / task in the flat list mark where each section starts.
   const firstClientIdx = results.findIndex(r => r.kind === 'client');
+  const firstTaskIdx = results.findIndex(r => r.kind === 'task');
 
   return createPortal(
     <div className="cmdk-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setOpen(false); }}>
@@ -161,9 +191,10 @@ export default function CommandPalette() {
             <div className="cmdk-empty">No matches.</div>
           ) : (
             results.map((r, i) => (
-              <div key={r.kind === 'client' ? `c${r.id}` : `r${r.path}`}>
+              <div key={r.kind === 'client' ? `c${r.id}` : r.kind === 'task' ? `t${r.id}` : `r${r.path}`}>
                 {i === 0 && r.kind === 'route' && <div className="cmdk-section">Pages</div>}
                 {i === firstClientIdx && <div className="cmdk-section">Clients</div>}
+                {i === firstTaskIdx && <div className="cmdk-section">Tasks</div>}
                 <button
                   type="button"
                   role="option"
@@ -176,6 +207,11 @@ export default function CommandPalette() {
                     <>
                       {r.code && <span className="client-code-inline">{r.code}</span>}
                       <span className="cmdk-item-label">{r.name}</span>
+                    </>
+                  ) : r.kind === 'task' ? (
+                    <>
+                      <span className="cmdk-item-label">{r.title}</span>
+                      {r.clientName && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{r.clientName}</span>}
                     </>
                   ) : (
                     <span className="cmdk-item-label">{r.label}</span>
