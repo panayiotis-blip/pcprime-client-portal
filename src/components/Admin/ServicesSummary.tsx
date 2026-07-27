@@ -26,6 +26,14 @@ export default function ServicesSummary() {
   const [search, setSearch] = useState('');
   const [withServicesOnly, setWithServicesOnly] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([]);
+  const [filterCategory, setFilterCategory] = useState('');
+
+  useEffect(() => {
+    api.getClientCategories()
+      .then(rows => setCategoryOptions((rows as any[]).map(r => ({ value: r.value, label: r.label }))))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,10 +67,11 @@ export default function ServicesSummary() {
   const rows = useMemo(() => {
     const t = search.trim().toLowerCase();
     return baseClients
+      .filter(c => !filterCategory || c.client_category === filterCategory)
       .filter(c => !t || (c.name || '').toLowerCase().includes(t) || (c.client_code || '').toLowerCase().includes(t))
       .filter(c => !withServicesOnly || services.some(s => enabled.has(key(c.id, s.id))))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [baseClients, services, enabled, search, withServicesOnly]);
+  }, [baseClients, services, enabled, search, withServicesOnly, filterCategory]);
 
   const has = (clientId: number, serviceId: number) => enabled.has(key(clientId, serviceId));
 
@@ -157,6 +166,13 @@ export default function ServicesSummary() {
       </p>
 
       <div className="tf-summary-controls">
+        <label>
+          <span className="tf-control-label">Category</span>
+          <select className="form-input form-input-sm" value={filterCategory} onChange={e => setFilterCategory(e.target.value)}>
+            <option value="">All categories</option>
+            {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
         <label>
           <span className="tf-control-label">Search</span>
           <input
