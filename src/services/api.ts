@@ -2869,6 +2869,33 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // ---------- Per-client suppliers (migration 154) ----------
+  async getSuppliers(ownerClientId: number) {
+    const { data, error } = await supabase.from('supplier')
+      .select('*').eq('owner_client_id', ownerClientId).order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async saveSupplier(row: {
+    id?: number; owner_client_id: number; name: string;
+    contact_person?: string | null; email?: string | null; phone?: string | null;
+    vat_number?: string | null; address?: string | null; notes?: string | null; active?: boolean;
+  }) {
+    if (row.id) {
+      const { id, ...patch } = row;
+      const { error } = await supabase.from('supplier').update(patch).eq('id', id);
+      if (error) throw new Error(error.message);
+      return id;
+    }
+    const { data, error } = await supabase.from('supplier').insert(row).select('id').single();
+    if (error) throw new Error(error.message);
+    return data.id as number;
+  },
+  async deleteSupplier(id: number) {
+    const { error } = await supabase.from('supplier').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // --------- Client expense capture ---------
   async uploadExpenseFile(clientId: number, file: File) {
     const safe = file.name.replace(/[^\w.\-]+/g, '_');

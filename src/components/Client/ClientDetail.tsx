@@ -13,6 +13,7 @@ import { FileText, ClipboardList, Mail, Download, UserX } from 'lucide-react';
 import ClientInfoTab from './tabs/ClientInfoTab';
 import ClientServicesTab from './tabs/ClientServicesTab';
 import ContactsTab from './tabs/ContactsTab';
+import ClientContactsBook from './tabs/ClientContactsBook';
 import TaxRegistrationTab from './tabs/TaxRegistrationTab';
 import DirectorsTab from './tabs/DirectorsTab';
 import ComplianceTab from './tabs/ComplianceTab';
@@ -43,7 +44,7 @@ type TabKey =
   | 'compliance' | 'tax_filings' | 'emails'
   | 'time'
   | 'notes' | 'audit'
-  | 'accounts' | 'patterns';
+  | 'accounts' | 'patterns' | 'contacts_book';
 
 const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'info',        label: 'Client Info' },
@@ -67,6 +68,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
 ];
 
 const MORE_TABS: { key: TabKey; label: string }[] = [
+  { key: 'contacts_book', label: 'Customers & Suppliers' },
   { key: 'accounts',    label: 'Chart of Accounts' },
   { key: 'patterns',    label: 'Vendor Patterns' },
 ];
@@ -510,6 +512,7 @@ export default function ClientDetail() {
         {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
         {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} client={client} />}
         {tab === 'emails'      && <ClientEmails clientId={clientId} />}
+        {tab === 'contacts_book' && <ClientContactsBook clientId={clientId} clientName={client.name} />}
         {tab === 'time'        && <TimeTab clientId={clientId} clientName={client.name} />}
         {tab === 'notes'       && <NotesTab />}
         {tab === 'audit'       && <AuditTab clientId={clientId} />}
