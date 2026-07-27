@@ -79,6 +79,7 @@ export default function StaffTasks() {
   // Delete + Restore + the Deleted-tasks view are supervisor-only — keeps
   // junior staff from removing other people's tasks.
   const canDelete = isSupervisorOrHigher(user);
+  const [generating, setGenerating] = useState(false);
   const { clients } = useApp();
   const location = useLocation();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -309,6 +310,28 @@ export default function StaffTasks() {
           <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)} style={{ marginLeft: 6 }}>
             From template
           </button>
+          {isSupervisorOrHigher(user) && (
+            <button
+              className="btn btn-secondary"
+              style={{ marginLeft: 6 }}
+              disabled={generating}
+              title="Generate this month's due tasks now — normally runs automatically every night"
+              onClick={async () => {
+                setGenerating(true);
+                try {
+                  const r = await api.runDueServiceSchedules();
+                  alert(`Generated ${r.created_tasks} task(s) and ${r.created_runs} run(s).`);
+                  await reload();
+                } catch (e: any) {
+                  alert('Generate failed: ' + (e?.message || e));
+                } finally {
+                  setGenerating(false);
+                }
+              }}
+            >
+              {generating ? 'Generating…' : '⟳ Generate now'}
+            </button>
+          )}
           <button
             className="btn btn-secondary"
             onClick={() => setShowPendingEmails(true)}
