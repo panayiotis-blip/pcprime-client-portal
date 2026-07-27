@@ -234,6 +234,36 @@ export default function StaffTasks() {
     };
   }, [tasks]);
 
+  // Print the currently-filtered task list as a clean table (new window).
+  const printTasks = () => {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+    const rowsHtml = visibleTasks.map(t => `<tr>
+      <td>${esc((t.client_code ? t.client_code + '  ' : '') + (t.client_name || ''))}</td>
+      <td>${esc(t.title)}</td>
+      <td style="white-space:nowrap">${esc(t.due_date || '')}</td>
+      <td>${esc(STATUS_LABEL[t.status as Status] || t.status)}</td>
+      <td>${esc(t.priority)}</td>
+      <td>${esc(staffUsers.find(u => u.id === t.assigned_to)?.display_name || staffUsers.find(u => u.id === t.assigned_to)?.username || '')}</td>
+    </tr>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Tasks</title>
+      <style>
+        body{font-family:system-ui,Arial,sans-serif;color:#111;padding:20px;}
+        h2{margin:0 0 2px;} .meta{color:#666;font-size:12px;margin-bottom:12px;}
+        table{width:100%;border-collapse:collapse;font-size:12px;}
+        th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;}
+        th{background:#f1f5f9;}
+      </style></head><body>
+      <h2>Tasks</h2>
+      <div class="meta">${visibleTasks.length} task(s) · printed ${new Date().toLocaleString('en-GB')}</div>
+      <table><thead><tr><th>Client</th><th>Task</th><th>Due</th><th>Status</th><th>Priority</th><th>Assignee</th></tr></thead>
+      <tbody>${rowsHtml}</tbody></table>
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow pop-ups to print the task list.'); return; }
+    w.document.write(html); w.document.close();
+  };
+
   const patchTask = async (id: number, patch: Partial<Task>) => {
     try {
       await api.updateStaffTask(id, patch);
@@ -322,6 +352,9 @@ export default function StaffTasks() {
           </button>
           <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)} style={{ marginLeft: 6 }}>
             From template
+          </button>
+          <button className="btn btn-secondary" onClick={printTasks} style={{ marginLeft: 6 }} title="Print the current filtered task list">
+            🖨 Print
           </button>
           {isSupervisorOrHigher(user) && (
             <button
