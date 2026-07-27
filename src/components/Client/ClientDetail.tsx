@@ -60,7 +60,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'emails',      label: 'Emails' },
   { key: 'time',        label: 'Time' },
   { key: 'notes',       label: 'Notes' },
-  { key: 'audit',       label: 'Audit' },
+  { key: 'audit',       label: 'Client Audit Log' },
 ];
 
 // Grouped under a single "Billing & Accounts ▾" dropdown to de-clutter the bar.
@@ -70,9 +70,6 @@ const FINANCE_TABS: { key: TabKey; label: string }[] = [
   { key: 'customer_billing', label: 'Customer Billing' },
   { key: 'contacts_book', label: 'Customers & Suppliers' },
   { key: 'reports',     label: 'Reports' },
-];
-
-const MORE_TABS: { key: TabKey; label: string }[] = [
   { key: 'accounts',    label: 'Chart of Accounts' },
   { key: 'patterns',    label: 'Vendor Patterns' },
 ];
@@ -134,7 +131,6 @@ export default function ClientDetail() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [tab, setTab] = useState<TabKey>('info');
-  const [moreOpen, setMoreOpen] = useState(false);
   const [financeOpen, setFinanceOpen] = useState(false);
 
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
@@ -491,27 +487,6 @@ export default function ClientDetail() {
                   key={t.key}
                   className={`cd-more-item ${tab === t.key ? 'active' : ''}`}
                   onClick={() => { requestTab(t.key); setFinanceOpen(false); }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="cd-more-wrap">
-          <button
-            className={`cd-tab cd-tab-more ${MORE_TABS.some(t => t.key === tab) ? 'active' : ''}`}
-            onClick={() => setMoreOpen(o => !o)}
-          >
-            More ▾
-          </button>
-          {moreOpen && (
-            <div className="cd-more-menu" onMouseLeave={() => setMoreOpen(false)}>
-              {MORE_TABS.map(t => (
-                <button
-                  key={t.key}
-                  className={`cd-more-item ${tab === t.key ? 'active' : ''}`}
-                  onClick={() => { requestTab(t.key); setMoreOpen(false); }}
                 >
                   {t.label}
                 </button>

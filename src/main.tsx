@@ -13,6 +13,9 @@ initSentry();
 // and remove a stale SW, we reload ONCE (guarded against a loop) so the fresh
 // app loads cleanly instead of flashing the old one.
 if ('serviceWorker' in navigator) {
+  // Whether a service worker is actively serving THIS page (i.e. could be
+  // serving stale cached content). Captured before we unregister.
+  const controlled = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.getRegistrations().then(async (registrations) => {
     if (registrations.length === 0) return;
     await Promise.all(registrations.map((reg) => reg.unregister()));
@@ -20,7 +23,9 @@ if ('serviceWorker' in navigator) {
       const names = await caches.keys();
       await Promise.all(names.map((name) => caches.delete(name)));
     }
-    if (!sessionStorage.getItem('pc_sw_cleaned')) {
+    // Only reload if this page was actually being served by the old SW — and
+    // only once per session — so a fresh (uncontrolled) load never reloads.
+    if (controlled && !sessionStorage.getItem('pc_sw_cleaned')) {
       sessionStorage.setItem('pc_sw_cleaned', '1');
       window.location.reload();
     }

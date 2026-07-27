@@ -126,7 +126,7 @@ export default function SignupApplication() {
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginTop: 8 }}>
           <input type="checkbox" checked={form.terms_accepted} onChange={e => f('terms_accepted', e.target.checked)} />
-          I agree to the <Link to="/privacy">privacy notice</Link> and terms of use.
+          I agree to the <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> and terms of use.
         </label>
         {siteKey && <Turnstile siteKey={siteKey} onToken={setToken} />}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
