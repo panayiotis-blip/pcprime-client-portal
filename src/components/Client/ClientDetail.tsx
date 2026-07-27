@@ -55,10 +55,6 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'directors',   label: 'Directors' },
   { key: 'credentials', label: 'Credentials' },
   { key: 'documents',   label: 'Documents' },
-  { key: 'invoices',    label: 'Invoices' },
-  { key: 'financials',  label: 'Financials' },
-  { key: 'customer_billing', label: 'Customer Billing' },
-  { key: 'reports',     label: 'Reports' },
   { key: 'compliance',  label: 'Compliance' },
   { key: 'tax_filings', label: 'Tax Filings' },
   { key: 'emails',      label: 'Emails' },
@@ -67,8 +63,16 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'audit',       label: 'Audit' },
 ];
 
-const MORE_TABS: { key: TabKey; label: string }[] = [
+// Grouped under a single "Billing & Accounts ▾" dropdown to de-clutter the bar.
+const FINANCE_TABS: { key: TabKey; label: string }[] = [
+  { key: 'invoices',    label: 'Invoices' },
+  { key: 'financials',  label: 'Financials' },
+  { key: 'customer_billing', label: 'Customer Billing' },
   { key: 'contacts_book', label: 'Customers & Suppliers' },
+  { key: 'reports',     label: 'Reports' },
+];
+
+const MORE_TABS: { key: TabKey; label: string }[] = [
   { key: 'accounts',    label: 'Chart of Accounts' },
   { key: 'patterns',    label: 'Vendor Patterns' },
 ];
@@ -131,6 +135,7 @@ export default function ClientDetail() {
   const [loadedOnce, setLoadedOnce] = useState(false);
   const [tab, setTab] = useState<TabKey>('info');
   const [moreOpen, setMoreOpen] = useState(false);
+  const [financeOpen, setFinanceOpen] = useState(false);
 
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -472,6 +477,27 @@ export default function ClientDetail() {
             {t.label}
           </button>
         ))}
+        <div className="cd-more-wrap">
+          <button
+            className={`cd-tab cd-tab-more ${FINANCE_TABS.some(t => t.key === tab) ? 'active' : ''}`}
+            onClick={() => setFinanceOpen(o => !o)}
+          >
+            Billing &amp; Accounts ▾
+          </button>
+          {financeOpen && (
+            <div className="cd-more-menu" onMouseLeave={() => setFinanceOpen(false)}>
+              {FINANCE_TABS.map(t => (
+                <button
+                  key={t.key}
+                  className={`cd-more-item ${tab === t.key ? 'active' : ''}`}
+                  onClick={() => { requestTab(t.key); setFinanceOpen(false); }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="cd-more-wrap">
           <button
             className={`cd-tab cd-tab-more ${MORE_TABS.some(t => t.key === tab) ? 'active' : ''}`}

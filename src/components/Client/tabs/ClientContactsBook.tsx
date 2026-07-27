@@ -28,6 +28,9 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
   const [draft, setDraft] = useState<Partial<Contact> | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [compose, setCompose] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
 
   const list = () => (kind === 'customer' ? api.getCustomers(clientId) : api.getSuppliers(clientId));
   const save = (row: any) => (kind === 'customer' ? api.saveCustomer(row) : api.saveSupplier(row));
@@ -47,6 +50,25 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
     catch (e: any) { alert('Delete failed: ' + (e?.message || e)); }
   };
   const toggle = (id: number) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const doImport = async () => {
+    const lines = importText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (!lines.length) { alert('Paste some rows first.'); return; }
+    setImportBusy(true);
+    let added = 0, skipped = 0;
+    for (const line of lines) {
+      const parts = line.split(/[,\t;]/).map(p => p.trim());
+      const name = parts[0];
+      const email = parts.find(p => p.includes('@')) || null;
+      const phone = parts.slice(1).find(p => p && !p.includes('@')) || null;
+      // Skip a header row like "Name, Email".
+      if (!name || (/^name$/i.test(name) && !email)) { skipped++; continue; }
+      try { await save({ owner_client_id: clientId, name, email, phone }); added++; }
+      catch { skipped++; }
+    }
+    setImportBusy(false); setImportOpen(false); setImportText(''); load();
+    alert(`Imported ${added} ${kind}${added === 1 ? '' : 's'}.` + (skipped ? ` ${skipped} row(s) skipped.` : ''));
+  };
+
   const withEmail = rows.filter(r => r.email && r.email.trim());
   const selectedWithEmail = rows.filter(r => sel.has(r.id) && r.email && r.email.trim());
 
@@ -56,6 +78,7 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
         <h3 style={{ margin: 0 }}>{title} <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 14 }}>({rows.length})</span></h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setDraft(blank(clientId))}>+ Add {kind}</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setImportOpen(true)}>⭱ Import</button>
           <button className="btn btn-primary btn-sm" disabled={withEmail.length === 0}
             title={withEmail.length === 0 ? 'No email addresses to send to' : `Email ${kind}s on behalf of ${clientName}`}
             onClick={() => { if (!sel.size) setSel(new Set(withEmail.map(r => r.id))); setCompose(true); }}>
@@ -128,6 +151,26 @@ function ContactSection({ kind, title, clientId, clientName }: { kind: Kind; tit
           recipients={selectedWithEmail.length ? selectedWithEmail : withEmail}
           onClose={() => setCompose(false)}
         />
+      )}
+
+      {importOpen && (
+        <Modal title={`Import ${kind}s`} onClose={() => setImportOpen(false)}>
+          <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+            One per line as <code>Name, email, phone</code> (email and phone optional). Commas, tabs or
+            semicolons all work — paste straight from a spreadsheet column.
+          </p>
+          <textarea
+            className="form-input" rows={10} value={importText}
+            onChange={e => setImportText(e.target.value)}
+            placeholder={'ACME Ltd, accounts@acme.com, 99123456\nBeta Trading, info@beta.com'}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+            <button className="btn btn-secondary" onClick={() => setImportOpen(false)} disabled={importBusy}>Cancel</button>
+            <button className="btn btn-primary" onClick={doImport} disabled={importBusy || !importText.trim()}>
+              {importBusy ? 'Importing…' : 'Import'}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   );
