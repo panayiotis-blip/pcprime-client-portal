@@ -100,6 +100,7 @@ export default function StaffTasks() {
   const [fFrom, setFFrom]         = useState<string>('');
   const [fTo, setFTo]             = useState<string>('');
   const [search, setSearch]       = useState<string>('');
+  const [fType, setFType]         = useState<string>(''); // '' all · 'manual' · service_key
   // Migration 102: 'live' hides soft-deleted rows (default), 'deleted'
   // shows ONLY the trash so the user can restore something they killed
   // by mistake.
@@ -191,9 +192,18 @@ export default function StaffTasks() {
       .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   }, [tasks]);
 
+  // Task "types" for the filter — each service the tasks belong to, plus manual.
+  const typeOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of tasks) if (t.service_key) m.set(t.service_key, t.service_label || t.service_key);
+    return Array.from(m.entries()).map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [tasks]);
+
   const visibleTasks = useMemo(() => {
     let out = tasks.filter(t => t.category !== 'return_call');
     if (fStatus === 'open') out = out.filter(t => isOpenStatus(t.status));
+    if (fType === 'manual') out = out.filter(t => !t.service_key);
+    else if (fType) out = out.filter(t => t.service_key === fType);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       out = out.filter(t =>
@@ -203,7 +213,7 @@ export default function StaffTasks() {
       );
     }
     return out;
-  }, [tasks, fStatus, search]);
+  }, [tasks, fStatus, fType, search]);
 
   const stats = useMemo(() => {
     const today = todayIso();
@@ -503,6 +513,14 @@ export default function StaffTasks() {
             <option value="open">Open (open + in progress + blocked)</option>
             <option value="all">All</option>
             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+          </select>
+        </div>
+        <div className="form-group" style={{ minWidth: 170 }}>
+          <label>Type</label>
+          <select className="form-input" value={fType} onChange={e => setFType(e.target.value)}>
+            <option value="">All types</option>
+            {typeOptions.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            <option value="manual">Manual / other</option>
           </select>
         </div>
         {canDelete && (
