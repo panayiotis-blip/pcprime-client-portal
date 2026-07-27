@@ -1456,6 +1456,18 @@ export const api = {
       .eq('id', runId);
     if (e) throw new Error(e.message);
   },
+  // Suppress pending automated emails WITHOUT sending them — stamps the
+  // service_runs rows email_sent=true so they drop off the pending list.
+  // Used to clear a backlog when those emails were already handled another
+  // way, so clients aren't bombarded with duplicates.
+  async clearPendingServiceEmails(runIds: number[]) {
+    if (!runIds.length) return 0;
+    const { error } = await supabase.from('service_runs')
+      .update({ email_sent: true, email_error: 'Cleared — not sent (already handled).', fired_at: new Date().toISOString() })
+      .in('id', runIds);
+    if (error) throw new Error(error.message);
+    return runIds.length;
+  },
 
   // --------- Engagement Letters (migration 104) ---------
   async getEngagementLetters(clientId: number) {

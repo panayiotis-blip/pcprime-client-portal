@@ -23,6 +23,10 @@ export default function ServicesSummary() {
 
   const [services, setServices] = useState<ServiceDef[]>([]);
   const [enabled, setEnabled] = useState<Set<string>>(new Set());
+  // Account manager per client: staff list + local overrides so a change shows
+  // immediately (the clients context isn't refetched on every save).
+  const [staffUsers, setStaffUsers] = useState<{ id: string; name: string }[]>([]);
+  const [managers, setManagers] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [withServicesOnly, setWithServicesOnly] = useState(false);
@@ -61,7 +65,31 @@ export default function ServicesSummary() {
     api.getClientCategories()
       .then(rows => setCategoryOptions((rows as any[]).map(r => ({ value: r.value, label: r.label }))))
       .catch(() => {});
+    // Internal staff for the account-manager picker (exclude client-role + inactive).
+    api.getUsers()
+      .then(all => setStaffUsers((all as any[])
+        .filter(u => u.role !== 'client' && u.active !== false)
+        .map(u => ({ id: u.id, name: u.display_name || u.username }))))
+      .catch(() => {});
   }, []);
+
+  // Seed the account-manager overrides from the clients context once loaded.
+  useEffect(() => {
+    const seed: Record<number, string> = {};
+    for (const c of clients as any[]) if (c.account_manager) seed[c.id] = c.account_manager;
+    setManagers(seed);
+  }, [clients]);
+
+  const setManager = async (clientId: number, uid: string) => {
+    const prev = managers[clientId] || '';
+    setManagers(m => ({ ...m, [clientId]: uid }));
+    try {
+      await api.updateClient(clientId, { account_manager: uid || null });
+    } catch (e: any) {
+      setManagers(m => ({ ...m, [clientId]: prev }));
+      alert('Could not set account manager: ' + (e?.message || e));
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -234,6 +262,9 @@ export default function ServicesSummary() {
             <thead>
               <tr>
                 <th className="svc-col-client">Client</th>
+                <th style={{ textAlign: 'left', minWidth: 150 }}>
+                  Account manager<div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>auto-assigned tasks</div>
+                </th>
                 <th className="svc-col-all">
                   All<div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>per client</div>
                 </th>
@@ -266,6 +297,18 @@ export default function ServicesSummary() {
                       {c.client_code ? <span className="client-code-inline">{c.client_code}</span> : null}
                       {c.name || `Client #${c.id}`}
                     </Link>
+                  </td>
+                  <td style={{ textAlign: 'left' }}>
+                    <select
+                      className="form-input form-input-sm"
+                      style={{ minWidth: 140 }}
+                      value={managers[c.id] || ''}
+                      onChange={e => setManager(c.id, e.target.value)}
+                      title={`Account manager for ${c.name || `#${c.id}`} — new scheduled tasks are assigned to them`}
+                    >
+                      <option value="">— unassigned —</option>
+                      {staffUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
                   </td>
                   <td className="svc-col-all">
                     <input

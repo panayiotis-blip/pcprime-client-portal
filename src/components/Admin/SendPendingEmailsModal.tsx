@@ -162,6 +162,22 @@ export default function SendPendingEmailsModal({ onClose, onDone }: { onClose: (
 
   const canSend = pending.some(r => picked.has(r.run_id) && (status[r.run_id] === 'pending' || status[r.run_id] === 'failed'));
 
+  // Clear the whole pending backlog WITHOUT sending — for when the emails were
+  // already sent another way and we don't want to bombard clients again.
+  const handleClearAll = async () => {
+    const unsent = pending.filter(r => status[r.run_id] !== 'sent');
+    if (!unsent.length) { alert('Nothing to clear.'); return; }
+    if (!confirm(`Clear ${unsent.length} pending email(s) WITHOUT sending them?\n\nThey'll be marked as handled and removed from this list — no email goes out to clients. This cannot be undone.`)) return;
+    setSending(true);
+    try {
+      await api.clearPendingServiceEmails(unsent.map(r => r.run_id));
+      alert(`Cleared ${unsent.length} pending email(s). No emails were sent.`);
+      onDone();
+    } catch (err: any) {
+      alert('Clear failed: ' + (err?.message || String(err)));
+    } finally { setSending(false); }
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)', zIndex: 1100,
@@ -237,6 +253,15 @@ export default function SendPendingEmailsModal({ onClose, onDone }: { onClose: (
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-secondary" onClick={onClose} disabled={sending}>Close</button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ color: '#b91c1c', borderColor: '#fecaca' }}
+                  onClick={handleClearAll}
+                  disabled={sending}
+                  title="Mark all pending emails as handled without sending — clients receive nothing"
+                >
+                  Clear all (don't send)
+                </button>
                 <button className="btn btn-primary" onClick={handleSend} disabled={sending || !canSend}>
                   {sending ? 'Sending…' : `Send ${picked.size} email(s)`}
                 </button>
