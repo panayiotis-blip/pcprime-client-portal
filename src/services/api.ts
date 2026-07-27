@@ -949,6 +949,15 @@ export const api = {
   // export itself is an accountable event). Credential PASSWORDS are never
   // included — getCredentials already strips the ciphertext; we re-shape here
   // to make that explicit.
+  // GDPR erasure (anonymise & keep) — wipes the client's personal identifiers
+  // and deletes personal ancillary data; accounting records are retained.
+  // Returns a { table: deletedCount } summary. Supervisor+ only (enforced in RPC).
+  async anonymiseClient(clientId: number) {
+    const { data, error } = await supabase.rpc('anonymise_client', { p_client_id: clientId });
+    if (error) throw new Error(error.message);
+    return (data || {}) as Record<string, number>;
+  },
+
   async exportClientData(clientId: number) {
     const [
       client, addresses, directors, directorships, services,

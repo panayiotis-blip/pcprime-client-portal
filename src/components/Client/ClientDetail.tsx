@@ -8,7 +8,7 @@ import { api, isStaffRole, hasPermission, isSupervisorOrHigher } from '../../ser
 import { FieldCtx } from './fieldContext';
 import ClientHeader from './ClientHeader';
 import { Modal, Button, type MenuItem } from '../ui';
-import { FileText, ClipboardList, Mail, Download } from 'lucide-react';
+import { FileText, ClipboardList, Mail, Download, UserX } from 'lucide-react';
 
 import ClientInfoTab from './tabs/ClientInfoTab';
 import ClientServicesTab from './tabs/ClientServicesTab';
@@ -270,6 +270,28 @@ export default function ClientDetail() {
     }
   };
 
+  // GDPR erasure (anonymise & keep). Irreversible; requires typing the client
+  // name to confirm. Personal data is wiped/deleted; accounting records stay.
+  const handleErase = async () => {
+    const typed = window.prompt(
+      `GDPR erasure — this permanently anonymises "${client?.name}" and deletes their personal data ` +
+      `(addresses, notes, emails, credentials, directors, messages, intake). Accounting records ` +
+      `(invoices, tax filings, engagement letters, documents) are kept for the legal period.\n\n` +
+      `This cannot be undone. Type the client name to confirm:`
+    );
+    if (typed == null) return;
+    if (typed.trim() !== (client?.name || '').trim()) { alert('The name did not match — nothing was erased.'); return; }
+    try {
+      const summary = await api.anonymiseClient(clientId);
+      await refreshClients();
+      const lines = Object.entries(summary).map(([k, v]) => `${k}: ${v}`);
+      alert('Client erased and anonymised.' + (lines.length ? '\n\nDeleted:\n' + lines.join('\n') : ''));
+      navigate('/clients');
+    } catch (err: any) {
+      alert('Erasure failed: ' + (err?.message || String(err)));
+    }
+  };
+
   const handleCopy = async () => {
     if (!editable) return;
     if (!confirm(`Create a new client copied from "${client.name}"?`)) return;
@@ -390,6 +412,14 @@ export default function ClientDetail() {
       icon: <Download size={14} />,
       onSelect: handleExportData,
       separatorBefore: true,
+    }] : []),
+    ...(canDelete ? [{
+      key: 'gdpr-erase',
+      label: 'Erase client (GDPR)',
+      icon: <UserX size={14} />,
+      onSelect: handleErase,
+      separatorBefore: true,
+      danger: true,
     }] : []),
   ];
 
