@@ -91,8 +91,10 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
     fields: [
       { key: 'tax_number', label: 'Tax Identification Code (TIC)', type: 'text', half: true },
       { key: 'vat_number', label: 'VAT number (if registered)', type: 'text', half: true },
+      { key: 'vat_registration_date', label: 'VAT registration date', type: 'date', half: true, when: (f) => !!f.vat_number },
       { key: 'social_insurance_number', label: 'Social Insurance number', type: 'text', half: true, when: isIndividual },
       { key: 'employer_number', label: 'SI employer number (if you employ staff)', type: 'text', half: true },
+      { key: 'ergani_number', label: 'Ergani number (if you employ staff)', type: 'text', half: true },
       { key: 'tax_residency_country', label: 'Country of tax residence', type: 'text', half: true, placeholder: 'Cyprus' },
     ],
   },

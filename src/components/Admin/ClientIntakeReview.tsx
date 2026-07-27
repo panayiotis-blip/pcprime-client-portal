@@ -46,8 +46,10 @@ const CORE: { k: string; col: string; label: string }[] = [
   { k: 'addr_country', col: 'country', label: 'Country' },
   { k: 'tax_number', col: 'tax_number', label: 'Tax number (TIC)' },
   { k: 'vat_number', col: 'vat_number', label: 'VAT number' },
+  { k: 'vat_registration_date', col: 'vat_registration_date', label: 'VAT registration date' },
   { k: 'social_insurance_number', col: 'social_insurance_number', label: 'Social Insurance no.' },
   { k: 'employer_number', col: 'employer_number', label: 'SI employer no.' },
+  { k: 'ergani_number', col: 'ergani_number', label: 'Ergani number' },
 ];
 const CORE_KEYS = new Set(CORE.map((c) => c.k));
 const CATEGORY_MAP: Record<string, string> = {
