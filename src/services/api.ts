@@ -1376,6 +1376,7 @@ export const api = {
   },
   async upsertStageOverride(clientServiceId: number, stageId: number, patch: {
     day_of_month?: number | null; use_last_day?: boolean | null; skip?: boolean;
+    active_months?: number[] | null;
   }) {
     const { error } = await supabase.from('client_service_stage_overrides')
       .upsert({

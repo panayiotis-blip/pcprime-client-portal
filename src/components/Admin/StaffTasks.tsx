@@ -5,7 +5,6 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
 import LogMessageModal from './LogMessageModal';
-import RunSchedulesModal from './RunSchedulesModal';
 import TaskCompletionModal, { templateFor } from './TaskCompletionModal';
 import SendPendingEmailsModal from './SendPendingEmailsModal';
 import SearchableSelect from '../common/SearchableSelect';
@@ -88,7 +87,6 @@ export default function StaffTasks() {
   const [showSearch, setShowSearch] = useState(false);
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
   const [showLogMessage,    setShowLogMessage]    = useState(false);
-  const [showRunSchedules,  setShowRunSchedules]  = useState(false);
   const [showPendingEmails, setShowPendingEmails] = useState(false);
   const [pendingEmailsCount, setPendingEmailsCount] = useState(0);
   const [completingTask,    setCompletingTask]    = useState<Task | null>(null);
@@ -162,7 +160,7 @@ export default function StaffTasks() {
     };
     refresh();
     return () => { cancelled = true; };
-  }, [showPendingEmails, showRunSchedules]);
+  }, [showPendingEmails]);
   useEffect(() => { reload(); /* eslint-disable-next-line */ }, [fAssignee, fStatus, fPriority, fClient, fFrom, fTo, fDeleted]);
 
   // Defence: if the user isn't a supervisor but somehow has the trash
@@ -313,17 +311,9 @@ export default function StaffTasks() {
           </button>
           <button
             className="btn btn-secondary"
-            onClick={() => setShowRunSchedules(true)}
-            style={{ marginLeft: 6 }}
-            title="Pick a date / service / clients, preview what would fire, then run"
-          >
-            ⟲ Run schedules
-          </button>
-          <button
-            className="btn btn-secondary"
             onClick={() => setShowPendingEmails(true)}
             style={{ marginLeft: 6, position: 'relative' }}
-            title="Send the emails queued by 'Run schedules'"
+            title="Send the emails queued by the nightly scheduler"
             disabled={pendingEmailsCount === 0}
           >
             📧 Send pending emails
@@ -704,13 +694,6 @@ export default function StaffTasks() {
         <ApplyTaskTemplateModal
           onClose={() => setShowApplyTemplate(false)}
           onApplied={() => reload()}
-        />
-      )}
-
-      {showRunSchedules && (
-        <RunSchedulesModal
-          onClose={() => setShowRunSchedules(false)}
-          onRan={(r) => { alert(`Done. Created ${r.created_runs} run(s) and ${r.created_tasks} task(s).`); reload(); }}
         />
       )}
 

@@ -34,7 +34,18 @@ type ClientService = {
 type Override = {
   id: number; client_service_id: number; service_stage_id: number;
   day_of_month: number | null; use_last_day: boolean | null; skip: boolean;
+  active_months: number[] | null;
 };
+
+// Cyprus staggered VAT quarter groups → the months a client's VAT tasks FIRE
+// (the month after each period ends). Set per client so staggered quarters work.
+const VAT_QUARTERS: { key: string; label: string; months: number[] }[] = [
+  { key: 'g1', label: 'Group 1 — periods end Mar/Jun/Sep/Dec (due 10 May, Aug, Nov, Feb)', months: [4, 7, 10, 1] },
+  { key: 'g2', label: 'Group 2 — periods end Apr/Jul/Oct/Jan (due 10 Jun, Sep, Dec, Mar)', months: [5, 8, 11, 2] },
+  { key: 'g3', label: 'Group 3 — periods end May/Aug/Nov/Feb (due 10 Jul, Oct, Jan, Apr)', months: [6, 9, 12, 3] },
+];
+const sameMonths = (a: number[] | null | undefined, b: number[]) =>
+  !!a && a.length === b.length && [...a].sort((x, y) => x - y).join(',') === [...b].sort((x, y) => x - y).join(',');
 
 export default function ClientServicesTab({ clientId }: { clientId: number }) {
   const { user } = useAuth();
@@ -95,6 +106,23 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
     try {
       await api.upsertStageOverride(cs.id, stage.id, patch);
       // Re-pull just this row's overrides so the panel reflects the change.
+      const ov = await api.getClientStageOverrides(cs.id);
+      setOverrides(prev => ({ ...prev, [cs.id]: ov as Override[] }));
+    } catch (err: any) {
+      alert('Failed: ' + (err?.message || String(err)));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  // Set this client's VAT quarter group — applies the fire-months to every
+  // stage of the VAT service so tasks appear in the right months.
+  const handleSetVatQuarter = async (cs: ClientService, stagesForSvc: Stage[], months: number[] | null) => {
+    setSavingKey('vatq-' + cs.id);
+    try {
+      for (const st of stagesForSvc) {
+        await api.upsertStageOverride(cs.id, st.id, { active_months: months });
+      }
       const ov = await api.getClientStageOverrides(cs.id);
       setOverrides(prev => ({ ...prev, [cs.id]: ov as Override[] }));
     } catch (err: any) {
@@ -187,6 +215,32 @@ export default function ClientServicesTab({ clientId }: { clientId: number }) {
                 </div>
                 {savingKey === 'svc-' + svc.id && <span style={{ fontSize: 12, color: '#94a3b8' }}>saving…</span>}
               </label>
+
+              {svc.key === 'vat_return' && isOn && cs && (
+                <div style={{ borderTop: '1px solid #e2e8f0', padding: '10px 14px' }}>
+                  <label style={{ fontSize: 12.5, fontWeight: 600, color: '#1a365d' }}>VAT quarter group</label>
+                  <select
+                    className="form-input"
+                    style={{ maxWidth: 520, marginTop: 4 }}
+                    disabled={savingKey === 'vatq-' + cs.id}
+                    value={(() => {
+                      const m = (overrides[cs.id] || []).find(o => o.active_months)?.active_months;
+                      return VAT_QUARTERS.find(q => sameMonths(m, q.months))?.key || '';
+                    })()}
+                    onChange={(e) => {
+                      const q = VAT_QUARTERS.find(x => x.key === e.target.value);
+                      handleSetVatQuarter(cs, stagesForSvc, q ? q.months : null);
+                    }}
+                  >
+                    <option value="">— not set (no VAT tasks will be generated) —</option>
+                    {VAT_QUARTERS.map(q => <option key={q.key} value={q.key}>{q.label}</option>)}
+                  </select>
+                  <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
+                    Sets when this client's VAT return tasks appear — the month after each period ends
+                    (e.g. Group 1: Apr–Jun period → task on 1 Jul, due 10 Aug).
+                  </p>
+                </div>
+              )}
 
               {isOn && cs && stagesForSvc.length > 0 && (
                 <div style={{ borderTop: '1px solid #e2e8f0', padding: '8px 14px 12px' }}>
