@@ -67,3 +67,23 @@ export function vatPeriods(
   }
   return periods;
 }
+
+/** Months (1-12) in which VAT tasks should FIRE for a category + start month:
+ *  the month AFTER each filing period ends (the return is then due the 10th of
+ *  the following month). e.g. G (3-monthly) starting Apr → [1, 4, 7, 10].
+ *  Returns [] if the category / start month is missing or invalid. */
+export function vatFireMonths(
+  code: string | null | undefined,
+  startMonth: number | string | null | undefined,
+): number[] {
+  const cat = BY_CODE.get(String(code ?? '').trim().toUpperCase());
+  const s = Number(startMonth);
+  if (!cat || !Number.isInteger(s) || s < 1 || s > 12) return [];
+  const f = cat.frequency;
+  const months = new Set<number>();
+  for (let i = 0; i < 12 / f; i++) {
+    const endIdx = (s - 1 + i * f + f - 1) % 12;   // 0-based period-end month
+    months.add(((endIdx + 1) % 12) + 1);            // 1-based fire month = end + 1
+  }
+  return [...months].sort((a, b) => a - b);
+}

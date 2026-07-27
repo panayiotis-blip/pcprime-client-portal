@@ -4,6 +4,7 @@ import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { PanelSkeleton } from '../ui';
+import { vatFireMonths } from '../../services/vatCategories';
 
 // Cross-client services matrix — a row per client, a column per catalogue
 // service, tick a cell to provide that service to that client. Enabling a
@@ -26,6 +27,33 @@ export default function ServicesSummary() {
   const [search, setSearch] = useState('');
   const [withServicesOnly, setWithServicesOnly] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  // One-off: set each VAT client's task months from their VAT registration
+  // (category A-G + start month), so staggered VAT periods generate correctly.
+  const syncVatFromReg = async () => {
+    const vat = services.find(s => s.key === 'vat_return');
+    if (!vat) { alert('No VAT Return service found in the catalogue.'); return; }
+    if (!confirm("Set every VAT client's task months from their VAT registration (category + start month)? This replaces the per-client VAT months.")) return;
+    setSyncing(true);
+    try {
+      const stages = await api.getServiceStages();
+      const vatStageIds = (stages as any[]).filter(s => s.service_id === vat.id).map(s => s.id);
+      const rows = await api.getClientServicesWithVatReg(vat.id);
+      let set = 0, skipped = 0;
+      for (const r of rows) {
+        const months = vatFireMonths(r.vat_category, r.vat_start_month);
+        if (!months.length) { skipped++; continue; }
+        for (const stId of vatStageIds) await api.upsertStageOverride(r.id, stId, { active_months: months });
+        set++;
+      }
+      alert(`VAT task months set for ${set} client(s) from their registration.` + (skipped ? `\n${skipped} skipped — no VAT category / start month on file.` : ''));
+    } catch (e: any) {
+      alert('Sync failed: ' + (e?.message || e));
+    } finally {
+      setSyncing(false);
+    }
+  };
   const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([]);
   const [filterCategory, setFilterCategory] = useState('');
 
@@ -159,7 +187,13 @@ export default function ServicesSummary() {
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header"><h2 style={{ margin: 0 }}>Services provided — all clients</h2></div>
+      <div className="dashboard-header">
+        <h2 style={{ margin: 0 }}>Services provided — all clients</h2>
+        <button className="btn btn-secondary" onClick={syncVatFromReg} disabled={syncing}
+          title="Set each VAT client's task months from their VAT registration (category + start month)">
+          {syncing ? 'Setting VAT periods…' : '⟳ Set VAT periods from registrations'}
+        </button>
+      </div>
       <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 12px' }}>
         Tick a service to provide it to a client — all of that service's stages are included automatically.
         Use the checkbox in a column header to set a service for every client currently shown.

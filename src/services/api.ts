@@ -1339,6 +1339,21 @@ export const api = {
     if (error) throw new Error(error.message);
     return (data || []) as { client_id: number; service_id: number | null; enabled: boolean }[];
   },
+  // VAT-enabled client_services joined with each client's VAT registration —
+  // used to derive the per-client fire months from vat_category/vat_start_month.
+  async getClientServicesWithVatReg(serviceId: number) {
+    const { data, error } = await supabase.from('client_services')
+      .select('id, client_id, clients(vat_category, vat_start_month)')
+      .eq('service_id', serviceId).eq('enabled', true);
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({
+      id: r.id as number,
+      client_id: r.client_id as number,
+      vat_category: r.clients?.vat_category ?? null,
+      vat_start_month: r.clients?.vat_start_month ?? null,
+    }));
+  },
+
   // Enable/disable one catalogue service for many clients in a single upsert.
   async setClientServiceBulk(rows: { client_id: number; service_id: number; enabled: boolean }[]) {
     if (!rows.length) return;
