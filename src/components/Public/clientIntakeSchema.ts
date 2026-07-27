@@ -76,13 +76,26 @@ export const INTAKE_SECTIONS: IntakeSection[] = [
   {
     id: 'address',
     title: 'Address',
-    description: 'Your residential address (or registered office for a company).',
+    description: 'For a company, your registered office. For an individual, your residential address.',
     fields: [
       { key: 'addr_line1', label: 'Address line 1', type: 'text' },
       { key: 'addr_line2', label: 'Address line 2', type: 'text' },
       { key: 'addr_city', label: 'City / town', type: 'text', half: true },
       { key: 'addr_postal', label: 'Postal code', type: 'text', half: true },
       { key: 'addr_country', label: 'Country', type: 'text', half: true, placeholder: 'Cyprus' },
+    ],
+  },
+  {
+    id: 'address2',
+    title: 'Trading / correspondence address',
+    description: 'Only if different from the registered office above.',
+    when: isCompanyLike,
+    fields: [
+      { key: 'addr2_line1', label: 'Address line 1', type: 'text' },
+      { key: 'addr2_line2', label: 'Address line 2', type: 'text' },
+      { key: 'addr2_city', label: 'City / town', type: 'text', half: true },
+      { key: 'addr2_postal', label: 'Postal code', type: 'text', half: true },
+      { key: 'addr2_country', label: 'Country', type: 'text', half: true, placeholder: 'Cyprus' },
     ],
   },
   {

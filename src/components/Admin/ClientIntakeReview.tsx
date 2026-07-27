@@ -222,6 +222,30 @@ export default function ClientIntakeReview() {
         if (!patch.name) { alert('A name is required to create a new client.'); setBusy(false); return; }
         clientId = (await api.createClient(patch)).id;
       }
+      // For a NEWLY created client, seed the structured addresses from the
+      // submission — registered + trading for companies, home for individuals.
+      // Existing clients keep their addresses managed in Contacts (the second
+      // address still shows in the note below), so staff choices aren't overridden.
+      if (clientId && !sel.client_id) {
+        try {
+          const p: any = sel.payload || {};
+          const catNorm = CATEGORY_MAP[p.client_category] || String(p.client_category || '').toLowerCase();
+          const companyLike = ['company', 'partnership'].includes(catNorm);
+          const mk = (address_type: any, s: string) => ({
+            client_id: clientId!, address_type,
+            line1: p[`${s}_line1`] || null, line2: p[`${s}_line2`] || null,
+            city: p[`${s}_city`] || null, postal_code: p[`${s}_postal`] || null,
+            country: p[`${s}_country`] || 'Cyprus',
+          });
+          if (companyLike) {
+            if (p.addr_line1) await api.upsertClientAddress(mk('registered', 'addr'));
+            if (p.addr2_line1) await api.upsertClientAddress(mk('trading', 'addr2'));
+          } else if (p.addr_line1) {
+            await api.upsertClientAddress(mk('home', 'addr'));
+          }
+        } catch { /* structured addresses are best-effort */ }
+      }
+
       // Capture the extra info (employment / KYC / lists) so it isn't lost.
       if (clientId && extras.length) {
         try {
