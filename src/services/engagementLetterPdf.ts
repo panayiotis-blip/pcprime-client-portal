@@ -34,6 +34,7 @@ export type EngagementLetterData = {
     vat_number?: string | null;
     registration_number?: string | null;
     id_number?: string | null;
+    contact_person?: string | null;
   };
   firm: {
     name?: string | null;
@@ -281,8 +282,9 @@ export function generateEngagementLetterPdf(
   for (const line of clientLines) { doc.text(line, M, y); y += 4.4; }
   y += 6;
 
-  // Salutation
-  doc.text(`Dear ${data.client.name || 'Sir / Madam'},`, M, y);
+  // Salutation — address the contact person (the letter is addressed TO the
+  // company above; individuals fall back to their own name).
+  doc.text(`Dear ${data.client.contact_person || data.client.name || 'Sir / Madam'},`, M, y);
   y += 7;
 
   // Subject
@@ -294,18 +296,17 @@ export function generateEngagementLetterPdf(
   const subjLines = doc.splitTextToSize('Provision of services as per scope of services detailed in the Statement of Work', W - 2 * M);
   y += subjLines.length * 5;
   doc.setFont('Roboto', 'normal');
-  y += 4;
+  y += 7;   // clear line space between the subject line and the first paragraph
 
   // Body — cover letter text (with merge fields applied)
   doc.setFontSize(10);
   setColor(BODY);
   const coverText = applyMergeFields(data.cover_letter_text || DEFAULT_COVER, mergeVars);
-  // Tighter line height + paragraph gap so the longer (6-section) cover letter
-  // still leaves room for the sign-off on page 1.
+  // A blank line between paragraphs/sections so the cover letter reads tidily.
   for (const para of coverText.split(/\n+/)) {
     if (!para.trim()) continue;
     y = writeWrapped(para.trim(), M, y, W - 2 * M, 3.9);
-    y += 1.5;
+    y += 4;
   }
   y += 2;
 

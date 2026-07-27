@@ -54,6 +54,7 @@ export default function EngagementAcceptPage() {
         vat_number: letter.client_vat_number,
         registration_number: letter.client_registration_number,
         id_number: letter.client_id_number,
+        contact_person: letter.client_contact_person,
       },
       firm: {
         name: letter.firm_name,

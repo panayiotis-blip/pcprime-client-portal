@@ -195,6 +195,7 @@ export default function EngagementLetterBuilder({ clientId, client, letterId, on
       vat_number: client?.vat_number || null,
       registration_number: client?.registration_number || null,
       id_number: client?.id_number || null,
+      contact_person: client?.contact_person || null,
     },
     firm: { ...firm, logo_data_url: logoDataUrl },
     version,
