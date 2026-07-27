@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../services/api';
+import { normaliseSignatureHtml } from '../../../services/emailSignature';
 
 // The client's own customers and suppliers, held so the firm can bulk-email
 // them ON THE CLIENT'S BEHALF (e.g. supplier statements). Customers reuse the
@@ -194,6 +195,18 @@ function BulkEmail({ kind, clientName, recipients, onClose }: { kind: Kind; clie
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState('');
   const [result, setResult] = useState<{ sent: number; fails: string[] } | null>(null);
+  // Firm signature + logo (migration 126, set in Admin → Firm Email Settings).
+  // Appended to every message so bulk mail is branded like our normal email.
+  const [sigHtml, setSigHtml] = useState('');
+  const [sigText, setSigText] = useState('');
+  useEffect(() => {
+    api.getFirmEmailSignature()
+      .then(({ signature_html, signature_text }) => {
+        setSigHtml(normaliseSignatureHtml(signature_html || signature_text || ''));
+        setSigText(signature_text || '');
+      })
+      .catch(() => {});
+  }, []);
 
   const send = async () => {
     setSending(true); setResult(null);
@@ -206,9 +219,14 @@ function BulkEmail({ kind, clientName, recipients, onClose }: { kind: Kind; clie
       // Convert the plain text to HTML with real line breaks — email clients
       // strip white-space:pre-wrap, so newlines must become <br> to render.
       const escaped = text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
-      const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111">${escaped.replace(/\r?\n/g, '<br>')}</div>`;
+      const bodyHtml = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#111">${escaped.replace(/\r?\n/g, '<br>')}</div>`;
+      // Append the firm's branded signature + logo below the message.
+      const html = sigHtml
+        ? `${bodyHtml}<div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0">${sigHtml}</div>`
+        : bodyHtml;
+      const fullText = sigText ? `${text}\n\n${sigText}` : text;
       try {
-        await api.sendViaOutlook({ from_firm: true, to: r.email!, subject: subject.replace(/\{client\}/gi, clientName), body: text, html });
+        await api.sendViaOutlook({ from_firm: true, to: r.email!, subject: subject.replace(/\{client\}/gi, clientName), body: fullText, html });
         sent++;
       } catch (e: any) { fails.push(`${r.name}: ${e?.message || e}`); }
     }
@@ -239,6 +257,11 @@ function BulkEmail({ kind, clientName, recipients, onClose }: { kind: Kind; clie
           </div>
           <div className="form-group"><label>Message</label>
             <textarea className="form-input" rows={9} value={body} onChange={e => setBody(e.target.value)} />
+            <p style={{ fontSize: 12, color: '#64748b', margin: '6px 0 0' }}>
+              {sigHtml
+                ? '✓ Our company signature and logo are added automatically at the bottom of every email.'
+                : '⚠ No firm signature set yet — add one in Admin → Firm Email Settings so emails carry our logo.'}
+            </p>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
             <span style={{ fontSize: 12, color: '#64748b' }}>{progress}</span>
