@@ -14,6 +14,7 @@ import ClientInfoTab from './tabs/ClientInfoTab';
 import ClientServicesTab from './tabs/ClientServicesTab';
 import ContactsTab from './tabs/ContactsTab';
 import ClientContactsBook from './tabs/ClientContactsBook';
+import ClientAppsTab from './tabs/ClientAppsTab';
 import TaxRegistrationTab from './tabs/TaxRegistrationTab';
 import DirectorsTab from './tabs/DirectorsTab';
 import ComplianceTab from './tabs/ComplianceTab';
@@ -44,7 +45,7 @@ type TabKey =
   | 'compliance' | 'tax_filings' | 'emails'
   | 'time'
   | 'notes' | 'audit'
-  | 'accounts' | 'patterns' | 'contacts_book';
+  | 'accounts' | 'patterns' | 'contacts_book' | 'apps';
 
 const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'info',        label: 'Client Info' },
@@ -59,6 +60,7 @@ const PRIMARY_TABS: { key: TabKey; label: string }[] = [
   { key: 'tax_filings', label: 'Tax Filings' },
   { key: 'emails',      label: 'Emails' },
   { key: 'time',        label: 'Time' },
+  { key: 'apps',        label: 'Apps' },
   { key: 'notes',       label: 'Notes' },
   { key: 'audit',       label: 'Client Audit Log' },
 ];
@@ -514,6 +516,7 @@ export default function ClientDetail() {
         {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} client={client} />}
         {tab === 'emails'      && <ClientEmails clientId={clientId} />}
         {tab === 'contacts_book' && <ClientContactsBook clientId={clientId} clientName={client.name} />}
+        {tab === 'apps'         && <ClientAppsTab clientId={clientId} />}
         {tab === 'time'        && <TimeTab clientId={clientId} clientName={client.name} />}
         {tab === 'notes'       && <NotesTab />}
         {tab === 'audit'       && <AuditTab clientId={clientId} />}

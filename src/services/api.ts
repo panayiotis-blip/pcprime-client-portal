@@ -832,28 +832,45 @@ export const api = {
     return clientIds.length;
   },
 
-  // --------- Rental module (migration 160) ---------
-  // Clients with the Property Rentals module switched on. RLS narrows this to
-  // clients the caller can access, so a client-user sees only their own.
-  async getRentalClients(): Promise<Array<{ id: number; name: string; client_code: string | null }>> {
-    const { data, error } = await supabase.from('clients')
-      .select('id, name, client_code').eq('rental_enabled', true).order('name');
+  // --------- Client apps (migration 161) ---------
+  // App keys enabled for a specific client (firm-side Apps tab).
+  async getClientAppKeys(clientId: number): Promise<string[]> {
+    const { data, error } = await supabase.from('client_apps')
+      .select('app_key').eq('client_id', clientId).eq('enabled', true);
     if (error) throw new Error(error.message);
-    return (data || []) as any[];
+    return (data || []).map((r: any) => r.app_key);
   },
-  // The whole rental document for a client (null if not seeded yet).
-  async getRentalData(clientId: number): Promise<{ data: any; updated_at: string | null } | null> {
-    const { data, error } = await supabase.from('rental_data')
-      .select('data, updated_at').eq('client_id', clientId).maybeSingle();
+  // Enable/disable an app for a client.
+  async setClientApp(clientId: number, appKey: string, enabled: boolean) {
+    const { error } = await supabase.from('client_apps')
+      .upsert({ client_id: clientId, app_key: appKey, enabled }, { onConflict: 'client_id,app_key' });
+    if (error) throw new Error(error.message);
+  },
+  // Enabled (client, app) rows the caller can access — RLS narrows a
+  // client-user to their own client(s). Powers the client-side Apps nav.
+  async getMyClientApps(): Promise<Array<{ client_id: number; client_name: string | null; client_code: string | null; app_key: string }>> {
+    const { data, error } = await supabase.from('client_apps')
+      .select('app_key, client_id, client:clients(name, client_code)')
+      .eq('enabled', true);
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({
+      client_id: r.client_id, app_key: r.app_key,
+      client_name: r.client?.name ?? null, client_code: r.client?.client_code ?? null,
+    }));
+  },
+  // The JSON document for one (client, app) — null if not created yet.
+  async getClientAppData(clientId: number, appKey: string): Promise<{ data: any; updated_at: string | null } | null> {
+    const { data, error } = await supabase.from('client_app_data')
+      .select('data, updated_at').eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
     if (error) throw new Error(error.message);
     return data ? { data: (data as any).data, updated_at: (data as any).updated_at } : null;
   },
-  // Upsert the whole rental document (autosave). Stamps updated_by = caller.
-  async saveRentalData(clientId: number, doc: any) {
+  // Upsert the document (autosave). Stamps updated_by = caller.
+  async saveClientAppData(clientId: number, appKey: string, doc: any) {
     const { data: { user } } = await supabase.auth.getUser();
-    const { error } = await supabase.from('rental_data').upsert(
-      { client_id: clientId, data: doc, updated_by: user?.id ?? null, updated_at: new Date().toISOString() },
-      { onConflict: 'client_id' },
+    const { error } = await supabase.from('client_app_data').upsert(
+      { client_id: clientId, app_key: appKey, data: doc, updated_by: user?.id ?? null, updated_at: new Date().toISOString() },
+      { onConflict: 'client_id,app_key' },
     );
     if (error) throw new Error(error.message);
   },

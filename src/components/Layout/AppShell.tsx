@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { PanelSkeleton } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { api, isStaffRole, hasPermission, isSupervisorOrHigher, roleLabel } from '../../services/api';
+import { getClientApp } from '../../services/clientApps';
 import QuickActionsFab from './QuickActionsFab';
 import CommandPalette from './CommandPalette';
 
@@ -64,7 +65,6 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/services-summary', label: 'Services', icon: '🧩', requires: (u) => isSupervisorOrHigher(u) },
       { path: '/service-tasks', label: 'Service Tasks', icon: '🗓' },
       { path: '/task-dashboard', label: 'Task Dashboard', icon: '📊', requires: (u) => isSupervisorOrHigher(u) },
-      { path: '/rentals', label: 'Rentals', icon: '🏠' },
     ],
   },
   {
@@ -240,20 +240,28 @@ export default function AppShell() {
   // Favourites (UI polish Part 3) — pinned menu items + clients.
   const [favourites, setFavourites] = useState<Favourite[]>([]);
   const [favsLoaded, setFavsLoaded] = useState(false);
-  // Whether a client-role user has a rental-enabled client — gates the client
-  // "Rentals" nav item so it only shows for clients using the module.
-  const [hasRental, setHasRental] = useState(false);
+  // Apps a client-role user can reach (from client_apps, RLS-narrowed) — each
+  // becomes a nav item in their portal. Empty for clients with no apps.
+  const [myApps, setMyApps] = useState<{ key: string; label: string; icon: string }[]>([]);
   useEffect(() => {
     if (!user || isStaffRole(user)) return;
-    api.getRentalClients().then(cs => setHasRental((cs || []).length > 0)).catch(() => {});
+    api.getMyClientApps().then(rows => {
+      const seen = new Set<string>();
+      const items: { key: string; label: string; icon: string }[] = [];
+      for (const r of rows) {
+        const def = getClientApp(r.app_key);
+        if (def && !seen.has(def.key)) { seen.add(def.key); items.push({ key: def.key, label: def.label, icon: def.icon }); }
+      }
+      setMyApps(items);
+    }).catch(() => {});
   }, [user]);
   const clientGroups = useMemo(() => (
-    hasRental
+    myApps.length
       ? CLIENT_GROUPS.map((g, i) => i === 0
-          ? { ...g, items: [...g.items, { path: '/rentals', label: 'Rentals', icon: '🏠' }] }
+          ? { ...g, items: [...g.items, ...myApps.map(a => ({ path: '/my-apps/' + a.key, label: a.label, icon: a.icon }))] }
           : g)
       : CLIENT_GROUPS
-  ), [hasRental]);
+  ), [myApps]);
 
   // Filter groups the current user can see (e.g. Administration is leadership-only)
   const visibleGroups = useMemo(() => {
