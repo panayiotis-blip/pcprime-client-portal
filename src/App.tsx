@@ -36,6 +36,7 @@ const DuplicateFinder = lazy(() => import('./components/Admin/DuplicateFinder'))
 const TaxFilingsPage = lazy(() => import('./components/Admin/TaxFilingsPage'));
 const ServicesSummary = lazy(() => import('./components/Admin/ServicesSummary'));
 const ServiceTasksYear = lazy(() => import('./components/Admin/ServiceTasksYear'));
+const TaskDashboard = lazy(() => import('./components/Admin/TaskDashboard'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
 const ExportPage = lazy(() => import('./components/Export/ExportPage'));
@@ -143,6 +144,7 @@ function AuthedApp() {
             <Route path="/tax-filings" element={<TaxFilingsPage />} />
             <Route path="/services-summary" element={<ServicesSummary />} />
             <Route path="/service-tasks" element={<ServiceTasksYear />} />
+            <Route path="/task-dashboard" element={<TaskDashboard />} />
             <Route path="/credentials" element={<CredentialsVault />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/applications" element={<Applications />} />
