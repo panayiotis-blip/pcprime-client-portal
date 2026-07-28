@@ -1453,6 +1453,21 @@ export const api = {
     return data || [];
   },
 
+  // Expected service-task periods for a whole year (read-only) — mirrors the
+  // scheduler's fire logic and left-joins any task already generated. Powers
+  // the yearly completion grid so periods show up without pre-generating them.
+  async getServiceTaskYearPlan(year: number): Promise<Array<{
+    client_id: number; client_name: string | null; client_code: string | null;
+    service_id: number; service_key: string; service_label: string;
+    stage_id: number; stage_label: string;
+    fire_month: number; scheduled_date: string; period_label: string;
+    task_id: number | null; status: string | null; completion_data: any;
+  }>> {
+    const { data, error } = await supabase.rpc('service_task_year_plan', { p_year: year });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   // List pending automated emails (service_runs.email_sent=false). The UI
   // walks this to fire send-via-outlook one row at a time.
   async getPendingServiceEmails() {

@@ -4,26 +4,31 @@ import { api, isStaffRole, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PanelSkeleton } from '../ui';
 
-// Yearly service-task completion grid. Every service-generated task for the
-// selected year, per client, where staff flag done + completion date +
-// reference number. A backfill button ensures the whole year's tasks exist.
+// Yearly service-task completion grid. Shows every period each client's
+// enabled services are EXPECTED to fire in the year (computed by
+// service_task_year_plan, migration 159) — not just tasks already generated.
+// Staff flag done + completion date + reference. A period with no task yet is
+// generated on demand when acted on (or in bulk via "Generate all <year>").
 
-type Task = {
-  id: number;
-  client_id: number | null;
+type PlanRow = {
+  client_id: number;
   client_name: string | null;
   client_code: string | null;
-  title: string;
-  due_date: string | null;
-  status: string;
-  service_stage_id: number | null;
-  service_key: string | null;
-  service_label: string | null;
-  stage_label: string | null;
+  service_id: number;
+  service_key: string;
+  service_label: string;
+  stage_id: number;
+  stage_label: string;
+  fire_month: number;
+  scheduled_date: string;
+  period_label: string;
+  task_id: number | null;
+  status: string | null;
   completion_data: any;
 };
 
-const isDone = (s: string) => s === 'done';
+const isDone = (s: string | null) => s === 'done';
+const rowKey = (r: PlanRow) => `${r.client_id}:${r.stage_id}:${r.scheduled_date}`;
 
 export default function ServiceTasksYear() {
   const { user } = useAuth();
@@ -36,20 +41,26 @@ export default function ServiceTasksYear() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'outstanding' | 'done'>('all');
   const [services, setServices] = useState<{ key: string; label: string }[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [plan, setPlan] = useState<PlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
-  const [edits, setEdits] = useState<Record<number, { reference?: string; completed_date?: string }>>({});
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [edits, setEdits] = useState<Record<string, { reference?: string; completed_date?: string }>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
-  const load = () => {
+  const loadPlan = async (): Promise<PlanRow[]> => {
     setLoading(true);
-    api.getStaffTasks({ from: `${year}-01-01`, to: `${year}-12-31` })
-      .then((rows: any[]) => setTasks(rows.filter(t => t.service_stage_id != null) as Task[]))
-      .catch(() => setTasks([]))
-      .finally(() => setLoading(false));
+    try {
+      const rows = await api.getServiceTaskYearPlan(year) as PlanRow[];
+      setPlan(rows);
+      return rows;
+    } catch {
+      setPlan([]);
+      return [];
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(load, [year]);
+  useEffect(() => { loadPlan(); /* eslint-disable-next-line */ }, [year]);
   useEffect(() => {
     api.getServiceDefinitions()
       .then((d: any[]) => setServices(d.map(s => ({ key: s.key, label: s.label }))))
@@ -58,47 +69,91 @@ export default function ServiceTasksYear() {
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return tasks
-      .filter(t => !service || t.service_key === service)
-      .filter(t => statusFilter === 'all' || (statusFilter === 'done' ? isDone(t.status) : !isDone(t.status)))
-      .filter(t => !q || `${t.title} ${t.client_name || ''} ${t.client_code || ''}`.toLowerCase().includes(q))
-      .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || '') || (a.client_name || '').localeCompare(b.client_name || ''));
-  }, [tasks, service, statusFilter, search]);
+    return plan
+      .filter(r => !service || r.service_key === service)
+      .filter(r => statusFilter === 'all' || (statusFilter === 'done' ? isDone(r.status) : !isDone(r.status)))
+      .filter(r => !q || `${r.stage_label} ${r.period_label} ${r.client_name || ''} ${r.client_code || ''}`.toLowerCase().includes(q))
+      .sort((a, b) =>
+        (a.scheduled_date || '').localeCompare(b.scheduled_date || '') ||
+        (a.client_name || '').localeCompare(b.client_name || ''));
+  }, [plan, service, statusFilter, search]);
 
-  const ref = (t: Task) => edits[t.id]?.reference ?? t.completion_data?.reference ?? '';
-  const cdate = (t: Task) => edits[t.id]?.completed_date ?? t.completion_data?.completed_date ?? '';
-  const setEdit = (id: number, patch: { reference?: string; completed_date?: string }) =>
-    setEdits(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const ref = (r: PlanRow) => edits[rowKey(r)]?.reference ?? r.completion_data?.reference ?? '';
+  const cdate = (r: PlanRow) => edits[rowKey(r)]?.completed_date ?? r.completion_data?.completed_date ?? '';
+  const setEdit = (k: string, patch: { reference?: string; completed_date?: string }) =>
+    setEdits(prev => ({ ...prev, [k]: { ...prev[k], ...patch } }));
 
-  const save = async (t: Task, markDone: boolean) => {
-    setSavingId(t.id);
+  // Generate the single period's task on demand, then return the fresh plan.
+  const generatePeriod = async (r: PlanRow): Promise<PlanRow[]> => {
+    await api.runDueServiceSchedules({
+      runDate: `${year}-${String(r.fire_month).padStart(2, '0')}-28`,
+      serviceId: r.service_id,
+      clientIds: [r.client_id],
+    });
+    return await loadPlan();
+  };
+
+  // Mark a period done. Generates the task first if it doesn't exist yet.
+  const markDone = async (r: PlanRow) => {
+    const k = rowKey(r);
+    setSavingKey(k);
     try {
+      let taskId = r.task_id;
+      let existing = r.completion_data;
+      if (!taskId) {
+        const fresh = await generatePeriod(r);
+        const nr = fresh.find(x => rowKey(x) === k);
+        taskId = nr?.task_id ?? null;
+        existing = nr?.completion_data;
+        if (!taskId) { alert('Could not generate this task — check the service is still enabled for the client.'); return; }
+      }
       const completion_data = {
-        ...(t.completion_data || {}),
-        reference: ref(t) || null,
-        completed_date: (cdate(t) || (markDone ? new Date().toISOString().slice(0, 10) : '')) || null,
+        ...(existing || {}),
+        reference: (edits[k]?.reference ?? existing?.reference) || null,
+        completed_date: (edits[k]?.completed_date ?? existing?.completed_date ?? new Date().toISOString().slice(0, 10)) || null,
       };
-      const patch: any = { completion_data, status: markDone ? 'done' : (isDone(t.status) ? 'done' : 'open') };
-      await api.updateStaffTask(t.id, patch);
-      setTasks(prev => prev.map(x => (x.id === t.id ? { ...x, ...patch } : x)));
-      setEdits(prev => { const n = { ...prev }; delete n[t.id]; return n; });
+      await api.updateStaffTask(taskId, { status: 'done', completion_data });
+      setEdits(prev => { const n = { ...prev }; delete n[k]; return n; });
+      await loadPlan();
     } catch (e: any) {
       alert('Save failed: ' + (e?.message || e));
     } finally {
-      setSavingId(null);
+      setSavingKey(null);
     }
   };
 
-  const reopen = async (t: Task) => {
-    setSavingId(t.id);
+  // Save completion fields on an already-done task (edit ref/date without reopening).
+  const saveDetails = async (r: PlanRow) => {
+    if (!r.task_id) return;
+    const k = rowKey(r);
+    setSavingKey(k);
     try {
-      await api.updateStaffTask(t.id, { status: 'open' });
-      setTasks(prev => prev.map(x => (x.id === t.id ? { ...x, status: 'open' } : x)));
-    } catch (e: any) { alert('Failed: ' + (e?.message || e)); }
-    finally { setSavingId(null); }
+      const completion_data = {
+        ...(r.completion_data || {}),
+        reference: ref(r) || null,
+        completed_date: cdate(r) || null,
+      };
+      await api.updateStaffTask(r.task_id, { completion_data });
+      setEdits(prev => { const n = { ...prev }; delete n[k]; return n; });
+      await loadPlan();
+    } catch (e: any) { alert('Save failed: ' + (e?.message || e)); }
+    finally { setSavingKey(null); }
   };
 
-  // Generate every month of the year so the grid shows the full year.
+  const reopen = async (r: PlanRow) => {
+    if (!r.task_id) return;
+    const k = rowKey(r);
+    setSavingKey(k);
+    try {
+      await api.updateStaffTask(r.task_id, { status: 'open' });
+      await loadPlan();
+    } catch (e: any) { alert('Failed: ' + (e?.message || e)); }
+    finally { setSavingKey(null); }
+  };
+
+  // Bulk: generate every expected period for the year so all tasks exist
+  // (e.g. so their emails can be queued). On-demand per-row generation makes
+  // this optional now, but it's kept for convenience.
   const backfill = async () => {
     if (!confirm(`Generate all service tasks for ${year}? This creates any missing tasks for every month (existing ones are untouched).`)) return;
     setBusy('Generating…');
@@ -111,7 +166,7 @@ export default function ServiceTasksYear() {
       }
       setBusy('');
       alert(`Done — ${created} task(s) created for ${year}.`);
-      load();
+      await loadPlan();
     } catch (e: any) {
       setBusy('');
       alert('Generate failed: ' + (e?.message || e));
@@ -119,11 +174,16 @@ export default function ServiceTasksYear() {
   };
 
   const todayIso = new Date().toISOString().slice(0, 10);
-  const cellStatus = (t: Task) => isDone(t.status) ? 'done' : (t.due_date && t.due_date < todayIso ? 'overdue' : 'pending');
+  const cellStatus = (r: PlanRow): 'done' | 'overdue' | 'pending' | 'ungenerated' => {
+    if (isDone(r.status)) return 'done';
+    if (!r.task_id) return 'ungenerated';
+    return r.scheduled_date && r.scheduled_date < todayIso ? 'overdue' : 'pending';
+  };
 
   if (!canView) return <div className="empty-state"><p>Staff only.</p></div>;
 
   const years = [thisYear + 1, thisYear, thisYear - 1, thisYear - 2];
+  const doneCount = rows.filter(r => isDone(r.status)).length;
 
   return (
     <div className="dashboard">
@@ -136,7 +196,8 @@ export default function ServiceTasksYear() {
         )}
       </div>
       <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 12px' }}>
-        Every service-generated task for the year. Flag each as done with its completion date and reference number.
+        Every period each client's services are due to run this year — including ones not generated yet.
+        Flag each done with its completion date and reference; a not-yet-generated period is created automatically when you mark it done.
       </p>
 
       <div className="tf-summary-controls">
@@ -161,15 +222,14 @@ export default function ServiceTasksYear() {
         <label><span className="tf-control-label">Search</span>
           <input className="form-input form-input-sm" placeholder="Client or task" value={search} onChange={e => setSearch(e.target.value)} />
         </label>
-        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{rows.length} tasks</span>
+        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{doneCount}/{rows.length} done</span>
       </div>
 
       {loading ? (
         <PanelSkeleton rows={8} />
       ) : rows.length === 0 ? (
         <div className="empty-state">
-          <p>No service tasks for {year}{service ? ' in this service' : ''}.</p>
-          {canBackfill && <button className="btn btn-primary" onClick={backfill} disabled={!!busy}>{busy || `Generate all ${year}`}</button>}
+          <p>No expected service tasks for {year}{service ? ' in this service' : ''}. Enable services for clients in Admin → Services.</p>
         </div>
       ) : (
         <div className="export-table-wrapper">
@@ -186,35 +246,41 @@ export default function ServiceTasksYear() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(t => {
-                const st = cellStatus(t);
-                const color = st === 'done' ? '#047857' : st === 'overdue' ? '#b91c1c' : '#9b861f';
+              {rows.map(r => {
+                const k = rowKey(r);
+                const st = cellStatus(r);
+                const color = st === 'done' ? '#047857' : st === 'overdue' ? '#b91c1c' : st === 'ungenerated' ? '#64748b' : '#9b861f';
+                const label = st === 'done' ? 'Done' : st === 'overdue' ? 'Overdue' : st === 'ungenerated' ? 'Not generated' : 'Pending';
+                const saving = savingKey === k;
                 return (
-                  <tr key={t.id}>
+                  <tr key={k}>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      {t.client_id
-                        ? <Link to={`/clients/${t.client_id}`}>{t.client_code ? <span className="client-code-inline">{t.client_code}</span> : null}{t.client_name || `#${t.client_id}`}</Link>
-                        : '—'}
+                      <Link to={`/clients/${r.client_id}`}>
+                        {r.client_code ? <span className="client-code-inline">{r.client_code}</span> : null}
+                        {r.client_name || `#${r.client_id}`}
+                      </Link>
                     </td>
-                    <td>{t.title}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{t.due_date || '—'}</td>
-                    <td style={{ fontWeight: 600, color }}>{st === 'done' ? 'Done' : st === 'overdue' ? 'Overdue' : 'Pending'}</td>
+                    <td>{r.stage_label} <span style={{ color: '#94a3b8' }}>({r.period_label})</span></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.scheduled_date || '—'}</td>
+                    <td style={{ fontWeight: 600, color }}>{label}</td>
                     <td>
                       <input type="date" className="form-input" style={{ width: 150, padding: '3px 6px' }}
-                        value={cdate(t)} onChange={e => setEdit(t.id, { completed_date: e.target.value })} />
+                        value={cdate(r)} onChange={e => setEdit(k, { completed_date: e.target.value })} />
                     </td>
                     <td>
                       <input type="text" className="form-input" style={{ width: 140, padding: '3px 6px' }}
-                        placeholder="Ref no." value={ref(t)} onChange={e => setEdit(t.id, { reference: e.target.value })} />
+                        placeholder="Ref no." value={ref(r)} onChange={e => setEdit(k, { reference: e.target.value })} />
                     </td>
                     <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      {isDone(t.status) ? (
+                      {isDone(r.status) ? (
                         <>
-                          <button className="btn btn-secondary btn-sm" disabled={savingId === t.id} onClick={() => save(t, true)}>Save</button>{' '}
-                          <button className="btn btn-secondary btn-sm" disabled={savingId === t.id} onClick={() => reopen(t)}>Reopen</button>
+                          <button className="btn btn-secondary btn-sm" disabled={saving} onClick={() => saveDetails(r)}>Save</button>{' '}
+                          <button className="btn btn-secondary btn-sm" disabled={saving} onClick={() => reopen(r)}>Reopen</button>
                         </>
                       ) : (
-                        <button className="btn btn-primary btn-sm" disabled={savingId === t.id} onClick={() => save(t, true)}>✓ Done</button>
+                        <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => markDone(r)}>
+                          {saving ? '…' : '✓ Done'}
+                        </button>
                       )}
                     </td>
                   </tr>
