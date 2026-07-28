@@ -10,6 +10,8 @@ import SendPendingEmailsModal from './SendPendingEmailsModal';
 import SearchableSelect from '../common/SearchableSelect';
 import { toClientOptions } from '../../services/clientOptions';
 import { formatDateTime } from '../../services/dates';
+import { Menu, type MenuItem } from '../ui';
+import { MoreHorizontal, MessageSquarePlus, FileText, Printer, RefreshCw, Bell, Mail } from 'lucide-react';
 
 type Status   = 'open' | 'in_progress' | 'blocked' | 'done' | 'cancelled';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
@@ -343,84 +345,59 @@ export default function StaffTasks() {
     return u?.display_name || u?.username || uid.slice(0, 8);
   };
 
+  const doGenerate = async () => {
+    setGenerating(true);
+    try {
+      const r = await api.runDueServiceSchedules();
+      alert(`Generated ${r.created_tasks} task(s) and ${r.created_runs} run(s).`);
+      await reload();
+    } catch (e: any) {
+      alert('Generate failed: ' + (e?.message || e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const doSendReminders = async () => {
+    if (!confirm('Email every staff member a digest of their overdue and due-soon tasks now?\n\nThese go to staff only — no client emails.')) return;
+    setReminding(true);
+    try {
+      const r = await api.runTaskReminders();
+      let msg = `Reminder digests sent to ${r.sent} of ${r.recipients} staff member(s) with due tasks.`;
+      if (r.failures && r.failures.length) msg += `\n\nSkipped/failed:\n` + r.failures.join('\n');
+      alert(msg);
+    } catch (e: any) {
+      alert('Reminders failed: ' + (e?.message || e));
+    } finally {
+      setReminding(false);
+    }
+  };
+
+  const supervisor = isSupervisorOrHigher(user);
+  const moreItems: MenuItem[] = [
+    { key: 'log', label: 'Log message', icon: <MessageSquarePlus size={15} />, onSelect: () => setShowLogMessage(true) },
+    { key: 'template', label: 'From template', icon: <FileText size={15} />, onSelect: () => setShowApplyTemplate(true) },
+    { key: 'print', label: 'Print task list', icon: <Printer size={15} />, onSelect: printTasks, title: 'Print the current filtered task list' },
+    ...(supervisor ? [
+      { key: 'generate', label: generating ? 'Generating…' : 'Generate due tasks now', icon: <RefreshCw size={15} />, onSelect: doGenerate, disabled: generating, title: "Generate this month's due tasks now — normally runs automatically every night", separatorBefore: true },
+      { key: 'remind', label: reminding ? 'Sending…' : 'Send reminders now', icon: <Bell size={15} />, onSelect: doSendReminders, disabled: reminding, title: 'Email each staff member their overdue + due-soon tasks now — normally runs automatically every morning' },
+    ] as MenuItem[] : []),
+    { key: 'pending', label: `Send pending emails${pendingEmailsCount ? ` (${pendingEmailsCount})` : ''}`, icon: <Mail size={15} />, onSelect: () => setShowPendingEmails(true), disabled: pendingEmailsCount === 0, title: 'Send the emails queued by the nightly scheduler', separatorBefore: true },
+  ];
+
   return (
     <div className="dashboard staff-tasks-page">
       <div className="dashboard-header">
         <h2>Tasks</h2>
-        <div className="dashboard-actions">
-          <button className="btn btn-secondary" onClick={() => setShowLogMessage(true)}>
-            Log message
-          </button>
-          <button className="btn btn-secondary" onClick={() => setShowApplyTemplate(true)} style={{ marginLeft: 6 }}>
-            From template
-          </button>
-          <button className="btn btn-secondary" onClick={printTasks} style={{ marginLeft: 6 }} title="Print the current filtered task list">
-            🖨 Print
-          </button>
-          {isSupervisorOrHigher(user) && (
-            <button
-              className="btn btn-secondary"
-              style={{ marginLeft: 6 }}
-              disabled={generating}
-              title="Generate this month's due tasks now — normally runs automatically every night"
-              onClick={async () => {
-                setGenerating(true);
-                try {
-                  const r = await api.runDueServiceSchedules();
-                  alert(`Generated ${r.created_tasks} task(s) and ${r.created_runs} run(s).`);
-                  await reload();
-                } catch (e: any) {
-                  alert('Generate failed: ' + (e?.message || e));
-                } finally {
-                  setGenerating(false);
-                }
-              }}
-            >
-              {generating ? 'Generating…' : '⟳ Generate now'}
-            </button>
-          )}
-          {isSupervisorOrHigher(user) && (
-            <button
-              className="btn btn-secondary"
-              style={{ marginLeft: 6 }}
-              disabled={reminding}
-              title="Email each staff member their overdue + due-soon tasks now — normally runs automatically every morning"
-              onClick={async () => {
-                if (!confirm('Email every staff member a digest of their overdue and due-soon tasks now?\n\nThese go to staff only — no client emails.')) return;
-                setReminding(true);
-                try {
-                  const r = await api.runTaskReminders();
-                  let msg = `Reminder digests sent to ${r.sent} of ${r.recipients} staff member(s) with due tasks.`;
-                  if (r.failures && r.failures.length) msg += `\n\nSkipped/failed:\n` + r.failures.join('\n');
-                  alert(msg);
-                } catch (e: any) {
-                  alert('Reminders failed: ' + (e?.message || e));
-                } finally {
-                  setReminding(false);
-                }
-              }}
-            >
-              {reminding ? 'Sending…' : '🔔 Send reminders'}
-            </button>
-          )}
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowPendingEmails(true)}
-            style={{ marginLeft: 6, position: 'relative' }}
-            title="Send the emails queued by the nightly scheduler"
-            disabled={pendingEmailsCount === 0}
-          >
-            📧 Send pending emails
-            {pendingEmailsCount > 0 && (
-              <span style={{
-                position: 'absolute', top: -6, right: -6,
-                background: '#dc2626', color: '#fff',
-                borderRadius: 999, fontSize: 10, fontWeight: 700,
-                padding: '1px 6px',
-              }}>{pendingEmailsCount}</span>
-            )}
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowForm(s => !s)} style={{ marginLeft: 6 }}>
+        <div className="dashboard-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Menu
+            label={<><MoreHorizontal size={15} aria-hidden /> More{pendingEmailsCount > 0 && (
+              <span style={{ marginLeft: 6, background: '#dc2626', color: '#fff', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>{pendingEmailsCount}</span>
+            )}</>}
+            buttonClassName="btn btn-secondary"
+            items={moreItems}
+          />
+          <button className="btn btn-primary" onClick={() => setShowForm(s => !s)}>
             {showForm ? 'Cancel' : '+ New Task'}
           </button>
         </div>
