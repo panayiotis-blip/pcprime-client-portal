@@ -81,6 +81,9 @@ export default function LoginPage() {
           <Link to="/signup" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
             New client? Request an account →
           </Link>
+          <Link to="/app" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
+            Using a client app? Sign in here →
+          </Link>
           <Link to="/" style={{ color: '#9b861f', fontSize: 14, textDecoration: 'none' }}>
             ← Back to Home
           </Link>

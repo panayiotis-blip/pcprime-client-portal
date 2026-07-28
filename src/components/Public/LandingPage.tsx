@@ -81,6 +81,7 @@ export default function LandingPage() {
             {t('news_url') && (
               <a href={t('news_url')} target="_blank" rel="noopener noreferrer">{t('nav_news')}</a>
             )}
+            <Link to="/app">Client Apps</Link>
             <Link to="/login" className="landing-nav-cta">{t('nav_portal')}</Link>
           </nav>
         </header>
@@ -195,6 +196,7 @@ export default function LandingPage() {
             {instagram && <p><a href={instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
             {linkedin && <p><a href={linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
             <p><Link to="/login">Client Portal</Link></p>
+            <p><Link to="/app">Client Apps</Link></p>
             <p><Link to="/tax">Tax Calculator</Link></p>
           </div>
         </div>
