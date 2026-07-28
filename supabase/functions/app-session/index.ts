@@ -42,6 +42,15 @@ function b64ToBytes(s: string): Uint8Array {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out;
 }
 
+function b64(a: Uint8Array): string { let s = ''; for (const b of a) s += String.fromCharCode(b); return btoa(s); }
+async function pbkdf2Hash(password: string): Promise<string> {
+  const iters = 120000;
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iters }, key, 256);
+  return `pbkdf2$${iters}$${b64(salt)}$${b64(new Uint8Array(bits))}`;
+}
+
 async function pbkdf2Verify(password: string, stored: string): Promise<boolean> {
   const parts = stored.split('$');
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
@@ -121,6 +130,29 @@ Deno.serve(async (req) => {
       { client_id: s.cid, app_key: s.app, data: body.data, updated_at: new Date().toISOString() },
       { onConflict: 'client_id,app_key' },
     );
+    if (error) return json({ ok: false, error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  if (action === 'register') {
+    const clientName = String(body.client_name || '').trim();
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '');
+    if (!clientName || !username || password.length < 6) {
+      return json({ ok: false, error: 'Client name, username and a 6+ character password are required.' }, 400);
+    }
+    // Username must be free — across live logins and pending requests.
+    const { data: taken } = await admin.from('client_app_users').select('id').ilike('username', username).maybeSingle();
+    if (taken) return json({ ok: false, error: 'That username is already taken.' }, 400);
+    const { data: pend } = await admin.from('client_app_access_requests').select('id').ilike('username', username).eq('status', 'pending').maybeSingle();
+    if (pend) return json({ ok: false, error: 'A request with that username is already pending.' }, 400);
+    const password_hash = await pbkdf2Hash(password);
+    const { error } = await admin.from('client_app_access_requests').insert({
+      app_key: String(body.app_key || 'rentals'), client_name: clientName,
+      full_name: String(body.full_name || '').trim() || null, username, password_hash,
+      email: String(body.email || '').trim() || null, phone: String(body.phone || '').trim() || null,
+      message: String(body.message || '').trim() || null,
+    });
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true });
   }

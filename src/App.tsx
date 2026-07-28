@@ -39,6 +39,7 @@ const ServiceTasksYear = lazy(() => import('./components/Admin/ServiceTasksYear'
 const TaskDashboard = lazy(() => import('./components/Admin/TaskDashboard'));
 const MyClientApp = lazy(() => import('./components/Client/MyClientApp'));
 const ClientAppPortal = lazy(() => import('./components/AppPortal/ClientAppPortal'));
+const AppAccessRequests = lazy(() => import('./components/Admin/AppAccessRequests'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
 const ExportPage = lazy(() => import('./components/Export/ExportPage'));
@@ -148,6 +149,7 @@ function AuthedApp() {
             <Route path="/service-tasks" element={<ServiceTasksYear />} />
             <Route path="/task-dashboard" element={<TaskDashboard />} />
             <Route path="/my-apps/:appKey" element={<MyClientApp />} />
+            <Route path="/app-requests" element={<AppAccessRequests />} />
             <Route path="/credentials" element={<CredentialsVault />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/applications" element={<Applications />} />

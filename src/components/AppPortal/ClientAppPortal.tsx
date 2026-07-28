@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { getClientApp } from '../../services/clientApps';
 
@@ -18,6 +19,9 @@ export default function ClientAppPortal() {
   const [err, setErr] = useState('');
   const [srcDoc, setSrcDoc] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [reg, setReg] = useState({ client_name: '', full_name: '', username: '', password: '', email: '', phone: '', message: '' });
+  const [regDone, setRegDone] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const sessRef = useRef<Session | null>(null);
@@ -42,6 +46,22 @@ export default function ClientAppPortal() {
   };
 
   const signOut = () => { setSess(null); setSrcDoc(''); setPassword(''); setSaveState('idle'); };
+
+  const submitRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      await api.appRegister({
+        client_name: reg.client_name.trim(), full_name: reg.full_name.trim(), username: reg.username.trim(),
+        password: reg.password, email: reg.email.trim(), phone: reg.phone.trim(), message: reg.message.trim(),
+      });
+      setRegDone(true);
+    } catch (e: any) {
+      setErr(e?.message || 'Request failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Bridge with the embedded app.
   useEffect(() => {
@@ -85,22 +105,57 @@ export default function ClientAppPortal() {
     );
   }
 
-  // ----- Login box -----
+  // ----- Login / register box -----
+  const inputStyle: React.CSSProperties = { width: '100%', marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14 };
+  const linkStyle: React.CSSProperties = { color: '#9b861f', fontSize: 13, textDecoration: 'none', cursor: 'pointer', background: 'none', border: 'none' };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(120deg,#141f66,#28348a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <form onSubmit={signIn} style={{ background: '#fff', borderRadius: 16, padding: 30, width: 'min(380px,92vw)', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(120deg,#141f66,#28348a)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 30, width: 'min(420px,92vw)', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
         <h2 style={{ margin: '0 0 4px', fontSize: 20, color: '#0f172a' }}>Client Apps</h2>
-        <p style={{ margin: '0 0 18px', fontSize: 12, color: '#64748b' }}>PC Prime &amp; Calculate Consultants — please sign in.</p>
+        <p style={{ margin: '0 0 18px', fontSize: 12, color: '#64748b' }}>PC Prime &amp; Calculate Consultants</p>
         {err && <div style={{ color: '#ef4444', fontSize: 12.5, marginBottom: 8 }}>{err}</div>}
-        <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" autoComplete="username"
-          style={{ width: '100%', marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14 }} />
-        <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Password" autoComplete="current-password"
-          style={{ width: '100%', marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14 }} />
-        <button type="submit" disabled={busy || !username.trim() || !password}
-          style={{ width: '100%', padding: 11, borderRadius: 8, border: 'none', background: '#1e2a78', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
-          {busy ? 'Signing in…' : 'Sign in'}
-        </button>
-      </form>
+
+        {mode === 'login' ? (
+          <form onSubmit={signIn}>
+            <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" autoComplete="username" style={inputStyle} />
+            <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Password" autoComplete="current-password" style={inputStyle} />
+            <button type="submit" disabled={busy || !username.trim() || !password}
+              style={{ width: '100%', padding: 11, borderRadius: 8, border: 'none', background: '#1e2a78', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              {busy ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        ) : regDone ? (
+          <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.6 }}>
+            <p style={{ color: '#166534', fontWeight: 600 }}>✓ Request submitted.</p>
+            <p style={{ color: '#475569' }}>Your accountant will review it and activate your access. You'll be able to sign in once it's approved.</p>
+            <button onClick={() => { setMode('login'); setRegDone(false); }} style={{ ...linkStyle, marginTop: 6 }}>← Back to sign in</button>
+          </div>
+        ) : (
+          <form onSubmit={submitRegister}>
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>Request access — your accountant approves it before you can sign in.</p>
+            <input value={reg.client_name} onChange={e => setReg(p => ({ ...p, client_name: e.target.value }))} placeholder="Client / company name *" style={inputStyle} />
+            <input value={reg.full_name} onChange={e => setReg(p => ({ ...p, full_name: e.target.value }))} placeholder="Your full name" style={inputStyle} />
+            <input value={reg.username} onChange={e => setReg(p => ({ ...p, username: e.target.value }))} placeholder="Desired username *" autoComplete="username" style={inputStyle} />
+            <input value={reg.password} onChange={e => setReg(p => ({ ...p, password: e.target.value }))} type="password" placeholder="Choose a password (min 6) *" autoComplete="new-password" style={inputStyle} />
+            <input value={reg.email} onChange={e => setReg(p => ({ ...p, email: e.target.value }))} type="email" placeholder="Email" style={inputStyle} />
+            <input value={reg.phone} onChange={e => setReg(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={inputStyle} />
+            <button type="submit" disabled={busy || !reg.client_name.trim() || !reg.username.trim() || reg.password.length < 6}
+              style={{ width: '100%', padding: 11, borderRadius: 8, border: 'none', background: '#1e2a78', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              {busy ? 'Submitting…' : 'Request access'}
+            </button>
+          </form>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, borderTop: '1px solid #eef1f5', paddingTop: 14 }}>
+          <Link to="/" style={linkStyle}>← Back to home</Link>
+          {!regDone && (
+            <button type="button" onClick={() => { setErr(''); setMode(mode === 'login' ? 'register' : 'login'); }} style={linkStyle}>
+              {mode === 'login' ? 'Register for access →' : 'Have a login? Sign in →'}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

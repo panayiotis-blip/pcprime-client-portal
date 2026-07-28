@@ -916,6 +916,29 @@ export const api = {
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Save failed.');
   },
+  // Public: request app access (creates a pending request the firm approves).
+  async appRegister(p: { client_name: string; full_name?: string; username: string; password: string; email?: string; phone?: string; message?: string; app_key?: string }) {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'register', ...p } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Request failed.');
+  },
+  // Firm-side review of app-access requests.
+  async listAppRequests(): Promise<any[]> {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'list_requests' } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to load requests.');
+    return data.requests as any[];
+  },
+  async approveAppRequest(id: number, clientId: number, appKey: string, role: string) {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'approve_request', id, client_id: clientId, app_key: appKey, role } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Approve failed.');
+  },
+  async rejectAppRequest(id: number) {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'reject_request', id } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Reject failed.');
+  },
 
   async selfUpdateClient(id: number, data: any) {
     // Client role: whitelist of fields only

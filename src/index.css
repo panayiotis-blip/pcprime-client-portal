@@ -2632,9 +2632,13 @@ h4 { font-size: 14px; font-weight: 600; }
 .landing-cta-disabled:hover { transform: none; box-shadow: none; border-color: #e2e8f0; }
 .landing-cta-disabled .cta-title { color: #64748b; }
 .landing-cta-disabled .cta-arrow {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
-  opacity: 1; color: #94a3b8; top: 30px;
+  top: 22px; right: 20px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  opacity: 1; color: #475569; background: #cbd5e1;
+  border-radius: 999px; padding: 3px 10px;
 }
+/* keep the title/sub clear of the badge */
+.landing-cta-disabled .cta-title { padding-right: 70px; }
 .landing-cta .cta-title {
   font-size: 20px;
   font-weight: 700;

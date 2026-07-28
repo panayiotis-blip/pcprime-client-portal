@@ -60,6 +60,11 @@ Deno.serve(async (req) => {
     const { data } = await admin.from('client_app_users').select('client_id').eq('id', id).maybeSingle();
     return data ? (data as any).client_id : null;
   };
+  // Is the caller firm staff (for global actions like reviewing requests)?
+  const isStaff = async (): Promise<boolean> => {
+    const { data } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
+    return !!data && ['owner', 'supervisor', 'admin', 'staff'].includes((data as any).role);
+  };
 
   let body: any;
   try { body = await req.json(); } catch { return json({ ok: false, error: 'Bad JSON' }, 400); }
@@ -120,6 +125,49 @@ Deno.serve(async (req) => {
     const cid = await clientOf(id);
     if (cid == null || !(await canAccess(cid))) return json({ ok: false, error: 'No access.' }, 403);
     const { error } = await admin.from('client_app_users').delete().eq('id', id);
+    if (error) return json({ ok: false, error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  // ----- Self-registration requests (migration 163) -----
+  if (action === 'list_requests') {
+    if (!(await isStaff())) return json({ ok: false, error: 'Staff only.' }, 403);
+    const { data, error } = await admin.from('client_app_access_requests')
+      .select('id, app_key, client_name, full_name, username, email, phone, message, created_at')
+      .eq('status', 'pending').order('created_at');
+    if (error) return json({ ok: false, error: error.message }, 500);
+    return json({ ok: true, requests: data || [] });
+  }
+
+  if (action === 'approve_request') {
+    const id = Number(body.id);
+    const clientId = Number(body.client_id);
+    if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    const { data: reqRow } = await admin.from('client_app_access_requests').select('*').eq('id', id).maybeSingle();
+    if (!reqRow || (reqRow as any).status !== 'pending') return json({ ok: false, error: 'Request not found or already handled.' }, 404);
+    const r: any = reqRow;
+    const role = ROLES.includes(body.role) ? body.role : 'editor';
+    const appKey = String(body.app_key || r.app_key || 'rentals');
+    // Create the login from the (already hashed) request, and make sure the
+    // client has the app enabled so the login works.
+    const { data: created, error: cErr } = await admin.from('client_app_users').insert({
+      client_id: clientId, app_key: appKey, username: r.username, name: r.full_name,
+      role, password_hash: r.password_hash, created_by: user.id,
+    }).select('id').single();
+    if (cErr) return json({ ok: false, error: /duplicate|unique/i.test(cErr.message) ? 'That username is already taken.' : cErr.message }, 400);
+    await admin.from('client_apps').upsert({ client_id: clientId, app_key: appKey, enabled: true }, { onConflict: 'client_id,app_key' });
+    await admin.from('client_app_access_requests').update({
+      status: 'approved', client_id: clientId, resulting_user_id: (created as any).id,
+      reviewed_by: user.id, reviewed_at: new Date().toISOString(),
+    }).eq('id', id);
+    return json({ ok: true, id: (created as any).id });
+  }
+
+  if (action === 'reject_request') {
+    if (!(await isStaff())) return json({ ok: false, error: 'Staff only.' }, 403);
+    const { error } = await admin.from('client_app_access_requests')
+      .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+      .eq('id', Number(body.id)).eq('status', 'pending');
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true });
   }
