@@ -832,6 +832,32 @@ export const api = {
     return clientIds.length;
   },
 
+  // --------- Rental module (migration 160) ---------
+  // Clients with the Property Rentals module switched on. RLS narrows this to
+  // clients the caller can access, so a client-user sees only their own.
+  async getRentalClients(): Promise<Array<{ id: number; name: string; client_code: string | null }>> {
+    const { data, error } = await supabase.from('clients')
+      .select('id, name, client_code').eq('rental_enabled', true).order('name');
+    if (error) throw new Error(error.message);
+    return (data || []) as any[];
+  },
+  // The whole rental document for a client (null if not seeded yet).
+  async getRentalData(clientId: number): Promise<{ data: any; updated_at: string | null } | null> {
+    const { data, error } = await supabase.from('rental_data')
+      .select('data, updated_at').eq('client_id', clientId).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? { data: (data as any).data, updated_at: (data as any).updated_at } : null;
+  },
+  // Upsert the whole rental document (autosave). Stamps updated_by = caller.
+  async saveRentalData(clientId: number, doc: any) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('rental_data').upsert(
+      { client_id: clientId, data: doc, updated_by: user?.id ?? null, updated_at: new Date().toISOString() },
+      { onConflict: 'client_id' },
+    );
+    if (error) throw new Error(error.message);
+  },
+
   async selfUpdateClient(id: number, data: any) {
     // Client role: whitelist of fields only
     const allowed = ['address','phone','email','mobile','contact_person','website','city','postal_code','country'];

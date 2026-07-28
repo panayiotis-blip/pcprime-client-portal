@@ -39,3 +39,6 @@ supabase/xsd-tep-ext-2024/**/Samples/
 
 # Per-task brief files (transient, kept locally)
 *-instructions.md
+
+# Client rental app (contains real tenant data — seed goes to Supabase, not git)
+Greson_Property_Rentals.html
