@@ -2832,6 +2832,19 @@ h4 { font-size: 14px; font-weight: 600; }
 .footer-grid a { color: #1e3a5f; text-decoration: none; }
 .footer-grid a:hover { color: #9b861f; }
 .footer-grid code { color: #9b861f; font-size: 12px; }
+/* Quick-access buttons in the footer (Portal / Tax / Apps / Academy) */
+.landing-quicklinks { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; max-width: 240px; }
+.ql-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; border-radius: 8px; border: 1px solid #cbd5e1;
+  background: #fff; color: #1a365d !important; font-weight: 600; font-size: 14px;
+  text-decoration: none; transition: border-color .15s, background .15s;
+}
+.ql-btn:hover { border-color: #9b861f; background: #fdf9eb; color: #1a365d !important; }
+.ql-btn .ql-arrow { color: #9b861f; font-weight: 700; }
+.ql-btn.ql-disabled { opacity: .6; cursor: default; background: #f1f5f9; border-style: dashed; }
+.ql-btn.ql-disabled:hover { border-color: #cbd5e1; background: #f1f5f9; }
+.ql-btn .ql-soon { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
 .footer-bottom {
   border-top: 1px solid #e2e8f0;
   padding-top: 18px;

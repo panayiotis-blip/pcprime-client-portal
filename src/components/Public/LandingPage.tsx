@@ -200,9 +200,12 @@ export default function LandingPage() {
             {facebook && <p><a href={facebook} target="_blank" rel="noopener noreferrer">Facebook</a></p>}
             {instagram && <p><a href={instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
             {linkedin && <p><a href={linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
-            <p><Link to="/login">Client Portal</Link></p>
-            <p><Link to="/app">Client Apps</Link></p>
-            <p><Link to="/tax">Tax Calculator</Link></p>
+            <div className="landing-quicklinks">
+              <Link to="/login" className="ql-btn">Client Portal <span className="ql-arrow">→</span></Link>
+              <Link to="/tax" className="ql-btn">Tax Calculator <span className="ql-arrow">→</span></Link>
+              <Link to="/app" className="ql-btn">Client Apps <span className="ql-arrow">→</span></Link>
+              <span className="ql-btn ql-disabled" aria-disabled="true" title="Coming soon">PC Prime Academy <span className="ql-soon">coming soon</span></span>
+            </div>
           </div>
         </div>
         <div className="landing-section-inner footer-bottom">
