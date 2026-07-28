@@ -38,6 +38,7 @@ const ServicesSummary = lazy(() => import('./components/Admin/ServicesSummary'))
 const ServiceTasksYear = lazy(() => import('./components/Admin/ServiceTasksYear'));
 const TaskDashboard = lazy(() => import('./components/Admin/TaskDashboard'));
 const MyClientApp = lazy(() => import('./components/Client/MyClientApp'));
+const ClientAppPortal = lazy(() => import('./components/AppPortal/ClientAppPortal'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
 const ExportPage = lazy(() => import('./components/Export/ExportPage'));
@@ -237,6 +238,8 @@ function AppRoutes() {
       <Route path="/client-intake/:token" element={<ClientIntakePage />} />
       <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Standalone client-app entry (app-only users, not portal users). */}
+      <Route path="/app" element={<ClientAppPortal />} />
 
       {/* Everything else: authed → real app, anonymous → landing */}
       <Route path="/*" element={user ? <AuthedApp /> : <PublicApp />} />

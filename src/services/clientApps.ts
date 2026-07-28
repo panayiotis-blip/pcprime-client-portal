@@ -11,6 +11,10 @@ export type ClientAppDef = {
   icon: string;     // emoji for nav/tab
   asset: string;    // path to the app's static index.html folder (served from public/)
   description?: string;
+  // Restricted apps are built for one specific client and are NOT offered in
+  // the "add an app" picker — assign them via migration/SQL. They still show
+  // (and open) on clients they're already assigned to.
+  restricted?: boolean;
 };
 
 export const CLIENT_APPS: ClientAppDef[] = [
@@ -20,6 +24,7 @@ export const CLIENT_APPS: ClientAppDef[] = [
     icon: '🏠',
     asset: '/rental-app/',
     description: 'Tenants & contracts, rent schedule, receipts, arrears, deposits and statements.',
+    restricted: true, // Greson Easy Loo only
   },
 ];
 

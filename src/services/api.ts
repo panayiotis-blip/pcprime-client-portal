@@ -875,6 +875,48 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // ---- App-only users (migration 162) — firm-side management via app-users fn ----
+  async listAppUsers(clientId: number, appKey: string): Promise<any[]> {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'list', client_id: clientId, app_key: appKey } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to load users.');
+    return data.users as any[];
+  },
+  async createAppUser(p: { client_id: number; app_key: string; username: string; name?: string; role: string; password: string }): Promise<number> {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'create', ...p } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to create user.');
+    return data.id as number;
+  },
+  async updateAppUser(id: number, patch: { name?: string; role?: string; active?: boolean }) {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'update', id, ...patch } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to update user.');
+  },
+  async resetAppUserPassword(id: number, password: string) {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'reset', id, password } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to reset password.');
+  },
+  async deleteAppUser(id: number) {
+    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'delete', id } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to delete user.');
+  },
+
+  // ---- Standalone app session (public app-session fn) ----
+  async appLogin(username: string, password: string): Promise<{ session: string; role: string; name: string; app_key: string; data: any }> {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'login', username, password } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Login failed.');
+    return data;
+  },
+  async appSave(session: string, doc: any) {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'save', session, data: doc } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Save failed.');
+  },
+
   async selfUpdateClient(id: number, data: any) {
     // Client role: whitelist of fields only
     const allowed = ['address','phone','email','mobile','contact_person','website','city','postal_code','country'];
