@@ -822,6 +822,16 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // Bulk-assign the account manager for many clients in one update (pass null
+  // to clear). Used by the "Set all shown" action on the Services matrix.
+  async setAccountManagerBulk(clientIds: number[], managerId: string | null) {
+    if (!clientIds.length) return 0;
+    const { error } = await supabase.from('clients')
+      .update({ account_manager: managerId }).in('id', clientIds);
+    if (error) throw new Error(error.message);
+    return clientIds.length;
+  },
+
   async selfUpdateClient(id: number, data: any) {
     // Client role: whitelist of fields only
     const allowed = ['address','phone','email','mobile','contact_person','website','city','postal_code','country'];

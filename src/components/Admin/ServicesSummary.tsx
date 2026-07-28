@@ -91,6 +91,27 @@ export default function ServicesSummary() {
     }
   };
 
+  // Bulk-set the account manager for every client currently shown (respects
+  // the category/search/with-services filters).
+  const [bulkManager, setBulkManager] = useState('');
+  const setAllShown = async () => {
+    const ids = rows.map(c => c.id);
+    if (!ids.length) return;
+    const who = bulkManager ? (staffUsers.find(u => u.id === bulkManager)?.name || 'that person') : 'Unassigned';
+    if (!confirm(`Set the account manager to “${who}” for all ${ids.length} shown client${ids.length === 1 ? '' : 's'}?\n\nThis overwrites any manager already set on them.`)) return;
+    setBusy(true);
+    const snapshot = { ...managers };
+    setManagers(m => { const n = { ...m }; for (const id of ids) n[id] = bulkManager; return n; });
+    try {
+      await api.setAccountManagerBulk(ids, bulkManager || null);
+    } catch (e: any) {
+      setManagers(snapshot);
+      alert('Bulk update failed: ' + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -248,6 +269,19 @@ export default function ServicesSummary() {
           With services only
         </label>
         <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{rows.length} clients{busy ? ' · saving…' : ''}</span>
+        <label style={{ marginLeft: 'auto' }}>
+          <span className="tf-control-label">Set manager for all shown</span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <select className="form-input form-input-sm" value={bulkManager} onChange={e => setBulkManager(e.target.value)} style={{ minWidth: 140 }}>
+              <option value="">— Unassigned —</option>
+              {staffUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <button className="btn btn-secondary btn-sm" onClick={setAllShown} disabled={busy || rows.length === 0}
+              title="Assign this manager to every client currently shown">
+              Apply to {rows.length}
+            </button>
+          </span>
+        </label>
       </div>
 
       {loading ? (
