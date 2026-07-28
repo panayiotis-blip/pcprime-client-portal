@@ -240,6 +240,20 @@ export default function AppShell() {
   // Favourites (UI polish Part 3) — pinned menu items + clients.
   const [favourites, setFavourites] = useState<Favourite[]>([]);
   const [favsLoaded, setFavsLoaded] = useState(false);
+  // Whether a client-role user has a rental-enabled client — gates the client
+  // "Rentals" nav item so it only shows for clients using the module.
+  const [hasRental, setHasRental] = useState(false);
+  useEffect(() => {
+    if (!user || isStaffRole(user)) return;
+    api.getRentalClients().then(cs => setHasRental((cs || []).length > 0)).catch(() => {});
+  }, [user]);
+  const clientGroups = useMemo(() => (
+    hasRental
+      ? CLIENT_GROUPS.map((g, i) => i === 0
+          ? { ...g, items: [...g.items, { path: '/rentals', label: 'Rentals', icon: '🏠' }] }
+          : g)
+      : CLIENT_GROUPS
+  ), [hasRental]);
 
   // Filter groups the current user can see (e.g. Administration is leadership-only)
   const visibleGroups = useMemo(() => {
@@ -486,7 +500,7 @@ export default function AppShell() {
               <li className="sidebar-divider" aria-hidden="true" />
             )}
 
-            {CLIENT_GROUPS.map(g => {
+            {clientGroups.map(g => {
               const expanded = isGroupExpanded(g);
               const groupBadge = g.items.some(i => i.path === '/my-messages') ? msgUnread : 0;
               return (
