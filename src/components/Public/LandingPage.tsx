@@ -30,12 +30,17 @@ type Content = Record<string, string | null>;
 
 export default function LandingPage() {
   const [c, setC] = useState<Content>({});
+  // Hold the page invisible until saved content is loaded, so the initial
+  // render (built-in defaults) doesn't visibly swap to the saved values —
+  // that swap was the "flicker" on load. We fade in once, with real content.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
     api.getLandingContent()
       .then((data) => { if (alive) setC(data || {}); })
-      .catch(() => { /* fall back to built-in defaults */ });
+      .catch(() => { /* fall back to built-in defaults */ })
+      .finally(() => { if (alive) setLoaded(true); });
     return () => { alive = false; };
   }, []);
 
@@ -59,7 +64,7 @@ export default function LandingPage() {
   const alignClass = `ta-${align}`;
 
   return (
-    <div className="landing">
+    <div className="landing" style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.18s ease-in' }}>
       <div className="landing-topbar">
         <header className="landing-nav">
           <div className="landing-brand">
