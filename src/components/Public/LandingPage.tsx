@@ -28,19 +28,26 @@ const COMPANY_NAME = 'PC Prime & Calculate Consultants Ltd';
 
 type Content = Record<string, string | null>;
 
+const LANDING_CACHE = 'pc_landing_content';
+
 export default function LandingPage() {
-  const [c, setC] = useState<Content>({});
-  // Hold the page invisible until saved content is loaded, so the initial
-  // render (built-in defaults) doesn't visibly swap to the saved values —
-  // that swap was the "flicker" on load. We fade in once, with real content.
-  const [loaded, setLoaded] = useState(false);
+  // Seed from a cached copy of the saved content so repeat loads render the
+  // real content immediately — no flash of the built-in defaults that then
+  // swaps to the saved values (that swap was the flicker on load). First-ever
+  // visit falls back to defaults, then caches for next time.
+  const [c, setC] = useState<Content>(() => {
+    try { return JSON.parse(localStorage.getItem(LANDING_CACHE) || '{}'); } catch { return {}; }
+  });
 
   useEffect(() => {
     let alive = true;
     api.getLandingContent()
-      .then((data) => { if (alive) setC(data || {}); })
-      .catch(() => { /* fall back to built-in defaults */ })
-      .finally(() => { if (alive) setLoaded(true); });
+      .then((data) => {
+        if (!alive) return;
+        setC(data || {});
+        try { localStorage.setItem(LANDING_CACHE, JSON.stringify(data || {})); } catch { /* ignore quota */ }
+      })
+      .catch(() => { /* keep cache / built-in defaults */ });
     return () => { alive = false; };
   }, []);
 
@@ -64,7 +71,7 @@ export default function LandingPage() {
   const alignClass = `ta-${align}`;
 
   return (
-    <div className="landing" style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.18s ease-in' }}>
+    <div className="landing">
       <div className="landing-topbar">
         <header className="landing-nav">
           <div className="landing-brand">
@@ -86,7 +93,6 @@ export default function LandingPage() {
             {t('news_url') && (
               <a href={t('news_url')} target="_blank" rel="noopener noreferrer">{t('nav_news')}</a>
             )}
-            <Link to="/app">Client Apps</Link>
             <Link to="/login" className="landing-nav-cta">{t('nav_portal')}</Link>
           </nav>
         </header>
@@ -111,6 +117,18 @@ export default function LandingPage() {
                   <div className="cta-sub">{t('cta_tax_sub')}</div>
                   <div className="cta-arrow">→</div>
                 </Link>
+
+                <Link to="/app" className="landing-cta landing-cta-primary">
+                  <div className="cta-title">Client Apps</div>
+                  <div className="cta-sub">Sign in to your dedicated app.</div>
+                  <div className="cta-arrow">→</div>
+                </Link>
+
+                <div className="landing-cta landing-cta-disabled" aria-disabled="true" title="Coming soon">
+                  <div className="cta-title">PC Prime Academy</div>
+                  <div className="cta-sub">Training &amp; resources — coming soon.</div>
+                  <div className="cta-arrow">Soon</div>
+                </div>
               </div>
             </div>
 
@@ -200,12 +218,8 @@ export default function LandingPage() {
             {facebook && <p><a href={facebook} target="_blank" rel="noopener noreferrer">Facebook</a></p>}
             {instagram && <p><a href={instagram} target="_blank" rel="noopener noreferrer">Instagram</a></p>}
             {linkedin && <p><a href={linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
-            <div className="landing-quicklinks">
-              <Link to="/login" className="ql-btn">Client Portal <span className="ql-arrow">→</span></Link>
-              <Link to="/tax" className="ql-btn">Tax Calculator <span className="ql-arrow">→</span></Link>
-              <Link to="/app" className="ql-btn">Client Apps <span className="ql-arrow">→</span></Link>
-              <span className="ql-btn ql-disabled" aria-disabled="true" title="Coming soon">PC Prime Academy <span className="ql-soon">coming soon</span></span>
-            </div>
+            <p><Link to="/login">Client Portal</Link></p>
+            <p><Link to="/tax">Tax Calculator</Link></p>
           </div>
         </div>
         <div className="landing-section-inner footer-bottom">
