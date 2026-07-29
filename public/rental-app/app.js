@@ -68,6 +68,7 @@ function owed(t,y,m){ if(!due(t,y,m)||m>capM(y))return 0; const b=rentOf(t,y,m)-
 /* ---- shell ---- */
 function initShell(){
   refreshStamps();
+  applyHeaderLogo();
   document.getElementById("whoami").textContent=user? (user.name+" · "+user.role) : "";
   const tb=document.getElementById("tabs"); tb.innerHTML="";
   TABS().forEach(([id,l])=>{const d=document.createElement("div");d.className="tab"+(id===activeTab?" active":"");d.textContent=l;d.onclick=()=>{activeTab=id;render();};tb.appendChild(d);});
@@ -90,6 +91,7 @@ function initShell(){
   if(!window.__umClose){ window.__umClose=true; document.addEventListener("click",function(){ var m=document.getElementById("userMenu"); if(m)m.classList.add("hidden"); }); }
 }
 function refreshStamps(){ document.getElementById("stamps").innerHTML="Viewed: "+stamp(VIEWED)+" · Updated: "+(DATA.meta.updated||"—"); }
+function applyHeaderLogo(){ var hl=document.getElementById("hdrLogo"); if(!hl)return; var lg=(DATA.settings&&DATA.settings.logo)||""; if(lg){ hl.src=lg; hl.style.display=""; } else { hl.style.display="none"; } }
 
 /* ---- user menu: settings / privacy / users ---- */
 window.openPrivacy=function(){ try{ window.open("/privacy","_blank","noopener"); }catch(e){ flash("Could not open privacy policy."); } };
@@ -114,7 +116,7 @@ window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return
   var g=function(id){ return document.getElementById(id).value.trim(); };
   DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em"), invoicePrefix:g("st_inv")||"INV", bank:g("st_bank") });
   if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
-  persist("Updated company settings"); closeModal(); render(); flash("Settings saved."); };
+  persist("Updated company settings"); closeModal(); applyHeaderLogo(); render(); flash("Settings saved."); };
 
 /* ---- Users & access (talks to the host over postMessage → secure backend) ---- */
 var __userReqId=0, __userReqs={};
@@ -200,6 +202,8 @@ window.runImport=function(){ if(!canEdit()){alert("Read-only access.");return;}
 
 /* ---- Rent invoice ---- */
 var invTenant=null, invYear=null, invMonth=null;
+var stmtFrom=null, stmtTo=null;
+function ymKey(iso){ var y=parseInt((iso||"").slice(0,4),10), m=parseInt((iso||"").slice(5,7),10)-1; return (y||0)*12+(m||0); }
 function vInvoice(){
   if(invTenant==null && DATA.tenants.length)invTenant=DATA.tenants[0].id;
   var now=new Date(); if(invYear==null)invYear=String(now.getFullYear()); if(invMonth==null)invMonth=now.getMonth();
@@ -585,29 +589,31 @@ function vStatement(){
   if(stmtTenant==null && DATA.tenants.length)stmtTenant=DATA.tenants[0].id;
   const ys=yearList();
   const topts=DATA.tenants.map(t=>'<option value="'+t.id+'"'+(t.id===stmtTenant?" selected":"")+'>'+esc(t.name)+' — '+esc(t.unit)+'</option>').join("");
-  const yopt=ys.map(y=>'<option>'+y+'</option>').join("");
+  if(!stmtFrom) stmtFrom=ys[0]+"-01-01";
+  if(!stmtTo) stmtTo=ys[ys.length-1]+"-12-31";
   let h='<div class="panel noprint"><h3>Tenant statement</h3><div class="frow">'+
     '<label>Tenant<select id="stSel">'+topts+'</select></label>'+
-    '<label>From year<select id="stFrom">'+yopt+'</select></label>'+
-    '<label>To year<select id="stTo">'+yopt+'</select></label>'+
-    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print</button></label></div></div>';
+    '<label>From<input id="stFrom" type="date" value="'+esc(stmtFrom)+'"></label>'+
+    '<label>To<input id="stTo" type="date" value="'+esc(stmtTo)+'"></label>'+
+    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label></div></div>';
   h+=letterheadHtml();
+  const fYM=ymKey(stmtFrom), tYM=ymKey(stmtTo);
   const t=DATA.tenants.find(x=>x.id===stmtTenant);
   if(t){ const p=propById(t.propertyId), L=curLease(t);
     let charged=0,paidT=0,bal=0,rowsH="";
-    for(const y of ys){ for(let m=0;m<12;m++){ if(!due(t,y,m)&&paid(t,y,m)===0)continue; const dd=due(t,y,m); const ch=dd?rentOf(t,y,m):0; const pa=paid(t,y,m); bal+=ch-pa; charged+=ch; paidT+=pa;
+    for(const y of ys){ for(let m=0;m<12;m++){ const ck=(+y)*12+m; if(ck<fYM||ck>tYM)continue; if(!due(t,y,m)&&paid(t,y,m)===0)continue; const dd=due(t,y,m); const ch=dd?rentOf(t,y,m):0; const pa=paid(t,y,m); bal+=ch-pa; charged+=ch; paidT+=pa;
       rowsH+='<tr><td>'+MONTHS[m]+' '+y+'</td><td class="num">'+(ch?money(ch):"—")+'</td><td class="num">'+(pa?money(pa):(dd?"€0":"—"))+'</td><td class="num">'+money(bal)+'</td></tr>'; } }
-    h+='<div class="panel"><div style="display:flex;justify-content:space-between;flex-wrap:wrap"><h3>'+esc(t.name)+'</h3><div class="hint" style="text-align:right">Statement printed: '+stamp(new Date())+'</div></div>'+
-      '<div class="hint">'+esc(p?p.name:"")+' · '+esc(t.unit)+' · Lease '+esc(L.start||"?")+' → '+esc(L.end||"?")+' · Deposit '+money(t.deposit)+' · Electricity '+(t.electricity==null?"—":(t.electricity?"tenant pays":"included"))+'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone)+(t.email?" · "+esc(t.email):"")+'</div>'+
-      '<div class="tblwrap"><table><thead><tr><th>Period</th><th class="num">Charged</th><th class="num">Paid</th><th class="num">Balance</th></tr></thead><tbody>'+rowsH+
+    if(!rowsH)rowsH='<tr><td colspan="4" class="hint">No activity in this date range.</td></tr>';
+    h+='<div class="panel stmt-doc"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px"><h3 style="margin:0">Statement — '+esc(t.name)+'</h3><div class="hint" style="text-align:right">Period: '+esc(stmtFrom)+' → '+esc(stmtTo)+'<br>Printed: '+stamp(new Date()).slice(0,10)+'</div></div>'+
+      '<div class="hint" style="margin-top:6px">'+esc(p?p.name:"")+' · '+esc(t.unit)+' · Lease '+esc(L.start||"?")+' → '+esc(L.end||"?")+' · Deposit '+money(t.deposit)+'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone)+(t.email?" · "+esc(t.email):"")+'</div>'+
+      '<div class="tblwrap" style="margin-top:12px"><table><thead><tr><th>Period</th><th class="num">Charged</th><th class="num">Paid</th><th class="num">Balance</th></tr></thead><tbody>'+rowsH+
       '<tr class="total"><td>Total</td><td class="num">'+money(charged)+'</td><td class="num">'+money(paidT)+'</td><td class="num'+(bal>0?" warn":"")+'">'+money(bal)+'</td></tr></tbody></table></div></div>';
   }
   document.getElementById("view").innerHTML=h;
   const sel=document.getElementById("stSel"); if(sel)sel.onchange=e=>{stmtTenant=+e.target.value;render();};
-  const fr=document.getElementById("stFrom"),to=document.getElementById("stTo"); if(fr){fr.value=ys[0];to.value=ys[ys.length-1];
-    fr.onchange=to.onchange=()=>filterStmt(); }
+  const fr=document.getElementById("stFrom"); if(fr)fr.onchange=e=>{ stmtFrom=e.target.value; render(); };
+  const to=document.getElementById("stTo"); if(to)to.onchange=e=>{ stmtTo=e.target.value; render(); };
 }
-function filterStmt(){ render(); } // range applied via ys; simple full-range for now
 
 /* ---- Users (admin) ---- */
 function vUsers(){

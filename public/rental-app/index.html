@@ -60,14 +60,28 @@ canvas{max-height:300px;} .hidden{display:none;} .warn{color:var(--bad);font-wei
 .login h2{margin:0 0 4px;font-size:20px;} .login p{margin:0 0 18px;font-size:12px;color:var(--muted);}
 .login input{width:100%;margin-bottom:10px;padding:10px;}
 .login button{width:100%;padding:11px;} .login .err{color:var(--bad);font-size:12.5px;min-height:16px;margin-bottom:8px;}
-@media print{.tabs,.toolbar,header .who,.noprint{display:none!important;} .actions{position:static;box-shadow:none;}}
+@media print{
+  @page{ size:A4; margin:16mm; }
+  html,body{ background:#fff !important; }
+  header,.tabs,.toolbar,.noprint{ display:none !important; }
+  .wrap{ max-width:none; padding:0; }
+  .panel{ box-shadow:none !important; border:none !important; border-radius:0; padding:0; margin:0 0 10mm; }
+  .actions{ position:static; box-shadow:none; }
+  .invoice-doc,.stmt-doc{ font-size:12.5px; }
+  .tblwrap{ overflow:visible; }
+  table{ font-size:12px; } th,td{ padding:6px 8px; }
+  tr,td,th,.panel{ break-inside:avoid; }
+}
 </style></head>
 <body>
 <div id="loginHost"></div>
 <div id="app" class="hidden">
 <header>
-  <div><h1>Greson Easy Loo — Property Rentals</h1>
-  <div class="sub">Tenant contracts · deposits · receipts · arrears · statements</div></div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <img id="hdrLogo" alt="" style="max-height:46px;width:auto;display:none;background:#fff;border-radius:8px;padding:3px">
+    <div><h1>Greson Easy Loo — Property Rentals</h1>
+    <div class="sub">Tenant contracts · deposits · receipts · arrears · statements</div></div>
+  </div>
   <div class="who">
     <div class="usermenu-wrap">
       <button id="userMenuBtn" type="button" class="usermenu-btn"><span id="whoami"></span> <span style="opacity:.7">&#9662;</span></button>
