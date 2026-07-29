@@ -26,6 +26,14 @@ export const CLIENT_APPS: ClientAppDef[] = [
     description: 'Tenants & contracts, rent schedule, receipts, arrears, deposits and statements.',
     restricted: true, // Greson Easy Loo only
   },
+  {
+    key: 'mgmt',
+    label: 'Management Dashboard',
+    icon: '📊',
+    asset: '/mgmt-app/',
+    description: 'Financials, P&L, divisions, payroll, rentals, operations and decision insights.',
+    restricted: true, // Greson Easy Loo only
+  },
 ];
 
 export const getClientApp = (key: string): ClientAppDef | null =>

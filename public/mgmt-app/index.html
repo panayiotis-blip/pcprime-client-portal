@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base href="/mgmt-app/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greson EasyLoo — Management Reporting Platform</title>
+<script src="./vendor/chart.umd.min.js"></script>
+<script src="./vendor/xlsx.full.min.js"></script>
+<style>
+  :root{--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#1e2a78;--brand2:#2b3a8c;--accent:#10b981;--bad:#ef4444;--warn:#f59e0b;--soft:#f1f5f9;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f4f6f9;color:var(--ink);}
+  header{background:linear-gradient(120deg,#1e2a78,#2b3a8c);color:#fff;padding:16px 28px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+  header h1{margin:0;font-size:21px;font-weight:700;}
+  header .sub{opacity:.9;font-size:12.5px;margin-top:3px;}
+  header .who{font-size:12px;text-align:right;line-height:1.5;}
+  header .who #btnLogout{background:#fff;color:#ef4444;border:none;font-weight:600;margin-top:6px;padding:6px 12px;border-radius:8px;cursor:pointer;}
+  .wrap{max-width:1220px;margin:0 auto;padding:0 20px 60px;}
+  .tabs{display:flex;flex-wrap:wrap;gap:4px;background:#fff;border-bottom:1px solid var(--line);padding:0 28px;position:sticky;top:0;z-index:20;}
+  .tab{padding:12px 16px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;}
+  .tab.active{color:var(--brand);border-bottom-color:var(--brand);}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:18px 0;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .toolbar label{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+  select,button,.filebtn{font-family:inherit;font-size:14px;border-radius:8px;border:1px solid var(--line);padding:8px 12px;background:#fff;cursor:pointer;}
+  select:focus{outline:2px solid var(--brand2);}
+  button.primary{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:600;}
+  button.primary:hover{background:#16205e;}
+  button.ghost:hover,.filebtn:hover{background:var(--soft);}
+  .spacer{flex:1;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin-bottom:18px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);cursor:default;}
+  .card.click{cursor:pointer;transition:.15s;} .card.click:hover{border-color:var(--brand2);box-shadow:0 3px 10px rgba(8,145,178,.15);}
+  .card .k{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+  .card .v{font-size:25px;font-weight:700;margin:6px 0 2px;}
+  .card .d{font-size:12px;font-weight:600;}
+  .up{color:var(--accent);} .down{color:var(--bad);} .flat{color:var(--muted);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr;}}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .panel h3{margin:0 0 4px;font-size:15px;}
+  .panel .hint{font-size:12px;color:var(--muted);margin-bottom:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#fff;font-weight:600;}
+  thead th{background:var(--soft);color:var(--muted);font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.3px;}
+  tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#f8fafc;}
+  tr.sub td:first-child{padding-left:22px;color:var(--muted);font-weight:500;}
+  .tblwrap{overflow-x:auto;}
+  td input{width:80px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;text-align:right;font-size:13px;}
+  td input:focus{outline:2px solid var(--brand2);}
+  .rowlabel{color:var(--brand);}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--soft);color:var(--muted);}
+  .note{font-size:12px;color:var(--muted);line-height:1.6;}
+  canvas{max-height:330px;}
+  .hidden{display:none;}
+  .flash{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;z-index:99;}
+  .flash.show{opacity:1;}
+  .kpi-mini{font-size:12px;color:var(--muted);}
+  .pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+  .pill.g{background:#dcfce7;color:#166534;} .pill.r{background:#fee2e2;color:#991b1b;} .pill.n{background:var(--soft);color:var(--muted);}
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:60;}
+  .modal .box{background:#fff;border-radius:14px;padding:22px;width:min(620px,94vw);max-height:90vh;overflow:auto;}
+  .frow{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .frow label{flex:1;min-width:120px;font-size:12px;color:var(--muted);font-weight:600;display:flex;flex-direction:column;gap:4px;}
+  .frow input,.frow select{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:14px;}
+  .login{position:fixed;inset:0;background:linear-gradient(120deg,#141f66,#28348a);display:flex;align-items:center;justify-content:center;z-index:100;}
+  .login .box{background:#fff;border-radius:16px;padding:30px;width:min(380px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .login h2{margin:0 0 4px;font-size:20px;} .login p{margin:0 0 16px;font-size:12px;color:var(--muted);}
+  .login input{width:100%;margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:8px;font-size:14px;}
+  .login button{width:100%;padding:11px;} .login .err{color:var(--bad);font-size:12.5px;min-height:16px;margin-bottom:8px;}
+  .iconbtn{border:none;background:none;cursor:pointer;font-size:14px;padding:2px 5px;color:var(--muted);} .iconbtn:hover{color:var(--brand);}
+  tr.total td{font-weight:700;background:var(--soft);}
+  tr.cur td{background:#fff7ed;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:6px 12px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--muted);}
+  .seg button.on{background:var(--brand);color:#fff;font-weight:600;}
+  table.esoft{font-size:12.5px;} table.esoft th{text-align:right;white-space:nowrap;}
+  table.esoft td{text-align:right;white-space:nowrap;}
+  table.esoft td.rowlabel{text-align:left;color:var(--ink);max-width:300px;overflow:hidden;text-overflow:ellipsis;}
+  tr.grp td{background:#eef2ff;color:var(--brand);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  tr.sub td{background:#f8fafc;font-weight:600;}
+  .neg{color:#b91c1c;} .ok{color:#166534;font-weight:700;} .muted{color:#cbd5e1;}
+  .mchips{display:flex;flex-wrap:wrap;gap:6px;}
+  .mchip{font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid var(--line);background:var(--soft);color:var(--muted);cursor:pointer;user-select:none;}
+  .mchip.on{background:#dcfce7;color:#166534;border-color:#bbf7d0;}
+  .mchip.cur{outline:2px solid var(--accent);outline-offset:1px;font-weight:700;}
+  .cmt{border-left:3px solid var(--accent);padding:6px 10px;margin-bottom:8px;background:var(--soft);border-radius:0 8px 8px 0;font-size:13px;}
+  .imports{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;}
+  .impcard{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:#fff;}
+  .impcard .filebtn{align-self:flex-start;}
+  .impfmt{font-size:11px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.03em;}
+  .impdesc{font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px;}
+  #tStaff a,#tPay a{color:var(--brand);font-weight:600;text-decoration:none;} #tStaff a:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Greson EasyLoo — Management Reporting Platform</h1>
+  <div class="sub">Financials · Payroll · Rentals · Operations · Decision insights · store 2023–2028</div></div>
+  <div class="who"><div id="whoami"></div><div id="stamps" style="opacity:.85"></div><button id="btnLogout" class="ghost">Log out</button></div>
+</header>
+<div class="tabs" id="tabs"></div>
+
+<div class="wrap">
+  <div id="verBanner"></div>
+  <div class="toolbar">
+    <label>Period</label>
+    <select id="selYear"></select>
+    <select id="selMonth"></select>
+    <span class="badge" id="periodBadge"></span>
+    <div class="spacer"></div>
+    <span class="note">Imports live on the <b>Data &amp; Import</b> tab</span>
+    <button id="btnSave" class="primary">⬇ Save / share</button>
+  </div>
+
+  <div id="view-summary" class="view"></div>
+  <div id="view-pl" class="view hidden"></div>
+  <div id="view-divisions" class="view hidden"></div>
+  <div id="view-payroll" class="view hidden"></div>
+  <div id="view-rentals" class="view hidden"></div>
+  <div id="view-ops" class="view hidden"></div>
+  <div id="view-insights" class="view hidden"></div>
+  <div id="view-esoft" class="view hidden"></div>
+  <div id="view-data" class="view hidden"></div>
+  <div id="view-users" class="view hidden"></div>
+</div>
+
+<div class="flash" id="flash"></div>
+<div id="loginHost"></div>
+<div id="modalHost"></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
