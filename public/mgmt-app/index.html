@@ -15,6 +15,13 @@
   header h1{margin:0;font-size:21px;font-weight:700;}
   header .sub{opacity:.9;font-size:12.5px;margin-top:3px;}
   header .who{font-size:12px;text-align:right;line-height:1.5;}
+  .usermenu-wrap{position:relative;display:inline-block;}
+  .usermenu-btn{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;}
+  .usermenu-btn:hover{background:rgba(255,255,255,.2);}
+  .usermenu{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.18);min-width:190px;z-index:60;overflow:hidden;text-align:left;}
+  .usermenu button{display:block;width:100%;text-align:left;background:none;border:none;border-radius:0;padding:10px 14px;font-size:13px;color:#0f172a;cursor:pointer;}
+  .usermenu button:hover{background:var(--soft);}
+  .usermenu.hidden{display:none;}
   header .who #btnLogout{background:#fff;color:#ef4444;border:none;font-weight:600;margin-top:6px;padding:6px 12px;border-radius:8px;cursor:pointer;}
   .wrap{max-width:1220px;margin:0 auto;padding:0 20px 60px;}
   .tabs{display:flex;flex-wrap:wrap;gap:4px;background:#fff;border-bottom:1px solid var(--line);padding:0 28px;position:sticky;top:0;z-index:20;}
@@ -96,9 +103,24 @@
 </head>
 <body>
 <header>
-  <div><h1>Greson EasyLoo — Management Reporting Platform</h1>
-  <div class="sub">Financials · Payroll · Rentals · Operations · Decision insights · store 2023–2028</div></div>
-  <div class="who"><div id="whoami"></div><div id="stamps" style="opacity:.85"></div><button id="btnLogout" class="ghost">Log out</button></div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <img id="hdrLogo" alt="" style="max-height:46px;width:auto;display:none;background:#fff;border-radius:8px;padding:3px">
+    <div><h1>Greson EasyLoo — Management Reporting Platform</h1>
+    <div class="sub">Financials · Payroll · Rentals · Operations · Decision insights · store 2023–2028</div></div>
+  </div>
+  <div class="who">
+    <div class="usermenu-wrap">
+      <button id="userMenuBtn" type="button" class="usermenu-btn"><span id="whoami"></span> <span style="opacity:.7">&#9662;</span></button>
+      <div id="userMenu" class="usermenu hidden">
+        <button type="button" data-h="openSettings()">&#9881; Settings</button>
+        <button type="button" id="menuUsers" data-h="openUsers()">&#128101; Users &amp; access</button>
+        <button type="button" data-h="openPrivacy()">&#128274; Privacy Policy</button>
+        <button type="button" data-h="logout()" style="color:#f04e23">&#9099; Log out</button>
+      </div>
+    </div>
+    <div id="stamps" style="opacity:.85;margin-top:2px;"></div>
+    <button id="btnLogout" class="ghost">Log out</button>
+  </div>
 </header>
 <div class="tabs" id="tabs"></div>
 

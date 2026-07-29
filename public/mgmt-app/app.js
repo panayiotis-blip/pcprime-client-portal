@@ -110,6 +110,72 @@ function dGP(y,m){ const g=val(y,"gross_profit",m); if(has(g))return g; const r=
 function dGoods(y,m){ const r=val(y,"revenue",m),rt=val(y,"rentals",m),cl=val(y,"cleans_rev",m); if(!has(r))return null; return r-(has(rt)?rt:0)-(has(cl)?cl:0); }
 
 /* ---------- shell ---------- */
+/* ---- user menu: settings / privacy / users (portal-bridged) ---- */
+function applyHeaderLogo(){ var hl=document.getElementById("hdrLogo"); if(!hl)return; var lg=(DATA.settings&&DATA.settings.logo)||""; if(lg){ hl.src=lg; hl.style.display=""; } else { hl.style.display="none"; } }
+window.openPrivacy=function(){ try{ window.open("/privacy","_blank","noopener"); }catch(e){ flash("Could not open privacy policy."); } };
+window.openSettings=function(){ var s=DATA.settings||{}; var cn=s.companyName||"Greson EasyLoo"; window._logoData=undefined;
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box"><h3>Company settings</h3>'+
+    '<p class="hint">The logo shows in the header; company details are used on printed reports.</p>'+
+    '<div class="frow"><label>Company name<input id="st_cn" value="'+esc(cn)+'"></label></div>'+
+    '<div class="frow"><label>Registration no.<input id="st_reg" value="'+esc(s.regNo||"")+'"></label><label>VAT no.<input id="st_vat" value="'+esc(s.vatNo||"")+'"></label></div>'+
+    '<div class="frow"><label>Address<textarea id="st_addr" rows="2">'+esc(s.address||"")+'</textarea></label></div>'+
+    '<div class="frow"><label>Phone<input id="st_ph" value="'+esc(s.phone||"")+'"></label><label>Email<input id="st_em" value="'+esc(s.email||"")+'"></label></div>'+
+    '<div class="frow"><label>Logo (PNG/JPG, under 1.5&nbsp;MB)<input id="st_logo" type="file" accept="image/*"></label></div>'+
+    '<div id="st_logoPrev">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;margin-top:4px">':'')+'</div>'+
+    '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveSettings()">Save</button></div></div></div>';
+  var li=document.getElementById("st_logo");
+  li.onchange=function(e){ var f=e.target.files[0]; if(!f)return; if(f.size>1500000){alert("Logo must be under 1.5 MB.");return;} var r=new FileReader(); r.onload=function(){ window._logoData=r.result; document.getElementById("st_logoPrev").innerHTML='<img src="'+r.result+'" style="max-height:64px;margin-top:4px">'; }; r.readAsDataURL(f); };
+};
+window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return;}
+  var g=function(id){ return document.getElementById(id).value.trim(); };
+  DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em") });
+  if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
+  persist("Updated company settings"); closeModal(); applyHeaderLogo(); render(); flash("Settings saved."); };
+
+/* ---- Users & access (talks to the host over postMessage → secure backend) ---- */
+var __userReqId=0, __userReqs={};
+window.addEventListener("message", function(e){ var m=e.data||{}; if(m.type==="users:reply" && __userReqs[m.reqId]){ __userReqs[m.reqId](m); delete __userReqs[m.reqId]; } });
+function usersRequest(op, extra){ return new Promise(function(resolve){
+  if(window.parent===window){ resolve({ok:false,error:"Not available here."}); return; }
+  var id=++__userReqId; __userReqs[id]=resolve;
+  window.parent.postMessage(Object.assign({type:"users",op:op,reqId:id}, extra||{}), "*");
+  setTimeout(function(){ if(__userReqs[id]){ __userReqs[id]({ok:false,error:"Timed out."}); delete __userReqs[id]; } }, 15000);
+}); }
+window.openUsers=function(){ if(!isAdmin()){alert("Admins only.");return;}
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(780px,97vw)"><h3>Users &amp; access</h3>'+
+    '<p class="hint"><b>admin</b> — full access incl. managing users · <b>editor</b> — add/edit data · <b>viewer</b> — read-only.</p>'+
+    '<div id="usr_list">Loading…</div>'+
+    '<div style="border-top:1px solid var(--line);margin:14px 0;padding-top:12px"><div style="font-weight:600;margin-bottom:8px">Add user</div>'+
+    '<div class="frow" style="align-items:flex-end">'+
+      '<label>Username<input id="usr_un" placeholder="e.g. jsmith"></label>'+
+      '<label>Name<input id="usr_nm"></label>'+
+      '<label>Role<select id="usr_role"><option value="admin">admin</option><option value="editor" selected>editor</option><option value="viewer">viewer</option></select></label>'+
+      '<label>Password<input id="usr_pw" type="text" placeholder="min 6"></label>'+
+      '<button class="primary" data-h="addAppUser()">Add</button></div></div>'+
+    '<div class="frow" style="justify-content:flex-end"><button class="ghost" data-h="closeModal()">Close</button></div></div></div>';
+  refreshUserList();
+};
+function refreshUserList(){ var host=document.getElementById("usr_list"); if(!host)return; host.textContent="Loading…";
+  usersRequest("list").then(function(r){ if(!document.getElementById("usr_list"))return;
+    if(!r.ok){ host.innerHTML='<div class="hint" style="color:#ef4444">'+esc(r.error||"Failed to load users.")+'</div>'; return; }
+    var us=r.data||[];
+    host.innerHTML='<div class="tblwrap"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody>'+
+      (us.length?us.map(function(u){ return '<tr><td><b>'+esc(u.username)+'</b></td><td>'+esc(u.name||"—")+'</td>'+
+        '<td><select class="usr-role" data-uid="'+u.id+'">'+["admin","editor","viewer"].map(function(x){return '<option'+(x===u.role?" selected":"")+'>'+x+'</option>';}).join("")+'</select></td>'+
+        '<td>'+(u.active?"Active":'<span style="color:#94a3b8">Disabled</span>')+'</td>'+
+        '<td style="text-align:right;white-space:nowrap"><button class="iconbtn" data-h="resetAppUser('+u.id+')" title="Reset password">&#128273;</button>'+
+        '<button class="iconbtn" data-h="toggleAppUser('+u.id+','+(u.active?0:1)+')" title="'+(u.active?"Disable":"Enable")+'">'+(u.active?"&#8856;":"&#10003;")+'</button>'+
+        '<button class="iconbtn" data-h="delAppUser('+u.id+')" title="Delete" style="color:#ef4444">&#128465;</button></td></tr>'; }).join("")
+        :'<tr><td colspan="5" class="hint">No users yet.</td></tr>')+'</tbody></table></div>';
+    Array.prototype.forEach.call(host.querySelectorAll(".usr-role"), function(sel){ sel.onchange=function(){ usersRequest("update",{id:+sel.getAttribute("data-uid"),payload:{role:sel.value}}).then(function(r2){ if(!r2.ok)alert(r2.error||"Failed"); refreshUserList(); }); }; });
+  }); }
+window.addAppUser=function(){ var un=document.getElementById("usr_un").value.trim(), nm=document.getElementById("usr_nm").value.trim(), role=document.getElementById("usr_role").value, pw=document.getElementById("usr_pw").value;
+  if(!un||pw.length<6){ alert("Username and a 6+ character password are required."); return; }
+  usersRequest("create",{payload:{username:un,name:nm,role:role,password:pw}}).then(function(r){ if(!r.ok){ alert(r.error||"Failed"); return; } document.getElementById("usr_un").value="";document.getElementById("usr_nm").value="";document.getElementById("usr_pw").value=""; refreshUserList(); flash("User added."); }); };
+window.resetAppUser=function(id){ var pw=prompt("New password (min 6 characters):"); if(!pw)return; if(pw.length<6){alert("Too short.");return;} usersRequest("reset",{id:id,payload:{password:pw}}).then(function(r){ alert(r.ok?"Password updated.":(r.error||"Failed")); }); };
+window.toggleAppUser=function(id,active){ usersRequest("update",{id:id,payload:{active:!!active}}).then(function(r){ if(!r.ok)alert(r.error||"Failed"); refreshUserList(); }); };
+window.delAppUser=function(id){ if(!confirm("Delete this user's login?"))return; usersRequest("delete",{id:id}).then(function(r){ if(!r.ok)alert(r.error||"Failed"); refreshUserList(); }); };
+
 function initShell(){
   document.getElementById("stamps").textContent="Viewed: "+VIEWED+" · Updated: "+(DATA.meta.savedAt||DATA.meta.updated||"—");
   const tb=document.getElementById("tabs"); tb.innerHTML="";
@@ -121,9 +187,14 @@ function initShell(){
   if(sm.value==="") sm.value=(sy.value===cy)?cm:latestMonth(sy.value);
   sy.onchange=()=>{const yv=document.getElementById("selYear").value;document.getElementById("selMonth").value=(yv===cy)?cm:latestMonth(yv);render();};
   sm.onchange=render;
-  document.getElementById("btnSave").onclick=saveSnapshot;
+  document.getElementById("btnSave").onclick=function(){ persist(); flash("Saved."); };
   document.getElementById("btnLogout").onclick=logout;
   document.getElementById("whoami").textContent=user?(user.name+" · "+user.role):"";
+  applyHeaderLogo();
+  var umBtn=document.getElementById("userMenuBtn"), um=document.getElementById("userMenu");
+  if(umBtn&&um){ umBtn.onclick=function(e){ e.stopPropagation(); um.classList.toggle("hidden"); }; }
+  var mu=document.getElementById("menuUsers"); if(mu)mu.style.display=isAdmin()?"":"none";
+  if(!window.__umClose){ window.__umClose=true; document.addEventListener("click",function(){ var m=document.getElementById("userMenu"); if(m)m.classList.add("hidden"); }); }
   const vb=document.getElementById("verBanner");
   if(vb){ if(verInfo){ const newer=verInfo.browserNewer?"your browser copy":"the file you opened", older=verInfo.browserNewer?"the file you opened":"your browser copy";
     const newAt=verInfo.browserNewer?verInfo.la:verInfo.ea, oldAt=verInfo.browserNewer?verInfo.ea:verInfo.la;
