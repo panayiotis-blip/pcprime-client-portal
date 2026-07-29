@@ -4,7 +4,7 @@ let DATA=load(), user=null, activeTab="overview", schedYear="2026", stmtTenant=n
 let chart=null;
 const VIEWED=new Date();
 
-function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["statement","Statement"]]; return t; }
+function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["statement","Statement"],["invoice","Invoice"]]; return t; }
 function load(){ return norm({meta:{},tenants:[],properties:[],users:[],audit:[]}); }
 function norm(d){ if(!d.meta)d.meta={}; if(!d.tenants)d.tenants=[]; if(!d.properties)d.properties=[]; if(!d.users)d.users=[]; if(!d.audit)d.audit=[];
   d.tenants.forEach(t=>{ if(!t.pay)t.pay={}; if(!t.leases)t.leases=[{start:t.start||"",renewal:t.renewal||"",end:t.end||""}];
@@ -103,6 +103,7 @@ window.openSettings=function(){
     '<div class="frow"><label>Registration no.<input id="st_reg" value="'+esc(s.regNo||"")+'"></label><label>VAT no.<input id="st_vat" value="'+esc(s.vatNo||"")+'"></label></div>'+
     '<div class="frow"><label>Address<textarea id="st_addr" rows="2">'+esc(s.address||"")+'</textarea></label></div>'+
     '<div class="frow"><label>Phone<input id="st_ph" value="'+esc(s.phone||"")+'"></label><label>Email<input id="st_em" value="'+esc(s.email||"")+'"></label></div>'+
+    '<div class="frow"><label>Invoice number prefix<input id="st_inv" value="'+esc(s.invoicePrefix||"INV")+'" placeholder="INV"></label><label>Bank / payment details (shown on invoices)<input id="st_bank" value="'+esc(s.bank||"")+'"></label></div>'+
     '<div class="frow"><label>Logo (PNG/JPG, under 1.5&nbsp;MB)<input id="st_logo" type="file" accept="image/*"></label></div>'+
     '<div id="st_logoPrev">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;margin-top:4px">':'')+'</div>'+
     '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveSettings()">Save</button></div></div></div>';
@@ -111,7 +112,7 @@ window.openSettings=function(){
 };
 window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return;}
   var g=function(id){ return document.getElementById(id).value.trim(); };
-  DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em") });
+  DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em"), invoicePrefix:g("st_inv")||"INV", bank:g("st_bank") });
   if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
   persist("Updated company settings"); closeModal(); render(); flash("Settings saved."); };
 
@@ -197,6 +198,54 @@ window.runImport=function(){ if(!canEdit()){alert("Read-only access.");return;}
   flash(applied+" imported"+(skipped?" · "+skipped+" skipped (tenant not matched / bad row)":""));
 };
 
+/* ---- Rent invoice ---- */
+var invTenant=null, invYear=null, invMonth=null;
+function vInvoice(){
+  if(invTenant==null && DATA.tenants.length)invTenant=DATA.tenants[0].id;
+  var now=new Date(); if(invYear==null)invYear=String(now.getFullYear()); if(invMonth==null)invMonth=now.getMonth();
+  var ys=yearList();
+  var topts=DATA.tenants.map(function(t){return '<option value="'+t.id+'"'+(t.id===invTenant?" selected":"")+'>'+esc(t.name)+' — '+esc(t.unit)+'</option>';}).join("");
+  var yopts=ys.map(function(y){return '<option'+(y===invYear?" selected":"")+'>'+y+'</option>';}).join("");
+  var mopts=MONTHS.map(function(mn,i){return '<option value="'+i+'"'+(i===invMonth?" selected":"")+'>'+mn+'</option>';}).join("");
+  var h='<div class="panel noprint"><h3>Rent invoice</h3><div class="frow">'+
+    '<label>Tenant<select id="invSel">'+topts+'</select></label>'+
+    '<label>Year<select id="invY">'+yopts+'</select></label>'+
+    '<label>Month<select id="invM">'+mopts+'</select></label>'+
+    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label></div></div>';
+  var t=DATA.tenants.find(function(x){return x.id===invTenant;});
+  if(t){ var p=propById(t.propertyId); var rent=rentOf(t,invYear,invMonth); var paidAmt=paid(t,invYear,invMonth);
+    var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
+    var invNo=(s.invoicePrefix||"INV")+"-"+invYear+p2(invMonth+1)+"-"+t.id;
+    var issue=stamp(now).slice(0,10); var due=invYear+"-"+p2(invMonth+1)+"-01";
+    h+='<div class="panel invoice-doc">'+
+      '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px">'+
+        '<div style="display:flex;align-items:center;gap:14px">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:60px;width:auto">':'')+
+          '<div><div style="font-size:18px;font-weight:700">'+esc(cn)+'</div>'+
+          (s.address?'<div class="hint" style="white-space:pre-line;margin-top:2px">'+esc(s.address)+'</div>':'')+
+          ((s.regNo||s.vatNo)?'<div class="hint">'+[s.regNo?"Reg. "+esc(s.regNo):"",s.vatNo?"VAT "+esc(s.vatNo):""].filter(Boolean).join(" · ")+'</div>':'')+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--brand)">INVOICE</div>'+
+          '<div class="hint">No. '+esc(invNo)+'</div><div class="hint">Issued: '+issue+'</div><div class="hint">Due: '+due+'</div></div>'+
+      '</div>'+
+      '<div style="margin-top:16px"><div class="hint" style="text-transform:uppercase;letter-spacing:.05em">Bill to</div>'+
+        '<div style="font-weight:700">'+esc(t.name)+'</div>'+
+        '<div class="hint">'+esc(p?p.name:"")+' · '+esc(t.unit)+
+          ((t.contact1&&t.contact1.name)?'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone||""):"")+
+          (t.email?'<br>'+esc(t.email):"")+'</div></div>'+
+      '<div class="tblwrap" style="margin-top:14px"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>'+
+        '<tr><td>Rent — '+MONTHS[invMonth]+' '+invYear+' · '+esc(t.unit)+'</td><td class="num">'+money(rent)+'</td></tr>'+
+        '<tr class="total"><td>Total due</td><td class="num">'+money(rent)+'</td></tr>'+
+        (paidAmt>0?'<tr><td>Received to date</td><td class="num">'+money(paidAmt)+'</td></tr><tr class="total"><td>Balance outstanding</td><td class="num'+((rent-paidAmt)>0?" warn":"")+'">'+money(rent-paidAmt)+'</td></tr>':'')+
+      '</tbody></table></div>'+
+      (s.bank?'<div class="hint" style="margin-top:14px"><b>Payment:</b> '+esc(s.bank)+'</div>':'')+
+      ((s.phone||s.email)?'<div class="hint" style="margin-top:6px">Enquiries: '+[esc(s.phone||""),esc(s.email||"")].filter(Boolean).join(" · ")+'</div>':'')+
+      '</div>';
+  } else { h+='<div class="panel">No tenants yet.</div>'; }
+  document.getElementById("view").innerHTML=h;
+  var sel=document.getElementById("invSel"); if(sel)sel.onchange=function(e){invTenant=+e.target.value;render();};
+  var yy=document.getElementById("invY"); if(yy)yy.onchange=function(e){invYear=e.target.value;render();};
+  var mm=document.getElementById("invM"); if(mm)mm.onchange=function(e){invMonth=+e.target.value;render();};
+}
+
 // Company letterhead for printed statements (from Settings).
 function letterheadHtml(){ var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
   if(!cn && !s.address && !s.logo) return "";
@@ -212,7 +261,7 @@ function yr(){ return document.getElementById("selYear").value||"2026"; }
 function render(){
   document.querySelectorAll("#tabs .tab").forEach((t,i)=>t.classList.toggle("active",TABS()[i]&&TABS()[i][0]===activeTab));
   if(chart){try{chart.destroy();}catch(e){}chart=null;}
-  const map={overview:vOverview,properties:vProperties,tenants:vTenants,schedule:vSchedule,receipts:vReceipts,arrears:vArrears,deposits:vDeposits,statement:vStatement,users:vUsers};
+  const map={overview:vOverview,properties:vProperties,tenants:vTenants,schedule:vSchedule,receipts:vReceipts,arrears:vArrears,deposits:vDeposits,statement:vStatement,invoice:vInvoice,users:vUsers};
   (map[activeTab]||vOverview)();
 }
 
