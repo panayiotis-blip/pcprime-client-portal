@@ -89,21 +89,17 @@ export default function ClientAppPortal() {
     return () => window.removeEventListener('message', onMsg);
   }, []);
 
-  // ----- Signed in: full-screen app -----
+  // ----- Signed in: the app, full-screen. No wrapper bar — the app's own
+  // header already shows the user + Log out (its Log out posts 'logout' back
+  // to us via the bridge, which calls signOut). saveState is unused here now;
+  // the app's own "Updated" stamp reflects saves.
   if (sess && srcDoc) {
     return (
-      <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#f4f6f9' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px', background: '#0f172a', color: '#fff', fontSize: 13 }}>
-          <span style={{ opacity: 0.8 }}>Signed in as <strong style={{ color: '#fff' }}>{sess.name}</strong></span>
-          <span style={{ marginLeft: 'auto', color: saveState === 'error' ? '#fca5a5' : '#94a3b8' }}>
-            {saveState === 'saving' ? '● Saving…' : saveState === 'saved' ? '✓ Saved' : saveState === 'error' ? '⚠ Save failed' : ''}
-          </span>
-          <button onClick={signOut} style={{ background: 'none', border: '1px solid #334155', color: '#f04e23', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>Sign out</button>
-        </div>
-        <iframe ref={iframeRef} srcDoc={srcDoc} title="App" style={{ flex: 1, width: '100%', border: 0 }} />
-      </div>
+      <iframe ref={iframeRef} srcDoc={srcDoc} title="App"
+        style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', border: 0 }} />
     );
   }
+  void saveState;
 
   // ----- Login / register box -----
   const inputStyle: React.CSSProperties = { width: '100%', marginBottom: 10, padding: 10, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14 };

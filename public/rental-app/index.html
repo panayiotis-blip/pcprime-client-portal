@@ -13,6 +13,12 @@ header{background:linear-gradient(120deg,#141f66,#28348a);color:#fff;padding:16p
 header h1{margin:0;font-size:20px;font-weight:700;}
 header .sub{opacity:.9;font-size:12px;margin-top:3px;}
 header .who{font-size:12px;text-align:right;}
+.usermenu-wrap{position:relative;display:inline-block;}
+.usermenu-btn{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;}
+.usermenu-btn:hover{background:rgba(255,255,255,.2);}
+.usermenu{position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.18);min-width:190px;z-index:60;overflow:hidden;text-align:left;}
+.usermenu button{display:block;width:100%;text-align:left;background:none;border:none;border-radius:0;padding:10px 14px;font-size:13px;color:#0f172a;cursor:pointer;}
+.usermenu button:hover{background:var(--soft);}
 .tabs{display:flex;flex-wrap:wrap;gap:4px;background:#fff;border-bottom:1px solid var(--line);padding:0 26px;position:sticky;top:0;z-index:20;}
 .tab{padding:12px 15px;font-size:14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;}
 .tab.active{color:var(--brand);border-bottom-color:var(--brand);}
@@ -62,8 +68,19 @@ canvas{max-height:300px;} .hidden{display:none;} .warn{color:var(--bad);font-wei
 <header>
   <div><h1>Greson Easy Loo — Property Rentals</h1>
   <div class="sub">Tenant contracts · deposits · receipts · arrears · statements</div></div>
-  <div class="who"><div id="whoami"></div><div id="stamps" style="opacity:.85;margin-top:2px;"></div>
-  <button id="btnLogout" class="ghost" style="margin-top:6px;color:#f04e23;">Log out</button></div>
+  <div class="who">
+    <div class="usermenu-wrap">
+      <button id="userMenuBtn" type="button" class="usermenu-btn"><span id="whoami"></span> <span style="opacity:.7">&#9662;</span></button>
+      <div id="userMenu" class="usermenu hidden">
+        <button type="button" data-h="openSettings()">&#9881; Settings</button>
+        <button type="button" id="menuUsers" data-h="openUsers()">&#128101; Users &amp; access</button>
+        <button type="button" data-h="openPrivacy()">&#128274; Privacy Policy</button>
+        <button type="button" data-h="logout()" style="color:#f04e23">&#9099; Log out</button>
+      </div>
+    </div>
+    <div id="stamps" style="opacity:.85;margin-top:2px;"></div>
+    <button id="btnLogout" class="ghost" style="margin-top:6px;color:#f04e23;">Log out</button>
+  </div>
 </header>
 <div class="tabs" id="tabs"></div>
 <div class="wrap">

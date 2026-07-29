@@ -81,8 +81,53 @@ function initShell(){
   document.getElementById("btnLogout").onclick=logout;
   document.getElementById("fileImp").onchange=e=>importXlsx(e.target.files[0]);
   document.getElementById("pdfInput").onchange=onPdfPicked;
+  // User dropdown menu (name → Settings / Users / Privacy / Log out).
+  var umBtn=document.getElementById("userMenuBtn"), um=document.getElementById("userMenu");
+  umBtn.onclick=function(e){ e.stopPropagation(); um.classList.toggle("hidden"); };
+  document.getElementById("menuUsers").style.display=isAdmin()?"":"none";
+  if(!window.__umClose){ window.__umClose=true; document.addEventListener("click",function(){ var m=document.getElementById("userMenu"); if(m)m.classList.add("hidden"); }); }
 }
 function refreshStamps(){ document.getElementById("stamps").innerHTML="Viewed: "+stamp(VIEWED)+" · Updated: "+(DATA.meta.updated||"—"); }
+
+/* ---- user menu: settings / privacy / users ---- */
+window.openPrivacy=function(){ try{ window.open("/privacy","_blank","noopener"); }catch(e){ flash("Could not open privacy policy."); } };
+
+window.openSettings=function(){
+  var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
+  window._logoData=undefined;
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box"><h3>Company settings</h3>'+
+    '<p class="hint">Printed on statements and documents.</p>'+
+    '<div class="frow"><label>Company name<input id="st_cn" value="'+esc(cn)+'"></label></div>'+
+    '<div class="frow"><label>Registration no.<input id="st_reg" value="'+esc(s.regNo||"")+'"></label><label>VAT no.<input id="st_vat" value="'+esc(s.vatNo||"")+'"></label></div>'+
+    '<div class="frow"><label>Address<textarea id="st_addr" rows="2">'+esc(s.address||"")+'</textarea></label></div>'+
+    '<div class="frow"><label>Phone<input id="st_ph" value="'+esc(s.phone||"")+'"></label><label>Email<input id="st_em" value="'+esc(s.email||"")+'"></label></div>'+
+    '<div class="frow"><label>Logo (PNG/JPG, under 1.5&nbsp;MB)<input id="st_logo" type="file" accept="image/*"></label></div>'+
+    '<div id="st_logoPrev">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;margin-top:4px">':'')+'</div>'+
+    '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveSettings()">Save</button></div></div></div>';
+  var li=document.getElementById("st_logo");
+  li.onchange=function(e){ var f=e.target.files[0]; if(!f)return; if(f.size>1500000){alert("Logo must be under 1.5 MB.");return;} var r=new FileReader(); r.onload=function(){ window._logoData=r.result; document.getElementById("st_logoPrev").innerHTML='<img src="'+r.result+'" style="max-height:64px;margin-top:4px">'; }; r.readAsDataURL(f); };
+};
+window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return;}
+  var g=function(id){ return document.getElementById(id).value.trim(); };
+  DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em") });
+  if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
+  persist("Updated company settings"); closeModal(); render(); flash("Settings saved."); };
+
+window.openUsers=function(){ if(!isAdmin()){alert("Admins only.");return;}
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box"><h3>Users &amp; access</h3>'+
+    '<p class="hint">Add app users and set what each can do — being connected to the secure login system next. For now your accountant manages app logins.</p>'+
+    '<div class="frow" style="justify-content:flex-end"><button class="ghost" data-h="closeModal()">Close</button></div></div></div>'; };
+
+// Company letterhead for printed statements (from Settings).
+function letterheadHtml(){ var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
+  if(!cn && !s.address && !s.logo) return "";
+  var line=[s.regNo?"Reg. "+s.regNo:"", s.vatNo?"VAT "+s.vatNo:"", s.phone||"", s.email||""].filter(Boolean).map(esc).join(" · ");
+  return '<div class="panel" style="display:flex;align-items:center;gap:16px">'+
+    (s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;width:auto">':'')+
+    '<div style="flex:1"><div style="font-size:18px;font-weight:700">'+esc(cn)+'</div>'+
+    (s.address?'<div class="hint" style="margin:3px 0 0;white-space:pre-line">'+esc(s.address)+'</div>':'')+
+    (line?'<div class="hint" style="margin:3px 0 0">'+line+'</div>':'')+
+    '</div></div>'; }
 function yearList(){ const ys=new Set(["2024","2025","2026"]); DATA.tenants.forEach(t=>Object.keys(t.pay||{}).forEach(y=>ys.add(y))); return [...ys].sort(); }
 function yr(){ return document.getElementById("selYear").value||"2026"; }
 function render(){
@@ -418,6 +463,7 @@ function vStatement(){
     '<label>From year<select id="stFrom">'+yopt+'</select></label>'+
     '<label>To year<select id="stTo">'+yopt+'</select></label>'+
     '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print</button></label></div></div>';
+  h+=letterheadHtml();
   const t=DATA.tenants.find(x=>x.id===stmtTenant);
   if(t){ const p=propById(t.propertyId), L=curLease(t);
     let charged=0,paidT=0,bal=0,rowsH="";
