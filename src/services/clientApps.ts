@@ -24,7 +24,8 @@ export const CLIENT_APPS: ClientAppDef[] = [
     icon: '🏠',
     asset: '/rental-app/',
     description: 'Tenants & contracts, rent schedule, receipts, arrears, deposits and statements.',
-    restricted: true, // Greson Easy Loo only
+    // Reusable across clients — each client gets their own blank instance
+    // (data is isolated per client_id + app_key). Greson keeps its data.
   },
   {
     key: 'mgmt',
