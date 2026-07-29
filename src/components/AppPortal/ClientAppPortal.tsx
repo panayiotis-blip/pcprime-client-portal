@@ -83,6 +83,19 @@ export default function ClientAppPortal() {
         }, 400);
       } else if (m.type === 'logout') {
         signOut();
+      } else if (m.type === 'users') {
+        const win = iframeRef.current?.contentWindow;
+        const reply = (payload: any) => win?.postMessage({ type: 'users:reply', reqId: m.reqId, ...payload }, '*');
+        (async () => {
+          try {
+            const ses = s.session;
+            if (m.op === 'list') reply({ ok: true, data: await api.appAdminListUsers(ses) });
+            else if (m.op === 'create') { await api.appAdminCreateUser(ses, m.payload); reply({ ok: true }); }
+            else if (m.op === 'update') { await api.appAdminUpdateUser(ses, m.id, m.payload); reply({ ok: true }); }
+            else if (m.op === 'reset') { await api.appAdminResetUser(ses, m.id, m.payload.password); reply({ ok: true }); }
+            else if (m.op === 'delete') { await api.appAdminDeleteUser(ses, m.id); reply({ ok: true }); }
+          } catch (e: any) { reply({ ok: false, error: e?.message || 'Failed' }); }
+        })();
       }
     };
     window.addEventListener('message', onMsg);

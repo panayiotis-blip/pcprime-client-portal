@@ -916,6 +916,33 @@ export const api = {
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Save failed.');
   },
+  // In-app user management by an app-admin (standalone /app) — via the session.
+  async appAdminListUsers(session: string): Promise<any[]> {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'users_list', session } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to load users.');
+    return data.users as any[];
+  },
+  async appAdminCreateUser(session: string, p: { username: string; name?: string; role: string; password: string }) {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'user_create', session, ...p } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to create user.');
+  },
+  async appAdminUpdateUser(session: string, id: number, patch: { name?: string; role?: string; active?: boolean }) {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'user_update', session, id, ...patch } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to update user.');
+  },
+  async appAdminResetUser(session: string, id: number, password: string) {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'user_reset', session, id, password } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to reset password.');
+  },
+  async appAdminDeleteUser(session: string, id: number) {
+    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'user_delete', session, id } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to delete user.');
+  },
   // Public: request app access (creates a pending request the firm approves).
   async appRegister(p: { client_name: string; full_name?: string; username: string; password: string; email?: string; phone?: string; message?: string; app_key?: string }) {
     const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'register', ...p } });

@@ -115,10 +115,49 @@ window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return
   if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
   persist("Updated company settings"); closeModal(); render(); flash("Settings saved."); };
 
+/* ---- Users & access (talks to the host over postMessage → secure backend) ---- */
+var __userReqId=0, __userReqs={};
+window.addEventListener("message", function(e){ var m=e.data||{}; if(m.type==="users:reply" && __userReqs[m.reqId]){ __userReqs[m.reqId](m); delete __userReqs[m.reqId]; } });
+function usersRequest(op, extra){ return new Promise(function(resolve){
+  if(window.parent===window){ resolve({ok:false,error:"Not available here."}); return; }
+  var id=++__userReqId; __userReqs[id]=resolve;
+  window.parent.postMessage(Object.assign({type:"users",op:op,reqId:id}, extra||{}), "*");
+  setTimeout(function(){ if(__userReqs[id]){ __userReqs[id]({ok:false,error:"Timed out."}); delete __userReqs[id]; } }, 15000);
+}); }
 window.openUsers=function(){ if(!isAdmin()){alert("Admins only.");return;}
-  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box"><h3>Users &amp; access</h3>'+
-    '<p class="hint">Add app users and set what each can do — being connected to the secure login system next. For now your accountant manages app logins.</p>'+
-    '<div class="frow" style="justify-content:flex-end"><button class="ghost" data-h="closeModal()">Close</button></div></div></div>'; };
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(780px,97vw)"><h3>Users &amp; access</h3>'+
+    '<p class="hint"><b>admin</b> — full access incl. managing users · <b>editor</b> — add/edit data · <b>viewer</b> — read-only.</p>'+
+    '<div id="usr_list">Loading…</div>'+
+    '<div style="border-top:1px solid var(--line);margin:14px 0;padding-top:12px"><div style="font-weight:600;margin-bottom:8px">Add user</div>'+
+    '<div class="frow" style="align-items:flex-end">'+
+      '<label>Username<input id="usr_un" placeholder="e.g. jsmith"></label>'+
+      '<label>Name<input id="usr_nm"></label>'+
+      '<label>Role<select id="usr_role"><option value="admin">admin</option><option value="editor" selected>editor</option><option value="viewer">viewer</option></select></label>'+
+      '<label>Password<input id="usr_pw" type="text" placeholder="min 6"></label>'+
+      '<button class="primary" data-h="addAppUser()">Add</button></div></div>'+
+    '<div class="frow" style="justify-content:flex-end"><button class="ghost" data-h="closeModal()">Close</button></div></div></div>';
+  refreshUserList();
+};
+function refreshUserList(){ var host=document.getElementById("usr_list"); if(!host)return; host.textContent="Loading…";
+  usersRequest("list").then(function(r){ if(!document.getElementById("usr_list"))return;
+    if(!r.ok){ host.innerHTML='<div class="hint" style="color:#ef4444">'+esc(r.error||"Failed to load users.")+'</div>'; return; }
+    var us=r.data||[];
+    host.innerHTML='<div class="tblwrap"><table><thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th class="actions"></th></tr></thead><tbody>'+
+      (us.length?us.map(function(u){ return '<tr><td><b>'+esc(u.username)+'</b></td><td>'+esc(u.name||"—")+'</td>'+
+        '<td><select class="usr-role" data-uid="'+u.id+'">'+["admin","editor","viewer"].map(function(x){return '<option'+(x===u.role?" selected":"")+'>'+x+'</option>';}).join("")+'</select></td>'+
+        '<td>'+(u.active?"Active":'<span style="color:#94a3b8">Disabled</span>')+'</td>'+
+        '<td class="actions"><button class="iconbtn" data-h="resetAppUser('+u.id+')" title="Reset password">&#128273;</button>'+
+        '<button class="iconbtn" data-h="toggleAppUser('+u.id+','+(u.active?0:1)+')" title="'+(u.active?"Disable":"Enable")+'">'+(u.active?"&#8856;":"&#10003;")+'</button>'+
+        '<button class="iconbtn" data-h="delAppUser('+u.id+')" title="Delete" style="color:#ef4444">&#128465;</button></td></tr>'; }).join("")
+        :'<tr><td colspan="5" class="hint">No users yet.</td></tr>')+'</tbody></table></div>';
+    Array.prototype.forEach.call(host.querySelectorAll(".usr-role"), function(sel){ sel.onchange=function(){ usersRequest("update",{id:+sel.getAttribute("data-uid"),payload:{role:sel.value}}).then(function(r2){ if(!r2.ok)alert(r2.error||"Failed"); refreshUserList(); }); }; });
+  }); }
+window.addAppUser=function(){ var un=document.getElementById("usr_un").value.trim(), nm=document.getElementById("usr_nm").value.trim(), role=document.getElementById("usr_role").value, pw=document.getElementById("usr_pw").value;
+  if(!un||pw.length<6){ alert("Username and a 6+ character password are required."); return; }
+  usersRequest("create",{payload:{username:un,name:nm,role:role,password:pw}}).then(function(r){ if(!r.ok){ alert(r.error||"Failed"); return; } document.getElementById("usr_un").value="";document.getElementById("usr_nm").value="";document.getElementById("usr_pw").value=""; refreshUserList(); flash("User added."); }); };
+window.resetAppUser=function(id){ var pw=prompt("New password (min 6 characters):"); if(!pw)return; if(pw.length<6){alert("Too short.");return;} usersRequest("reset",{id:id,payload:{password:pw}}).then(function(r){ alert(r.ok?"Password updated.":(r.error||"Failed")); }); };
+window.toggleAppUser=function(id,active){ usersRequest("update",{id:id,payload:{active:!!active}}).then(function(r){ if(!r.ok)alert(r.error||"Failed"); refreshUserList(); }); };
+window.delAppUser=function(id){ if(!confirm("Delete this user's login?"))return; usersRequest("delete",{id:id}).then(function(r){ if(!r.ok)alert(r.error||"Failed"); refreshUserList(); }); };
 
 /* ---- CSV import (receipts / monthly rent) ---- */
 window.openImport=function(){ if(!canEdit()){alert("Read-only access.");return;}

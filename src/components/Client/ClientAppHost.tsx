@@ -65,6 +65,18 @@ export default function ClientAppHost({ clientId, appKey }: { clientId: number; 
           try { await api.saveClientAppData(clientId, appKey, m.data); setSaveState('saved'); }
           catch { setSaveState('error'); }
         }, 300);
+      } else if (m.type === 'users') {
+        const win = iframeRef.current?.contentWindow;
+        const reply = (payload: any) => win?.postMessage({ type: 'users:reply', reqId: m.reqId, ...payload }, '*');
+        (async () => {
+          try {
+            if (m.op === 'list') reply({ ok: true, data: await api.listAppUsers(clientId, appKey) });
+            else if (m.op === 'create') { await api.createAppUser({ client_id: clientId, app_key: appKey, ...m.payload }); reply({ ok: true }); }
+            else if (m.op === 'update') { await api.updateAppUser(m.id, m.payload); reply({ ok: true }); }
+            else if (m.op === 'reset') { await api.resetAppUserPassword(m.id, m.payload.password); reply({ ok: true }); }
+            else if (m.op === 'delete') { await api.deleteAppUser(m.id); reply({ ok: true }); }
+          } catch (e: any) { reply({ ok: false, error: e?.message || 'Failed' }); }
+        })();
       }
     };
     window.addEventListener('message', onMsg);
