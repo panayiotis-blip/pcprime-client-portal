@@ -76,10 +76,12 @@ function initShell(){
   sy.value=cur; sy.onchange=()=>{schedYear=sy.value;render();};
   document.getElementById("btnAdd").onclick=()=>editTenant(null);
   document.getElementById("btnAdd").style.display=canEdit()?"":"none";
-  document.getElementById("btnCsv").onclick=exportCsv;
-  document.getElementById("btnSave").onclick=function(){ try{ dl(new Blob([JSON.stringify(DATA,null,2)],{type:"application/json"}), "greson-rentals-"+stamp(new Date()).replace(/[: ]/g,"-")+".json"); flash("Backup downloaded."); }catch(e){} };
+  document.getElementById("btnImport").onclick=openImport;
+  document.getElementById("btnImport").style.display=canEdit()?"":"none";
+  document.getElementById("btnPrint").onclick=function(){ window.print(); };
+  document.getElementById("btnSave").onclick=function(){ persist(); flash("Saved."); };
+  document.getElementById("btnSave").style.display=canEdit()?"":"none";
   document.getElementById("btnLogout").onclick=logout;
-  document.getElementById("fileImp").onchange=e=>importXlsx(e.target.files[0]);
   document.getElementById("pdfInput").onchange=onPdfPicked;
   // User dropdown menu (name → Settings / Users / Privacy / Log out).
   var umBtn=document.getElementById("userMenuBtn"), um=document.getElementById("userMenu");
@@ -117,6 +119,44 @@ window.openUsers=function(){ if(!isAdmin()){alert("Admins only.");return;}
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box"><h3>Users &amp; access</h3>'+
     '<p class="hint">Add app users and set what each can do — being connected to the secure login system next. For now your accountant manages app logins.</p>'+
     '<div class="frow" style="justify-content:flex-end"><button class="ghost" data-h="closeModal()">Close</button></div></div></div>'; };
+
+/* ---- CSV import (receipts / monthly rent) ---- */
+window.openImport=function(){ if(!canEdit()){alert("Read-only access.");return;}
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(680px,96vw)"><h3>Import from CSV</h3>'+
+    '<div class="frow"><label>What are you importing?<select id="imp_type">'+
+      '<option value="receipts">Receipts (rent received)</option>'+
+      '<option value="rent">Monthly rent (per tenant)</option>'+
+    '</select></label></div>'+
+    '<div id="imp_hint" class="hint"></div>'+
+    '<div class="frow"><label>Paste CSV, or choose a file below<textarea id="imp_csv" rows="8"></textarea></label></div>'+
+    '<div class="frow" style="align-items:center"><label class="filebtn">⭱ Choose CSV file<input id="imp_file" type="file" accept=".csv,text/csv" class="hidden"></label><div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="runImport()">Import</button></div>'+
+    '</div></div>';
+  var hint=function(){ var t=document.getElementById("imp_type").value;
+    document.getElementById("imp_hint").innerHTML = t==="receipts"
+      ? "Columns: <b>Tenant, Date (YYYY-MM-DD), Reference, Amount</b> — one receipt per line. Tenant name must match an existing tenant."
+      : "Columns: <b>Tenant, Monthly rent</b> — sets each tenant's monthly rent.";
+    document.getElementById("imp_csv").placeholder = t==="receipts" ? "John Doe,2026-03-05,REC001,500" : "John Doe,500"; };
+  document.getElementById("imp_type").onchange=hint; hint();
+  document.getElementById("imp_file").onchange=function(e){ var f=e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ document.getElementById("imp_csv").value=r.result; }; r.readAsText(f); };
+};
+window.runImport=function(){ if(!canEdit()){alert("Read-only access.");return;}
+  var type=document.getElementById("imp_type").value;
+  var txt=document.getElementById("imp_csv").value.trim(); if(!txt){alert("Paste or choose a CSV first.");return;}
+  var lines=txt.split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+  if(lines.length && /tenant/i.test(lines[0].split(/[,;\t]/)[0])) lines.shift(); // skip header
+  var byName={}; DATA.tenants.forEach(function(t){ byName[(t.name||"").trim().toLowerCase()]=t; });
+  var applied=0, skipped=0;
+  lines.forEach(function(l){ var c=l.split(/[,;\t]/).map(function(x){return x.trim();});
+    var t=byName[(c[0]||"").toLowerCase()]; if(!t){ skipped++; return; }
+    if(type==="receipts"){ var date=c[1]||""; var y=date.slice(0,4); var m=parseInt(date.slice(5,7),10)-1;
+      if(!(m>=0&&m<12)||!/^\d{4}$/.test(y)){ skipped++; return; }
+      ensureYear(t,y)[m].receipts.push({date:date,ref:c[2]||"",amount:num(c[3]),cat:"Rent"}); applied++; }
+    else { t.rent=num(c[1]); applied++; }
+  });
+  persist("Imported "+applied+" "+(type==="receipts"?"receipt(s)":"rent value(s)")+" from CSV");
+  closeModal(); render();
+  flash(applied+" imported"+(skipped?" · "+skipped+" skipped (tenant not matched / bad row)":""));
+};
 
 // Company letterhead for printed statements (from Settings).
 function letterheadHtml(){ var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
