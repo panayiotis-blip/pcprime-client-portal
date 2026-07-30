@@ -904,6 +904,36 @@ export const api = {
     if (!data?.ok) throw new Error(data?.error || 'Failed to delete user.');
   },
 
+  // ---- App access grants (migration 164) — firm grants apps BY EMAIL via app-grants-admin fn ----
+  async listAppGrants(clientId: number, appKey?: string): Promise<any[]> {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'list', client_id: clientId, app_key: appKey } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to load access.');
+    return data.grants as any[];
+  },
+  // Grants an email access to (client, app). Returns whether a new account was invited.
+  async grantAppAccess(p: { client_id: number; app_key: string; email: string; role: string; name?: string }): Promise<{ id: number; user_id: string; invited: boolean }> {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'grant', ...p } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to grant access.');
+    return { id: data.id, user_id: data.user_id, invited: !!data.invited };
+  },
+  async setAppGrantRole(id: number, role: string) {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'set_role', id, role } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to update role.');
+  },
+  async setAppGrantActive(id: number, active: boolean) {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'set_active', id, active } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to update access.');
+  },
+  async revokeAppGrant(id: number) {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'revoke', id } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to revoke access.');
+  },
+
   // ---- Standalone app session (public app-session fn) ----
   async appLogin(username: string, password: string): Promise<{ session: string; role: string; name: string; app_key: string; data: any }> {
     const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'login', username, password } });
