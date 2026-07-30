@@ -39,6 +39,7 @@ const ServiceTasksYear = lazy(() => import('./components/Admin/ServiceTasksYear'
 const TaskDashboard = lazy(() => import('./components/Admin/TaskDashboard'));
 const MyClientApp = lazy(() => import('./components/Client/MyClientApp'));
 const ClientAppPortal = lazy(() => import('./components/AppPortal/ClientAppPortal'));
+const ClientEntry = lazy(() => import('./components/Client/ClientEntry'));
 const AppAccessRequests = lazy(() => import('./components/Admin/AppAccessRequests'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
@@ -126,6 +127,22 @@ function AuthedApp() {
         <MFAStepUpProvider>
         {/* Non-blocking 2FA nudge for clients without an authenticator. */}
         <ClientMfaNudge />
+        {/* Staff go straight to the portal. Non-staff (portal clients and
+            app-only users) route through ClientEntry, which offers the portal
+            and/or their granted apps and opens app-only users full-screen. */}
+        {isStaffRole(user) ? <PortalRoutes /> : <ClientEntry portalElement={<PortalRoutes />} />}
+        </MFAStepUpProvider>
+        </DashboardLayoutProvider>
+        </ViewPreferencesProvider>
+      </ScanProvider>
+    </AppProvider>
+  );
+}
+
+// The full portal route table (AppShell + all pages). Rendered for staff, and
+// for portal clients who choose "Client Portal" at the post-login chooser.
+function PortalRoutes() {
+  return (
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
@@ -204,11 +221,6 @@ function AuthedApp() {
             <Route path="*" element={<Navigate to="/" />} />
           </Route>
         </Routes>
-        </MFAStepUpProvider>
-        </DashboardLayoutProvider>
-        </ViewPreferencesProvider>
-      </ScanProvider>
-    </AppProvider>
   );
 }
 

@@ -10,7 +10,7 @@ import { PanelSkeleton } from '../ui';
 // the portal over postMessage: it posts "ready", we inject the document +
 // the portal user's role/name; it posts "save", we upsert (debounced).
 
-export default function ClientAppHost({ clientId, appKey }: { clientId: number; appKey: string }) {
+export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverride }: { clientId: number; appKey: string; fullScreen?: boolean; roleOverride?: string }) {
   const { user } = useAuth();
   const app = getClientApp(appKey);
 
@@ -24,7 +24,9 @@ export default function ClientAppHost({ clientId, appKey }: { clientId: number; 
   const docRef = useRef<any>(null);
   const saveTimer = useRef<any>(null);
 
-  const appRole = (user as any)?.role === 'client' ? 'editor' : 'admin';
+  // Grant-based callers (full-screen app users) pass their exact grant role;
+  // otherwise fall back to the portal-role heuristic (client → editor, staff → admin).
+  const appRole = roleOverride ?? ((user as any)?.role === 'client' ? 'editor' : 'admin');
   const appName = (user as any)?.display_name || (user as any)?.full_name || (user as any)?.username || (user as any)?.email || 'Staff';
 
   // Fetch the app shell once.
@@ -92,7 +94,7 @@ export default function ClientAppHost({ clientId, appKey }: { clientId: number; 
   if (docLoading || !srcDoc) return <PanelSkeleton rows={8} />;
 
   return (
-    <div>
+    <div style={fullScreen ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6, minHeight: 18 }}>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: saveState === 'error' ? '#b91c1c' : '#64748b' }}>{saveLabel}</span>
       </div>
@@ -101,7 +103,9 @@ export default function ClientAppHost({ clientId, appKey }: { clientId: number; 
         ref={iframeRef}
         srcDoc={srcDoc}
         title={app?.label || 'App'}
-        style={{ width: '100%', height: 'calc(100vh - 210px)', border: '1px solid #e2e8f0', borderRadius: 8, background: '#f4f6f9' }}
+        style={fullScreen
+          ? { flex: 1, minHeight: 0, width: '100%', border: 0, background: '#f4f6f9' }
+          : { width: '100%', height: 'calc(100vh - 210px)', border: '1px solid #e2e8f0', borderRadius: 8, background: '#f4f6f9' }}
       />
     </div>
   );

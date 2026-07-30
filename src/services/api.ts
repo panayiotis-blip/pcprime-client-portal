@@ -858,6 +858,15 @@ export const api = {
       client_name: r.client?.name ?? null, client_code: r.client?.client_code ?? null,
     }));
   },
+  // The caller's OWN active app grants (client_app_grants, migration 164) —
+  // RLS returns only this user's rows. Used by the post-login chooser to know
+  // which apps a person may open, and with what role.
+  async getMyAppGrants(): Promise<Array<{ client_id: number; app_key: string; role: string }>> {
+    const { data, error } = await supabase.from('client_app_grants')
+      .select('client_id, app_key, role').eq('active', true);
+    if (error) throw new Error(error.message);
+    return (data || []) as Array<{ client_id: number; app_key: string; role: string }>;
+  },
   // The JSON document for one (client, app) — null if not created yet.
   async getClientAppData(clientId: number, appKey: string): Promise<{ data: any; updated_at: string | null } | null> {
     const { data, error } = await supabase.from('client_app_data')
