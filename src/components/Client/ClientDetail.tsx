@@ -6,6 +6,7 @@ import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
 import { api, isStaffRole, hasPermission, isSupervisorOrHigher } from '../../services/api';
 
 import { FieldCtx } from './fieldContext';
+import { KeepAlive, TabErrorBoundary } from './TabKeepAlive';
 import ClientHeader from './ClientHeader';
 import { Modal, Button, type MenuItem } from '../ui';
 import { FileText, ClipboardList, Mail, Download, UserX } from 'lucide-react';
@@ -498,7 +499,16 @@ export default function ClientDetail() {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content.
+          Form/light tabs stay conditionally mounted (their edit state already
+          lives in ClientDetail's `form` via FieldCtx, so remounting loses
+          nothing). The heavy list/data tabs below are KEPT ALIVE — mounted lazily
+          on first visit, then hidden rather than unmounted, so their filters,
+          scroll and loaded rows survive a tab switch. Each is wrapped in a
+          TabErrorBoundary so one failing tab can't blank the page. Contacts is
+          intentionally NOT kept alive: it registers its saver / dirty state up to
+          the header Save, which must reflect only the active tab. Keyed by
+          clientId so paging to another client resets the kept-alive tabs. */}
       <div className="cd-tab-pane">
         {tab === 'info'        && <ClientInfoTab />}
         {tab === 'contacts'    && <ContactsTab registerSave={registerTabSave} onDirtyChange={setTabDirty} />}
@@ -507,21 +517,39 @@ export default function ClientDetail() {
         {tab === 'kyc'         && <KYCPanel clientId={clientId} onRefresh={loadClient} />}
         {tab === 'directors'   && <DirectorsTab clientId={clientId} canEdit={editable} />}
         {tab === 'credentials' && <PlatformCredentials clientId={clientId} />}
-        {tab === 'documents'   && <ClientDocuments clientId={clientId} />}
-        {tab === 'invoices'    && <InvoiceList clientId={clientId} />}
-        {tab === 'financials'  && <FinancialsTab clientId={clientId} />}
         {tab === 'customer_billing' && <ClientBillingTab clientId={clientId} />}
-        {tab === 'reports'     && <ClientReportsTab clientId={clientId} />}
         {tab === 'compliance'  && <ComplianceTab clientId={clientId} />}
-        {tab === 'tax_filings' && <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} client={client} />}
-        {tab === 'emails'      && <ClientEmails clientId={clientId} />}
         {tab === 'contacts_book' && <ClientContactsBook clientId={clientId} clientName={client.name} />}
         {tab === 'apps'         && <ClientAppsTab clientId={clientId} />}
-        {tab === 'time'        && <TimeTab clientId={clientId} clientName={client.name} />}
         {tab === 'notes'       && <NotesTab />}
         {tab === 'audit'       && <AuditTab clientId={clientId} />}
         {tab === 'accounts'    && <ChartOfAccounts clientId={clientId} />}
         {tab === 'patterns'    && <VendorPatterns clientId={clientId} />}
+
+        {/* Kept-alive heavy tabs */}
+        <KeepAlive key={`documents-${clientId}`} active={tab === 'documents'}>
+          <TabErrorBoundary label="documents"><ClientDocuments clientId={clientId} /></TabErrorBoundary>
+        </KeepAlive>
+        <KeepAlive key={`invoices-${clientId}`} active={tab === 'invoices'}>
+          <TabErrorBoundary label="invoices"><InvoiceList clientId={clientId} /></TabErrorBoundary>
+        </KeepAlive>
+        <KeepAlive key={`financials-${clientId}`} active={tab === 'financials'}>
+          <TabErrorBoundary label="financials"><FinancialsTab clientId={clientId} /></TabErrorBoundary>
+        </KeepAlive>
+        <KeepAlive key={`reports-${clientId}`} active={tab === 'reports'}>
+          <TabErrorBoundary label="reports"><ClientReportsTab clientId={clientId} /></TabErrorBoundary>
+        </KeepAlive>
+        <KeepAlive key={`tax_filings-${clientId}`} active={tab === 'tax_filings'}>
+          <TabErrorBoundary label="tax_filings">
+            <TaxFilingsTab clientId={clientId} canEdit={editable} clientName={client.name} client={client} />
+          </TabErrorBoundary>
+        </KeepAlive>
+        <KeepAlive key={`emails-${clientId}`} active={tab === 'emails'}>
+          <TabErrorBoundary label="emails"><ClientEmails clientId={clientId} /></TabErrorBoundary>
+        </KeepAlive>
+        <KeepAlive key={`time-${clientId}`} active={tab === 'time'}>
+          <TabErrorBoundary label="time"><TimeTab clientId={clientId} clientName={client.name} /></TabErrorBoundary>
+        </KeepAlive>
       </div>
 
       {showApplyTemplate && (
