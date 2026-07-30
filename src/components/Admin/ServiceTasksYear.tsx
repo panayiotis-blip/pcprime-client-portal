@@ -180,6 +180,39 @@ export default function ServiceTasksYear() {
     return r.scheduled_date && r.scheduled_date < todayIso ? 'overdue' : 'pending';
   };
 
+  // Print the currently-filtered year grid as a clean table (new window).
+  const printPlan = () => {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+    const STATUS_TEXT = { done: 'Done', overdue: 'Overdue', pending: 'Pending', ungenerated: 'Not generated' } as const;
+    const rowsHtml = rows.map(r => `<tr>
+      <td>${esc((r.client_code ? r.client_code + '  ' : '') + (r.client_name || `#${r.client_id}`))}</td>
+      <td>${esc(r.stage_label)} <span style="color:#888">(${esc(r.period_label)})</span></td>
+      <td style="white-space:nowrap">${esc(r.scheduled_date || '—')}</td>
+      <td>${esc(STATUS_TEXT[cellStatus(r)])}</td>
+      <td style="white-space:nowrap">${esc(cdate(r) || '')}</td>
+      <td>${esc(ref(r) || '')}</td>
+    </tr>`).join('');
+    const svcLabel = service ? (services.find(s => s.key === service)?.label || service) : 'All services';
+    const statusLabel = statusFilter === 'all' ? 'All' : statusFilter === 'done' ? 'Done' : 'Outstanding';
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Service tasks ${year}</title>
+      <style>
+        body{font-family:system-ui,Arial,sans-serif;color:#111;padding:20px;}
+        h2{margin:0 0 2px;} .meta{color:#666;font-size:12px;margin-bottom:12px;}
+        table{width:100%;border-collapse:collapse;font-size:12px;}
+        th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top;}
+        th{background:#f1f5f9;}
+      </style></head><body>
+      <h2>Service tasks — ${year}</h2>
+      <div class="meta">${svcLabel} · ${statusLabel} · ${rows.filter(r => isDone(r.status)).length}/${rows.length} done · printed ${new Date().toLocaleString('en-GB')}</div>
+      <table><thead><tr><th>Client</th><th>Task</th><th>Due</th><th>Status</th><th>Completed date</th><th>Reference</th></tr></thead>
+      <tbody>${rowsHtml}</tbody></table>
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow pop-ups to print the year grid.'); return; }
+    w.document.write(html); w.document.close();
+  };
+
   if (!canView) return <div className="empty-state"><p>Staff only.</p></div>;
 
   const years = [thisYear + 1, thisYear, thisYear - 1, thisYear - 2];
@@ -189,11 +222,16 @@ export default function ServiceTasksYear() {
     <div className="dashboard">
       <div className="dashboard-header">
         <h2 style={{ margin: 0 }}>Service tasks — {year}</h2>
-        {canBackfill && (
-          <button className="btn btn-secondary" onClick={backfill} disabled={!!busy}>
-            {busy || `Generate all ${year}`}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={printPlan} disabled={loading || rows.length === 0}>
+            Print
           </button>
-        )}
+          {canBackfill && (
+            <button className="btn btn-secondary" onClick={backfill} disabled={!!busy}>
+              {busy || `Generate all ${year}`}
+            </button>
+          )}
+        </div>
       </div>
       <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 12px' }}>
         Every period each client's services are due to run this year — including ones not generated yet.
