@@ -27,7 +27,7 @@ function hashPw(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h)+s.char
 function ensureUsers(){ if(!DATA.users.length){ DATA.users=[{username:"admin",hash:hashPw("greson2026"),role:"admin",name:"Administrator"}]; persist(); } }
 function showLogin(msg){
   document.getElementById("loginHost").innerHTML=
-    '<div class="login"><div class="box"><h2>Property Rentals</h2><p>Greson Easy Loo — please sign in.</p>'+
+    '<div class="login"><div class="box"><h2>Property Rentals</h2><p>Please sign in.</p>'+
     '<div class="err" id="lerr">'+(msg||"")+'</div>'+
     '<input id="lu" placeholder="Username" autocomplete="username">'+
     '<input id="lp" type="password" placeholder="Password" autocomplete="current-password">'+
@@ -69,6 +69,7 @@ function owed(t,y,m){ if(!due(t,y,m)||m>capM(y))return 0; const b=rentOf(t,y,m)-
 function initShell(){
   refreshStamps();
   applyHeaderLogo();
+  applyHeaderTitle();
   document.getElementById("whoami").textContent=user? (user.name+" · "+user.role) : "";
   const tb=document.getElementById("tabs"); tb.innerHTML="";
   TABS().forEach(([id,l])=>{const d=document.createElement("div");d.className="tab"+(id===activeTab?" active":"");d.textContent=l;d.onclick=()=>{activeTab=id;render();};tb.appendChild(d);});
@@ -92,6 +93,11 @@ function initShell(){
 }
 function refreshStamps(){ document.getElementById("stamps").innerHTML="Viewed: "+stamp(VIEWED)+" · Updated: "+(DATA.meta.updated||"—"); }
 function applyHeaderLogo(){ var hl=document.getElementById("hdrLogo"); if(!hl)return; var lg=(DATA.settings&&DATA.settings.logo)||""; if(lg){ hl.src=lg; hl.style.display=""; } else { hl.style.display="none"; } }
+// Header title = this client's own company name (set in Settings), else a
+// generic label — so the same app on any client shows THEIR name, not Greson.
+function companyName(){ var s=DATA.settings||{}; return (s.companyName||(DATA.meta&&DATA.meta.client)||"").trim(); }
+function applyHeaderTitle(){ var t=document.getElementById("hdrTitle"); if(!t)return; var cn=companyName(); var txt=cn?(cn+" — Property Rentals"):"Property Rentals"; t.textContent=txt; try{document.title=txt;}catch(e){} }
+function fileBase(){ var cn=companyName()||"Property Rentals"; return cn.replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"")||"Property_Rentals"; }
 
 /* ---- user menu: settings / privacy / users ---- */
 window.openPrivacy=function(){ try{ window.open("/privacy","_blank","noopener"); }catch(e){ flash("Could not open privacy policy."); } };
@@ -116,7 +122,7 @@ window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return
   var g=function(id){ return document.getElementById(id).value.trim(); };
   DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em"), invoicePrefix:g("st_inv")||"INV", bank:g("st_bank") });
   if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
-  persist("Updated company settings"); closeModal(); applyHeaderLogo(); render(); flash("Settings saved."); };
+  persist("Updated company settings"); closeModal(); applyHeaderLogo(); applyHeaderTitle(); render(); flash("Settings saved."); };
 
 /* ---- Users & access (talks to the host over postMessage → secure backend) ---- */
 var __userReqId=0, __userReqs={};
@@ -666,10 +672,10 @@ function importXlsx(file){ if(!file||!canEdit())return; const rd=new FileReader(
   rd.readAsArrayBuffer(file); }
 function exportCsv(){ const y=yr(); let rows=[["Property","Unit","Tenant","Rent","LeaseStart","LeaseEnd","Deposit","Electricity","Contact1","Phone1","Contact2","Phone2","Email"].concat(MONTHS.map(m=>m+" paid"))];
   DATA.tenants.forEach(t=>{ const p=propById(t.propertyId),L=curLease(t); rows.push([p?p.name:"",t.unit,t.name,t.rent,L.start,L.end,t.deposit,(t.electricity==null?"":t.electricity?"Yes":"No"),t.contact1.name,t.contact1.phone,t.contact2.name,t.contact2.phone,t.email].concat(MONTHS.map((_,m)=>paid(t,y,m)||""))); });
-  dl(new Blob([rows.map(r=>r.map(c=>'"'+(c==null?"":(""+c).replace(/"/g,'""'))+'"').join(",")).join("\n")],{type:"text/csv"}),"Greson_property_rentals_"+y+".csv"); flash("CSV exported."); }
+  dl(new Blob([rows.map(r=>r.map(c=>'"'+(c==null?"":(""+c).replace(/"/g,'""'))+'"').join(",")).join("\n")],{type:"text/csv"}),fileBase()+"_"+y+".csv"); flash("CSV exported."); }
 function saveSnapshot(){ persist(); const json=JSON.stringify(DATA); let html="<!DOCTYPE html>\n"+document.documentElement.outerHTML;
   html=html.replace(/window\.__EMBEDDED_DATA__\s*=\s*[\s\S]*?\/\*END_DATA\*\//,"window.__EMBEDDED_DATA__ = "+json+";/*END_DATA*/");
-  dl(new Blob([html],{type:"text/html"}),"Greson_Property_Rentals_"+(DATA.meta.updated||"").slice(0,10)+".html"); flash("Snapshot saved."); }
+  dl(new Blob([html],{type:"text/html"}),fileBase()+"_"+(DATA.meta.updated||"").slice(0,10)+".html"); flash("Snapshot saved."); }
 function dl(blob,name){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
 
 /* ---- ledger update (one-time) ---- */
