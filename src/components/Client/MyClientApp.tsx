@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../services/api';
-import { getClientApp } from '../../services/clientApps';
+import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import ClientAppHost from './ClientAppHost';
 import { PanelSkeleton } from '../ui';
 
@@ -16,8 +16,8 @@ export default function MyClientApp() {
 
   useEffect(() => {
     setLoading(true);
-    api.getMyClientApps()
-      .then(rows => {
+    Promise.all([loadAppTemplates(), api.getMyClientApps()])
+      .then(([, rows]) => {
         const row = rows.find(r => r.app_key === appKey);
         setClientId(row ? row.client_id : null);
       })

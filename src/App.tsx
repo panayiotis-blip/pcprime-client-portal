@@ -41,6 +41,7 @@ const MyClientApp = lazy(() => import('./components/Client/MyClientApp'));
 const ClientAppPortal = lazy(() => import('./components/AppPortal/ClientAppPortal'));
 const ClientEntry = lazy(() => import('./components/Client/ClientEntry'));
 const AppAccessRequests = lazy(() => import('./components/Admin/AppAccessRequests'));
+const ClientAppTemplates = lazy(() => import('./components/Admin/ClientAppTemplates'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
 const ExportPage = lazy(() => import('./components/Export/ExportPage'));
@@ -155,6 +156,7 @@ function PortalRoutes() {
             <Route path="/clients/duplicates" element={<DuplicateFinder />} />
             <Route path="/clients/unlinked-directors" element={<UnlinkedDirectors />} />
             <Route path="/clients/address-book" element={<AddressBook />} />
+            <Route path="/client-apps" element={<ClientAppTemplates />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/export" element={<ExportPage />} />

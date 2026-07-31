@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { getClientApp } from '../../services/clientApps';
+import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import { PanelSkeleton } from '../ui';
 
-// Embeds a CSP-clean per-client app (from public/<app>/) and bridges its data
-// to Supabase (client_app_data, migration 161). The app is loaded via iframe
-// srcdoc — which sidesteps the portal's X-Frame-Options: DENY — and talks to
-// the portal over postMessage: it posts "ready", we inject the document +
-// the portal user's role/name; it posts "save", we upsert (debounced).
+// Embeds a per-client app and bridges its data to Supabase (client_app_data,
+// migration 161). Two render modes:
+//  - BUILT-IN apps (public/<app>/): iframe srcdoc (sidesteps X-Frame-Options).
+//  - UPLOADED templates (app_templates, mig 167): a blob-URL iframe, so the app
+//    gets its own origin and isn't bound by the portal CSP — any self-contained
+//    HTML runs. It's sandboxed (scripts only, no same-origin) for isolation.
+// Either way it talks to the portal over postMessage: it posts "ready", we
+// inject the document + the user's role/name; it posts "save", we upsert.
 
 export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverride }: { clientId: number; appKey: string; fullScreen?: boolean; roleOverride?: string }) {
   const { user } = useAuth();
@@ -16,7 +19,9 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
 
   const [doc, setDoc] = useState<any | null>(null);
   const [docLoading, setDocLoading] = useState(true);
+  const [mode, setMode] = useState<'srcdoc' | 'blob' | null>(null);
   const [srcDoc, setSrcDoc] = useState('');
+  const [blobUrl, setBlobUrl] = useState('');
   const [err, setErr] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
@@ -29,14 +34,31 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
   const appRole = roleOverride ?? ((user as any)?.role === 'client' ? 'editor' : 'admin');
   const appName = (user as any)?.display_name || (user as any)?.full_name || (user as any)?.username || (user as any)?.email || 'Staff';
 
-  // Fetch the app shell once.
+  // Resolve the app shell: built-in → static index.html (srcdoc); uploaded
+  // template → its HTML from the DB served via a blob URL.
   useEffect(() => {
-    if (!app) { setErr('Unknown app: ' + appKey); return; }
-    fetch(app.asset + 'index.html')
-      .then(r => r.text())
-      .then(setSrcDoc)
-      .catch(e => setErr('Could not load the app: ' + (e?.message || e)));
-  }, [app, appKey]);
+    let alive = true;
+    let createdUrl: string | null = null;
+    setMode(null); setSrcDoc(''); setBlobUrl(''); setErr('');
+    (async () => {
+      await loadAppTemplates();
+      const a = getClientApp(appKey);
+      if (a?.asset) {
+        try {
+          const html = await fetch(a.asset + 'index.html').then(r => r.text());
+          if (alive) { setSrcDoc(html); setMode('srcdoc'); }
+        } catch (e: any) { if (alive) setErr('Could not load the app: ' + (e?.message || e)); }
+      } else {
+        try {
+          const html = await api.getAppTemplateHtml(appKey);
+          if (!html) { if (alive) setErr('This app has no template uploaded.'); return; }
+          createdUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+          if (alive) { setBlobUrl(createdUrl); setMode('blob'); } else { URL.revokeObjectURL(createdUrl); }
+        } catch (e: any) { if (alive) setErr(e?.message || String(e)); }
+      }
+    })();
+    return () => { alive = false; if (createdUrl) URL.revokeObjectURL(createdUrl); };
+  }, [appKey]);
 
   // Load this (client, app) document.
   useEffect(() => {
@@ -91,22 +113,36 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
     : '';
 
   if (err) return <div className="empty-state"><p style={{ color: '#b91c1c' }}>{err}</p></div>;
-  if (docLoading || !srcDoc) return <PanelSkeleton rows={8} />;
+  if (docLoading || !mode) return <PanelSkeleton rows={8} />;
+
+  const frameStyle: React.CSSProperties = fullScreen
+    ? { flex: 1, minHeight: 0, width: '100%', border: 0, background: '#f4f6f9' }
+    : { width: '100%', height: 'calc(100vh - 210px)', border: '1px solid #e2e8f0', borderRadius: 8, background: '#f4f6f9' };
 
   return (
     <div style={fullScreen ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6, minHeight: 18 }}>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: saveState === 'error' ? '#b91c1c' : '#64748b' }}>{saveLabel}</span>
       </div>
-      <iframe
-        key={`${clientId}:${appKey}`}
-        ref={iframeRef}
-        srcDoc={srcDoc}
-        title={app?.label || 'App'}
-        style={fullScreen
-          ? { flex: 1, minHeight: 0, width: '100%', border: 0, background: '#f4f6f9' }
-          : { width: '100%', height: 'calc(100vh - 210px)', border: '1px solid #e2e8f0', borderRadius: 8, background: '#f4f6f9' }}
-      />
+      {mode === 'blob' ? (
+        // Uploaded template: own origin (no portal CSP), sandboxed to scripts only.
+        <iframe
+          key={`${clientId}:${appKey}:blob`}
+          ref={iframeRef}
+          src={blobUrl}
+          title={app?.label || 'App'}
+          sandbox="allow-scripts allow-downloads allow-modals allow-popups allow-forms"
+          style={frameStyle}
+        />
+      ) : (
+        <iframe
+          key={`${clientId}:${appKey}`}
+          ref={iframeRef}
+          srcDoc={srcDoc}
+          title={app?.label || 'App'}
+          style={frameStyle}
+        />
+      )}
     </div>
   );
 }

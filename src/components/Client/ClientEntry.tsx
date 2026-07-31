@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { getClientApp } from '../../services/clientApps';
+import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import ClientAppHost from './ClientAppHost';
 
 // Post-login entry for NON-STAFF users (App access Phase 3). Works out where a
@@ -33,7 +33,7 @@ export default function ClientEntry({ portalElement }: { portalElement: ReactNod
     let alive = true;
     (async () => {
       try {
-        const [appRows, grants] = await Promise.all([api.getMyClientApps(), api.getMyAppGrants()]);
+        const [appRows, grants] = await Promise.all([api.getMyClientApps(), api.getMyAppGrants(), loadAppTemplates()]);
         const roleFor = (clientId: number, appKey: string) =>
           grants.find(g => g.client_id === clientId && g.app_key === appKey)?.role;
         const list: AppDest[] = appRows.map(r => ({

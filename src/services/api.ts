@@ -867,6 +867,56 @@ export const api = {
     if (error) throw new Error(error.message);
     return (data || []) as Array<{ client_id: number; app_key: string; role: string }>;
   },
+  // ---- App templates (migration 167): uploadable app definitions ----
+  async listAppTemplates(): Promise<any[]> {
+    const { data, error } = await supabase.from('app_templates')
+      .select('id, key, name, icon, description, restricted, active, created_at, updated_at')
+      .order('created_at');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  async getAppTemplateHtml(key: string): Promise<string | null> {
+    const { data, error } = await supabase.from('app_templates')
+      .select('html').eq('key', key).eq('active', true).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data?.html ?? null;
+  },
+  async createAppTemplate(p: { key: string; name: string; icon?: string; description?: string; html: string; restricted?: boolean }): Promise<number> {
+    const { data, error } = await supabase.from('app_templates').insert({
+      key: p.key, name: p.name, icon: p.icon || '📦', description: p.description || null,
+      html: p.html, restricted: !!p.restricted,
+    }).select('id').single();
+    if (error) throw new Error(/duplicate|unique/i.test(error.message) ? 'That key is already in use — pick another.' : error.message);
+    return (data as any).id as number;
+  },
+  async updateAppTemplate(id: number, patch: { name?: string; icon?: string; description?: string; html?: string; restricted?: boolean; active?: boolean }) {
+    const { error } = await supabase.from('app_templates').update(patch).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  async deleteAppTemplate(id: number) {
+    const { error } = await supabase.from('app_templates').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Clients this app_key is allocated to (client_apps rows), with names.
+  async getTemplateAllocations(appKey: string): Promise<Array<{ client_id: number; client_name: string | null; client_code: string | null; enabled: boolean }>> {
+    const { data, error } = await supabase.from('client_apps')
+      .select('client_id, enabled, client:clients(name, client_code)').eq('app_key', appKey);
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => ({
+      client_id: r.client_id, enabled: r.enabled,
+      client_name: r.client?.name ?? null, client_code: r.client?.client_code ?? null,
+    }));
+  },
+  // Allocate the template to clients — each gets the app enabled with its OWN
+  // blank data (client_app_data is keyed per client_id + app_key, so no client
+  // ever sees another's data). Idempotent.
+  async allocateTemplate(appKey: string, clientIds: number[]) {
+    if (!clientIds.length) return;
+    const rows = clientIds.map(id => ({ client_id: id, app_key: appKey, enabled: true }));
+    const { error } = await supabase.from('client_apps').upsert(rows, { onConflict: 'client_id,app_key' });
+    if (error) throw new Error(error.message);
+  },
+
   // The JSON document for one (client, app) — null if not created yet.
   async getClientAppData(clientId: number, appKey: string): Promise<{ data: any; updated_at: string | null } | null> {
     const { data, error } = await supabase.from('client_app_data')

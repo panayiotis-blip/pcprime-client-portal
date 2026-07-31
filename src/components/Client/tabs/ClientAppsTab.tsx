@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, isSupervisorOrHigher } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
-import { CLIENT_APPS, getClientApp } from '../../../services/clientApps';
+import { allClientApps, getClientApp, loadAppTemplates } from '../../../services/clientApps';
 import ClientAppHost from '../ClientAppHost';
 import { PanelSkeleton } from '../../ui';
 
@@ -23,7 +23,8 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
 
   const loadKeys = () => {
     setLoading(true);
-    api.getClientAppKeys(clientId).then(k => setKeys(k)).catch(() => setKeys([])).finally(() => setLoading(false));
+    Promise.all([loadAppTemplates(), api.getClientAppKeys(clientId)])
+      .then(([, k]) => setKeys(k)).catch(() => setKeys([])).finally(() => setLoading(false));
   };
   useEffect(loadKeys, [clientId]);
 
@@ -60,9 +61,9 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
     return <AppUsersPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
   }
 
-  const enabled = CLIENT_APPS.filter(a => keys.includes(a.key));
+  const enabled = allClientApps().filter(a => keys.includes(a.key));
   // Restricted apps (built for one client) aren't offered in the picker.
-  const available = CLIENT_APPS.filter(a => !keys.includes(a.key) && !a.restricted);
+  const available = allClientApps().filter(a => !keys.includes(a.key) && !a.restricted);
 
   return (
     <div>

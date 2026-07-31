@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { PanelSkeleton } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { api, isStaffRole, hasPermission, isSupervisorOrHigher, roleLabel } from '../../services/api';
-import { getClientApp } from '../../services/clientApps';
+import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import QuickActionsFab from './QuickActionsFab';
 import CommandPalette from './CommandPalette';
 
@@ -53,6 +53,7 @@ const STAFF_GROUPS: NavGroup[] = [
     items: [
       { path: '/clients',     label: 'Clients',         icon: '⊡' },
       { path: '/clients/address-book', label: 'Address Book', icon: '📖' },
+      { path: '/client-apps', label: 'App Templates', icon: '📱', requires: (u) => isSupervisorOrHigher(u) },
       { path: '/clients/duplicates', label: 'Find Duplicates', icon: '⧉' },
       { path: '/credentials', label: 'Credentials',     icon: '🔑', requires: (u) => hasPermission(u, 'credentials.read') },
     ],
@@ -246,7 +247,7 @@ export default function AppShell() {
   const [myApps, setMyApps] = useState<{ key: string; label: string; icon: string }[]>([]);
   useEffect(() => {
     if (!user || isStaffRole(user)) return;
-    api.getMyClientApps().then(rows => {
+    Promise.all([loadAppTemplates(), api.getMyClientApps()]).then(([, rows]) => {
       const seen = new Set<string>();
       const items: { key: string; label: string; icon: string }[] = [];
       for (const r of rows) {
