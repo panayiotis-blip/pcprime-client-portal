@@ -982,26 +982,30 @@ export const api = {
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Failed to delete user.');
   },
-  // Public: request app access (creates a pending request the firm approves).
-  async appRegister(p: { client_name: string; full_name?: string; username: string; password: string; email?: string; phone?: string; message?: string; app_key?: string }) {
-    const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'register', ...p } });
+  // Public: request app access BY EMAIL (no password — invited on approval).
+  // Creates a pending request the firm approves (app-request fn, migration 166).
+  async submitAppRequest(p: { client_name: string; full_name?: string; email: string; phone?: string; message?: string; app_key?: string }): Promise<{ already: boolean }> {
+    const { data, error } = await supabase.functions.invoke('app-request', { body: { action: 'submit', ...p } });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Request failed.');
+    return { already: !!data.already };
   },
-  // Firm-side review of app-access requests.
+  // Firm-side review of app-access requests — approval invites/reuses the email
+  // account and creates a grant (app-grants-admin, Phase 4).
   async listAppRequests(): Promise<any[]> {
-    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'list_requests' } });
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'list_requests' } });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Failed to load requests.');
     return data.requests as any[];
   },
-  async approveAppRequest(id: number, clientId: number, appKey: string, role: string) {
-    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'approve_request', id, client_id: clientId, app_key: appKey, role } });
+  async approveAppRequest(id: number, clientId: number, appKey: string, role: string): Promise<{ invited: boolean }> {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'approve_request', id, client_id: clientId, app_key: appKey, role } });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Approve failed.');
+    return { invited: !!data.invited };
   },
   async rejectAppRequest(id: number) {
-    const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'reject_request', id } });
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'reject_request', id } });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Reject failed.');
   },

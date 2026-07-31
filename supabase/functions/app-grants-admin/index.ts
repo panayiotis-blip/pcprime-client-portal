@@ -64,6 +64,38 @@ Deno.serve(async (req) => {
     const { data } = await admin.from('client_app_grants').select('client_id').eq('id', id).maybeSingle();
     return data ? (data as any).client_id : null;
   };
+  // Is the caller firm staff? (for global actions like reviewing requests)
+  const isStaff = async (): Promise<boolean> => {
+    const { data } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle();
+    return !!data && ['owner', 'supervisor', 'admin', 'staff'].includes((data as any).role);
+  };
+  // Resolve an email to an existing account, or invite a new one (marking new
+  // accounts app_user). Returns the user id + whether an invite was sent.
+  const resolveOrInvite = async (email: string, name: string): Promise<{ userId: string; invited: boolean } | { error: string }> => {
+    const { data: existingId, error: lookErr } = await admin.rpc('auth_user_id_by_email', { p_email: email });
+    if (lookErr) return { error: 'Lookup failed: ' + lookErr.message };
+    if (existingId) return { userId: existingId as string, invited: false };
+    const { data: inv, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
+      data: name ? { full_name: name } : {},
+      redirectTo: `${PORTAL_URL}/reset-password`,
+    });
+    if (invErr || !inv?.user) return { error: 'Could not invite that email: ' + (invErr?.message || 'unknown error') };
+    const uid = inv.user.id;
+    await admin.from('profiles').update({ role: 'app_user' }).eq('id', uid);
+    if (name) await admin.from('profiles').update({ full_name: name }).eq('id', uid);
+    return { userId: uid, invited: true };
+  };
+  // Enable the app for the client and upsert the grant (idempotent).
+  const upsertGrant = async (clientId: number, appKey: string, userId: string, role: string): Promise<{ id: number } | { error: string }> => {
+    await admin.from('client_apps').upsert(
+      { client_id: clientId, app_key: appKey, enabled: true }, { onConflict: 'client_id,app_key' });
+    const { data: g, error: gErr } = await admin.from('client_app_grants').upsert(
+      { user_id: userId, client_id: clientId, app_key: appKey, role, active: true, created_by: user.id },
+      { onConflict: 'user_id,client_id,app_key' },
+    ).select('id').single();
+    if (gErr) return { error: gErr.message };
+    return { id: (g as any).id };
+  };
 
   let body: any;
   try { body = await req.json(); } catch { return json({ ok: false, error: 'Bad JSON' }, 400); }
@@ -116,41 +148,11 @@ Deno.serve(async (req) => {
     if (!appKey) return json({ ok: false, error: 'app_key is required.' }, 400);
     if (!EMAIL_RE.test(email)) return json({ ok: false, error: 'A valid email is required.' }, 400);
 
-    // Find the existing account, or invite a new one.
-    let userId: string | null = null;
-    let invited = false;
-    const { data: existingId, error: lookErr } = await admin.rpc('auth_user_id_by_email', { p_email: email });
-    if (lookErr) return json({ ok: false, error: 'Lookup failed: ' + lookErr.message }, 500);
-    if (existingId) {
-      userId = existingId as string;
-    } else {
-      const { data: inv, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, {
-        data: name ? { full_name: name } : {},
-        redirectTo: `${PORTAL_URL}/reset-password`,
-      });
-      if (invErr || !inv?.user) {
-        return json({ ok: false, error: 'Could not invite that email: ' + (invErr?.message || 'unknown error') }, 400);
-      }
-      userId = inv.user.id;
-      invited = true;
-      // A freshly invited account is app-only (no portal link) → mark it so the
-      // portal never treats it as a client. handle_new_user created the profile
-      // as 'client'; service role bypasses the privileged-change guard.
-      await admin.from('profiles').update({ role: 'app_user' }).eq('id', userId);
-      if (name) await admin.from('profiles').update({ full_name: name }).eq('id', userId);
-    }
-
-    // The app must be enabled for the client for the grant to be usable.
-    await admin.from('client_apps').upsert(
-      { client_id: clientId, app_key: appKey, enabled: true }, { onConflict: 'client_id,app_key' });
-
-    // Upsert the grant (re-granting reactivates + updates the role).
-    const { data: g, error: gErr } = await admin.from('client_app_grants').upsert(
-      { user_id: userId, client_id: clientId, app_key: appKey, role, active: true, created_by: user.id },
-      { onConflict: 'user_id,client_id,app_key' },
-    ).select('id').single();
-    if (gErr) return json({ ok: false, error: gErr.message }, 500);
-    return json({ ok: true, id: (g as any).id, user_id: userId, invited });
+    const resolved = await resolveOrInvite(email, name);
+    if ('error' in resolved) return json({ ok: false, error: resolved.error }, 400);
+    const g = await upsertGrant(clientId, appKey, resolved.userId, role);
+    if ('error' in g) return json({ ok: false, error: g.error }, 500);
+    return json({ ok: true, id: g.id, user_id: resolved.userId, invited: resolved.invited });
   }
 
   // ---------------------------------------------------------
@@ -180,6 +182,49 @@ Deno.serve(async (req) => {
     const cid = await grantClient(id);
     if (cid == null || !(await canAccess(cid))) return json({ ok: false, error: 'No access.' }, 403);
     const { error } = await admin.from('client_app_grants').delete().eq('id', id);
+    if (error) return json({ ok: false, error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  // ---------------------------------------------------------
+  // Self-registration requests (migration 163/166) — email based
+  // ---------------------------------------------------------
+  if (action === 'list_requests') {
+    if (!(await isStaff())) return json({ ok: false, error: 'Staff only.' }, 403);
+    const { data, error } = await admin.from('client_app_access_requests')
+      .select('id, app_key, client_name, full_name, email, phone, message, created_at')
+      .eq('status', 'pending').order('created_at');
+    if (error) return json({ ok: false, error: error.message }, 500);
+    return json({ ok: true, requests: data || [] });
+  }
+
+  if (action === 'approve_request') {
+    const id = Number(body.id);
+    const clientId = Number(body.client_id);
+    if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    const { data: reqRow } = await admin.from('client_app_access_requests').select('*').eq('id', id).maybeSingle();
+    if (!reqRow || (reqRow as any).status !== 'pending') return json({ ok: false, error: 'Request not found or already handled.' }, 404);
+    const rr: any = reqRow;
+    const email = String(rr.email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) return json({ ok: false, error: 'This request has no valid email to invite.' }, 400);
+    const appKey = String(body.app_key || rr.app_key || 'rentals');
+    const role = ROLES.includes(body.role) ? body.role : 'editor';
+    const resolved = await resolveOrInvite(email, rr.full_name || '');
+    if ('error' in resolved) return json({ ok: false, error: resolved.error }, 400);
+    const g = await upsertGrant(clientId, appKey, resolved.userId, role);
+    if ('error' in g) return json({ ok: false, error: g.error }, 500);
+    await admin.from('client_app_access_requests').update({
+      status: 'approved', client_id: clientId, resulting_grant_id: g.id,
+      reviewed_by: user.id, reviewed_at: new Date().toISOString(),
+    }).eq('id', id);
+    return json({ ok: true, grant_id: g.id, invited: resolved.invited });
+  }
+
+  if (action === 'reject_request') {
+    if (!(await isStaff())) return json({ ok: false, error: 'Staff only.' }, 403);
+    const { error } = await admin.from('client_app_access_requests')
+      .update({ status: 'rejected', reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+      .eq('id', Number(body.id)).eq('status', 'pending');
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true });
   }

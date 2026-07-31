@@ -20,7 +20,7 @@ export default function ClientAppPortal() {
   const [srcDoc, setSrcDoc] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [reg, setReg] = useState({ client_name: '', full_name: '', username: '', password: '', email: '', phone: '', message: '' });
+  const [reg, setReg] = useState({ client_name: '', full_name: '', email: '', phone: '', message: '' });
   const [regDone, setRegDone] = useState(false);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -51,9 +51,9 @@ export default function ClientAppPortal() {
     e.preventDefault();
     setBusy(true); setErr('');
     try {
-      await api.appRegister({
-        client_name: reg.client_name.trim(), full_name: reg.full_name.trim(), username: reg.username.trim(),
-        password: reg.password, email: reg.email.trim(), phone: reg.phone.trim(), message: reg.message.trim(),
+      await api.submitAppRequest({
+        client_name: reg.client_name.trim(), full_name: reg.full_name.trim(),
+        email: reg.email.trim(), phone: reg.phone.trim(), message: reg.message.trim(),
       });
       setRegDone(true);
     } catch (e: any) {
@@ -137,19 +137,17 @@ export default function ClientAppPortal() {
         ) : regDone ? (
           <div style={{ fontSize: 13, color: '#0f172a', lineHeight: 1.6 }}>
             <p style={{ color: '#166534', fontWeight: 600 }}>✓ Request submitted.</p>
-            <p style={{ color: '#475569' }}>Your accountant will review it and activate your access. You'll be able to sign in once it's approved.</p>
+            <p style={{ color: '#475569' }}>Your accountant will review it. Once approved, you'll get an email to set your password — then you can sign in.</p>
             <button onClick={() => { setMode('login'); setRegDone(false); }} style={{ ...linkStyle, marginTop: 6 }}>← Back to sign in</button>
           </div>
         ) : (
           <form onSubmit={submitRegister}>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>Request access — your accountant approves it before you can sign in.</p>
+            <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>Request access by email — your accountant approves it, then you'll get an email to set your password.</p>
             <input value={reg.client_name} onChange={e => setReg(p => ({ ...p, client_name: e.target.value }))} placeholder="Client / company name *" style={inputStyle} />
             <input value={reg.full_name} onChange={e => setReg(p => ({ ...p, full_name: e.target.value }))} placeholder="Your full name" style={inputStyle} />
-            <input value={reg.username} onChange={e => setReg(p => ({ ...p, username: e.target.value }))} placeholder="Desired username *" autoComplete="username" style={inputStyle} />
-            <input value={reg.password} onChange={e => setReg(p => ({ ...p, password: e.target.value }))} type="password" placeholder="Choose a password (min 6) *" autoComplete="new-password" style={inputStyle} />
-            <input value={reg.email} onChange={e => setReg(p => ({ ...p, email: e.target.value }))} type="email" placeholder="Email" style={inputStyle} />
+            <input value={reg.email} onChange={e => setReg(p => ({ ...p, email: e.target.value }))} type="email" placeholder="Email *" autoComplete="email" style={inputStyle} />
             <input value={reg.phone} onChange={e => setReg(p => ({ ...p, phone: e.target.value }))} placeholder="Phone" style={inputStyle} />
-            <button type="submit" disabled={busy || !reg.client_name.trim() || !reg.username.trim() || reg.password.length < 6}
+            <button type="submit" disabled={busy || !reg.client_name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reg.email.trim())}
               style={{ width: '100%', padding: 11, borderRadius: 8, border: 'none', background: '#1e2a78', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
               {busy ? 'Submitting…' : 'Request access'}
             </button>
