@@ -7,6 +7,8 @@ if (!url || !key) {
   throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY in .env');
 }
 
+export const supabaseUrl = url;
+
 export const supabase = createClient(url, key, {
   auth: {
     persistSession: true,

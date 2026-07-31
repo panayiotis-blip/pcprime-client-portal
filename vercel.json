@@ -9,7 +9,7 @@
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/app-frame).*)",
       "headers": [
         {
           "key": "Content-Security-Policy",

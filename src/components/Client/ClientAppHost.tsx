@@ -7,9 +7,11 @@ import { PanelSkeleton } from '../ui';
 // Embeds a per-client app and bridges its data to Supabase (client_app_data,
 // migration 161). Two render modes:
 //  - BUILT-IN apps (public/<app>/): iframe srcdoc (sidesteps X-Frame-Options).
-//  - UPLOADED templates (app_templates, mig 167): a blob-URL iframe, so the app
-//    gets its own origin and isn't bound by the portal CSP — any self-contained
-//    HTML runs. It's sandboxed (scripts only, no same-origin) for isolation.
+//  - UPLOADED templates (app_templates, mig 167): framed from the app-frame edge
+//    function on the supabase.co origin, so the app carries its own headers (no
+//    portal CSP) and any self-contained HTML — inline scripts included — runs.
+//    (A blob/srcdoc frame would inherit the portal CSP and block inline scripts.)
+//    Sandboxed (scripts only, no same-origin) for isolation.
 // Either way it talks to the portal over postMessage: it posts "ready", we
 // inject the document + the user's role/name; it posts "save", we upsert.
 
@@ -19,9 +21,9 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
 
   const [doc, setDoc] = useState<any | null>(null);
   const [docLoading, setDocLoading] = useState(true);
-  const [mode, setMode] = useState<'srcdoc' | 'blob' | null>(null);
+  const [mode, setMode] = useState<'srcdoc' | 'frame' | null>(null);
   const [srcDoc, setSrcDoc] = useState('');
-  const [blobUrl, setBlobUrl] = useState('');
+  const [frameUrl, setFrameUrl] = useState('');
   const [err, setErr] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
@@ -38,26 +40,27 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
   // template → its HTML from the DB served via a blob URL.
   useEffect(() => {
     let alive = true;
-    let createdUrl: string | null = null;
-    setMode(null); setSrcDoc(''); setBlobUrl(''); setErr('');
+    setMode(null); setSrcDoc(''); setFrameUrl(''); setErr('');
     (async () => {
       await loadAppTemplates();
       const a = getClientApp(appKey);
       if (a?.asset) {
+        // Built-in app: static index.html served same-origin (CSP-clean) → srcdoc.
         try {
           const html = await fetch(a.asset + 'index.html').then(r => r.text());
           if (alive) { setSrcDoc(html); setMode('srcdoc'); }
         } catch (e: any) { if (alive) setErr('Could not load the app: ' + (e?.message || e)); }
       } else {
-        try {
-          const html = await api.getAppTemplateHtml(appKey);
-          if (!html) { if (alive) setErr('This app has no template uploaded.'); return; }
-          createdUrl = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-          if (alive) { setBlobUrl(createdUrl); setMode('blob'); } else { URL.revokeObjectURL(createdUrl); }
-        } catch (e: any) { if (alive) setErr(e?.message || String(e)); }
+        // Uploaded template: framed from the same-origin /api/app-frame Vercel
+        // function, which serves the app with no restrictive CSP/XFO (that path
+        // is exempted from the portal headers), so its inline scripts run. A
+        // blob/srcdoc frame would inherit the portal CSP and block them; Supabase
+        // Functions/Storage force `default-src 'none'; sandbox`. (No app render in
+        // local `vite` dev — /api runs only on Vercel.)
+        if (alive) { setFrameUrl(`/api/app-frame?key=${encodeURIComponent(appKey)}`); setMode('frame'); }
       }
     })();
-    return () => { alive = false; if (createdUrl) URL.revokeObjectURL(createdUrl); };
+    return () => { alive = false; };
   }, [appKey]);
 
   // Load this (client, app) document.
@@ -124,12 +127,12 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6, minHeight: 18 }}>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: saveState === 'error' ? '#b91c1c' : '#64748b' }}>{saveLabel}</span>
       </div>
-      {mode === 'blob' ? (
-        // Uploaded template: own origin (no portal CSP), sandboxed to scripts only.
+      {mode === 'frame' ? (
+        // Uploaded template: framed from supabase.co (own headers), sandboxed.
         <iframe
-          key={`${clientId}:${appKey}:blob`}
+          key={`${clientId}:${appKey}:frame`}
           ref={iframeRef}
-          src={blobUrl}
+          src={frameUrl}
           title={app?.label || 'App'}
           sandbox="allow-scripts allow-downloads allow-modals allow-popups allow-forms"
           style={frameStyle}
