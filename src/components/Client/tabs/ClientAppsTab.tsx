@@ -240,6 +240,20 @@ function AppGrantsPanel({ clientId, appKey, canManage, onBack }: { clientId: num
   const setRole = async (g: AppGrant, role: string) => { try { await api.setAppGrantRole(g.id, role); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
   const toggleActive = async (g: AppGrant) => { try { await api.setAppGrantActive(g.id, !g.active); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
   const revoke = async (g: AppGrant) => { if (!confirm(`Revoke ${g.email}'s access to this app? Their account stays; only this app grant is removed.`)) return; try { await api.revokeAppGrant(g.id); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
+  const sendReset = async (g: AppGrant) => {
+    if (!g.email) { alert('No email on file for this person.'); return; }
+    setNotice('');
+    try { await api.sendPasswordReset(g.email); setNotice(`Password reset link sent to ${g.email} — they set their own new password.`); }
+    catch (e: any) { alert(e?.message || 'Failed'); }
+  };
+  const setPw = async (g: AppGrant) => {
+    const p = prompt(`Set a new password for ${g.email} (min 6 characters):`);
+    if (p == null) return;
+    if (p.length < 6) { alert('Password must be at least 6 characters.'); return; }
+    setNotice('');
+    try { await api.setAppUserPassword(g.user_id, clientId, p); setNotice(`Password updated for ${g.email}.`); }
+    catch (e: any) { alert(e?.message || 'Failed'); }
+  };
 
   return (
     <div>
@@ -278,6 +292,8 @@ function AppGrantsPanel({ clientId, appKey, canManage, onBack }: { clientId: num
                   <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{g.created_at ? new Date(g.created_at).toLocaleDateString() : '—'}</td>
                   <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                     {canManage && <>
+                      <button className="btn btn-link btn-sm" onClick={() => sendReset(g)}>Reset link</button>
+                      <button className="btn btn-link btn-sm" onClick={() => setPw(g)}>Set pw</button>
                       <button className="btn btn-link btn-sm" onClick={() => toggleActive(g)}>{g.active ? 'Suspend' : 'Restore'}</button>
                       <button className="btn btn-link btn-sm" style={{ color: '#b91c1c' }} onClick={() => revoke(g)}>Revoke</button>
                     </>}

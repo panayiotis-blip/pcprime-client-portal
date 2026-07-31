@@ -942,6 +942,13 @@ export const api = {
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Failed to revoke access.');
   },
+  // Firm sets an app user's password directly (they hold a grant on this client).
+  // The gentler path — email them a reset link — reuses api.sendPasswordReset(email).
+  async setAppUserPassword(userId: string, clientId: number, password: string) {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'set_password', user_id: userId, client_id: clientId, password } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to set password.');
+  },
 
   // ---- Standalone app session (public app-session fn) ----
   async appLogin(username: string, password: string): Promise<{ session: string; role: string; name: string; app_key: string; data: any }> {

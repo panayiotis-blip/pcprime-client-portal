@@ -187,6 +187,26 @@ Deno.serve(async (req) => {
   }
 
   // ---------------------------------------------------------
+  // set_password — firm sets an app user's password directly. Only for
+  // someone who holds a grant on a client the caller can access. (The
+  // gentler alternative — email the client a reset link — is done
+  // client-side via supabase.auth.resetPasswordForEmail, no fn needed.)
+  // ---------------------------------------------------------
+  if (action === 'set_password') {
+    const userId = String(body.user_id || '');
+    const clientId = Number(body.client_id);
+    const password = String(body.password || '');
+    if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    if (password.length < 6) return json({ ok: false, error: 'Password must be at least 6 characters.' }, 400);
+    const { data: gr } = await admin.from('client_app_grants')
+      .select('id').eq('user_id', userId).eq('client_id', clientId).limit(1).maybeSingle();
+    if (!gr) return json({ ok: false, error: 'That person has no app access on this client.' }, 404);
+    const { error } = await admin.auth.admin.updateUserById(userId, { password });
+    if (error) return json({ ok: false, error: error.message }, 400);
+    return json({ ok: true });
+  }
+
+  // ---------------------------------------------------------
   // Self-registration requests (migration 163/166) — email based
   // ---------------------------------------------------------
   if (action === 'list_requests') {
