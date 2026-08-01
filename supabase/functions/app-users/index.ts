@@ -6,6 +6,12 @@
 // browser never handles a hash. Every action is gated by the caller being
 // able to access the target client (user_can_access_client via their JWT).
 //
+// LEGACY (App access Phase 5): these username logins are being retired in
+// favour of email accounts + client_app_grants. This function stays only so
+// the firm can see and clean up what's left; new access is granted by email
+// via app-grants-admin, and moving an existing login over is its
+// migrate_user action.
+//
 // Actions (POST { action, ... }):
 //   list   {client_id, app_key}                          → { ok, users:[...] }  (no hashes)
 //   create {client_id, app_key, username, name, role, password} → { ok, id }
@@ -74,7 +80,7 @@ Deno.serve(async (req) => {
     const clientId = Number(body.client_id);
     if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
     const { data, error } = await admin.from('client_app_users')
-      .select('id, username, name, role, active, last_login_at, created_at')
+      .select('id, username, name, role, active, last_login_at, created_at, migrated_at, migrated_email')
       .eq('client_id', clientId).eq('app_key', String(body.app_key)).order('created_at');
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true, users: data || [] });

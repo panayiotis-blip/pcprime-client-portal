@@ -934,6 +934,19 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // Logos for the apps launcher tiles. Each client's own logo lives on its
+  // company profile (migration 078); RLS returns only clients the caller can
+  // reach, which for staff is all of them.
+  async getClientLogos(clientIds: number[]): Promise<Record<number, string>> {
+    if (!clientIds.length) return {};
+    const { data, error } = await supabase.from('client_company_profile')
+      .select('client_id, logo_url').in('client_id', clientIds);
+    if (error) throw new Error(error.message);
+    const out: Record<number, string> = {};
+    for (const r of data || []) if ((r as any).logo_url) out[(r as any).client_id] = (r as any).logo_url;
+    return out;
+  },
+
   // ---- App-only users (migration 162) — firm-side management via app-users fn ----
   async listAppUsers(clientId: number, appKey: string): Promise<any[]> {
     const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'list', client_id: clientId, app_key: appKey } });
@@ -961,6 +974,14 @@ export const api = {
     const { data, error } = await supabase.functions.invoke('app-users', { body: { action: 'delete', id } });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Failed to delete user.');
+  },
+  // Phase 5 cutover: move one legacy username login onto an email account —
+  // same app and role, as a grant. The old login is disabled and stamped.
+  async migrateAppUserToEmail(legacyId: number, email: string, role?: string): Promise<{ id: number; user_id: string; invited: boolean }> {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'migrate_user', legacy_id: legacyId, email, role } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to move this login.');
+    return { id: data.id, user_id: data.user_id, invited: !!data.invited };
   },
 
   // ---- App access grants (migration 164) — firm grants apps BY EMAIL via app-grants-admin fn ----

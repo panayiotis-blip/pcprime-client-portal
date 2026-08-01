@@ -18,10 +18,11 @@
 //   set_role {id, role}                                → { ok }
 //   set_active {id, active}                            → { ok }
 //   revoke {id}                                        → { ok }
+//   migrate_user {legacy_id, email, role?}             → { ok, id, user_id, invited }
 //
 // Deploy with "Verify JWT" OFF — we validate the JWT in-function.
 //   supabase functions deploy app-grants-admin --project-ref ddwdrjhnfwpbtqzqgdsl --no-verify-jwt
-// Requires migrations 164 + 165 applied.
+// Requires migrations 164 + 165 applied (169 for migrate_user).
 // =============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -204,6 +205,44 @@ Deno.serve(async (req) => {
     const { error } = await admin.auth.admin.updateUserById(userId, { password });
     if (error) return json({ ok: false, error: error.message }, 400);
     return json({ ok: true });
+  }
+
+  // ---------------------------------------------------------
+  // migrate_user — Phase 5 cutover. Move ONE legacy username login
+  // (client_app_users, migration 162) onto an email account: reuse or invite
+  // the account, copy the login's app + role into a grant, then retire the old
+  // row (active = false, migrated_* stamped, migration 169). The password is
+  // NOT carried over — it can't be, the old one is a one-way PBKDF2 hash — so
+  // a brand-new account gets the usual invite email and an existing account
+  // keeps the password it already has.
+  // ---------------------------------------------------------
+  if (action === 'migrate_user') {
+    const legacyId = Number(body.legacy_id);
+    const email = String(body.email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) return json({ ok: false, error: 'A valid email is required.' }, 400);
+
+    const { data: legacy } = await admin.from('client_app_users')
+      .select('id, client_id, app_key, username, name, role, migrated_at')
+      .eq('id', legacyId).maybeSingle();
+    if (!legacy) return json({ ok: false, error: 'That app user no longer exists.' }, 404);
+    const lu: any = legacy;
+    if (lu.migrated_at) return json({ ok: false, error: 'That login has already been moved to an email account.' }, 400);
+    if (!(await canAccess(lu.client_id))) return json({ ok: false, error: 'No access to this client.' }, 403);
+
+    const role = ROLES.includes(body.role) ? body.role : (ROLES.includes(lu.role) ? lu.role : 'editor');
+    const resolved = await resolveOrInvite(email, lu.name || '');
+    if ('error' in resolved) return json({ ok: false, error: resolved.error }, 400);
+    const g = await upsertGrant(lu.client_id, lu.app_key, resolved.userId, role);
+    if ('error' in g) return json({ ok: false, error: g.error }, 500);
+
+    // Retire the old login only once the grant is safely in place.
+    const { error: mErr } = await admin.from('client_app_users').update({
+      active: false, migrated_at: new Date().toISOString(),
+      migrated_user_id: resolved.userId, migrated_email: email,
+    }).eq('id', legacyId);
+    if (mErr) return json({ ok: false, error: 'Access was granted but the old login could not be retired: ' + mErr.message }, 500);
+
+    return json({ ok: true, id: g.id, user_id: resolved.userId, invited: resolved.invited });
   }
 
   // ---------------------------------------------------------

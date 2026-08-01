@@ -39,6 +39,7 @@ const ServiceTasksYear = lazy(() => import('./components/Admin/ServiceTasksYear'
 const TaskDashboard = lazy(() => import('./components/Admin/TaskDashboard'));
 const MyClientApp = lazy(() => import('./components/Client/MyClientApp'));
 const ClientAppPortal = lazy(() => import('./components/AppPortal/ClientAppPortal'));
+const AppsLauncher = lazy(() => import('./components/AppPortal/AppsLauncher'));
 const ClientEntry = lazy(() => import('./components/Client/ClientEntry'));
 const AppAccessRequests = lazy(() => import('./components/Admin/AppAccessRequests'));
 const ClientAppTemplates = lazy(() => import('./components/Admin/ClientAppTemplates'));
@@ -145,6 +146,10 @@ function AuthedApp() {
 function PortalRoutes() {
   return (
         <Routes>
+          {/* Staff apps launcher — deliberately OUTSIDE AppShell so it fills the
+              screen with no portal chrome, while still sitting behind the MFA /
+              Terms gates in AuthedApp. Non-staff are redirected out of it. */}
+          <Route path="/apps" element={<AppsLauncher />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/scan" element={<ScannerPage />} />

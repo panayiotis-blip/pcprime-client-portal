@@ -76,7 +76,19 @@ export default function ClientEntry({ portalElement }: { portalElement: ReactNod
 
   if (effective.type === 'portal') return <>{portalElement}</>;
 
-  return <FullScreenApp dest={effective} canSwitch={destinations.length > 1} onSwitch={() => { clearChoice(); setChoice(null); }} />;
+  // Inside an app: offer the chooser when there's more than one app, and a
+  // direct way into the Client Portal for anyone entitled to it — a portal
+  // client shouldn't have to log out and back in to reach their documents.
+  const goPortal = () => { const d: Dest = { type: 'portal' }; writeChoice(d); setChoice(d); };
+  return (
+    <FullScreenApp
+      dest={effective}
+      canSwitch={apps.length > 1}
+      hasPortal={isPortalClient}
+      onSwitch={() => { clearChoice(); setChoice(null); }}
+      onPortal={goPortal}
+    />
+  );
 }
 
 // ---- Chooser ----
@@ -114,13 +126,15 @@ function Chooser({ destinations, onPick }: { destinations: Dest[]; onPick: (d: D
 }
 
 // ---- Full-screen app (app-only users, or a portal client who chose an app) ----
-function FullScreenApp({ dest, canSwitch, onSwitch }: { dest: AppDest; canSwitch: boolean; onSwitch: () => void }) {
+function FullScreenApp({ dest, canSwitch, hasPortal, onSwitch, onPortal }:
+  { dest: AppDest; canSwitch: boolean; hasPortal: boolean; onSwitch: () => void; onPortal: () => void }) {
   const app = getClientApp(dest.appKey);
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid #e2e8f0', flex: '0 0 auto' }}>
         <span style={{ fontWeight: 700, color: '#1a365d' }}>{app?.icon} {app?.label || 'App'}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 16, alignItems: 'center' }}>
+          {hasPortal && <button onClick={onPortal} style={linkBtn}>Client Portal →</button>}
           {canSwitch && <button onClick={onSwitch} style={linkBtn}>Switch app</button>}
           <button onClick={doLogout} style={linkBtn}>Log out</button>
         </span>

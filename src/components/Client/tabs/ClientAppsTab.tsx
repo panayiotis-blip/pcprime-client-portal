@@ -10,7 +10,7 @@ import { PanelSkeleton } from '../../ui';
 // remove apps and manage each app's own logins (app-only users), and opens an
 // app inline. App users sign in separately at /app.
 
-type AppUser = { id: number; username: string; name: string | null; role: string; active: boolean; last_login_at: string | null };
+type AppUser = { id: number; username: string; name: string | null; role: string; active: boolean; last_login_at: string | null; migrated_at: string | null; migrated_email: string | null };
 const ROLES = ['admin', 'editor', 'viewer'];
 
 export default function ClientAppsTab({ clientId }: { clientId: number }) {
@@ -114,8 +114,7 @@ function AppUsersPanel({ clientId, appKey, canManage, onBack }: { clientId: numb
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [form, setForm] = useState({ username: '', name: '', role: 'editor', password: '' });
-  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const load = () => {
     setLoading(true); setErr('');
@@ -123,29 +122,44 @@ function AppUsersPanel({ clientId, appKey, canManage, onBack }: { clientId: numb
   };
   useEffect(load, [clientId, appKey]);
 
-  const add = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await api.createAppUser({ client_id: clientId, app_key: appKey, username: form.username.trim(), name: form.name.trim(), role: form.role, password: form.password });
-      setForm({ username: '', name: '', role: 'editor', password: '' });
-      load();
-    } catch (e: any) { alert(e?.message || 'Failed'); }
-    finally { setSaving(false); }
-  };
   const setRole = async (u: AppUser, role: string) => { try { await api.updateAppUser(u.id, { role }); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
   const toggleActive = async (u: AppUser) => { try { await api.updateAppUser(u.id, { active: !u.active }); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
   const resetPw = async (u: AppUser) => { const p = prompt(`New password for ${u.username} (min 6 chars):`); if (!p) return; try { await api.resetAppUserPassword(u.id, p); alert('Password updated.'); } catch (e: any) { alert(e?.message || 'Failed'); } };
   const del = async (u: AppUser) => { if (!confirm(`Delete app user ${u.username}?`)) return; try { await api.deleteAppUser(u.id); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
+  // Phase 5: hand this login over to an email account, keeping its app + role.
+  const moveToEmail = async (u: AppUser) => {
+    const email = prompt(`Move "${u.username}" to an email login.\n\nEmail address for ${u.name || u.username}:`);
+    if (email == null) return;
+    const addr = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) { alert('Please enter a valid email address.'); return; }
+    if (!confirm(`Give ${addr} ${u.role} access to this app and disable the username "${u.username}"?`)) return;
+    setNotice('');
+    try {
+      const r = await api.migrateAppUserToEmail(u.id, addr, u.role);
+      setNotice(r.invited
+        ? `${u.username} moved to ${addr}. An invite email was sent so they can set their own password — the old username no longer works.`
+        : `${u.username} moved to ${addr} (existing account — they sign in with their current password). The old username no longer works.`);
+      load();
+    } catch (e: any) { alert(e?.message || 'Failed'); }
+  };
+
+  const remaining = users.filter(u => !u.migrated_at).length;
 
   return (
     <div>
       <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to apps</button>
-      <h3 style={{ color: '#1a365d', margin: '12px 0 4px' }}>{app?.icon} {app?.label} — App users</h3>
-      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>
-        These logins are separate from portal users. They sign in at <code>/app</code> and open only this app. Roles: <strong>admin/editor</strong> can edit, <strong>viewer</strong> is read-only.
+      <h3 style={{ color: '#1a365d', margin: '12px 0 4px' }}>{app?.icon} {app?.label} — App users (old username logins)</h3>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
+        These are the old username logins, being retired. Use <strong>Move to email</strong> on each one: the person keeps this app
+        and role but signs in with their email, and the username stops working. New access is granted from the <strong>Access</strong> panel.
       </p>
+      <div style={{ background: remaining ? '#fffbeb' : '#ecfdf5', border: `1px solid ${remaining ? '#fde68a' : '#a7f3d0'}`, color: remaining ? '#92400e' : '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
+        {remaining
+          ? `${remaining} login${remaining === 1 ? '' : 's'} still on the old username system for this app.`
+          : 'Nothing left on the old username system for this app.'}
+      </div>
 
+      {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>{notice}</div>}
       {err && <div className="empty-state"><p style={{ color: '#b91c1c' }}>{err}</p></div>}
       {loading ? <PanelSkeleton rows={3} /> : (
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
@@ -153,7 +167,7 @@ function AppUsersPanel({ clientId, appKey, canManage, onBack }: { clientId: numb
             <thead>
               <tr style={{ textAlign: 'left', color: '#64748b', background: '#f8fafc' }}>
                 <th style={{ padding: '8px 12px' }}>Username</th><th style={{ padding: '8px 12px' }}>Name</th>
-                <th style={{ padding: '8px 12px', width: 120 }}>Role</th><th style={{ padding: '8px 12px', width: 90 }}>Status</th>
+                <th style={{ padding: '8px 12px', width: 120 }}>Role</th><th style={{ padding: '8px 12px', width: 200 }}>Status</th>
                 <th style={{ padding: '8px 12px', width: 130 }}>Last login</th><th style={{ padding: '8px 12px' }}></th>
               </tr>
             </thead>
@@ -165,18 +179,25 @@ function AppUsersPanel({ clientId, appKey, canManage, onBack }: { clientId: numb
                   <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1a365d' }}>{u.username}</td>
                   <td style={{ padding: '8px 12px' }}>{u.name || '—'}</td>
                   <td style={{ padding: '8px 12px' }}>
-                    <select className="form-input" style={{ padding: '2px 6px', fontSize: 13 }} value={u.role} disabled={!canManage} onChange={e => setRole(u, e.target.value)}>
+                    <select className="form-input" style={{ padding: '2px 6px', fontSize: 13 }} value={u.role} disabled={!canManage || !!u.migrated_at} onChange={e => setRole(u, e.target.value)}>
                       {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </td>
-                  <td style={{ padding: '8px 12px' }}>{u.active ? 'Active' : 'Disabled'}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    {u.migrated_at
+                      ? <span style={{ color: '#065f46' }}>✓ Moved to {u.migrated_email || 'email'}</span>
+                      : (u.active ? 'Active' : 'Disabled')}
+                  </td>
                   <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{u.last_login_at ? new Date(u.last_login_at).toLocaleDateString() : '—'}</td>
                   <td style={{ padding: '8px 12px', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                    {canManage && <>
+                    {canManage && (u.migrated_at ? (
+                      <button className="btn btn-link btn-sm" style={{ color: '#b91c1c' }} onClick={() => del(u)}>Delete</button>
+                    ) : <>
+                      <button className="btn btn-link btn-sm" onClick={() => moveToEmail(u)}>Move to email</button>
                       <button className="btn btn-link btn-sm" onClick={() => resetPw(u)}>Reset password</button>
                       <button className="btn btn-link btn-sm" onClick={() => toggleActive(u)}>{u.active ? 'Disable' : 'Enable'}</button>
                       <button className="btn btn-link btn-sm" style={{ color: '#b91c1c' }} onClick={() => del(u)}>Delete</button>
-                    </>}
+                    </>)}
                   </td>
                 </tr>
               ))}
@@ -185,22 +206,8 @@ function AppUsersPanel({ clientId, appKey, canManage, onBack }: { clientId: numb
         </div>
       )}
 
-      {canManage && (
-        <form onSubmit={add} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#1a365d', marginBottom: 10 }}>Add app user</div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <label style={{ fontSize: 12, color: '#64748b' }}>Username<br />
-              <input className="form-input" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} placeholder="e.g. greson_john" required style={{ minWidth: 160 }} /></label>
-            <label style={{ fontSize: 12, color: '#64748b' }}>Name<br />
-              <input className="form-input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Full name" style={{ minWidth: 150 }} /></label>
-            <label style={{ fontSize: 12, color: '#64748b' }}>Role<br />
-              <select className="form-input" value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}>{ROLES.map(r => <option key={r} value={r}>{r}</option>)}</select></label>
-            <label style={{ fontSize: 12, color: '#64748b' }}>Password<br />
-              <input className="form-input" type="text" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="min 6 chars" required style={{ minWidth: 140 }} /></label>
-            <button className="btn btn-primary" type="submit" disabled={saving || !form.username.trim() || form.password.length < 6}>{saving ? 'Adding…' : 'Add user'}</button>
-          </div>
-        </form>
-      )}
+      {/* No "add app user" form any more — new people are added by email in the
+          Access panel, which is the system this one is being retired into. */}
     </div>
   );
 }
