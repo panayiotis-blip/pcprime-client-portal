@@ -47,10 +47,13 @@ export default function AppsLauncher() {
     return () => { alive = false; };
   }, [staff]);
 
-  // app_key → the clients that have it, by name.
+  // app_key → the clients that have it, by name. Keys with no app behind them
+  // (template deleted or deactivated, allocation left behind) are skipped:
+  // offering a tile that can only fail is worse than not offering it. They are
+  // listed for cleanup on the App Templates screen instead.
   const byApp = useMemo(() => {
     const m = new Map<string, Row[]>();
-    for (const r of rows || []) {
+    for (const r of (rows || []).filter(r => getClientApp(r.app_key))) {
       const list = m.get(r.app_key) || [];
       list.push(r);
       m.set(r.app_key, list);

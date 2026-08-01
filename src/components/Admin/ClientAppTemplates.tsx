@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { CLIENT_APPS, loadAppTemplates } from '../../services/clientApps';
+import { CLIENT_APPS, allClientApps, loadAppTemplates } from '../../services/clientApps';
 import { PanelSkeleton } from '../ui';
 
 // Clients → App Templates. A library of app templates (built-in + uploaded);
@@ -18,10 +18,15 @@ export default function ClientAppTemplates() {
   const [templates, setTemplates] = useState<Tmpl[] | null>(null);
   const [allocFor, setAllocFor] = useState<{ key: string; label: string } | null>(null);
   const [editing, setEditing] = useState<Tmpl | null>(null);
+  const [orphans, setOrphans] = useState<Array<{ app_key: string; clients: number }>>([]);
 
   const load = () => {
     api.listAppTemplates().then(t => setTemplates(t as Tmpl[])).catch(() => setTemplates([]));
-    loadAppTemplates(true); // refresh the runtime registry so renders pick up changes
+    // Allocations whose app no longer exists — deleting a template used to
+    // leave these behind, and they still list as apps that cannot load.
+    loadAppTemplates(true) // refresh the runtime registry so renders pick up changes
+      .then(() => api.getOrphanAppKeys(allClientApps().map(a => a.key)))
+      .then(setOrphans).catch(() => setOrphans([]));
   };
   useEffect(load, []);
 
@@ -34,7 +39,7 @@ export default function ClientAppTemplates() {
 
   // Retire an app for good. The summary is fetched first so the confirmation
   // can name the clients and the data that will be destroyed with it.
-  const removeEverywhere = async (t: Tmpl) => {
+  const removeEverywhere = async (t: { key: string; name: string }) => {
     let s: Awaited<ReturnType<typeof api.purgeAppEverywhere>>;
     try { s = await api.purgeAppEverywhere(t.key, true); }
     catch (e: any) { alert(e?.message || 'Failed'); return; }
@@ -100,6 +105,26 @@ export default function ClientAppTemplates() {
             </div>
           ))}
           {uploaded.length === 0 && <div className="empty-state" style={{ gridColumn: '1/-1' }}><p>No uploaded templates yet — upload one above.</p></div>}
+        </div>
+      )}
+
+      {orphans.length > 0 && (
+        <div style={{ marginTop: 22 }}>
+          <h3 style={{ color: '#92400e', margin: '0 0 6px', fontSize: 15 }}>Apps with nothing behind them</h3>
+          <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 10px' }}>
+            These app keys are still allocated to clients, but no template answers to them any more — the template was deleted
+            or deactivated. They cannot load, so clear them out.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {orphans.map(o => (
+              <div key={o.app_key} style={{ ...card, flexDirection: 'row', alignItems: 'center', gap: 12, background: '#fffbeb', borderColor: '#fde68a' }}>
+                <strong style={{ color: '#92400e' }}>{o.app_key}</strong>
+                <span style={{ fontSize: 12.5, color: '#64748b' }}>allocated to {o.clients} client{o.clients === 1 ? '' : 's'}</span>
+                <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', color: '#b91c1c' }}
+                  onClick={() => removeEverywhere({ key: o.app_key, name: o.app_key })}>Remove everywhere</button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

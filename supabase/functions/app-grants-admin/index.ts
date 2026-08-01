@@ -55,12 +55,21 @@ Deno.serve(async (req) => {
   const { data: { user }, error: uErr } = await userClient.auth.getUser();
   if (uErr || !user) return json({ ok: false, error: 'Unauthorized.' }, 401);
 
-  // Can the caller manage this client's apps? (is_admin staff OR linked to it)
+  // Reach: is_admin() staff OR a portal client linked to this client. Enough to
+  // SEE a client, NOT enough to administer access to it — user_can_access_client
+  // is true for the client's own portal users, so every management action below
+  // is additionally gated on isStaff(). Without that, a portal client could
+  // invite accounts onto their client, enable apps, or set another grant
+  // holder's password by calling this function directly with their own JWT.
   const canAccess = async (clientId: number): Promise<boolean> => {
     if (!clientId) return false;
     const { data } = await userClient.rpc('user_can_access_client', { cid: clientId });
     return data === true;
   };
+  // Firm staff AND able to reach this client — the gate for anything that
+  // changes who can get in.
+  const canManage = async (clientId: number): Promise<boolean> =>
+    (await isStaff()) && (await canAccess(clientId));
   // Resolve a grant row's client_id (for id-based actions), then gate on it.
   const grantClient = async (id: number): Promise<number | null> => {
     const { data } = await admin.from('client_app_grants').select('client_id').eq('id', id).maybeSingle();
@@ -142,7 +151,7 @@ Deno.serve(async (req) => {
   // ---------------------------------------------------------
   if (action === 'grant') {
     const clientId = Number(body.client_id);
-    if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    if (!(await canManage(clientId))) return json({ ok: false, error: 'Only firm staff can grant app access.' }, 403);
     const appKey = String(body.app_key || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
     const role = ROLES.includes(body.role) ? body.role : 'editor';
@@ -163,7 +172,7 @@ Deno.serve(async (req) => {
   if (action === 'set_role') {
     const id = Number(body.id);
     const cid = await grantClient(id);
-    if (cid == null || !(await canAccess(cid))) return json({ ok: false, error: 'No access.' }, 403);
+    if (cid == null || !(await canManage(cid))) return json({ ok: false, error: 'Only firm staff can change app access.' }, 403);
     if (!ROLES.includes(body.role)) return json({ ok: false, error: 'Invalid role.' }, 400);
     const { error } = await admin.from('client_app_grants').update({ role: body.role }).eq('id', id);
     if (error) return json({ ok: false, error: error.message }, 500);
@@ -173,7 +182,7 @@ Deno.serve(async (req) => {
   if (action === 'set_active') {
     const id = Number(body.id);
     const cid = await grantClient(id);
-    if (cid == null || !(await canAccess(cid))) return json({ ok: false, error: 'No access.' }, 403);
+    if (cid == null || !(await canManage(cid))) return json({ ok: false, error: 'Only firm staff can change app access.' }, 403);
     const { error } = await admin.from('client_app_grants').update({ active: !!body.active }).eq('id', id);
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true });
@@ -182,7 +191,7 @@ Deno.serve(async (req) => {
   if (action === 'revoke') {
     const id = Number(body.id);
     const cid = await grantClient(id);
-    if (cid == null || !(await canAccess(cid))) return json({ ok: false, error: 'No access.' }, 403);
+    if (cid == null || !(await canManage(cid))) return json({ ok: false, error: 'Only firm staff can change app access.' }, 403);
     const { error } = await admin.from('client_app_grants').delete().eq('id', id);
     if (error) return json({ ok: false, error: error.message }, 500);
     return json({ ok: true });
@@ -198,11 +207,19 @@ Deno.serve(async (req) => {
     const userId = String(body.user_id || '');
     const clientId = Number(body.client_id);
     const password = String(body.password || '');
-    if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    if (!(await canManage(clientId))) return json({ ok: false, error: 'Only firm staff can set a password.' }, 403);
     if (password.length < 6) return json({ ok: false, error: 'Password must be at least 6 characters.' }, 400);
     const { data: gr } = await admin.from('client_app_grants')
       .select('id').eq('user_id', userId).eq('client_id', clientId).limit(1).maybeSingle();
     if (!gr) return json({ ok: false, error: 'That person has no app access on this client.' }, 404);
+    // Never let the app-access path set a FIRM account's password. A staff
+    // member who also holds a grant would otherwise be resettable from here,
+    // turning app administration into a route into the portal itself. Staff
+    // change their own password, or an owner does it in User Management.
+    const { data: targetProf } = await admin.from('profiles').select('role').eq('id', userId).maybeSingle();
+    if (targetProf && ['owner', 'supervisor', 'admin', 'staff'].includes((targetProf as any).role)) {
+      return json({ ok: false, error: 'That is a firm account — change its password in User Management, not here.' }, 403);
+    }
     const { error } = await admin.auth.admin.updateUserById(userId, { password });
     if (error) return json({ ok: false, error: error.message }, 400);
     return json({ ok: true });
@@ -228,7 +245,7 @@ Deno.serve(async (req) => {
     if (!legacy) return json({ ok: false, error: 'That app user no longer exists.' }, 404);
     const lu: any = legacy;
     if (lu.migrated_at) return json({ ok: false, error: 'That login has already been moved to an email account.' }, 400);
-    if (!(await canAccess(lu.client_id))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    if (!(await canManage(lu.client_id))) return json({ ok: false, error: 'Only firm staff can move a login to email.' }, 403);
 
     const role = ROLES.includes(body.role) ? body.role : (ROLES.includes(lu.role) ? lu.role : 'editor');
     const resolved = await resolveOrInvite(email, lu.name || '');
@@ -263,8 +280,15 @@ Deno.serve(async (req) => {
     const appKey = String(body.app_key || '').trim();
     if (!appKey) return json({ ok: false, error: 'app_key is required.' }, 400);
 
+    // Built-in apps ship in code and must never be purged — their data is real
+    // client work (keep in sync with CLIENT_APPS in src/services/clientApps.ts).
+    const BUILT_IN = ['rentals', 'mgmt'];
+    if (BUILT_IN.includes(appKey)) return json({ ok: false, error: 'That is a built-in app and cannot be removed this way.' }, 400);
+
+    // Normally there is a template to delete. There may not be: deleting a
+    // template used to leave its allocations behind, and those orphans still
+    // show as apps that will not load. Purging is how they get cleaned up.
     const { data: tmpl } = await admin.from('app_templates').select('id, name').eq('key', appKey).maybeSingle();
-    if (!tmpl) return json({ ok: false, error: 'Only uploaded app templates can be removed this way — this key has no template.' }, 400);
 
     const { data: allocs } = await admin.from('client_apps').select('client_id').eq('app_key', appKey);
     const clientIds = (allocs || []).map((r: any) => r.client_id);
@@ -281,7 +305,8 @@ Deno.serve(async (req) => {
       .select('id', { count: 'exact', head: true }).eq('app_key', appKey);
 
     const summary = {
-      template: (tmpl as any).name, clients: clientIds.length,
+      template: (tmpl as any)?.name ?? `${appKey} (no template — orphaned allocations)`,
+      clients: clientIds.length,
       client_names: clientIds.map(id => names[id] || `#${id}`).sort(),
       data_rows: dataRows ?? 0, grants: grantRows ?? 0, legacy_users: legacyRows ?? 0,
     };
@@ -293,8 +318,10 @@ Deno.serve(async (req) => {
       const { error } = await admin.from(table).delete().eq('app_key', appKey);
       if (error) return json({ ok: false, error: `Failed clearing ${table}: ${error.message}` }, 500);
     }
-    const { error: tErr } = await admin.from('app_templates').delete().eq('id', (tmpl as any).id);
-    if (tErr) return json({ ok: false, error: 'Everything was cleared but the template row remains: ' + tErr.message }, 500);
+    if (tmpl) {
+      const { error: tErr } = await admin.from('app_templates').delete().eq('id', (tmpl as any).id);
+      if (tErr) return json({ ok: false, error: 'Everything was cleared but the template row remains: ' + tErr.message }, 500);
+    }
 
     return json({ ok: true, summary });
   }
@@ -314,7 +341,7 @@ Deno.serve(async (req) => {
   if (action === 'approve_request') {
     const id = Number(body.id);
     const clientId = Number(body.client_id);
-    if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);
+    if (!(await canManage(clientId))) return json({ ok: false, error: 'Only firm staff can approve a request.' }, 403);
     const { data: reqRow } = await admin.from('client_app_access_requests').select('*').eq('id', id).maybeSingle();
     if (!reqRow || (reqRow as any).status !== 'pending') return json({ ok: false, error: 'Request not found or already handled.' }, 404);
     const rr: any = reqRow;

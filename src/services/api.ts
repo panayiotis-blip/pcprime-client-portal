@@ -982,6 +982,21 @@ export const api = {
     if (error) throw new Error(error.message);
     return (data as any)?.html_override ?? (data as any)?.pinned_html ?? null;
   },
+  // App keys that clients are still allocated but that no app answers to any
+  // more — template deleted or deactivated. They show as apps that will not
+  // load, so the library screen offers to clear them out. Pass the keys the
+  // registry knows about (built-ins + active templates).
+  async getOrphanAppKeys(knownKeys: string[]): Promise<Array<{ app_key: string; clients: number }>> {
+    const { data, error } = await supabase.from('client_apps').select('app_key, client_id');
+    if (error) throw new Error(error.message);
+    const counts = new Map<string, number>();
+    for (const r of (data || []) as any[]) {
+      if (knownKeys.includes(r.app_key)) continue;
+      counts.set(r.app_key, (counts.get(r.app_key) || 0) + 1);
+    }
+    return [...counts.entries()].map(([app_key, clients]) => ({ app_key, clients })).sort((a, b) => a.app_key.localeCompare(b.app_key));
+  },
+
   // Retire an uploaded template everywhere: allocations, per-client data, the
   // grants that opened it, legacy logins scoped to it, then the template.
   // dry_run first to show what will go. Built-in apps are refused server-side.
