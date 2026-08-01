@@ -18,7 +18,7 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
   const canManage = isSupervisorOrHigher(user);
   const [keys, setKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<{ mode: 'list' } | { mode: 'open'; key: string } | { mode: 'users'; key: string } | { mode: 'grants'; key: string }>({ mode: 'list' });
+  const [view, setView] = useState<{ mode: 'list' } | { mode: 'open'; key: string } | { mode: 'users'; key: string } | { mode: 'grants'; key: string } | { mode: 'version'; key: string }>({ mode: 'list' });
   const [busy, setBusy] = useState('');
 
   const loadKeys = () => {
@@ -57,6 +57,9 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
   if (view.mode === 'grants') {
     return <AppGrantsPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
   }
+  if (view.mode === 'version') {
+    return <AppVersionPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
+  }
   if (view.mode === 'users') {
     return <AppUsersPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
   }
@@ -85,6 +88,7 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn btn-primary btn-sm" onClick={() => setView({ mode: 'open', key: app.key })}>Open</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'grants', key: app.key })}>Access</button>
+                {app.source === 'template' && <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'version', key: app.key })}>Version</button>}
                 <button className="btn btn-secondary btn-sm" style={{ color: '#94a3b8' }} onClick={() => setView({ mode: 'users', key: app.key })}>App users (old)</button>
                 {canManage && <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} disabled={busy === app.key} onClick={() => removeApp(app.key)}>Remove</button>}
               </div>
@@ -208,6 +212,98 @@ function AppUsersPanel({ clientId, appKey, canManage, onBack }: { clientId: numb
 
       {/* No "add app user" form any more — new people are added by email in the
           Access panel, which is the system this one is being retired into. */}
+    </div>
+  );
+}
+
+// Which copy of an uploaded app THIS client runs (migration 170): the shared
+// template, a version they were held on, or one customised for them. This is
+// also where a held/customised client is deliberately brought back onto the
+// shared app — shared edits never reach them on their own.
+function AppVersionPanel({ clientId, appKey, canManage, onBack }: { clientId: number; appKey: string; canManage: boolean; onBack: () => void }) {
+  const app = getClientApp(appKey);
+  const [v, setV] = useState<Awaited<ReturnType<typeof api.getClientAppVariant>> | null>(null);
+  const [sharedVersion, setSharedVersion] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = () => {
+    setLoading(true); setErr('');
+    Promise.all([api.getClientAppVariant(clientId, appKey), api.getTemplateRollout(appKey)])
+      .then(([variant, rollout]) => { setV(variant); setSharedVersion(rollout.version); })
+      .catch(e => setErr(e?.message || String(e)))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [clientId, appKey]);
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    let html = '';
+    try { html = await file.text(); } catch { alert('Could not read that file.'); return; }
+    if (!html.trim()) { alert('That file is empty.'); return; }
+    setBusy(true); setNotice('');
+    try {
+      await api.customiseClientApp(clientId, appKey, html);
+      setNotice(`This client now runs their own copy of the app (${file.name}). Shared edits no longer reach them.`);
+      load();
+    } catch (e: any) { alert(e?.message || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  const reset = async () => {
+    if (!confirm('Put this client back on the shared app? Their customised copy is discarded — their saved data is untouched.')) return;
+    setBusy(true); setNotice('');
+    try {
+      await api.resetClientAppToShared(clientId, appKey);
+      setNotice(`Back on the shared app (v${sharedVersion ?? '?'}).`);
+      load();
+    } catch (e: any) { alert(e?.message || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  const state = !v ? 'none' : v.customised ? 'customised' : v.pinned ? 'pinned' : 'shared';
+
+  return (
+    <div>
+      <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to apps</button>
+      <h3 style={{ color: '#1a365d', margin: '12px 0 4px' }}>{app?.icon} {app?.label} — Version</h3>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>
+        Which copy of the app this client runs. Give them their own copy to change the app for them alone — from then on
+        edits to the shared template skip them until you put them back.
+      </p>
+
+      {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>{notice}</div>}
+      {err && <div className="empty-state"><p style={{ color: '#b91c1c' }}>{err}</p></div>}
+
+      {loading ? <PanelSkeleton rows={2} /> : (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, maxWidth: 640 }}>
+          <div style={{ fontSize: 14, color: '#0f172a' }}>
+            {state === 'customised' && <><strong style={{ color: '#7c3aed' }}>Customised for this client.</strong> They run their own copy, not the shared app.</>}
+            {state === 'pinned' && <><strong style={{ color: '#b45309' }}>Held on v{v!.pinned_version ?? '?'}.</strong> The shared app has moved on to v{sharedVersion ?? '?'}; this client stayed where they were.</>}
+            {state === 'shared' && <><strong style={{ color: '#166534' }}>On the shared app (v{sharedVersion ?? '?'}).</strong> They pick up every edit you push to it.</>}
+            {state === 'none' && <span style={{ color: '#94a3b8' }}>This app isn't allocated to the client.</span>}
+          </div>
+          {v?.variant_at && (state === 'customised' || state === 'pinned') && (
+            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>Since {new Date(v.variant_at).toLocaleDateString()}</div>
+          )}
+
+          {canManage && state !== 'none' && (
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginTop: 16, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+              <label style={{ fontSize: 12, color: '#64748b' }}>
+                {state === 'customised' ? 'Replace their copy' : 'Customise for this client'}<br />
+                <input type="file" accept=".html,text/html" disabled={busy} onChange={e => upload(e.target.files?.[0])} />
+              </label>
+              {state !== 'shared' && (
+                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={reset}>
+                  Put back on the shared app{sharedVersion ? ` (v${sharedVersion})` : ''}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

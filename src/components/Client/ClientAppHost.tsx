@@ -57,11 +57,20 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
         // blob/srcdoc frame would inherit the portal CSP and block them; Supabase
         // Functions/Storage force `default-src 'none'; sandbox`. (No app render in
         // local `vite` dev — /api runs only on Vercel.)
-        if (alive) { setFrameUrl(`/api/app-frame?key=${encodeURIComponent(appKey)}`); setMode('frame'); }
+        // This client may run its own copy (customised, or pinned to the
+        // version they were on) — migration 170. The variant token tells
+        // app-frame which to serve; it falls back to the shared template when
+        // there is no variant behind the token.
+        let v = '';
+        try { v = (await api.getClientAppVariant(clientId, appKey))?.variant_token || ''; } catch { /* shared template */ }
+        if (alive) {
+          setFrameUrl(`/api/app-frame?key=${encodeURIComponent(appKey)}${v ? `&v=${encodeURIComponent(v)}` : ''}`);
+          setMode('frame');
+        }
       }
     })();
     return () => { alive = false; };
-  }, [appKey]);
+  }, [appKey, clientId]);
 
   // Load this (client, app) document.
   useEffect(() => {

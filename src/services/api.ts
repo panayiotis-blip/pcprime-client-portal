@@ -870,7 +870,7 @@ export const api = {
   // ---- App templates (migration 167): uploadable app definitions ----
   async listAppTemplates(): Promise<any[]> {
     const { data, error } = await supabase.from('app_templates')
-      .select('id, key, name, icon, description, restricted, active, created_at, updated_at')
+      .select('id, key, name, icon, description, restricted, active, version, created_at, updated_at')
       .order('created_at');
     if (error) throw new Error(error.message);
     return data || [];
@@ -892,6 +892,95 @@ export const api = {
   async updateAppTemplate(id: number, patch: { name?: string; icon?: string; description?: string; html?: string; restricted?: boolean; active?: boolean }) {
     const { error } = await supabase.from('app_templates').update(patch).eq('id', id);
     if (error) throw new Error(error.message);
+  },
+
+  // ---- Template versions & per-client variants (migration 170) ----
+  // How an edit would land: who follows the shared template today, and who is
+  // already customised or pinned and so will be left alone either way.
+  async getTemplateRollout(appKey: string): Promise<{
+    version: number;
+    following: Array<{ client_id: number; client_name: string | null }>;
+    fixed: Array<{ client_id: number; client_name: string | null; customised: boolean; pinned_version: number | null }>;
+  }> {
+    const { data: t, error: tErr } = await supabase.from('app_templates')
+      .select('version').eq('key', appKey).maybeSingle();
+    if (tErr) throw new Error(tErr.message);
+    const { data, error } = await supabase.from('client_apps')
+      .select('client_id, is_customised, is_pinned, pinned_version, client:clients(name)').eq('app_key', appKey);
+    if (error) throw new Error(error.message);
+    const following: any[] = [], fixed: any[] = [];
+    for (const r of (data || []) as any[]) {
+      const row = { client_id: r.client_id, client_name: r.client?.name ?? null };
+      if (r.is_customised || r.is_pinned) {
+        fixed.push({ ...row, customised: !!r.is_customised, pinned_version: r.pinned_version ?? null });
+      } else following.push(row);
+    }
+    return { version: (t as any)?.version ?? 1, following, fixed };
+  },
+
+  // Replace a template's HTML. mode 'apply' lets every client that follows the
+  // shared template pick the new version up; mode 'keep' first snapshots the
+  // OLD html onto each of those clients so they carry on unchanged. Clients
+  // already customised or pinned are never touched by either mode.
+  async saveTemplateHtml(appKey: string, html: string, mode: 'apply' | 'keep'): Promise<{ version: number; kept: number }> {
+    const { data: t, error: tErr } = await supabase.from('app_templates')
+      .select('id, html, version').eq('key', appKey).maybeSingle();
+    if (tErr) throw new Error(tErr.message);
+    if (!t) throw new Error('That template no longer exists.');
+    const cur: any = t;
+
+    let kept = 0;
+    if (mode === 'keep') {
+      // Freeze the followers on what they are running BEFORE the template moves.
+      const { data: frozen, error: fErr } = await supabase.from('client_apps')
+        .update({ pinned_html: cur.html, pinned_version: cur.version, variant_at: new Date().toISOString() })
+        .eq('app_key', appKey).is('html_override', null).is('pinned_html', null)
+        .select('client_id');
+      if (fErr) throw new Error('Could not hold clients on the current version: ' + fErr.message);
+      kept = (frozen || []).length;
+    }
+
+    const version = (cur.version ?? 1) + 1;
+    const { error } = await supabase.from('app_templates').update({ html, version }).eq('id', cur.id);
+    if (error) throw new Error(error.message);
+    return { version, kept };
+  },
+
+  // One client's own copy of the app. Setting it stops shared edits reaching
+  // them; clearing both variant columns puts them back on the shared template.
+  async customiseClientApp(clientId: number, appKey: string, html: string) {
+    const { error } = await supabase.from('client_apps')
+      .update({ html_override: html, variant_at: new Date().toISOString() })
+      .eq('client_id', clientId).eq('app_key', appKey);
+    if (error) throw new Error(error.message);
+  },
+  async resetClientAppToShared(clientId: number, appKey: string) {
+    const { error } = await supabase.from('client_apps')
+      .update({ html_override: null, pinned_html: null, pinned_version: null, variant_at: null })
+      .eq('client_id', clientId).eq('app_key', appKey);
+    if (error) throw new Error(error.message);
+  },
+  // What one client is running, and the token the iframe loads it by.
+  async getClientAppVariant(clientId: number, appKey: string): Promise<{
+    customised: boolean; pinned: boolean; pinned_version: number | null; variant_token: string | null; variant_at: string | null;
+  } | null> {
+    const { data, error } = await supabase.from('client_apps')
+      .select('is_customised, is_pinned, pinned_version, variant_token, variant_at')
+      .eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    const r: any = data;
+    return {
+      customised: !!r.is_customised, pinned: !!r.is_pinned,
+      pinned_version: r.pinned_version ?? null, variant_token: r.variant_token ?? null, variant_at: r.variant_at ?? null,
+    };
+  },
+  // The customised/pinned HTML itself, for editing or downloading.
+  async getClientAppHtml(clientId: number, appKey: string): Promise<string | null> {
+    const { data, error } = await supabase.from('client_apps')
+      .select('html_override, pinned_html').eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as any)?.html_override ?? (data as any)?.pinned_html ?? null;
   },
   // Retire an uploaded template everywhere: allocations, per-client data, the
   // grants that opened it, legacy logins scoped to it, then the template.

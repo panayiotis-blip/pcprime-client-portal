@@ -10,13 +10,14 @@ import { PanelSkeleton } from '../ui';
 // client gets the app with its OWN blank data (client_app_data is keyed per
 // client + app), so two clients on the same template never share data.
 
-type Tmpl = { id: number; key: string; name: string; icon: string; description: string | null; restricted: boolean; active: boolean };
+type Tmpl = { id: number; key: string; name: string; icon: string; description: string | null; restricted: boolean; active: boolean; version?: number };
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
 export default function ClientAppTemplates() {
   const { user } = useAuth();
   const [templates, setTemplates] = useState<Tmpl[] | null>(null);
   const [allocFor, setAllocFor] = useState<{ key: string; label: string } | null>(null);
+  const [editing, setEditing] = useState<Tmpl | null>(null);
 
   const load = () => {
     api.listAppTemplates().then(t => setTemplates(t as Tmpl[])).catch(() => setTemplates([]));
@@ -88,10 +89,11 @@ export default function ClientAppTemplates() {
                 <span style={badge('#dcfce7', '#166534')}>uploaded</span>
                 {!t.active && <span style={badge('#f1f5f9', '#64748b')}>inactive</span>}
               </div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>key: {t.key}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>key: {t.key} · v{t.version ?? 1}</div>
               {t.description && <p style={desc}>{t.description}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 <button className="btn btn-primary btn-sm" onClick={() => setAllocFor({ key: t.key, label: t.name })}>Allocate to clients</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setEditing(t)}>Edit</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setActive(t)}>{t.active ? 'Deactivate' : 'Activate'}</button>
                 <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} onClick={() => removeEverywhere(t)}>Remove everywhere</button>
               </div>
@@ -102,6 +104,7 @@ export default function ClientAppTemplates() {
       )}
 
       {allocFor && <AllocateModal appKey={allocFor.key} label={allocFor.label} onClose={() => setAllocFor(null)} />}
+      {editing && <EditModal tmpl={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
     </div>
   );
 }
@@ -157,6 +160,110 @@ function UploadForm({ onCreated }: { onCreated: () => void }) {
         <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </form>
+  );
+}
+
+// ---- Edit a template: details, and replacing the app itself ----
+// Replacing the HTML is the moment that matters: every client following the
+// shared template would change under them the second it saves. So the file
+// picker is followed by an explicit choice — push it to those clients, or hold
+// them on what they are running now (which snapshots today's HTML onto each).
+// Clients already customised or pinned are listed as untouched either way;
+// they only move when you push a version to them from their own Apps tab.
+function EditModal({ tmpl, onClose, onSaved }: { tmpl: Tmpl; onClose: () => void; onSaved: () => void }) {
+  const [f, setF] = useState({ name: tmpl.name, icon: tmpl.icon, description: tmpl.description || '', restricted: tmpl.restricted });
+  const [html, setHtml] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [rollout, setRollout] = useState<Awaited<ReturnType<typeof api.getTemplateRollout>> | null>(null);
+  const [mode, setMode] = useState<'apply' | 'keep'>('apply');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+
+  useEffect(() => { api.getTemplateRollout(tmpl.key).then(setRollout).catch(() => setRollout(null)); }, [tmpl.key]);
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setFileName(file.name);
+    try { setHtml(await file.text()); } catch { alert('Could not read that file.'); }
+  };
+
+  const save = async () => {
+    setBusy(true); setNote('');
+    try {
+      await api.updateAppTemplate(tmpl.id, {
+        name: f.name.trim(), icon: f.icon.trim() || '📦',
+        description: f.description.trim() || undefined, restricted: f.restricted,
+      });
+      if (html.trim()) {
+        const r = await api.saveTemplateHtml(tmpl.key, html, mode);
+        setNote(mode === 'keep'
+          ? `Saved as v${r.version}. ${r.kept} client${r.kept === 1 ? '' : 's'} held on the previous version.`
+          : `Saved as v${r.version}. Clients on the shared version now get it.`);
+        // Let the note register before the list refreshes underneath.
+        setTimeout(onSaved, 900);
+      } else onSaved();
+    } catch (e: any) { alert(e?.message || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  const following = rollout?.following.length ?? 0;
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={modal} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={{ margin: 0, color: '#1a365d' }}>Edit “{tmpl.name}”</h3>
+          <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>v{rollout?.version ?? tmpl.version ?? 1}</span>
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={onClose}>Close</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label style={lbl}>Name<br /><input className="form-input" value={f.name} onChange={e => setF(p => ({ ...p, name: e.target.value }))} style={{ minWidth: 200 }} /></label>
+          <label style={lbl}>Icon<br /><input className="form-input" value={f.icon} onChange={e => setF(p => ({ ...p, icon: e.target.value }))} style={{ width: 60, textAlign: 'center' }} /></label>
+          <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 8 }}>
+            <input type="checkbox" checked={f.restricted} onChange={e => setF(p => ({ ...p, restricted: e.target.checked }))} /> Restricted
+          </label>
+        </div>
+        <label style={{ ...lbl, display: 'block', marginTop: 10 }}>Description<br />
+          <input className="form-input" value={f.description} onChange={e => setF(p => ({ ...p, description: e.target.value }))} style={{ width: '100%' }} /></label>
+
+        <div style={{ marginTop: 16, borderTop: '1px solid #eef1f5', paddingTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#1a365d', marginBottom: 6 }}>Replace the app (optional)</div>
+          <input type="file" accept=".html,text/html" onChange={e => onFile(e.target.files?.[0])} />
+          {fileName && <span style={{ fontSize: 12, color: '#166534', marginLeft: 8 }}>✓ {fileName} ({Math.round(html.length / 1024)} KB)</span>}
+
+          {html.trim() && (
+            <div style={{ marginTop: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 12.5, color: '#0f172a', fontWeight: 600, marginBottom: 8 }}>
+                {following === 0
+                  ? 'No client is following the shared version right now.'
+                  : `${following} client${following === 1 ? '' : 's'} follow${following === 1 ? 'es' : ''} the shared version: ${rollout!.following.map(c => c.client_name || `#${c.client_id}`).join(', ')}`}
+              </div>
+              <label style={radio}>
+                <input type="radio" checked={mode === 'apply'} onChange={() => setMode('apply')} />
+                <span><strong>Give them the new version</strong> — they pick it up next time the app loads.</span>
+              </label>
+              <label style={radio}>
+                <input type="radio" checked={mode === 'keep'} onChange={() => setMode('keep')} />
+                <span><strong>Leave them on the current version</strong> — each keeps a copy of today's app; only new allocations get the new one.</span>
+              </label>
+              {!!rollout?.fixed.length && (
+                <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginTop: 8 }}>
+                  Untouched either way ({rollout.fixed.length}): {rollout.fixed.map(c => `${c.client_name || '#' + c.client_id}${c.customised ? ' (customised)' : ` (v${c.pinned_version ?? '?'})`}`).join(', ')}.
+                  Push a new version to them from the client's Apps tab.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {note && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginTop: 12 }}>{note}</div>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button className="btn btn-primary" disabled={busy || !f.name.trim()} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -249,6 +356,7 @@ function AllocateModal({ appKey, label, onClose }: { appKey: string; label: stri
 const card: React.CSSProperties = { border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, background: '#fff', display: 'flex', flexDirection: 'column', gap: 6 };
 const desc: React.CSSProperties = { fontSize: 12, color: '#64748b', margin: 0 };
 const lbl: React.CSSProperties = { fontSize: 12, color: '#64748b' };
+const radio: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: '#334155', padding: '4px 0', cursor: 'pointer' };
 const badge = (bg: string, color: string): React.CSSProperties => ({ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', background: bg, color, borderRadius: 6, padding: '2px 6px' });
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, zIndex: 1000 };
 const modal: React.CSSProperties = { background: '#fff', borderRadius: 14, padding: 20, width: 'min(560px,94vw)', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.3)' };
