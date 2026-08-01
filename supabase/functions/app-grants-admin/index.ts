@@ -19,6 +19,7 @@
 //   set_active {id, active}                            → { ok }
 //   revoke {id}                                        → { ok }
 //   migrate_user {legacy_id, email, role?}             → { ok, id, user_id, invited }
+//   purge_app {app_key, dry_run?}                      → { ok, summary }
 //
 // Deploy with "Verify JWT" OFF — we validate the JWT in-function.
 //   supabase functions deploy app-grants-admin --project-ref ddwdrjhnfwpbtqzqgdsl --no-verify-jwt
@@ -243,6 +244,59 @@ Deno.serve(async (req) => {
     if (mErr) return json({ ok: false, error: 'Access was granted but the old login could not be retired: ' + mErr.message }, 500);
 
     return json({ ok: true, id: g.id, user_id: resolved.userId, invited: resolved.invited });
+  }
+
+  // ---------------------------------------------------------
+  // purge_app — retire an UPLOADED app template completely: its allocations,
+  // every client's data for it, the grants that opened it and any legacy
+  // username logins scoped to it, then the template itself. Deleting just the
+  // template row would leave allocated clients with an app that no longer
+  // loads, so removal is one action.
+  //
+  // Only apps that came from app_templates can be purged: a built-in app (no
+  // template row) is refused, which keeps this away from Greson's rentals and
+  // mgmt data. dry_run returns the same summary without deleting, so the UI can
+  // spell out the damage before asking.
+  // ---------------------------------------------------------
+  if (action === 'purge_app') {
+    if (!(await isStaff())) return json({ ok: false, error: 'Staff only.' }, 403);
+    const appKey = String(body.app_key || '').trim();
+    if (!appKey) return json({ ok: false, error: 'app_key is required.' }, 400);
+
+    const { data: tmpl } = await admin.from('app_templates').select('id, name').eq('key', appKey).maybeSingle();
+    if (!tmpl) return json({ ok: false, error: 'Only uploaded app templates can be removed this way — this key has no template.' }, 400);
+
+    const { data: allocs } = await admin.from('client_apps').select('client_id').eq('app_key', appKey);
+    const clientIds = (allocs || []).map((r: any) => r.client_id);
+    const names: Record<number, string> = {};
+    if (clientIds.length) {
+      const { data: cs } = await admin.from('clients').select('id, name').in('id', clientIds);
+      for (const c of cs || []) names[(c as any).id] = (c as any).name || '';
+    }
+    const { count: dataRows } = await admin.from('client_app_data')
+      .select('client_id', { count: 'exact', head: true }).eq('app_key', appKey);
+    const { count: grantRows } = await admin.from('client_app_grants')
+      .select('id', { count: 'exact', head: true }).eq('app_key', appKey);
+    const { count: legacyRows } = await admin.from('client_app_users')
+      .select('id', { count: 'exact', head: true }).eq('app_key', appKey);
+
+    const summary = {
+      template: (tmpl as any).name, clients: clientIds.length,
+      client_names: clientIds.map(id => names[id] || `#${id}`).sort(),
+      data_rows: dataRows ?? 0, grants: grantRows ?? 0, legacy_users: legacyRows ?? 0,
+    };
+    if (body.dry_run) return json({ ok: true, summary });
+
+    // Dependants first, template last — a failure part-way leaves the template
+    // in place rather than orphaning clients on a missing app.
+    for (const table of ['client_app_grants', 'client_app_users', 'client_app_data', 'client_apps']) {
+      const { error } = await admin.from(table).delete().eq('app_key', appKey);
+      if (error) return json({ ok: false, error: `Failed clearing ${table}: ${error.message}` }, 500);
+    }
+    const { error: tErr } = await admin.from('app_templates').delete().eq('id', (tmpl as any).id);
+    if (tErr) return json({ ok: false, error: 'Everything was cleared but the template row remains: ' + tErr.message }, 500);
+
+    return json({ ok: true, summary });
   }
 
   // ---------------------------------------------------------

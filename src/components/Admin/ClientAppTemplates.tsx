@@ -30,7 +30,26 @@ export default function ClientAppTemplates() {
   const uploaded = (templates || []).filter(t => !builtinKeys.has(t.key));
 
   const setActive = async (t: Tmpl) => { try { await api.updateAppTemplate(t.id, { active: !t.active }); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
-  const del = async (t: Tmpl) => { if (!confirm(`Delete template "${t.name}"? Clients already using it keep their data but the app stops loading until you re-upload. This can't be undone.`)) return; try { await api.deleteAppTemplate(t.id); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
+
+  // Retire an app for good. The summary is fetched first so the confirmation
+  // can name the clients and the data that will be destroyed with it.
+  const removeEverywhere = async (t: Tmpl) => {
+    let s: Awaited<ReturnType<typeof api.purgeAppEverywhere>>;
+    try { s = await api.purgeAppEverywhere(t.key, true); }
+    catch (e: any) { alert(e?.message || 'Failed'); return; }
+    const lines = [
+      `Remove "${t.name}" everywhere? This cannot be undone.`,
+      '',
+      `• ${s.clients} client${s.clients === 1 ? '' : 's'} lose the app${s.client_names.length ? ': ' + s.client_names.join(', ') : ''}`,
+      `• ${s.data_rows} saved data record${s.data_rows === 1 ? '' : 's'} deleted`,
+      `• ${s.grants} access grant${s.grants === 1 ? '' : 's'} removed`,
+      ...(s.legacy_users ? [`• ${s.legacy_users} old username login${s.legacy_users === 1 ? '' : 's'} removed`] : []),
+      `• the template itself is deleted`,
+    ];
+    if (!confirm(lines.join('\n'))) return;
+    try { await api.purgeAppEverywhere(t.key); load(); }
+    catch (e: any) { alert(e?.message || 'Failed'); }
+  };
 
   return (
     <div className="dashboard" style={{ padding: '1rem 1.5rem' }}>
@@ -74,7 +93,7 @@ export default function ClientAppTemplates() {
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 <button className="btn btn-primary btn-sm" onClick={() => setAllocFor({ key: t.key, label: t.name })}>Allocate to clients</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setActive(t)}>{t.active ? 'Deactivate' : 'Activate'}</button>
-                <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} onClick={() => del(t)}>Delete</button>
+                <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} onClick={() => removeEverywhere(t)}>Remove everywhere</button>
               </div>
             </div>
           ))}

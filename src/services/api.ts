@@ -893,6 +893,17 @@ export const api = {
     const { error } = await supabase.from('app_templates').update(patch).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  // Retire an uploaded template everywhere: allocations, per-client data, the
+  // grants that opened it, legacy logins scoped to it, then the template.
+  // dry_run first to show what will go. Built-in apps are refused server-side.
+  async purgeAppEverywhere(appKey: string, dryRun = false): Promise<{
+    template: string; clients: number; client_names: string[]; data_rows: number; grants: number; legacy_users: number;
+  }> {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'purge_app', app_key: appKey, dry_run: dryRun } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to remove the app.');
+    return data.summary;
+  },
   async deleteAppTemplate(id: number) {
     const { error } = await supabase.from('app_templates').delete().eq('id', id);
     if (error) throw new Error(error.message);
