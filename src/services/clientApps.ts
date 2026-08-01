@@ -33,11 +33,15 @@ export const CLIENT_APPS: ClientAppDef[] = [
   },
   {
     key: 'mgmt',
-    label: 'Management Dashboard',
+    label: 'Management Dashboard (Greson Easy Loo)',
     icon: '📊',
     asset: '/mgmt-app/',
-    description: 'Financials, P&L, divisions, payroll, rentals, operations and decision insights.',
-    restricted: true, // Greson Easy Loo only
+    // Written around ONE client: Greson's divisions, payroll and operations are
+    // baked into it, so it is not a general reporting app and must never be
+    // offered to another client. A generic reporting app for everyone is a
+    // separate build. restricted keeps it out of the add-an-app picker.
+    description: 'Built for Greson Easy Loo only — their financials, P&L, divisions, payroll, rentals and operations.',
+    restricted: true,
     source: 'builtin',
   },
 ];
