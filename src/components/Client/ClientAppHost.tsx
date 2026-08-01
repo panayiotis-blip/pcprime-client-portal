@@ -57,14 +57,15 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
         // blob/srcdoc frame would inherit the portal CSP and block them; Supabase
         // Functions/Storage force `default-src 'none'; sandbox`. (No app render in
         // local `vite` dev — /api runs only on Vercel.)
-        // This client may run its own copy (customised, or pinned to the
-        // version they were on) — migration 170. The variant token tells
-        // app-frame which to serve; it falls back to the shared template when
-        // there is no variant behind the token.
+        // The iframe has no session, so it fetches by this allocation's variant
+        // token (migrations 170-172): app-frame resolves it to this client's
+        // customised copy, the version they were held on, or the shared
+        // template. No token = no app; app HTML is not fetchable by key.
         let v = '';
-        try { v = (await api.getClientAppVariant(clientId, appKey))?.variant_token || ''; } catch { /* shared template */ }
+        try { v = (await api.getClientAppVariant(clientId, appKey))?.variant_token || ''; } catch { /* handled below */ }
         if (alive) {
-          setFrameUrl(`/api/app-frame?key=${encodeURIComponent(appKey)}${v ? `&v=${encodeURIComponent(v)}` : ''}`);
+          if (!v) { setErr('This app is not available for this client.'); return; }
+          setFrameUrl(`/api/app-frame?v=${encodeURIComponent(v)}`);
           setMode('frame');
         }
       }
