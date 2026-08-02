@@ -36,10 +36,14 @@ export default function ClientEntry({ portalElement }: { portalElement: ReactNod
         const [appRows, grants] = await Promise.all([api.getMyClientApps(), api.getMyAppGrants(), loadAppTemplates()]);
         const roleFor = (clientId: number, appKey: string) =>
           grants.find(g => g.client_id === clientId && g.app_key === appKey)?.role;
-        const list: AppDest[] = appRows.map(r => ({
-          type: 'app', appKey: r.app_key, clientId: r.client_id,
-          role: roleFor(r.client_id, r.app_key) ?? (isPortalClient ? 'editor' : 'admin'),
-        }));
+        const list: AppDest[] = appRows
+          // Firm-only apps (e.g. Management Report) are never a destination for
+          // a client or app-grant user, even if the client holds the app.
+          .filter(r => !getClientApp(r.app_key)?.staffOnly)
+          .map(r => ({
+            type: 'app', appKey: r.app_key, clientId: r.client_id,
+            role: roleFor(r.client_id, r.app_key) ?? (isPortalClient ? 'editor' : 'admin'),
+          }));
         if (alive) setApps(list);
       } catch { if (alive) setApps([]); }
     })();

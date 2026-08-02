@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../../services/api';
+import { api, isStaffRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import { PanelSkeleton } from '../ui';
+import ManagementReport from './apps/ManagementReport';
 
 // Embeds a per-client app and bridges its data to Supabase (client_app_data,
 // migration 161). Two render modes:
@@ -18,6 +19,10 @@ import { PanelSkeleton } from '../ui';
 export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverride }: { clientId: number; appKey: string; fullScreen?: boolean; roleOverride?: string }) {
   const { user } = useAuth();
   const app = getClientApp(appKey);
+  // Component apps (e.g. Management Report) are portal code, not a framed
+  // document: they query the client's data under the caller's own RLS instead
+  // of being handed a JSON doc over postMessage. Nothing below applies to them.
+  const isComponent = !!app?.component;
 
   const [doc, setDoc] = useState<any | null>(null);
   const [docLoading, setDocLoading] = useState(true);
@@ -39,6 +44,7 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
   // Resolve the app shell: built-in → static index.html (srcdoc); uploaded
   // template → its HTML from the DB served via a blob URL.
   useEffect(() => {
+    if (isComponent) return; // portal code — no shell to resolve
     let alive = true;
     setMode(null); setSrcDoc(''); setFrameUrl(''); setErr('');
     (async () => {
@@ -73,8 +79,10 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
     return () => { alive = false; };
   }, [appKey, clientId]);
 
-  // Load this (client, app) document.
+  // Load this (client, app) document. Component apps read what they need
+  // themselves, so there is nothing to fetch or bridge for them.
   useEffect(() => {
+    if (isComponent) return;
     setDocLoading(true);
     setSaveState('idle');
     api.getClientAppData(clientId, appKey)
@@ -124,6 +132,17 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
     : saveState === 'saved' ? '✓ Saved'
     : saveState === 'error' ? '⚠ Save failed'
     : '';
+
+  // Firm-only apps never render for a client or app-grant user, whatever the
+  // allocation says — the guard lives here so every entry point inherits it.
+  if (app?.staffOnly && !isStaffRole(user)) {
+    return <div className="empty-state"><p>This app is not available.</p></div>;
+  }
+  if (isComponent) {
+    return appKey === 'mgmt-report'
+      ? <ManagementReport clientId={clientId} />
+      : <div className="empty-state"><p>This app is not available.</p></div>;
+  }
 
   if (err) return <div className="empty-state"><p style={{ color: '#b91c1c' }}>{err}</p></div>;
   if (docLoading || !mode) return <PanelSkeleton rows={8} />;

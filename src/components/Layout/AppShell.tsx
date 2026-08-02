@@ -252,7 +252,9 @@ export default function AppShell() {
       const items: { key: string; label: string; icon: string }[] = [];
       for (const r of rows) {
         const def = getClientApp(r.app_key);
-        if (def && !seen.has(def.key)) { seen.add(def.key); items.push({ key: def.key, label: def.label, icon: def.icon }); }
+        // staffOnly apps are the firm's own view of a client — never in a
+        // client's own menu, even when the client holds the app.
+        if (def && !def.staffOnly && !seen.has(def.key)) { seen.add(def.key); items.push({ key: def.key, label: def.label, icon: def.icon }); }
       }
       setMyApps(items);
     }).catch(() => {});

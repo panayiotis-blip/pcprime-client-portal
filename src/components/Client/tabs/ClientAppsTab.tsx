@@ -87,9 +87,12 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
               {app.description && <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 12px' }}>{app.description}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn btn-primary btn-sm" onClick={() => setView({ mode: 'open', key: app.key })}>Open</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'grants', key: app.key })}>Access</button>
-                {app.source === 'template' && <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'version', key: app.key })}>Version</button>}
-                <button className="btn btn-secondary btn-sm" style={{ color: '#94a3b8' }} onClick={() => setView({ mode: 'users', key: app.key })}>App users (old)</button>
+                {/* A firm-only app has no client-side access to manage. */}
+                {!app.staffOnly && <>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'grants', key: app.key })}>Access</button>
+                  {app.source === 'template' && <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'version', key: app.key })}>Version</button>}
+                  <button className="btn btn-secondary btn-sm" style={{ color: '#94a3b8' }} onClick={() => setView({ mode: 'users', key: app.key })}>App users (old)</button>
+                </>}
                 {canManage && <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} disabled={busy === app.key} onClick={() => removeApp(app.key)}>Remove</button>}
               </div>
             </div>
