@@ -8,11 +8,15 @@ import { toClientOptions } from '../../services/clientOptions';
 
 type Mode = 'sales' | 'vat' | 'receipts';
 
+// Local calendar date, NOT toISOString(): Cyprus is ahead of UTC, so midnight
+// local is still the previous day in UTC, which started every quick range a
+// day early and pulled an extra day into the totals.
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const firstOfMonth = () => {
   const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return iso(new Date(d.getFullYear(), d.getMonth(), 1));
 };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => iso(new Date());
 
 const eur = (n: number) => '€' + n.toFixed(2);
 
@@ -114,8 +118,8 @@ export default function SalesReports() {
     while (qIdx < 0) { qIdx += 4; year -= 1; }
     while (qIdx > 3) { qIdx -= 4; year += 1; }
     const startMonth = qIdx * 3;
-    setFrom(new Date(year, startMonth, 1).toISOString().slice(0, 10));
-    setTo  (new Date(year, startMonth + 3, 0).toISOString().slice(0, 10));
+    setFrom(iso(new Date(year, startMonth, 1)));
+    setTo  (iso(new Date(year, startMonth + 3, 0)));
   };
   const setThisMonth = () => { setFrom(firstOfMonth()); setTo(today()); };
   const setYear = (offset: number) => {

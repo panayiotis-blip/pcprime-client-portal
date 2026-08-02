@@ -4,8 +4,13 @@ import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/dates';
 
-const firstOfMonth = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
-const today = () => new Date().toISOString().slice(0, 10);
+// Local calendar date, NOT toISOString(): Cyprus is ahead of UTC, so midnight
+// local is still the previous day in UTC — building period bounds that way
+// started every range a day early (e.g. "this month" from the 31st of last
+// month), quietly pulling an extra day's invoices and expenses into the P&L.
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const firstOfMonth = () => { const d = new Date(); return iso(new Date(d.getFullYear(), d.getMonth(), 1)); };
+const today = () => iso(new Date());
 const eur = (n: number) => '€' + n.toFixed(2);
 
 // Client business reports — Profit & Loss and VAT — over a chosen period.
@@ -79,8 +84,8 @@ export default function MyReports() {
   const setQuarter = (offset: number) => {
     const now = new Date(); let q = Math.floor(now.getMonth() / 3) + offset; let year = now.getFullYear();
     while (q < 0) { q += 4; year -= 1; } while (q > 3) { q -= 4; year += 1; }
-    setFrom(new Date(year, q * 3, 1).toISOString().slice(0, 10));
-    setTo(new Date(year, q * 3 + 3, 0).toISOString().slice(0, 10));
+    setFrom(iso(new Date(year, q * 3, 1)));
+    setTo(iso(new Date(year, q * 3 + 3, 0)));
   };
 
   if (!owner) return <div className="empty-state"><p>No client account is linked to your login.</p></div>;
