@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { api, isStaffRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getClientApp, loadAppTemplates } from '../../services/clientApps';
+import { EXTERNAL_SYSTEMS } from '../../services/externalSystems';
 import ClientAppHost from '../Client/ClientAppHost';
 
 // Staff apps launcher (/apps) — the blank, chrome-free screen the firm lands on
@@ -142,6 +143,30 @@ export default function AppsLauncher() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Systems that are not part of this portal — own hosting, own login.
+            Firm-only, and deliberately set apart from the client apps above so
+            nobody mistakes one for the other. */}
+        {EXTERNAL_SYSTEMS.length > 0 && (
+          <div style={{ marginTop: 26 }}>
+            <div style={{ color: '#c7d2fe', fontSize: 12, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 10 }}>Other systems</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 16 }}>
+              {EXTERNAL_SYSTEMS.map(s => (
+                <a key={s.key} href={s.url} target="_blank" rel="noopener noreferrer"
+                  style={{ ...cardStyle, textDecoration: 'none', border: '1px dashed #c7d2fe' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 30 }}>{s.icon}</span>
+                    <div>
+                      <strong style={{ color: '#0f172a', fontSize: 15 }}>{s.label} ↗</strong>
+                      <div style={{ color: '#94a3b8', fontSize: 12 }}>opens in a new tab</div>
+                    </div>
+                  </div>
+                  <p style={{ color: '#64748b', fontSize: 12.5, margin: '10px 0 0' }}>{s.description}</p>
+                </a>
+              ))}
+            </div>
           </div>
         )}
 

@@ -4,6 +4,7 @@ import { PanelSkeleton } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { api, isStaffRole, hasPermission, isSupervisorOrHigher, roleLabel } from '../../services/api';
 import { getClientApp, loadAppTemplates } from '../../services/clientApps';
+import { ERP_URL } from '../../services/externalSystems';
 import QuickActionsFab from './QuickActionsFab';
 import CommandPalette from './CommandPalette';
 
@@ -19,6 +20,9 @@ type NavItem = {
   label: string;
   icon: string;
   requires?: (u: any) => boolean;
+  // A separate system, not a route in this app: rendered as a plain link that
+  // opens in a new tab, and not pinnable (Favourites resolve routes).
+  external?: boolean;
   // Nested entries shown indented under this one. The parent stays a real
   // link; the sub-list opens automatically when the active route is inside it.
   children?: NavItem[];
@@ -55,6 +59,9 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/clients/address-book', label: 'Address Book', icon: '📖' },
       { path: '/client-apps', label: 'App Templates', icon: '📱', requires: (u) => isSupervisorOrHigher(u) },
       { path: '/clients/duplicates', label: 'Find Duplicates', icon: '⧉' },
+      // Property ERP — a separate product on its own hosting, with its own
+      // login. Nothing is shared with the portal; this is only a way through.
+      { path: ERP_URL, label: 'Property ERP', icon: '🏢', external: true },
       { path: '/credentials', label: 'Credentials',     icon: '🔑', requires: (u) => hasPermission(u, 'credentials.read') },
     ],
   },
@@ -259,7 +266,7 @@ export default function AppShell() {
       setMyApps(items);
     }).catch(() => {});
   }, [user]);
-  const clientGroups = useMemo(() => (
+  const clientGroups = useMemo((): NavGroup[] => (
     myApps.length
       ? CLIENT_GROUPS.map((g, i) => i === 0
           ? { ...g, items: [...g.items, ...myApps.map(a => ({ path: '/my-apps/' + a.key, label: a.label, icon: a.icon }))] }
@@ -535,6 +542,22 @@ export default function AppShell() {
                     <ul className="sidebar-group-items">
                       {g.items.map(item => {
                         const isPinned = favourites.some(f => f.favourite_type === 'menu_item' && f.target_id === item.path);
+                        // A separate system: a plain link out, in a new tab.
+                        if (item.external) return (
+                          <li key={item.path}>
+                            <a
+                              href={item.path}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="sidebar-link sidebar-sub-link"
+                              onClick={() => setSidebarOpen(false)}
+                              title={`${item.label} — opens in a new tab (separate login)`}
+                            >
+                              <span className="nav-icon">{item.icon}</span>{item.label}
+                              <span style={{ marginLeft: 6, fontSize: 11, opacity: .6 }}>↗</span>
+                            </a>
+                          </li>
+                        );
                         return (
                           <li key={item.path}>
                             <Link
