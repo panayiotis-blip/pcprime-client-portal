@@ -7,11 +7,54 @@ const VIEWED=new Date();
 function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["statement","Statement"],["invoice","Invoice"]]; return t; }
 function load(){ return norm({meta:{},tenants:[],properties:[],users:[],audit:[]}); }
 function norm(d){ if(!d.meta)d.meta={}; if(!d.tenants)d.tenants=[]; if(!d.properties)d.properties=[]; if(!d.users)d.users=[]; if(!d.audit)d.audit=[];
+  // Charges billed alongside rent. The list is the firm's own — edit it in
+  // Settings. kind: "monthly" recurs every month; "annual" is billed once, in
+  // the month it is entered; "oneoff" is ad-hoc. Seeded on first run only, so
+  // an existing book keeps whatever list it already has (including none).
+  if(!d.chargeTypes)d.chargeTypes=[{id:1,name:"Common fees",kind:"monthly"},{id:2,name:"Electricity",kind:"monthly"},{id:3,name:"Water",kind:"monthly"},{id:4,name:"Refuse",kind:"annual"}];
   d.tenants.forEach(t=>{ if(!t.pay)t.pay={}; if(!t.leases)t.leases=[{start:t.start||"",renewal:t.renewal||"",end:t.end||""}];
     if(!t.contact1)t.contact1={name:t.contact||"",phone:""}; if(!t.contact2)t.contact2={name:"",phone:""}; if(!t.depositMoves)t.depositMoves=[];
     if(!t.agreements)t.agreements=(t.agreement?[t.agreement]:[]); delete t.agreement;
+    // Standing charges: what this tenant pays every month on top of rent.
+    if(!t.charges)t.charges=[];
     Object.keys(t.pay).forEach(y=>{ t.pay[y].forEach(mo=>{ if(!mo.receipts)mo.receipts=(mo.a?[{date:mo.d||"",ref:"",amount:mo.a}]:[]); }); }); });
   return d; }
+
+/* ---- Charges (billed with the rent) --------------------------------------
+   A month's charges are NOT written until someone edits that month: an
+   untouched month simply shows the tenant's standing charges, so changing a
+   standing charge fixes every month that has not been dealt with by hand,
+   while months already adjusted keep exactly what was entered. */
+function chargeTypes(){ return (DATA.chargeTypes||[]).filter(c=>c.active!==false); }
+function ctById(id){ return (DATA.chargeTypes||[]).find(c=>c.id===+id)||null; }
+function ctName(id){ const c=ctById(id); return c?c.name:"Charge"; }
+function nextCtId(){ return (DATA.chargeTypes||[]).reduce((m,c)=>Math.max(m,c.id),0)+1; }
+// Standing charges that recur — annual/one-off ones are added to a month by hand.
+function standingCharges(t){ return (t.charges||[]).filter(c=>{ const ct=ctById(c.typeId); return ct && ct.active!==false && ct.kind==="monthly"; }); }
+// What this tenant is charged for this month, beyond rent.
+function monthCharges(t,y,m){
+  const mo=(t.pay&&t.pay[y]&&t.pay[y][m])||null;
+  if(mo&&Array.isArray(mo.charges))return mo.charges.filter(c=>ctById(c.typeId));
+  return standingCharges(t).map(c=>({typeId:c.typeId,amount:num(c.amount)}));
+}
+function chargesTotal(t,y,m){ return monthCharges(t,y,m).reduce((s,c)=>s+num(c.amount),0); }
+// The actual amount owed for the month: rent plus its charges.
+function dueTotal(t,y,m){ return rentOf(t,y,m)+chargesTotal(t,y,m); }
+// Received TOWARDS what the month bills: rent, plus the charges actually
+// raised for it. Money allocated to anything else (an "Other" reimbursement, a
+// charge that was never billed) is income but settles nothing, so it must not
+// quietly cancel out arrears. With no charges billed this is rent receipts
+// alone — exactly the behaviour before charges existed.
+function paidAll(t,y,m){
+  const billed=monthCharges(t,y,m).map(c=>ctName(c.typeId));
+  return ensureYear(t,y)[m].receipts.reduce((s,r)=>{ const c=catOf(r); return s+((c==="Rent"||billed.indexOf(c)>=0)?num(r.amount):0); },0);
+}
+// Received against one charge type (receipts are allocated by name, so older
+// receipts labelled "Electricity"/"Other" keep counting without conversion).
+function paidCat(t,y,m,name){ return ensureYear(t,y)[m].receipts.reduce((s,r)=>s+(catOf(r)===name?num(r.amount):0),0); }
+// The allocation list offered on a receipt: rent, every charge type, then Other.
+function catList(){ return ["Rent"].concat(chargeTypes().map(c=>c.name)).concat(["Other"]); }
+function catOptions(sel){ return catList().map(c=>'<option'+((sel||"Rent")===c?" selected":"")+'>'+esc(c)+'</option>').join(""); }
 function persist(action){ DATA.meta.updated=stamp(new Date()); if(action){ if(!DATA.audit)DATA.audit=[]; DATA.audit.push({ts:DATA.meta.updated,user:(user?user.username:"system"),action:action}); if(DATA.audit.length>3000)DATA.audit=DATA.audit.slice(-3000); } postSave(); refreshStamps(); }
 function stamp(d){ return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate())+" "+p2(d.getHours())+":"+p2(d.getMinutes()); }
 function p2(x){ return (x<10?"0":"")+x; }
@@ -57,13 +100,16 @@ function paid(t,y,m){ return ensureYear(t,y)[m].receipts.reduce((s,r)=>s+(catOf(
 function otherPaid(t,y,m){ return ensureYear(t,y)[m].receipts.reduce((s,r)=>s+(catOf(r)!=="Rent"?num(r.amount):0),0); }
 function rentOf(t,y,m){ const p=t.pay&&t.pay[y]&&t.pay[y][m]; if(p&&p.rent!==undefined&&p.rent!==null&&p.rent!=="")return num(p.rent); return t.rent||0; }
 function capM(y){ const d=new Date(); if(+y<d.getFullYear())return 11; if(+y>d.getFullYear())return -1; return d.getMonth(); }
-function statusOf(t,y,m){ const pa=paid(t,y,m),r=rentOf(t,y,m);
+// A month counts as settled only when rent AND its charges are covered, so
+// pa/r below are the totals rather than rent alone.
+function statusOf(t,y,m){ const pa=paidAll(t,y,m),r=dueTotal(t,y,m);
   const vf=mIdx(t.vacantFrom); if(vf!=null && ((+y)*12+m)>=vf) return pa>0?"PAID":"VACANT";
   if(r<=0)return pa>0?"PAID":"NA";
   if(!due(t,y,m))return pa>0?(pa>=r?"PAID":"PARTIAL"):"NA";
   if(m>capM(y))return pa>0?(pa>=r?"PAID":"PARTIAL"):"UPCOMING";
   if(pa>=r)return "PAID"; if(pa>0)return "PARTIAL"; return "UNPAID"; }
-function owed(t,y,m){ if(!due(t,y,m)||m>capM(y))return 0; const b=rentOf(t,y,m)-paid(t,y,m); return b>0?b:0; }
+// Outstanding for the month = rent AND its charges, against everything paid.
+function owed(t,y,m){ if(!due(t,y,m)||m>capM(y))return 0; const b=dueTotal(t,y,m)-paidAll(t,y,m); return b>0?b:0; }
 
 /* ---- shell ---- */
 function initShell(){
@@ -114,14 +160,51 @@ window.openSettings=function(){
     '<div class="frow"><label>Invoice number prefix<input id="st_inv" value="'+esc(s.invoicePrefix||"INV")+'" placeholder="INV"></label><label>Bank / payment details (shown on invoices)<input id="st_bank" value="'+esc(s.bank||"")+'"></label></div>'+
     '<div class="frow"><label>Logo (PNG/JPG, under 1.5&nbsp;MB)<input id="st_logo" type="file" accept="image/*"></label></div>'+
     '<div id="st_logoPrev">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;margin-top:4px">':'')+'</div>'+
+    '<div style="border-top:1px solid #e2e8f0;margin:14px 0 8px;padding-top:12px"><b style="font-size:13px">Charge types</b>'+
+      '<p class="hint" style="margin:2px 0 8px">Billed alongside rent — common fees, utilities, refuse. <b>Monthly</b> ones can be set as a tenant\'s standing charge and appear on every month; <b>annual</b> and <b>one-off</b> ones you add to the month they fall in. Removing a type here leaves past months and receipts untouched.</p>'+
+      '<div id="ctBox"></div><div class="frow"><button class="ghost" data-h="addChargeType()">+ Add charge type</button></div></div>'+
     '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveSettings()">Save</button></div></div></div>';
   var li=document.getElementById("st_logo");
   li.onchange=function(e){ var f=e.target.files[0]; if(!f)return; if(f.size>1500000){alert("Logo must be under 1.5 MB.");return;} var r=new FileReader(); r.onload=function(){ window._logoData=r.result; document.getElementById("st_logoPrev").innerHTML='<img src="'+r.result+'" style="max-height:64px;margin-top:4px">'; }; r.readAsDataURL(f); };
+  window._cts=(DATA.chargeTypes||[]).map(function(c){return {id:c.id,name:c.name,kind:c.kind||"monthly"};});
+  renderChargeTypes();
+};
+
+var KINDS=[["monthly","Monthly"],["annual","Annual"],["oneoff","One-off"]];
+function renderChargeTypes(){
+  var box=document.getElementById("ctBox"); if(!box)return;
+  var L=window._cts||[];
+  box.innerHTML = L.length ? L.map(function(c,i){
+    return '<div class="frow" style="align-items:flex-end"><label style="flex:1">Name<input class="ctz" data-i="'+i+'" data-k="name" value="'+esc(c.name)+'"></label>'+
+      '<label>Billed<select class="ctz" data-i="'+i+'" data-k="kind">'+KINDS.map(function(k){return '<option value="'+k[0]+'"'+(c.kind===k[0]?" selected":"")+'>'+k[1]+'</option>';}).join("")+'</select></label>'+
+      '<button class="iconbtn" data-h="rmChargeType('+i+')" title="Remove">🗑</button></div>';
+  }).join("") : '<div class="hint">No charge types — rent only.</div>';
+}
+function collectChargeTypes(){ document.querySelectorAll(".ctz").forEach(function(inp){ var i=+inp.dataset.i,k=inp.dataset.k; if(window._cts[i])window._cts[i][k]=inp.value; }); }
+window.addChargeType=function(){ collectChargeTypes(); window._cts.push({id:0,name:"",kind:"monthly"}); renderChargeTypes(); };
+window.rmChargeType=function(i){
+  collectChargeTypes();
+  var c=window._cts[i];
+  // Tenants may be standing-charged for it; say so rather than silently unpick.
+  var used=DATA.tenants.filter(function(t){return (t.charges||[]).some(function(x){return +x.typeId===+c.id;});}).length;
+  if(c.id && used && !confirm('"'+c.name+'" is a standing charge on '+used+' tenant'+(used===1?"":"s")+'. Remove it? Past months and receipts already entered are not changed.'))return;
+  window._cts.splice(i,1); renderChargeTypes();
 };
 window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return;}
   var g=function(id){ return document.getElementById(id).value.trim(); };
   DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em"), invoicePrefix:g("st_inv")||"INV", bank:g("st_bank") });
   if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
+  if(window._cts){
+    collectChargeTypes();
+    var next=nextCtId();
+    // New rows get an id here; existing ones keep theirs, so tenants' standing
+    // charges and every month already entered still point at the same charge.
+    DATA.chargeTypes=window._cts.filter(function(c){return String(c.name||"").trim();})
+      .map(function(c){ return {id:c.id||next++, name:String(c.name).trim(), kind:c.kind||"monthly"}; });
+    var live={}; DATA.chargeTypes.forEach(function(c){live[c.id]=1;});
+    DATA.tenants.forEach(function(t){ if(t.charges)t.charges=t.charges.filter(function(x){return live[x.typeId];}); });
+    window._cts=null;
+  }
   persist("Updated company settings"); closeModal(); applyHeaderLogo(); applyHeaderTitle(); render(); flash("Settings saved."); };
 
 /* ---- Users & access (talks to the host over postMessage → secure backend) ---- */
@@ -223,7 +306,11 @@ function vInvoice(){
     '<label>Month<select id="invM">'+mopts+'</select></label>'+
     '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label></div></div>';
   var t=DATA.tenants.find(function(x){return x.id===invTenant;});
-  if(t){ var p=propById(t.propertyId); var rent=rentOf(t,invYear,invMonth); var paidAmt=paid(t,invYear,invMonth);
+  if(t){ var p=propById(t.propertyId); var rent=rentOf(t,invYear,invMonth);
+    // The invoice bills the month in full — rent plus its charges — and credits
+    // everything received against it, however each receipt was allocated.
+    var invCharges=monthCharges(t,invYear,invMonth).filter(function(c){return num(c.amount)!==0;});
+    var totalDue=dueTotal(t,invYear,invMonth); var paidAmt=paidAll(t,invYear,invMonth);
     var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
     var invNo=(s.invoicePrefix||"INV")+"-"+invYear+p2(invMonth+1)+"-"+t.id;
     var issue=stamp(now).slice(0,10); var due=invYear+"-"+p2(invMonth+1)+"-01";
@@ -243,8 +330,10 @@ function vInvoice(){
           (t.email?'<br>'+esc(t.email):"")+'</div></div>'+
       '<div class="tblwrap" style="margin-top:14px"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>'+
         '<tr><td>Rent — '+MONTHS[invMonth]+' '+invYear+' · '+esc(t.unit)+'</td><td class="num">'+money(rent)+'</td></tr>'+
-        '<tr class="total"><td>Total due</td><td class="num">'+money(rent)+'</td></tr>'+
-        (paidAmt>0?'<tr><td>Received to date</td><td class="num">'+money(paidAmt)+'</td></tr><tr class="total"><td>Balance outstanding</td><td class="num'+((rent-paidAmt)>0?" warn":"")+'">'+money(rent-paidAmt)+'</td></tr>':'')+
+        // One line per charge, so the tenant sees exactly what makes up the month.
+        invCharges.map(function(c){return '<tr><td>'+esc(ctName(c.typeId))+' — '+MONTHS[invMonth]+' '+invYear+'</td><td class="num">'+money(num(c.amount))+'</td></tr>';}).join("")+
+        '<tr class="total"><td>Total due</td><td class="num">'+money(totalDue)+'</td></tr>'+
+        (paidAmt>0?'<tr><td>Received to date</td><td class="num">'+money(paidAmt)+'</td></tr><tr class="total"><td>Balance outstanding</td><td class="num'+((totalDue-paidAmt)>0?" warn":"")+'">'+money(totalDue-paidAmt)+'</td></tr>':'')+
       '</tbody></table></div>'+
       (s.bank?'<div class="hint" style="margin-top:14px"><b>Payment:</b> '+esc(s.bank)+'</div>':'')+
       ((s.phone||s.email)?'<div class="hint" style="margin-top:6px">Enquiries: '+[esc(s.phone||""),esc(s.email||"")].filter(Boolean).join(" · ")+'</div>':'')+
@@ -278,23 +367,30 @@ function render(){
 /* ---- Overview ---- */
 function vOverview(){
   const y=yr(), cap=capM(y);
-  let roll=0,colYTD=0,dueYTD=0,occ=0,arr=0,dep=0,oth=0; const colByM=Array(12).fill(0);
+  let roll=0,colYTD=0,dueYTD=0,occ=0,arr=0,dep=0,oth=0,chDue=0; const colByM=Array(12).fill(0), chByM=Array(12).fill(0);
   const units=DATA.properties.reduce((s,p)=>s+(p.units||0),0)||DATA.tenants.length;
   DATA.tenants.forEach(t=>{ dep+=netDeposit(t); let a=false; const real=t.name&&t.name!=="NO TENANT";
-    for(let m=0;m<12;m++){ colByM[m]+=paid(t,y,m); if(m<=cap)oth+=otherPaid(t,y,m); if(due(t,y,m)&&m<=cap){ dueYTD+=rentOf(t,y,m); colYTD+=paid(t,y,m); if(owed(t,y,m)>0)a=true; } }
+    // colByM = rent received, chByM = everything else received (the charges).
+    for(let m=0;m<12;m++){ colByM[m]+=paid(t,y,m); chByM[m]+=otherPaid(t,y,m); if(m<=cap)oth+=otherPaid(t,y,m);
+      if(due(t,y,m)&&m<=cap){ dueYTD+=dueTotal(t,y,m); colYTD+=paidAll(t,y,m); chDue+=chargesTotal(t,y,m); if(owed(t,y,m)>0)a=true; } }
     const nm=cap<0?0:cap; if(real&&due(t,y,nm)){ roll+=rentOf(t,y,nm); occ++; } if(a)arr++; });
   let h='<div class="cards">';
   h+=card("Monthly rent roll",money(roll),(cap<0?"—":MONTHS[cap])+" "+y);
-  h+=card("Collected YTD",money(colYTD),"to "+(cap<0?"—":MONTHS[cap]));
-  h+=card("Outstanding YTD",money(dueYTD-colYTD),(dueYTD-colYTD>0?"owed":"up to date"));
+  h+=card("Collected YTD",money(colYTD),"rent + charges, to "+(cap<0?"—":MONTHS[cap]));
+  h+=card("Outstanding YTD",money(dueYTD-colYTD),(dueYTD-colYTD>0?"owed (incl. charges)":"up to date"));
+  h+=card("Charges billed YTD",money(chDue),"common fees, utilities, refuse");
   h+=card("Occupancy",occ+" / "+units,"units let");
   h+=cardLink("In arrears",String(arr),"view outstanding","arrears");
   h+=cardLink("Deposits held",money(dep),"view register","deposits");
-  h+=card("Other income",money(oth),"electricity / costs YTD");
-  h+='</div><div class="panel"><h3>Rental income — '+y+'</h3><div class="hint">Rent collected per month.</div><canvas id="cRent"></canvas></div>';
+  h+=card("Charges collected YTD",money(oth),"received against charges");
+  h+='</div><div class="panel"><h3>Collected — '+y+'</h3><div class="hint">What came in each month, rent and charges stacked. Hover a bar for the total.</div><canvas id="cRent"></canvas></div>';
   document.getElementById("view").innerHTML=h;
-  chart=new Chart(document.getElementById("cRent"),{type:"bar",data:{labels:MONTHS,datasets:[{label:"Rental income",data:colByM,backgroundColor:"#1e2a78"}]},
-    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"€"+v.toLocaleString()}}}}});
+  // Same monthly bars, split into rent and charges so both are visible at once.
+  chart=new Chart(document.getElementById("cRent"),{type:"bar",data:{labels:MONTHS,datasets:[
+      {label:"Rent",data:colByM,backgroundColor:"#1e2a78"},
+      {label:"Charges",data:chByM,backgroundColor:"#f59e0b"}]},
+    options:{responsive:true,plugins:{legend:{display:true,position:"bottom"},tooltip:{callbacks:{footer:function(items){var s=items.reduce(function(a,i){return a+i.parsed.y;},0);return "Total €"+Math.round(s).toLocaleString();}}}},
+      scales:{x:{stacked:true},y:{stacked:true,ticks:{callback:v=>"€"+v.toLocaleString()}}}}});
 }
 function card(k,v,d){ return '<div class="card"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="d">'+(d||"")+'</div></div>'; }
 function cardLink(k,v,d,tab){ return '<div class="card click" data-h="goTab(\''+tab+'\')"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="d">'+(d||"")+' ›</div></div>'; }
@@ -367,6 +463,9 @@ window.editTenant=function(id){ if(!canEdit())return;
    '<div class="frow"><label>Monthly rent (€)<input id="t_rent" type="number" value="'+(t.rent||0)+'"></label><label>Deposit (€)<input id="t_deposit" type="number" value="'+(t.deposit||0)+'"></label>'+
    '<label>Electricity<select id="t_elec"><option value="">—</option><option value="1">Tenant pays</option><option value="0">Included</option></select></label>'+
    '<label>Vacant from (blank = occupied)<input id="t_vacant" type="date" value="'+esc(t.vacantFrom||"")+'"></label></div>'+
+   '<div style="font-size:12px;font-weight:700;color:#1e2a78;margin:6px 0">Standing charges <span style="font-weight:400;color:#94a3b8">— billed with the rent every month</span></div>'+
+   '<div class="hint" style="margin:0 0 4px">Tick what this tenant pays on top of rent and set the usual amount. Every month starts from these; adjust a month\'s figure when the actual bill arrives. Annual and one-off charges are added to the month they fall in, not here.</div>'+
+   '<div id="tchBox">'+chargePickerHtml(t)+'</div>'+
    '<div style="font-size:12px;font-weight:700;color:#1e2a78;margin:6px 0">Lease dates (history)</div><div id="leaseBox">'+leaseRows+'</div>'+
    '<div class="frow"><button class="ghost" data-h="addLeaseRow()">+ Add renewal period</button></div>'+
    '<div style="font-size:12px;font-weight:700;color:#1e2a78;margin:6px 0">Contacts</div>'+
@@ -381,12 +480,37 @@ window.addLeaseRow=function(){ collectLeases(); window._leaseDraft.push({start:"
   const i=window._leaseDraft.length-1; const div=document.createElement("div"); div.className="frow";
   div.innerHTML='<label>Prev/new start<input class="lz" data-k="start" data-i="'+i+'" type="date"></label><label>Renewal<input class="lz" data-k="renewal" data-i="'+i+'" type="date"></label><label>End<input class="lz" data-k="end" data-i="'+i+'" type="date"></label>';
   box.appendChild(div); };
+/* Standing-charge picker on the tenant form: every monthly charge type with a
+   tick and an amount, plus select-all. Annual/one-off types are deliberately
+   absent — they belong to a month, not to every month. */
+function chargePickerHtml(t){
+  const types=chargeTypes().filter(c=>c.kind==="monthly");
+  if(!types.length)return '<div class="hint">No monthly charge types yet — add them in Settings → Charge types.</div>';
+  const has=(id)=>(t.charges||[]).find(c=>+c.typeId===+id);
+  return '<div class="frow" style="gap:6px;margin-bottom:2px"><button class="ghost" type="button" data-h="tchAll(1)">Select all</button> <button class="ghost" type="button" data-h="tchAll(0)">Clear all</button></div>'+
+    types.map(ct=>{ const cur=has(ct.id);
+      return '<div class="frow" style="align-items:flex-end"><label style="flex:1;flex-direction:row;align-items:center;gap:8px">'+
+        '<input type="checkbox" class="tch" data-id="'+ct.id+'"'+(cur?" checked":"")+'> '+esc(ct.name)+'</label>'+
+        '<label>Amount (€)<input class="tcha" data-id="'+ct.id+'" type="number" step="0.01" value="'+esc(cur?cur.amount:"")+'"></label></div>';
+    }).join("");
+}
+window.tchAll=function(on){ document.querySelectorAll(".tch").forEach(cb=>{ cb.checked=!!on; }); };
+function collectTenantCharges(){
+  const out=[];
+  document.querySelectorAll(".tch").forEach(cb=>{
+    if(!cb.checked)return;
+    const id=+cb.dataset.id;
+    const amt=document.querySelector('.tcha[data-id="'+id+'"]');
+    out.push({typeId:id,amount:num(amt?amt.value:0)});
+  });
+  return out;
+}
 function collectLeases(){ const arr=window._leaseDraft.map(x=>({start:x.start,renewal:x.renewal,end:x.end}));
   document.querySelectorAll(".lz").forEach(inp=>{ const i=+inp.dataset.i,k=inp.dataset.k; if(!arr[i])arr[i]={start:"",renewal:"",end:""}; arr[i][k]=inp.value; });
   window._leaseDraft=arr; return arr; }
 window.saveTenant=function(id){ const g=k=>document.getElementById(k).value; const leases=collectLeases().filter(L=>L.start||L.end||L.renewal); if(!leases.length)leases.push({start:"",renewal:"",end:""});
   const o={propertyId:num(g("t_prop")),unit:g("t_unit").trim(),name:g("t_name").trim(),rent:num(g("t_rent")),deposit:num(g("t_deposit")),
-    electricity:(g("t_elec")===""?null:g("t_elec")==="1"),vacantFrom:g("t_vacant"),leases:leases,contact1:{name:g("t_c1n").trim(),phone:g("t_c1p").trim()},contact2:{name:g("t_c2n").trim(),phone:g("t_c2p").trim()},email:g("t_email").trim()};
+    electricity:(g("t_elec")===""?null:g("t_elec")==="1"),vacantFrom:g("t_vacant"),leases:leases,charges:collectTenantCharges(),contact1:{name:g("t_c1n").trim(),phone:g("t_c1p").trim()},contact2:{name:g("t_c2n").trim(),phone:g("t_c2p").trim()},email:g("t_email").trim()};
   const clash=DATA.tenants.find(x=>x.id!==id && x.propertyId===o.propertyId && (x.unit||"")===o.unit && o.unit && x.name && x.name!=="NO TENANT");
   if(clash && !confirm("Unit “"+o.unit+"” is already assigned to "+clash.name+". Assign it here anyway?")) return;
   if(id==null){const t={id:nextTid(),agreements:[],pay:{}};Object.assign(t,o);ensureYear(t,"2026");DATA.tenants.push(t);} else Object.assign(DATA.tenants.find(x=>x.id===id),o);
@@ -419,15 +543,16 @@ function sortedTenants(){ const arr=DATA.tenants.slice();
   return arr; }
 function vSchedule(){
   const y=yr(), cap=capM(y);
-  let h='<div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Rent Schedule '+y+'</h3>'+(canEdit()?'<button class="ghost" data-h="openBatchReceipts()">+ Enter receipts</button> <button class="ghost" data-h="openSplit()">⇄ Split a receipt</button> <button class="ghost" data-h="openRentEditor()">✎ Enter / adjust rent</button>':'')+'</div><div class="hint">'+(canEdit()?"“Split a receipt” allocates one payment across units and costs (rent / electricity / other) · “Enter receipts” for bulk entry · click a month to edit one tenant. ":"")+'Only due months up to the current period are shown; future rent is not flagged as unpaid.</div>'+
+  let h='<div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Rent Schedule '+y+'</h3>'+(canEdit()?'<button class="ghost" data-h="openBatchReceipts()">+ Enter receipts</button> <button class="ghost" data-h="openSplit()">⇄ Split a receipt</button> <button class="ghost" data-h="openRentEditor()">✎ Enter / adjust rent</button>':'')+'</div><div class="hint">'+(canEdit()?"Click a month to set that tenant’s rent, charges and receipts · “Split a receipt” allocates one payment across units, rent and charges · “Enter receipts” for bulk entry. ":"")+'“due” is rent plus that month’s charges — hover it for the split. Only due months up to the current period are shown; future rent is not flagged as unpaid.</div>'+
     '<div style="margin-bottom:8px;font-size:12px;color:#64748b">Sort by: <select id="schSort"><option value="tenant"'+(schedSort==="tenant"?" selected":"")+'>Tenant name</option><option value="property"'+(schedSort==="property"?" selected":"")+'>Property</option><option value="rent"'+(schedSort==="rent"?" selected":"")+'>Rent (high to low)</option></select></div>'+
     '<div class="tblwrap"><table><thead><tr><th>Tenant</th><th class="num">Rent</th>'+MONTHS.map((m,i)=>'<th class="num">'+m+'</th>').join("")+'</tr></thead><tbody>';
   sortedTenants().forEach(t=>{ const _p=propById(t.propertyId); h+='<tr><td>'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+(_p?' · '+esc(_p.name):'')+'</div></td><td class="num">'+money(t.rent)+'</td>';
-    for(let m=0;m<12;m++){ const st=statusOf(t,y,m); const pa=paid(t,y,m); const rd=rentOf(t,y,m);
+    for(let m=0;m<12;m++){ const st=statusOf(t,y,m); const pa=paidAll(t,y,m); const rd=dueTotal(t,y,m); const ch=chargesTotal(t,y,m);
       let disp;
       if(st==="NA"){ disp='<span class="st NA">—</span>'; }
       else if(st==="VACANT"){ disp='<span class="st NA">vacant</span>'; }
-      else { const due='<div style="font-size:10px;color:#94a3b8;line-height:1.2">due '+money(rd)+'</div>';
+      else { // "due" is rent + charges; the split is spelled out when charges exist.
+        const due='<div style="font-size:10px;color:#94a3b8;line-height:1.2" title="'+(ch?'Rent '+money(rentOf(t,y,m))+' + charges '+money(ch):'Rent only')+'">due '+money(rd)+(ch?' <span style="color:#b45309">+'+Math.round(ch)+'</span>':'')+'</div>';
         const pay='<div style="font-weight:600;line-height:1.2">'+(pa>0?money(pa):(st==="UPCOMING"?'<span style="color:#cbd5e1">—</span>':'<span style="color:#ef4444">€0</span>'))+'</div>';
         const pill=(st==="UPCOMING")?'<span class="st UPCOMING">upcoming</span>':'<span class="st '+st+'">'+st+'</span>';
         disp=due+pay+pill; }
@@ -441,13 +566,50 @@ function vSchedule(){
   const ss=document.getElementById("schSort"); if(ss)ss.onchange=e=>{schedSort=e.target.value;render();};
 }
 window.openReceipts=function(id,m){ if(!canEdit())return; const y=yr(); const t=DATA.tenants.find(x=>x.id===id); const recs=ensureYear(t,y)[m].receipts;
-  let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'"><option'+((r.cat||"Rent")==="Rent"?" selected":"")+'>Rent</option><option'+(r.cat==="Electricity"?" selected":"")+'>Electricity</option><option'+(r.cat==="Other"?" selected":"")+'>Other</option></select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
-  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box"><h3>Receipts — '+esc(t.name)+' · '+MONTHS[m]+' '+y+'</h3>'+
+  let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'">'+catOptions(r.cat)+'</select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
+  window._mcharges=monthCharges(t,y,m).map(c=>({typeId:c.typeId,amount:c.amount}));
+  window._mchTenant=t;
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(760px,96vw)"><h3>'+esc(t.name)+' · '+MONTHS[m]+' '+y+'</h3>'+
     '<div class="frow"><label>Rent charged this month<input id="rentOv" type="number" value="'+esc(rentOf(t,y,m))+'"></label><label>&nbsp;<span class="hint" style="margin:0">Agreement rent: '+money(t.rent)+'. Change here to override just this month.</span></label></div>'+
-    '<div class="hint">Existing receipts below — edit them or add extra lines.</div><div id="recBox">'+(rows||'<div class="hint">No receipts yet.</div>')+'</div>'+
+    '<div style="border-top:1px solid #e2e8f0;margin:10px 0 8px;padding-top:10px"><b style="font-size:13px">Charges for this month</b>'+
+      '<div class="hint">Starts from the tenant\'s standing charges — change an amount, or add the ones that vary (electricity, water) when the bill arrives. Together with the rent this is what the tenant owes for '+MONTHS[m]+'.</div>'+
+      '<div id="chBox"></div><div id="chAdd"></div></div>'+
+    '<div class="hint">Receipts below — edit them or add extra lines. Allocate each one to rent or to a charge.</div><div id="recBox">'+(rows||'<div class="hint">No receipts yet.</div>')+'</div>'+
     '<div class="frow"><button class="ghost" data-h="addReceiptRow('+id+','+m+')">+ Add receipt line</button></div>'+
     '<div class="frow" style="justify-content:flex-end;margin-top:6px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveReceipts('+id+','+m+')">Save</button></div></div></div>';
+  renderMCharges();
 };
+
+/* The month's charge lines, plus the picker for adding more. Kept in
+   window._mcharges while the modal is open so amounts survive a re-render. */
+function renderMCharges(){
+  const L=window._mcharges||[];
+  const box=document.getElementById("chBox"); if(!box)return;
+  box.innerHTML = L.length
+    ? L.map((c,i)=>'<div class="frow" style="align-items:flex-end"><label style="flex:1">'+esc(ctName(c.typeId))+
+        '<input class="chz" data-i="'+i+'" type="number" step="0.01" value="'+esc(c.amount)+'"></label>'+
+        '<button class="iconbtn" data-h="rmMCharge('+i+')" title="Remove this charge">🗑</button></div>').join("")
+    : '<div class="hint">No charges this month — rent only.</div>';
+  const avail=chargeTypes().filter(ct=>!L.some(c=>+c.typeId===+ct.id));
+  const add=document.getElementById("chAdd");
+  add.innerHTML = avail.length
+    ? '<div class="frow" style="align-items:flex-end"><label style="flex:1">Add a charge<select id="chPick">'+
+        avail.map(ct=>'<option value="'+ct.id+'">'+esc(ct.name)+(ct.kind==="annual"?" (annual)":"")+'</option>').join("")+
+        '</select></label><button class="ghost" data-h="addMCharge()">+ Add</button> <button class="ghost" data-h="addMCharge(\'all\')">Add all</button></div>'
+    : '<div class="hint">Every charge type is already on this month. Add more types in Settings → Charge types.</div>';
+}
+// Amounts live in the inputs until something re-renders the list.
+function collectMCharges(){ document.querySelectorAll(".chz").forEach(inp=>{ const i=+inp.dataset.i; if(window._mcharges[i])window._mcharges[i].amount=inp.value; }); }
+window.addMCharge=function(which){
+  collectMCharges();
+  const L=window._mcharges;
+  // A standing charge carries its agreed amount over; anything else starts blank.
+  const amountFor=(id)=>{ const t=window._mchTenant; const st=t&&(t.charges||[]).find(c=>+c.typeId===+id); return st?num(st.amount):""; };
+  if(which==="all"){ chargeTypes().forEach(ct=>{ if(!L.some(c=>+c.typeId===+ct.id))L.push({typeId:ct.id,amount:amountFor(ct.id)}); }); }
+  else { const p=document.getElementById("chPick"); if(!p)return; const id=+p.value; if(!L.some(c=>+c.typeId===id))L.push({typeId:id,amount:amountFor(id)}); }
+  renderMCharges();
+};
+window.rmMCharge=function(i){ collectMCharges(); window._mcharges.splice(i,1); renderMCharges(); };
 window.addReceiptRow=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); ensureYear(DATA.tenants.find(x=>x.id===id),y)[m].receipts.push({date:"",ref:"",amount:""}); openReceipts(id,m); };
 window.rmReceipt=function(id,m,i){ const y=yr(); ensureYear(DATA.tenants.find(x=>x.id===id),y)[m].receipts.splice(i,1); openReceipts(id,m); };
 function saveReceiptsDraft(id,m){ const y=yr(); const recs=ensureYear(DATA.tenants.find(x=>x.id===id),y)[m].receipts;
@@ -455,7 +617,19 @@ function saveReceiptsDraft(id,m){ const y=yr(); const recs=ensureYear(DATA.tenan
 window.saveReceipts=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); const t=DATA.tenants.find(x=>x.id===id);
   t.pay[y][m].receipts=t.pay[y][m].receipts.map(r=>({date:r.date,ref:r.ref,amount:num(r.amount),cat:r.cat||"Rent"})).filter(r=>r.amount!==0||r.date||r.ref);
   const ov=document.getElementById("rentOv"); if(ov){ const v=ov.value.trim(); if(v===""||num(v)===(t.rent||0)) delete t.pay[y][m].rent; else t.pay[y][m].rent=num(v); }
-  persist("Edited receipts — "+t.name+" · "+MONTHS[m]+" "+y); closeModal(); render(); flash("Saved."); };
+  // Charges are written on the month once it has been edited, so this month
+  // stops following later changes to the tenant's standing charges. Matching
+  // the standing set exactly means there is nothing to pin — leave it
+  // following, so a change to the agreement still flows through.
+  if(document.getElementById("chBox")){
+    collectMCharges();
+    const L=(window._mcharges||[]).map(c=>({typeId:+c.typeId,amount:num(c.amount)})).filter(c=>ctById(c.typeId));
+    const std=standingCharges(t).map(c=>({typeId:+c.typeId,amount:num(c.amount)}));
+    const same=L.length===std.length && L.every(c=>std.some(s=>s.typeId===c.typeId&&s.amount===c.amount));
+    if(same) delete t.pay[y][m].charges; else t.pay[y][m].charges=L;
+  }
+  window._mcharges=null; window._mchTenant=null;
+  persist("Edited month — "+t.name+" · "+MONTHS[m]+" "+y); closeModal(); render(); flash("Saved."); };
 
 /* ---- Bulk rent editor (per year) ---- */
 window.openRentEditor=function(){ if(!canEdit())return; const y=yr();
@@ -499,7 +673,7 @@ window.saveBatch=function(){ collectBatch(); let n=0;
 /* ---- Split one receipt across units & cost types ---- */
 window.openSplit=function(){ if(!canEdit())return; if(!window._split)window._split={date:new Date().toISOString().slice(0,10),ref:"",total:"",lines:[{tid:"",cat:"Rent",amount:""},{tid:"",cat:"Rent",amount:""},{tid:"",cat:"Rent",amount:""}]}; renderSplit(); };
 function renderSplit(){ const S=window._split;
-  const catOpt=function(c){return '<option'+(c==="Rent"?" selected":"")+'>Rent</option><option'+(c==="Electricity"?" selected":"")+'>Electricity</option><option'+(c==="Other"?" selected":"")+'>Other</option>';};
+  const catOpt=function(c){return catOptions(c);};
   const rows=S.lines.map((l,i)=>'<tr><td><select class="sz" data-k="tid" data-i="'+i+'" style="width:100%;min-width:240px">'+tenantOpts(l.tid)+'</select></td>'+
     '<td><select class="sz" data-k="cat" data-i="'+i+'">'+catOpt(l.cat||"Rent")+'</select></td>'+
     '<td class="num"><input class="sz num" data-k="amount" data-i="'+i+'" type="number" value="'+esc(l.amount)+'" style="width:100px"></td>'+
@@ -607,8 +781,10 @@ function vStatement(){
   const t=DATA.tenants.find(x=>x.id===stmtTenant);
   if(t){ const p=propById(t.propertyId), L=curLease(t);
     let charged=0,paidT=0,bal=0,rowsH="";
-    for(const y of ys){ for(let m=0;m<12;m++){ const ck=(+y)*12+m; if(ck<fYM||ck>tYM)continue; if(!due(t,y,m)&&paid(t,y,m)===0)continue; const dd=due(t,y,m); const ch=dd?rentOf(t,y,m):0; const pa=paid(t,y,m); bal+=ch-pa; charged+=ch; paidT+=pa;
-      rowsH+='<tr><td>'+MONTHS[m]+' '+y+'</td><td class="num">'+(ch?money(ch):"—")+'</td><td class="num">'+(pa?money(pa):(dd?"€0":"—"))+'</td><td class="num">'+money(bal)+'</td></tr>'; } }
+    // The statement bills the month in full — rent plus its charges — and
+    // credits every receipt, so the running balance is what the tenant owes.
+    for(const y of ys){ for(let m=0;m<12;m++){ const ck=(+y)*12+m; if(ck<fYM||ck>tYM)continue; if(!due(t,y,m)&&paidAll(t,y,m)===0)continue; const dd=due(t,y,m); const ch=dd?dueTotal(t,y,m):0; const pa=paidAll(t,y,m); const cx=dd?chargesTotal(t,y,m):0; bal+=ch-pa; charged+=ch; paidT+=pa;
+      rowsH+='<tr><td>'+MONTHS[m]+' '+y+(cx?'<div style="font-size:10px;color:#94a3b8">rent '+money(rentOf(t,y,m))+' + '+monthCharges(t,y,m).filter(c=>num(c.amount)!==0).map(c=>esc(ctName(c.typeId)).toLowerCase()+" "+money(num(c.amount))).join(", ")+'</div>':'')+'</td><td class="num">'+(ch?money(ch):"—")+'</td><td class="num">'+(pa?money(pa):(dd?"€0":"—"))+'</td><td class="num">'+money(bal)+'</td></tr>'; } }
     if(!rowsH)rowsH='<tr><td colspan="4" class="hint">No activity in this date range.</td></tr>';
     h+='<div class="panel stmt-doc"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px"><h3 style="margin:0">Statement — '+esc(t.name)+'</h3><div class="hint" style="text-align:right">Period: '+esc(stmtFrom)+' → '+esc(stmtTo)+'<br>Printed: '+stamp(new Date()).slice(0,10)+'</div></div>'+
       '<div class="hint" style="margin-top:6px">'+esc(p?p.name:"")+' · '+esc(t.unit)+' · Lease '+esc(L.start||"?")+' → '+esc(L.end||"?")+' · Deposit '+money(t.deposit)+'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone)+(t.email?" · "+esc(t.email):"")+'</div>'+
