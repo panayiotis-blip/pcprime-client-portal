@@ -870,7 +870,7 @@ export const api = {
   // ---- App templates (migration 167): uploadable app definitions ----
   async listAppTemplates(): Promise<any[]> {
     const { data, error } = await supabase.from('app_templates')
-      .select('id, key, name, icon, description, restricted, active, version, created_at, updated_at')
+      .select('id, key, name, icon, description, restricted, active, version, preview_token, created_at, updated_at')
       .order('created_at');
     if (error) throw new Error(error.message);
     return data || [];

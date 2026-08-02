@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, isSupervisorOrHigher } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -10,7 +10,8 @@ import { PanelSkeleton } from '../ui';
 // client gets the app with its OWN blank data (client_app_data is keyed per
 // client + app), so two clients on the same template never share data.
 
-type Tmpl = { id: number; key: string; name: string; icon: string; description: string | null; restricted: boolean; active: boolean; version?: number };
+type Tmpl = { id: number; key: string; name: string; icon: string; description: string | null; restricted: boolean; active: boolean; version?: number; preview_token?: string | null };
+type PreviewApp = { key: string; label: string; asset?: string; previewToken?: string };
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
 export default function ClientAppTemplates() {
@@ -18,6 +19,7 @@ export default function ClientAppTemplates() {
   const [templates, setTemplates] = useState<Tmpl[] | null>(null);
   const [allocFor, setAllocFor] = useState<{ key: string; label: string } | null>(null);
   const [editing, setEditing] = useState<Tmpl | null>(null);
+  const [preview, setPreview] = useState<PreviewApp | null>(null);
   const [orphans, setOrphans] = useState<Array<{ app_key: string; clients: number }>>([]);
 
   const load = () => {
@@ -73,7 +75,9 @@ export default function ClientAppTemplates() {
           {/* Built-in apps — allocatable, not editable here */}
           {CLIENT_APPS.map(a => (
             <div key={a.key} style={card}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: a.component ? 'default' : 'pointer' }}
+                onClick={() => { if (!a.component) setPreview({ key: a.key, label: a.label, asset: a.asset }); }}
+                title={a.component ? '' : 'Click to preview'}>
                 <span style={{ fontSize: 22 }}>{a.icon}</span>
                 <strong style={{ color: '#1a365d' }}>{a.label}</strong>
                 <span style={badge('#e0e7ff', '#3730a3')}>built-in</span>
@@ -82,13 +86,17 @@ export default function ClientAppTemplates() {
               {a.description && <p style={desc}>{a.description}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 <button className="btn btn-primary btn-sm" onClick={() => setAllocFor({ key: a.key, label: a.label })}>Allocate to clients</button>
+                {/* Component apps are portal views, not framed documents — they
+                    need a real client's data, so there is nothing to preview. */}
+                {!a.component && <button className="btn btn-secondary btn-sm" onClick={() => setPreview({ key: a.key, label: a.label, asset: a.asset })}>Preview</button>}
               </div>
             </div>
           ))}
           {/* Uploaded templates */}
           {uploaded.map(t => (
             <div key={t.id} style={{ ...card, opacity: t.active ? 1 : 0.6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} title="Click to preview"
+                onClick={() => setPreview({ key: t.key, label: t.name, previewToken: t.preview_token || undefined })}>
                 <span style={{ fontSize: 22 }}>{t.icon}</span>
                 <strong style={{ color: '#1a365d' }}>{t.name}</strong>
                 <span style={badge('#dcfce7', '#166534')}>uploaded</span>
@@ -98,6 +106,7 @@ export default function ClientAppTemplates() {
               {t.description && <p style={desc}>{t.description}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 <button className="btn btn-primary btn-sm" onClick={() => setAllocFor({ key: t.key, label: t.name })}>Allocate to clients</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setPreview({ key: t.key, label: t.name, previewToken: t.preview_token || undefined })}>Preview</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setEditing(t)}>Edit</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setActive(t)}>{t.active ? 'Deactivate' : 'Activate'}</button>
                 <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} onClick={() => removeEverywhere(t)}>Remove everywhere</button>
@@ -130,6 +139,7 @@ export default function ClientAppTemplates() {
 
       {allocFor && <AllocateModal appKey={allocFor.key} label={allocFor.label} onClose={() => setAllocFor(null)} />}
       {editing && <EditModal tmpl={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+      {preview && <PreviewModal app={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }
@@ -185,6 +195,78 @@ function UploadForm({ onCreated }: { onCreated: () => void }) {
         <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </form>
+  );
+}
+
+// ---- Preview an app from the library ----
+// Runs the real app, full-screen, on an EMPTY document: it is handed no
+// client's data and every save it attempts is dropped, so looking at an app
+// can never touch anyone's records. Uploaded templates are served by their
+// preview token (migration 173); built-in apps come from their static files.
+function PreviewModal({ app, onClose }: { app: { key: string; label: string; asset?: string; previewToken?: string }; onClose: () => void }) {
+  const [srcDoc, setSrcDoc] = useState('');
+  const [url, setUrl] = useState('');
+  const [err, setErr] = useState('');
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setSrcDoc(''); setUrl(''); setErr('');
+    (async () => {
+      if (app.asset) {
+        try {
+          const html = await fetch(app.asset + 'index.html').then(r => r.text());
+          if (alive) setSrcDoc(html);
+        } catch (e: any) { if (alive) setErr('Could not load the app: ' + (e?.message || e)); }
+      } else if (app.previewToken) {
+        setUrl(`/api/app-frame?v=${encodeURIComponent(app.previewToken)}`);
+      } else {
+        setErr('This template has no preview yet — run migration 173, then reload.');
+      }
+    })();
+    return () => { alive = false; };
+  }, [app.key, app.asset, app.previewToken]);
+
+  // Stand in for the portal host: hand the app an empty document so it renders,
+  // answer its user-admin calls with nothing, and swallow saves.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      const win = frameRef.current?.contentWindow;
+      if (!win || e.source !== win) return;
+      const m: any = e.data || {};
+      if (m.type === 'ready') {
+        win.postMessage({ type: 'init', data: {}, role: 'admin', name: 'Preview', username: 'preview' }, '*');
+      } else if (m.type === 'users' && m.reqId != null) {
+        win.postMessage({ type: 'users:reply', reqId: m.reqId, ok: true, data: [] }, '*');
+      }
+      // 'save' is deliberately ignored — a preview writes nothing.
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: '#fff', borderRadius: 12, width: 'min(1200px,96vw)', height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #e2e8f0' }}>
+          <strong style={{ color: '#1a365d' }}>{app.label}</strong>
+          <span style={{ fontSize: 12, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 6, padding: '2px 8px' }}>
+            Preview · empty data, nothing is saved
+          </span>
+          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={onClose}>Close</button>
+        </div>
+        {err ? <div className="empty-state" style={{ margin: 16 }}><p style={{ color: '#b91c1c' }}>{err}</p></div> : (
+          <iframe
+            ref={frameRef}
+            {...(srcDoc ? { srcDoc } : { src: url })}
+            title={app.label}
+            sandbox="allow-scripts allow-downloads allow-modals allow-popups allow-forms"
+            style={{ flex: 1, width: '100%', border: 0, background: '#f4f6f9' }}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
