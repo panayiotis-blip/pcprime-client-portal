@@ -6,13 +6,35 @@
 // per element property.
 //
 // `confidence`:
-//   'confirmed' — the key↔meaning is proven by an official sample filing.
+//   'confirmed' — the key↔meaning is proven by a real filing: either the value
+//                 is self-identifying (a T.I.C., a name, a date) or it checks
+//                 out arithmetically against a statutory rate in the same row.
 //   'inferred'  — deduced from the TD1 PDF layout / XSD position; must be
 //                 confirmed by a real TaxisNet test import. Surfaced as a
 //                 warning by the validator so nothing unverified ships silently.
 //
 // Coverage grows incrementally; every key is checked against keyCatalogue at
 // build time, so an out-of-schema key can never reach the file.
+//
+// XML COLUMN NUMBERS ARE NOT FORM COLUMN NUMBERS. The printed TD1 numbers the
+// columns a person fills in; the schema numbers the fields it carries, and the
+// two drift apart wherever the form splits one column into two (Part 4.C col 5
+// = cost + area → c5 + c6), adds a lettered field (c3a, c9a, c5a) or omits a
+// computed total. Assuming they matched is what put gross rents in the lessee
+// columns and SDC/GHS one place left, both fixed 2026-08-03 against the real
+// filings in supabase/xsd-tep-ext-2024/Samples. Check a column against a
+// sample before trusting the form's numbering.
+//
+// Evidence for the 2026-08-03 corrections (scripts/audit-taxisnet-map.mjs and
+// scripts/_taxisnet-rows.mjs reproduce it):
+//   · rents row: gross 250 → c16 5,63 (2.25% = SDC on 75%) and c17 6,63
+//     (2.65% = GHS); gross 1300 → 29,26 / 34,46. c7/c8 hold a T.I.C. and a
+//     lessee name, c9 an ownership share of 16/50, c10 the gross rent.
+//   · employments: gross 11000 → c8 291,5, exactly 2.65%; the same figure is
+//     the GHS line of the contributions block, and the totals row carries it
+//     in the GHS position with the tax position empty. c8 is GHS, not tax.
+//   · dividends: gross 4125 → c5 701,24 (17% SDC) and c5a 109,3 (2.65% GHS);
+//     3025 → 514,24 / 80,15. Gross 30 → c6 8,99 (30% withheld abroad).
 
 import type { FieldKind } from './format';
 
@@ -62,7 +84,17 @@ const EPR1M: FormMap = {
   flat: [],
   grids: [
     {
-      // Part 4.A salaried services — confirmed grid id (sample).
+      // Part 4.A salaried services. Schema columns: c1 c2 c3 c3a c4 c5 c6 c7
+      // c8 c9 c10 — eleven for the form's twelve slots, so one printed column
+      // (the gross-emoluments total, which the Department computes) has no key.
+      // c8 is GHS, PROVEN: the sample's 11000 gross carries 291,5 there, the
+      // exact 2.65% that reappears as the GHS line of the contributions block,
+      // while the totals row shows the tax position empty. Tax withheld is
+      // therefore c7 — the only slot left, and still inferred.
+      //
+      // Benefits in kind have NO column: the form declares them as their own
+      // line under code 7 or 9, so `bik` is deliberately not mapped. Mapping it
+      // to c7 (as this did) silently filed benefits as tax deducted at source.
       gridId: 'epr1mm4tar1',
       source: 'employments',
       cols: [
@@ -72,9 +104,8 @@ const EPR1M: FormMap = {
         { col: 'c4', field: 'periodMonths', kind: 'text', confidence: 'confirmed' },
         { col: 'c5', field: 'grossInRepublic', kind: 'money', confidence: 'confirmed' },
         { col: 'c6', field: 'grossOutsideRepublic', kind: 'money', confidence: 'inferred' },
-        { col: 'c7', field: 'bik', kind: 'money', confidence: 'inferred' },
-        { col: 'c8', field: 'taxWithheld', kind: 'money', confidence: 'confirmed' },
-        { col: 'c9', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c7', field: 'taxWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c8', field: 'ghsWithheld', kind: 'money', confidence: 'confirmed' },
       ],
     },
     {
@@ -93,25 +124,37 @@ const EPR1M: FormMap = {
       ],
     },
     {
-      // Part 4.C rents — grid tc. c12/c13/c15/c16 are anchored to official
-      // column numbers the portal model already documents (capital allowances,
-      // interest payable, SDC, GHS). Identity/gross cols c1–c8 are positional
-      // guesses — the form's full column order isn't confirmed here. All inferred.
+      // Part 4.C rents — grid tc. Read straight off the real filing, where a
+      // row is self-describing: c2 a property code, c3/c4 two dates, c5/c6 the
+      // cost and area the form prints as one column, c7 a T.I.C., c8 a lessee
+      // name, c9 an ownership share (16 / 50), c10 the gross rent, and c16/c17
+      // the withholdings — 250 rent → 5,63 and 6,63, i.e. 2.25% (SDC on 75%)
+      // and 2.65% (GHS) to the cent.
+      //
+      // This was previously mapped as though schema columns matched the form's
+      // printed numbers. They do not: gross rents were being filed into the
+      // lessee's T.I.C. and name, the ownership share into a date, and SDC/GHS
+      // one column to the left of where they belong.
+      //
+      // NOT MAPPED, because the calculator does not collect them: c4 hand-over
+      // date, c5 cost of acquisition, c6 area m², c9a ownership at 31.12, c15
+      // tax paid outside the Republic. Cost drives the capital allowance, so
+      // it is the one worth adding to the rental form next.
       gridId: 'epr1mm4tcr1',
       source: 'rentalProperties',
       cols: [
         { col: 'c1', field: 'registrationNo', kind: 'text', confidence: 'inferred' },
-        { col: 'c2', field: 'propertyTypeCode', kind: 'text', confidence: 'inferred' },
-        { col: 'c3', field: 'acquisitionDate', kind: 'date', confidence: 'inferred' },
-        { col: 'c4', field: 'ownershipShare', kind: 'text', confidence: 'inferred' },
-        { col: 'c5', field: 'lesseeTic', kind: 'tic', confidence: 'inferred' },
-        { col: 'c6', field: 'lesseeName', kind: 'text', confidence: 'inferred' },
-        { col: 'c7', field: 'annualGrossInRepublic', kind: 'money', confidence: 'inferred' },
-        { col: 'c8', field: 'annualGrossOutsideRepublic', kind: 'money', confidence: 'inferred' },
+        { col: 'c2', field: 'propertyTypeCode', kind: 'text', confidence: 'confirmed' },
+        { col: 'c3', field: 'acquisitionDate', kind: 'date', confidence: 'confirmed' },
+        { col: 'c7', field: 'lesseeTic', kind: 'tic', confidence: 'confirmed' },
+        { col: 'c8', field: 'lesseeName', kind: 'text', confidence: 'confirmed' },
+        { col: 'c9', field: 'ownershipShare', kind: 'text', confidence: 'confirmed' },
+        { col: 'c10', field: 'annualGrossInRepublic', kind: 'money', confidence: 'confirmed' },
+        { col: 'c11', field: 'annualGrossOutsideRepublic', kind: 'money', confidence: 'inferred' },
         { col: 'c12', field: 'capitalAllowances', kind: 'money', confidence: 'inferred' },
         { col: 'c13', field: 'interestPayable', kind: 'money', confidence: 'inferred' },
-        { col: 'c15', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
-        { col: 'c16', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c16', field: 'sdcWithheld', kind: 'money', confidence: 'confirmed' },
+        { col: 'c17', field: 'ghsWithheld', kind: 'money', confidence: 'confirmed' },
       ],
     },
     {
@@ -138,20 +181,24 @@ const EPR1M: FormMap = {
       ],
     },
     {
-      // Part 4.F dividends — grid tz (position F, after the portal-skipped D).
-      // No epr1m sample populated tz, so all inferred. `country` not mapped
-      // (coded format, as with interest).
+      // Part 4.F dividends — grid tz. Every column now checks out against the
+      // real filing: Cyprus-company rows carry a T.I.C. in c1 and a name in c2,
+      // and the money columns land on the statutory rates — gross 4125 → c5
+      // 701,24 (17% SDC) and c5a 109,3 (2.65% GHS); 3025 → 514,24 / 80,15. c6
+      // is tax withheld abroad: a 30 dividend carries 8,99, the US 30%.
+      // c1b (a country/source code, 6 or 600 in the filing) is not mapped —
+      // the portal captures country as free text, not in the coded form.
       gridId: 'epr1mm4tzr1',
       source: 'dividendSources',
       cols: [
-        { col: 'c1', field: 'payerTic', kind: 'tic', confidence: 'inferred' },
-        { col: 'c2', field: 'businessName', kind: 'text', confidence: 'inferred' },
-        { col: 'c3', field: 'code', kind: 'text', confidence: 'inferred' },
-        { col: 'c4', field: 'grossDividend', kind: 'money', confidence: 'inferred' },
-        { col: 'c5', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
-        { col: 'c5a', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
-        { col: 'c6', field: 'taxPaidOutside', kind: 'money', confidence: 'inferred' },
-        { col: 'c7', field: 'receiptDate', kind: 'date', confidence: 'inferred' },
+        { col: 'c1', field: 'payerTic', kind: 'tic', confidence: 'confirmed' },
+        { col: 'c2', field: 'businessName', kind: 'text', confidence: 'confirmed' },
+        { col: 'c3', field: 'code', kind: 'text', confidence: 'confirmed' },
+        { col: 'c4', field: 'grossDividend', kind: 'money', confidence: 'confirmed' },
+        { col: 'c5', field: 'sdcWithheld', kind: 'money', confidence: 'confirmed' },
+        { col: 'c5a', field: 'ghsWithheld', kind: 'money', confidence: 'confirmed' },
+        { col: 'c6', field: 'taxPaidOutside', kind: 'money', confidence: 'confirmed' },
+        { col: 'c7', field: 'receiptDate', kind: 'date', confidence: 'confirmed' },
       ],
     },
     {

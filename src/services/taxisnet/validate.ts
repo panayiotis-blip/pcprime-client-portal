@@ -61,5 +61,14 @@ export function validateExport(inputData: any, year: number, formType: TaxReturn
     warnings.push(`${inferredGroups.size} field(s) use inferred mappings not yet confirmed against an official sample — verify with a TaxisNet test import before relying on the file.`);
   }
 
+  // Benefits in kind have no column on the form: they are declared as their own
+  // employment line under code 7 or 9. They used to be exported into the tax
+  // column, which overstated tax deducted at source, so they are now left out —
+  // say so, rather than dropping a figure the preparer entered.
+  const bikTotal = (inputData?.employments ?? []).reduce((s: number, e: any) => s + (Number(e?.bik) || 0), 0);
+  if (bikTotal > 0) {
+    warnings.push(`Benefits in kind (€${bikTotal.toLocaleString()}) are NOT in the file: the form has no column for them — declare them as a separate employment line with code 7 or 9 (benefits not subject to Social Insurance).`);
+  }
+
   return { errors, warnings };
 }
