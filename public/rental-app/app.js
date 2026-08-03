@@ -429,7 +429,28 @@ function render(){
   if(chart){try{chart.destroy();}catch(e){}chart=null;}
   const map={overview:vOverview,properties:vProperties,tenants:vTenants,schedule:vSchedule,receipts:vReceipts,arrears:vArrears,deposits:vDeposits,statement:vStatement,invoice:vInvoice,users:vUsers};
   (map[activeTab]||vOverview)();
+  fitFreeze();
 }
+
+/* Give a frozen grid exactly the room left beneath it, so the grid itself is
+   the only thing that scrolls and its heading row genuinely stays put. Doing
+   this by measurement rather than a vh guess is what makes it work embedded:
+   the app sits in an iframe whose height the portal sets, and if anything is
+   left over the iframe's own document scrolls and takes the heading with it. */
+function fitFreeze(){
+  document.querySelectorAll(".tblwrap.freeze").forEach(function(w){
+    var top=w.getBoundingClientRect().top;
+    var avail=Math.max(220, window.innerHeight-top-14);
+    w.style.maxHeight=avail+"px";
+    // Then take back whatever still overflows (body padding, margins), so the
+    // page itself does not scroll at all and the grid is the only scroller —
+    // otherwise a scroll anywhere but over the table carries the heading off.
+    var over=document.documentElement.scrollHeight-window.innerHeight;
+    if(over>0)w.style.maxHeight=Math.max(220,avail-over)+"px";
+  });
+}
+var __fitT=null;
+window.addEventListener("resize",function(){ clearTimeout(__fitT); __fitT=setTimeout(fitFreeze,120); });
 
 /* ---- Overview ---- */
 function vOverview(){

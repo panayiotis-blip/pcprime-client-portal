@@ -54,11 +54,22 @@ thead th{background:var(--soft);color:var(--muted);font-weight:700;text-transfor
    sticky to bite (sticking to the page would never fire). .tblwrap.freeze
    gives the grid its own height and pins the heading row, and the first column
    with it, so tenant and month stay readable however far you scroll. */
-.tblwrap.freeze{max-height:calc(100vh - 250px);overflow:auto;}
-.tblwrap.freeze thead th{position:sticky;top:0;z-index:6;}
-.tblwrap.freeze tbody td:first-child,
-.tblwrap.freeze thead th:first-child{position:sticky;left:0;background:#fff;z-index:5;}
-.tblwrap.freeze thead th:first-child{background:var(--soft);z-index:7;}
+/* Height is set in JS (fitFreeze) to exactly the space left below the grid:
+   the app runs in an iframe whose height the portal decides, so any vh or
+   calc() guess leaves the iframe's OWN document scrolling — and then the whole
+   table, heading included, slides away no matter how sticky the row is. */
+.tblwrap.freeze{overflow:auto;}
+/* border-collapse:collapse breaks sticky table headings — the collapsed
+   borders belong to the table, not the cells, so the browser will not lift the
+   row. The frozen grid therefore uses separate borders and draws its own,
+   which looks identical. Percentage height, not calc(100vh - Npx): the app
+   runs in an iframe whose height the portal sets, and a fixed subtraction can
+   compute to nothing on a short window. */
+.tblwrap.freeze table{border-collapse:separate;border-spacing:0;}
+.tblwrap.freeze th,.tblwrap.freeze td{border-bottom:1px solid var(--line);}
+.tblwrap.freeze thead th{position:sticky;top:0;z-index:6;box-shadow:inset 0 -1px 0 var(--line);}
+.tblwrap.freeze tbody td:first-child{position:sticky;left:0;background:#fff;z-index:5;box-shadow:inset -1px 0 0 var(--line);}
+.tblwrap.freeze thead th:first-child{position:sticky;left:0;background:var(--soft);z-index:7;box-shadow:inset -1px 0 0 var(--line),inset 0 -1px 0 var(--line);}
 @media print{ .tblwrap.freeze{max-height:none;overflow:visible;} .tblwrap.freeze thead th,.tblwrap.freeze tbody td:first-child{position:static;} }
 tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#eef1fb;}
 .num{text-align:right;}
