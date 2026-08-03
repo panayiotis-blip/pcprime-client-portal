@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../services/api';
+import { api, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import SearchableSelect from '../common/SearchableSelect';
@@ -66,7 +66,7 @@ export default function LogCallModal({
       try {
         const users = await api.getUsers();
         if (cancelled) return;
-        setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+        setStaffUsers((users as any[]).filter(u => isStaffRole(u)));
       } finally {
         if (!cancelled) setLoading(false);
       }

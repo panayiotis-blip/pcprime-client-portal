@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../services/api';
+import { api, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import SearchableSelect from '../common/SearchableSelect';
@@ -39,7 +39,7 @@ export default function ApplyTaskTemplateModal({ preSelectedClientId, onClose, o
         const [tpls, users] = await Promise.all([api.getTaskTemplates(), api.getUsers()]);
         if (cancelled) return;
         setTemplates(tpls as any[]);
-        setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+        setStaffUsers((users as any[]).filter(u => isStaffRole(u)));
       } catch (err: any) {
         alert('Failed to load templates: ' + err.message);
       } finally {

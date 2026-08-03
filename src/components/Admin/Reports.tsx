@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../services/api';
+import { api, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
 import { toClientOptions } from '../../services/clientOptions';
@@ -59,7 +59,7 @@ export default function Reports() {
         if (cancelled) return;
         setComplianceTasks(c as any[]);
         setStaffTasks((t as any[]));
-        setStaffUsers((u as any[]).filter(x => x.role !== 'client'));
+        setStaffUsers((u as any[]).filter(x => isStaffRole(x)));
       } catch (err: any) {
         alert('Failed to load reports data: ' + err.message);
       } finally {

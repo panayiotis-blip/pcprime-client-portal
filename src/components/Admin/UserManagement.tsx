@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api, roleLabel, hasPermission } from '../../services/api';
+import { api, roleLabel, hasPermission, isStaffRole } from '../../services/api';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -74,7 +74,7 @@ export default function UserManagement() {
 
   const handleAdd = async () => {
     if (!form.email || !form.password || !form.display_name) { alert('Email, password and display name are required'); return; }
-    const wasStaff = form.role !== 'client';
+    const wasStaff = isStaffRole(form);
     const newDisplayName = form.display_name;
     const newEmail = form.email;
     const sourceId = form.copy_from_user_id || '';
@@ -269,7 +269,7 @@ export default function UserManagement() {
                 <option value="client">Client</option>
               </select>
             </div>
-            {form.role !== 'client' && (
+            {isStaffRole(form) && (
               <div className="form-group">
                 <label>Hourly Rate (€/h)</label>
                 <input
@@ -457,10 +457,10 @@ export default function UserManagement() {
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(u)}>Edit</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => setChangePasswordId(u.id)}>🔑</button>
-                        {u.role !== 'client' && (
+                        {isStaffRole(u) && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setRatesForUser({ id: u.id, name: u.display_name || u.username })}>Rates</button>
                         )}
-                        {u.role !== 'client' && (
+                        {isStaffRole(u) && (
                           <button className="btn btn-secondary btn-sm" onClick={() => setEmailForUser({ id: u.id, name: u.display_name || u.username, email: '' })}>Email</button>
                         )}
                         {canEditRoles && (

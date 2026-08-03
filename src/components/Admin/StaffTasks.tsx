@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { api, isSupervisorOrHigher } from '../../services/api';
+import { api, isSupervisorOrHigher, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import ApplyTaskTemplateModal from './ApplyTaskTemplateModal';
@@ -148,7 +148,7 @@ export default function StaffTasks() {
   const loadStaff = async () => {
     try {
       const all = await api.getUsers();
-      setStaffUsers(all.filter((u: any) => u.role !== 'client'));
+      setStaffUsers(all.filter(u => isStaffRole(u)));
     } catch {}
   };
 

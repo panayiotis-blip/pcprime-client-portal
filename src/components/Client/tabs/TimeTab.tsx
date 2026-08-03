@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../../services/api';
+import { api, isStaffRole } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 
 const BILLABLE_SERVICES = [
@@ -91,7 +91,7 @@ export default function TimeTab({ clientId, clientName }: { clientId: number; cl
         api.getUsers(),
       ]);
       setEntries(data as TimeEntry[]);
-      setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+      setStaffUsers((users as any[]).filter(u => isStaffRole(u)));
       // Drop selection of rows that aren't in the latest result
       const visibleIds = new Set((data as TimeEntry[]).map(e => e.id));
       setSelected(prev => new Set(Array.from(prev).filter(id => visibleIds.has(id))));

@@ -118,8 +118,11 @@ export function hasPermission(user: AuthUser | null | undefined, perm: string): 
 }
 
 // True for any internal-firm role (owner, supervisor, admin, staff).
-// Use this anywhere the UI used to gate on `user?.role === 'admin'`.
-export function isStaffRole(user: AuthUser | null | undefined): boolean {
+// Use this anywhere the UI used to gate on `user?.role === 'admin'`, and
+// anywhere a list of staff is built — an allowlist stays correct when a new
+// role appears, whereas "not a client" silently admits it. Takes anything
+// carrying a role, so it works on plain user rows as well as the auth user.
+export function isStaffRole(user: { role?: string | null } | null | undefined): boolean {
   if (!user) return false;
   return user.role === 'owner' || user.role === 'supervisor'
       || user.role === 'admin' || user.role === 'staff';

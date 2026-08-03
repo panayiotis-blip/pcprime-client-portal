@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, isSupervisorOrHigher } from '../../services/api';
+import { api, isSupervisorOrHigher, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { PanelSkeleton } from '../ui';
@@ -68,7 +68,7 @@ export default function ServicesSummary() {
     // Internal staff for the account-manager picker (exclude client-role + inactive).
     api.getUsers()
       .then(all => setStaffUsers((all as any[])
-        .filter(u => u.role !== 'client' && u.active !== false)
+        .filter(u => isStaffRole(u) && u.active !== false)
         .map(u => ({ id: u.id, name: u.display_name || u.username }))))
       .catch(() => {});
   }, []);

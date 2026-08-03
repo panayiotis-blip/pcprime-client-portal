@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../../services/api';
+import { api, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import SearchableSelect from '../common/SearchableSelect';
 import { toClientOptions } from '../../services/clientOptions';
@@ -75,7 +75,7 @@ export default function PhoneLog() {
     (async () => {
       try {
         const users = await api.getUsers();
-        if (!cancelled) setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+        if (!cancelled) setStaffUsers((users as any[]).filter(u => isStaffRole(u)));
       } catch {}
     })();
     reload();

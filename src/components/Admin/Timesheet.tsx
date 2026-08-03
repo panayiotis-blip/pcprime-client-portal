@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, isSupervisorOrHigher, isOwner } from '../../services/api';
+import { api, isSupervisorOrHigher, isOwner, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/dates';
@@ -253,7 +253,7 @@ export default function Timesheet() {
           loadTimer(),
         ]);
         if (cancelled) return;
-        setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+        setStaffUsers((users as any[]).filter(u => isStaffRole(u)));
         await loadEntries();
       } finally {
         if (!cancelled) setLoading(false);

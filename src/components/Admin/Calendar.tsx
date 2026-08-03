@@ -3,7 +3,7 @@ import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { api } from '../../services/api';
+import { api, isStaffRole } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatDateTime } from '../../services/dates';
@@ -141,7 +141,7 @@ export default function Calendar() {
       try {
         const users = await api.getUsers();
         if (cancelled) return;
-        setStaffUsers((users as any[]).filter(u => u.role !== 'client'));
+        setStaffUsers((users as any[]).filter(u => isStaffRole(u)));
         await loadAppointments();
       } finally {
         if (!cancelled) setLoading(false);
