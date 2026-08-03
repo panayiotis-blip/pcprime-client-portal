@@ -34,7 +34,13 @@ const STORAGE_SHIM = `<script>(function(){
   function flush(){ ready=true; var q=waiting; waiting=[]; q.forEach(function(f){ try{f();}catch(e){} }); }
   window.addEventListener("message", function(e){
     var m=e.data||{};
-    if(m.type==="init"){ doc=(m.data&&typeof m.data==="object")?m.data:{}; flush(); }
+    if(m.type==="init"){
+      doc=(m.data&&typeof m.data==="object")?m.data:{};
+      // Who the portal says this is. An app that drops its own sign-in reads
+      // identity from here, so a grant of 'viewer' cannot be edited around.
+      window.__portalUser={ role:m.role||"viewer", name:m.name||"" };
+      flush();
+    }
   });
   function when(fn){ ready?fn():waiting.push(fn); }
   function persist(){

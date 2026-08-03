@@ -347,7 +347,6 @@
   var DEFAULTS={
     employer:{name:"",reg:"",tic:"",siReg:"",address:"",phone:"",email:"",contact:"",contactTel:""},
     employees:[],
-    users:[{u:"Admin",p:"Admin",name:"Administrator",role:"admin"}],
     rates:{siEE:8.8, siER:8.8, holER:8, redER:1.2, itfER:0.5, scfER:2, ghsEE:2.65, ghsER:2.9},
     params:{stdDay:8, stdMonth:176, capMonth:5742, capWeek:1325, ghsCapYear:180000, recording:"exceptions",
       stdBasis:"calendar", weekEnd:6, payLag:7},
@@ -771,6 +770,14 @@
     if(Object.keys(o[d]).length===0) delete o[d];
     save();
   }
+
+  // Identity comes from the portal (see /api/app-frame): it authenticated the
+  // user and its grant decides what they may do here.
+  function portalUser(){
+    var p=(window.__portalUser||null);
+    if(!p) return {name:"Preview", role:"client"};
+    return {name:p.name||"Portal user", role:(p.role==="viewer"?"client":"admin")};
+  }
   function isAdmin(){ return !!me && me.role==="admin"; }
 
   /* ---------- csv ---------- */
@@ -833,7 +840,7 @@
       $tabs.appendChild(b);
     });
     var items=[];
-    if(isAdmin()) items.push(["setup","⚙","Settings"],["users","👥","Users & access"]);
+    if(isAdmin()) items.push(["setup","⚙","Settings"]);
     items.push(["privacy","🔒","Privacy policy"]);
     $menu.innerHTML="";
     items.forEach(function(it){
@@ -842,9 +849,7 @@
       $menu.appendChild(b);
     });
     var sep=document.createElement("div"); sep.className="sep"; $menu.appendChild(sep);
-    var lo=document.createElement("button"); lo.className="out"; lo.innerHTML='<span class="ic">⏻</span>Log out';
-    lo.onclick=function(){ closeMenus(); me=null; view="sheet"; render(); };
-    $menu.appendChild(lo);
+
   }
 
   /* ---------- period bar ---------- */
@@ -888,9 +893,9 @@
   /* ---------- render ---------- */
   function render(){
     closeMenus();
-    if(!me){ $app.classList.add("locked"); $tabs.innerHTML=""; $menu.innerHTML=""; $stamp.textContent=""; $acctName.textContent="—"; viewLogin(); return; }
+    if(!me){ me=portalUser(); }
     $app.classList.remove("locked");
-    if(!isAdmin() && (view==="setup"||view==="users"||view==="empcard"||view==="employees")) view="sheet";
+    if(!isAdmin() && (view==="setup"||view==="empcard"||view==="employees")) view="sheet";
     clearCache(); renderChrome(); setStamp(); $body.innerHTML="";
     if(view==="sheet") viewSheet();
     else if(view==="month") viewMonth();
@@ -900,7 +905,6 @@
     else if(view==="data") viewData();
     else if(view==="setup") viewSetup();
     else if(view==="empcard") viewEmpCard();
-    else if(view==="users") viewUsers();
     else if(view==="privacy") viewPrivacy();
   }
   function card(title,right){
@@ -925,28 +929,7 @@
   }
 
   /* ---------- login ---------- */
-  function viewLogin(){
-    $body.innerHTML="";
-    var box=document.createElement("div"); box.className="login";
-    box.innerHTML='<div class="lg"><div class="logo" id="logoTile2">PR</div><div><b>'+
-      esc(coName())+
-      '</b><span>Payroll &amp; Hours Control · '+YEAR+'</span></div></div>'+
-      (loginErr?'<div class="err">'+esc(loginErr)+'</div>':'')+
-      '<div class="fld"><label>User name</label><input type="text" id="lu" autocomplete="username"></div>'+
-      '<div class="fld"><label>Password</label><input type="password" id="lp" autocomplete="current-password"></div>'+
-      '<button class="btn" id="lb">Sign in</button>';
-    $body.appendChild(box);
-    var u=document.getElementById("lu"), p=document.getElementById("lp");
-    function go(){
-      var un=(u.value||"").trim().toLowerCase(), pw=p.value||"";
-      var hit=(S.users||[]).filter(function(x){ return String(x.u).toLowerCase()===un && String(x.p)===pw; })[0];
-      if(!hit){ loginErr="That user name and password do not match."; render(); return; }
-      loginErr=""; me=hit; opened=new Date(); view="sheet"; render();
-    }
-    document.getElementById("lb").onclick=go;
-    [u,p].forEach(function(el){ el.onkeydown=function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); go(); } }; });
-    u.focus();
-  }
+
 
   /* ---------- 01 timesheet ---------- */
   function viewSheet(){
@@ -2335,44 +2318,7 @@
   }
 
   /* ---------- users ---------- */
-  function viewUsers(){
-    var add=document.createElement("button"); add.className="btn ghost"; add.textContent="Add user";
-    add.onclick=function(){ S.users.push({u:"newuser",p:"change-me",name:"New user",role:"client"}); save(); render(); };
-    var c=card("Users & access",add);
-    var w=document.createElement("div"); w.className="scroll";
-    var t=document.createElement("table");
-    t.innerHTML='<thead><tr><th class="l">User name</th><th class="l">Display name</th><th class="l">Password</th><th class="l">Role</th><th class="l"></th></tr></thead>';
-    var tb=document.createElement("tbody");
-    S.users.forEach(function(u,i){
-      var tr=document.createElement("tr");
-      tr.innerHTML='<td class="l"><input type="text" value="'+esc(u.u)+'" data-u="'+i+'" data-f="u" style="width:130px"></td>'+
-        '<td class="l"><input type="text" value="'+esc(u.name)+'" data-u="'+i+'" data-f="name" style="width:150px"></td>'+
-        '<td class="l"><input type="text" value="'+esc(u.p)+'" data-u="'+i+'" data-f="p" style="width:130px"></td>'+
-        '<td class="l"><select data-u="'+i+'" data-f="role"><option value="admin"'+(u.role==="admin"?" selected":"")+'>Admin</option>'+
-        '<option value="client"'+(u.role==="client"?" selected":"")+'>Client</option></select></td>'+
-        '<td class="l">'+(S.users.length>1?'<button class="btn danger sm" data-del="'+i+'">Remove</button>':'<span class="muted">last user</span>')+'</td>';
-      tb.appendChild(tr);
-    });
-    t.appendChild(tb); w.appendChild(t); c.appendChild(w);
-    var b=document.createElement("div"); b.className="bd";
-    var rt=document.createElement("div"); rt.className="note";
-    rt.innerHTML="<strong>Admin</strong> — PC Prime &amp; Calculate Consultants Ltd: everything, including employer details, employees, rates and parameters.<br>"+
-      "<strong>Client</strong> — the person keeping the times: timesheets, summaries, reports, exports and backups. No access to settings or rates.";
-    b.appendChild(rt);
-    var wn=document.createElement("div"); wn.className="warn"; wn.style.marginTop="14px";
-    wn.textContent="Passwords are held in plain text in this browser profile. That is adequate for a standalone build shared with one client, but it is not real security — proper sign-in comes with the portal.";
-    b.appendChild(wn); c.appendChild(b); $body.appendChild(c);
-    tb.querySelectorAll("[data-u]").forEach(function(el){
-      el.onchange=function(){ var u=S.users[+el.dataset.u]; u[el.dataset.f]=el.value; save();
-        if(me && u===me) renderChrome(); };
-    });
-    tb.querySelectorAll("[data-del]").forEach(function(bt){
-      bt.onclick=function(){ var u=S.users[+bt.dataset.del];
-        if(u===me){ alert("You cannot remove the user you are signed in as."); return; }
-        if(!confirm("Remove user "+u.u+"?")) return;
-        S.users.splice(+bt.dataset.del,1); save(); render(); };
-    });
-  }
+
 
   /* ---------- privacy ---------- */
   function viewPrivacy(){
@@ -2693,7 +2639,7 @@
   window.__kmp={monthRecordingPub:monthRecording,dayRawPub:dayRaw,convertMonth:convertMonth,monthHasHours:monthHasHours,monthDaysPub:monthDays,td59Calc:td59Calc,payeXml:payeXml,clearCache:clearCache,annualTax:annualTax,siFile:siFile,siRows:siRows,siSectionB:siSectionB,divisor:divisor,grossForNet:grossForNet,netOf:netOf,monthDetail:monthDetail,
     monthCalc:monthCalc,empMonth:empMonth,monthTotals:monthTotals,actives:actives,
     grossRate:grossRate,otRate:otRate,dayType:dayType,
-    boot:function(){ S=JSON.parse(JSON.stringify(DEFAULTS)); me=S.users[0]; },
+    boot:function(){ S=JSON.parse(JSON.stringify(DEFAULTS)); me=portalUser(); },
     state:function(){ return S; }};
 
   /* ---------- boot ---------- */
@@ -2703,7 +2649,6 @@
     if(!S.params) S.params=DEFAULTS.params;
     if(!S.rates) S.rates=DEFAULTS.rates;
     if(!S.employer) S.employer=JSON.parse(JSON.stringify(DEFAULTS.employer));
-    if(!S.users||!S.users.length) S.users=JSON.parse(JSON.stringify(DEFAULTS.users));
     if(!S.holidays) S.holidays=defaultHolidays();
     if(!S.paye) S.paye=JSON.parse(JSON.stringify(DEFAULTS.paye));
     S.params.recording="exceptions";

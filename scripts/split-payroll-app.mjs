@@ -42,7 +42,6 @@ const defaultsLiteral = html.slice(i, end);
 const BLANK = `{
     employer:{name:"",reg:"",tic:"",siReg:"",address:"",phone:"",email:"",contact:"",contactTel:""},
     employees:[],
-    users:[{u:"Admin",p:"Admin",name:"Administrator",role:"admin"}],
     rates:{siEE:8.8, siER:8.8, holER:8, redER:1.2, itfER:0.5, scfER:2, ghsEE:2.65, ghsER:2.9},
     params:{stdDay:8, stdMonth:176, capMonth:5742, capWeek:1325, ghsCapYear:180000, recording:"exceptions",
       stdBasis:"calendar", weekEnd:6, payLag:7},
@@ -53,9 +52,80 @@ const BLANK = `{
   }`;
 
 let clean = html.slice(0, i) + BLANK + html.slice(end);
+
+// ---- 2a. drop the app's own login --------------------------------------
+// The app shipped its own user list and sign-in screen (Admin/Admin in plain
+// text). Inside the portal that is both redundant and weaker than the door it
+// sits behind: the portal already authenticated the person and decided, via
+// their app grant, whether they may open this client's payroll at all. A second
+// password adds nothing, and a shared one that everybody knows subtracts.
+//
+// So the app now takes its identity from the portal instead: the host sends
+// role + name with the document, the shim hands them over, and a grant of
+// 'viewer' lands as the app's read-only role.
+const loginGate = `if(!me){ $app.classList.add("locked"); $tabs.innerHTML=""; $menu.innerHTML=""; $stamp.textContent=""; $acctName.textContent="—"; viewLogin(); return; }`;
+must(clean.includes(loginGate), 'login gate not found — has render() changed?');
+clean = clean.replace(loginGate, `if(!me){ me=portalUser(); }`);
+
+// Identity from the host. Falls back to a read-only stub when the app is
+// opened outside the portal, so it can never be MORE permissive standalone.
+const portalUserFn = `
+  // Identity comes from the portal (see /api/app-frame): it authenticated the
+  // user and its grant decides what they may do here.
+  function portalUser(){
+    var p=(window.__portalUser||null);
+    if(!p) return {name:"Preview", role:"client"};
+    return {name:p.name||"Portal user", role:(p.role==="viewer"?"client":"admin")};
+  }
+`;
+clean = clean.replace('  function isAdmin(){', portalUserFn + '  function isAdmin(){');
+
+// The sign-in screen and the in-app user admin have nothing left to do; the
+// portal's Access panel is where people are added and removed now. Take the
+// menu entry with them, or it leads to a blank screen.
+clean = clean.replace(`    else if(view==="users") viewUsers();\n`, '');
+must(clean.includes(`["users","👥","Users & access"]`), 'users menu entry not found');
+clean = clean.replace(`,["users","👥","Users & access"]`, '');
+clean = clean.replace(`if(!isAdmin() && (view==="setup"||view==="users"||view==="empcard"||view==="employees")) view="sheet";`,
+                      `if(!isAdmin() && (view==="setup"||view==="empcard"||view==="employees")) view="sheet";`);
+
+// "Log out" belonged to the app's own session. The portal's own chrome carries
+// logging out; leaving a dead one here just confuses.
+const logoutItem = `    var lo=document.createElement("button"); lo.className="out"; lo.innerHTML='<span class="ic">⏻</span>Log out';`;
+if (clean.includes(logoutItem)) {
+  const at = clean.indexOf(logoutItem);
+  const stop = clean.indexOf('\n', clean.indexOf('lo.onclick', at));
+  const tail = clean.slice(stop);
+  const appendLine = tail.match(/^\s*\$menu\.appendChild\(lo\);\s*$/m);
+  clean = clean.slice(0, at) + (appendLine ? tail.replace(appendLine[0], '') : tail);
+}
 clean = clean.replace(/^\s*var SEED_ENTRIES = \{[\s\S]*?\};\s*$/m, '  var SEED_ENTRIES = {};  // per-client data lives in the portal, not in the template\n');
 // The storage key must not be KM's, or two clients would share a document key.
 clean = clean.replace('var KEY="km_payroll_2026"', 'var KEY="payroll_2026"');
+
+
+// Both screens are unreachable now; leaving a sign-in form in a file the whole
+// firm can read only invites someone to wire it back up.
+for (const fn of ["viewLogin", "viewUsers"]) {
+  const at = clean.indexOf("  function " + fn + "(");
+  must(at > 0, fn + " not found");
+  let d = 0, started = false, j = at;
+  for (; j < clean.length; j++) {
+    if (clean[j] === "{") { d++; started = true; }
+    else if (clean[j] === "}") { d--; if (started && d === 0) { j++; break; } }
+  }
+  clean = clean.slice(0, at) + clean.slice(j);
+}
+
+
+// Nothing declares a user list now, so the two places that still reach for one
+// would throw on boot (JSON.parse(JSON.stringify(undefined))).
+must(clean.includes("me=S.users[0];"), "debug boot hook not found");
+clean = clean.replace("me=S.users[0];", "me=portalUser();");
+const normalise = clean.match(/^[ \t]*if\(!S\.users\|\|!S\.users\.length\)[^\n]*\n/m);
+must(normalise, 'user normaliser not found');
+clean = clean.replace(normalise[0], '');
+must(!/S\.users/.test(clean), 'S.users still referenced');
 
 must(!/FIX-IT-ALL/i.test(clean), 'employer name still present in the template');
 must(!/ANDREOU ANDRI|GEORGIOU GEORGIOS|PERLOG NICANDROU/.test(clean), 'employee names still present');
@@ -82,6 +152,12 @@ const evalSrc = `
 const kmState = Function(evalSrc)();
 must(kmState.employees.length === 6, 'expected 6 KM employees, got ' + kmState.employees.length);
 must(Object.keys(kmState.entries).length > 0, 'KM entries did not carry over');
+
+// The app no longer has its own login, so the stored user list is dead weight —
+// and it held passwords in plain text. Drop it rather than seed it into the
+// database. Who may open KM's payroll is decided by their app grant.
+delete kmState.users;
+must(!/"p":"|"users":/.test(JSON.stringify(kmState)), 'app credentials still in the seeded document');
 
 const kmDoc = { km_payroll_2026: JSON.stringify(kmState) };
 const sql = `-- =============================================================
