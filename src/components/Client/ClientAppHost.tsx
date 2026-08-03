@@ -110,6 +110,12 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
           try { await api.saveClientAppData(clientId, appKey, m.data); setSaveState('saved'); }
           catch { setSaveState('error'); }
         }, 300);
+      } else if (m.type === 'mailto') {
+        // The app has saved a PDF and wants a message opened for it. The frame
+        // is sandboxed and cannot navigate itself, so the portal does it —
+        // mailto only, never an arbitrary URL.
+        const href = String(m.href || '');
+        if (href.startsWith('mailto:')) window.location.href = href;
       } else if (m.type === 'users') {
         const win = iframeRef.current?.contentWindow;
         const reply = (payload: any) => win?.postMessage({ type: 'users:reply', reqId: m.reqId, ...payload }, '*');

@@ -58,6 +58,9 @@ function catOptions(sel){ return catList().map(c=>'<option'+((sel||"Rent")===c?"
 function persist(action){ DATA.meta.updated=stamp(new Date()); if(action){ if(!DATA.audit)DATA.audit=[]; DATA.audit.push({ts:DATA.meta.updated,user:(user?user.username:"system"),action:action}); if(DATA.audit.length>3000)DATA.audit=DATA.audit.slice(-3000); } postSave(); refreshStamps(); }
 function stamp(d){ return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate())+" "+p2(d.getHours())+":"+p2(d.getMinutes()); }
 function p2(x){ return (x<10?"0":"")+x; }
+// Local calendar date. toISOString() would report yesterday for anyone east of
+// Greenwich late in the evening, and a receipt must carry the day it was taken.
+function todayIso(){ var d=new Date(); return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); }
 function money(v){ if(v===null||v===undefined||v==="")return "—"; return "€"+Math.round(v).toLocaleString(); }
 function num(v){ v=parseFloat(v); return isFinite(v)?v:0; }
 function esc(s){ return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -543,8 +546,27 @@ function sortedTenants(){ const arr=DATA.tenants.slice();
   return arr; }
 function vSchedule(){
   const y=yr(), cap=capM(y);
-  let h='<div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Rent Schedule '+y+'</h3>'+(canEdit()?'<button class="ghost" data-h="openBatchReceipts()">+ Enter receipts</button> <button class="ghost" data-h="openSplit()">⇄ Split a receipt</button> <button class="ghost" data-h="openRentEditor()">✎ Enter / adjust rent</button>':'')+'</div><div class="hint">'+(canEdit()?"Click a month to set that tenant’s rent, charges and receipts · “Split a receipt” allocates one payment across units, rent and charges · “Enter receipts” for bulk entry. ":"")+'“due” is rent plus that month’s charges — hover it for the split. Only due months up to the current period are shown; future rent is not flagged as unpaid.</div>'+
-    '<div style="margin-bottom:8px;font-size:12px;color:#64748b">Sort by: <select id="schSort"><option value="tenant"'+(schedSort==="tenant"?" selected":"")+'>Tenant name</option><option value="property"'+(schedSort==="property"?" selected":"")+'>Property</option><option value="rent"'+(schedSort==="rent"?" selected":"")+'>Rent (high to low)</option></select></div>'+
+  // Three actions: take money in (Receipts), bill it out (Invoice), print or
+  // send it (Reports). Sorting sits with them rather than on its own line.
+  let h='<div class="panel">'+
+    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Rent Schedule '+y+'</h3>'+
+    (canEdit()?'<button class="ghost" data-h="openReceipt()">💶 Receipts</button>'+
+      '<span class="menuwrap"><button class="ghost" data-h="toggleMenu(&#39;mInv&#39;)">🧾 Invoice ▾</button>'+
+        '<div class="menu" id="mInv">'+
+          '<button data-h="openRentEditor()">Enter / adjust rents</button>'+
+          chargeTypes().map(function(c){return '<button data-h="openChargeEditor('+c.id+')">Enter / adjust '+esc(c.name.toLowerCase())+'</button>';}).join('')+
+        '</div></span>'+
+      '<span class="menuwrap"><button class="ghost" data-h="toggleMenu(&#39;mRep&#39;)">📄 Reports ▾</button>'+
+        '<div class="menu" id="mRep">'+
+          '<button data-h="goTab(&#39;invoice&#39;)">Tenant invoices</button>'+
+          '<button data-h="goTab(&#39;statement&#39;)">Tenant statements</button>'+
+          '<button data-h="openSendDoc(&#39;invoice&#39;)">Email an invoice</button>'+
+          '<button data-h="openSendDoc(&#39;statement&#39;)">Email a statement</button>'+
+        '</div></span>':'')+
+    '<span style="flex:1"></span>'+
+    '<span style="font-size:12px;color:#64748b">Sort by <select id="schSort"><option value="tenant"'+(schedSort==="tenant"?" selected":"")+'>Tenant name</option><option value="property"'+(schedSort==="property"?" selected":"")+'>Property</option><option value="rent"'+(schedSort==="rent"?" selected":"")+'>Rent (high to low)</option></select></span>'+
+    '</div>'+
+    '<div class="hint">'+(canEdit()?"Click a month to set that tenant’s rent, charges and receipts. ":"")+'“due” is rent plus that month’s charges — hover it for the split. Only due months up to the current period are shown; future rent is not flagged as unpaid.</div>'+
     '<div class="tblwrap"><table><thead><tr><th>Tenant</th><th class="num">Rent</th>'+MONTHS.map((m,i)=>'<th class="num">'+m+'</th>').join("")+'</tr></thead><tbody>';
   sortedTenants().forEach(t=>{ const _p=propById(t.propertyId); h+='<tr><td>'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+(_p?' · '+esc(_p.name):'')+'</div></td><td class="num">'+money(t.rent)+'</td>';
     for(let m=0;m<12;m++){ const st=statusOf(t,y,m); const pa=paidAll(t,y,m); const rd=dueTotal(t,y,m); const ch=chargesTotal(t,y,m);
@@ -631,6 +653,271 @@ window.saveReceipts=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); const
   window._mcharges=null; window._mchTenant=null;
   persist("Edited month — "+t.name+" · "+MONTHS[m]+" "+y); closeModal(); render(); flash("Saved."); };
 
+/* ---- Sending an invoice or statement ---------------------------------------
+   The app does not send mail itself: it saves the document as a PDF and opens
+   a message in whatever mail program this machine uses, addressed to the
+   tenant with the subject and covering note filled in. You attach the PDF that
+   just downloaded and press send, so nothing leaves without you seeing it, and
+   the mail comes from your own address rather than the portal's. */
+
+// Snapshot a rendered document node into an A4 PDF and save it.
+function savePdf(nodeId, filename, done){
+  var node=document.getElementById(nodeId)||document.querySelector("."+nodeId);
+  if(!node){ alert("Open the document first, then send it."); return; }
+  var jsPDFctor=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF;
+  if(!window.html2canvas||!jsPDFctor){ alert("PDF support did not load - use Print / PDF instead."); return; }
+  window.html2canvas(node,{scale:2,backgroundColor:"#ffffff",useCORS:true}).then(function(canvas){
+    var pdf=new jsPDFctor({unit:"mm",format:"a4",orientation:"portrait"});
+    var pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight();
+    var margin=10, iw=pw-margin*2;
+    var ih=canvas.height*iw/canvas.width;
+    var img=canvas.toDataURL("image/jpeg",0.92);
+    if(ih<=ph-margin*2){ pdf.addImage(img,"JPEG",margin,margin,iw,ih); }
+    else {
+      // Taller than a page: walk down the image a page at a time.
+      var pageH=ph-margin*2, drawn=0;
+      while(drawn<ih){
+        pdf.addImage(img,"JPEG",margin,margin-drawn,iw,ih);
+        drawn+=pageH;
+        if(drawn<ih)pdf.addPage();
+      }
+    }
+    pdf.save(filename);
+    if(done)done();
+  }).catch(function(e){ alert("Could not build the PDF: "+(e&&e.message?e.message:e)); });
+}
+
+// Pick who and what, then hand off to the mail program.
+window.openSendDoc=function(kind){
+  if(!DATA.tenants.length){ alert("No tenants yet."); return; }
+  var isInv=(kind==="invoice");
+  var ys=yearList(), now=new Date();
+  var tid=(isInv?invTenant:stmtTenant)||DATA.tenants[0].id;
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(620px,96vw)"><h3>Email '+(isInv?"an invoice":"a statement")+'</h3>'+
+    '<div class="hint">The document is saved as a PDF and a message opens in your mail program, addressed to the tenant. Attach the PDF that just downloaded, then send.</div>'+
+    '<div class="frow"><label>Tenant<select id="sd_t" style="min-width:260px">'+tenantOpts(tid)+'</select></label></div>'+
+    (isInv?'<div class="frow"><label>Year<select id="sd_y">'+ys.map(function(y){return '<option'+(y===String(now.getFullYear())?" selected":"")+'>'+y+'</option>';}).join("")+'</select></label>'+
+      '<label>Month<select id="sd_m">'+MONTHS.map(function(mn,i){return '<option value="'+i+'"'+(i===now.getMonth()?" selected":"")+'>'+mn+'</option>';}).join("")+'</select></label></div>':'')+
+    '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="sendDoc(&#39;'+kind+'&#39;)">Prepare email</button></div>'+
+    '</div></div>';
+};
+window.sendDoc=function(kind){
+  var isInv=(kind==="invoice");
+  var tid=+document.getElementById("sd_t").value;
+  var t=DATA.tenants.find(function(x){return x.id===tid;});
+  if(!t){ alert("Pick a tenant."); return; }
+  if(isInv){ invTenant=tid; invYear=document.getElementById("sd_y").value; invMonth=+document.getElementById("sd_m").value; activeTab="invoice"; }
+  else { stmtTenant=tid; activeTab="statement"; }
+  closeModal(); render();
+  // Let the document paint before it is captured.
+  setTimeout(function(){
+    var s=DATA.settings||{}, cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
+    var period=isInv?(MONTHS[invMonth]+" "+invYear):((stmtFrom||"")+" to "+(stmtTo||""));
+    var who=String(t.name||"tenant").replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"");
+    var file=who+"-"+(isInv?"invoice-"+invYear+p2(invMonth+1):"statement")+".pdf";
+    savePdf(isInv?"invoice-doc":"stmt-doc", file, function(){
+      var subject=(isInv?"Invoice":"Statement")+" - "+period+(cn?" - "+cn:"");
+      var body="Dear "+(t.contact1&&t.contact1.name?t.contact1.name:t.name)+","+
+        "\n\nPlease find attached your "+(isInv?"invoice":"statement")+" for "+period+"."+
+        (isInv?"\n\nAmount due: "+money(dueTotal(t,invYear,invMonth)):"")+
+        (s.bank?"\n\nPayment details: "+s.bank:"")+
+        "\n\nKind regards,\n"+cn;
+      var href="mailto:"+encodeURIComponent(t.email||"")+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+      // The frame is sandboxed, so the parent opens the mail program.
+      if(window.parent!==window){ try{ window.parent.postMessage({type:"mailto",href:href},"*"); }catch(e){} }
+      else { window.location.href=href; }
+      flash(t.email?"PDF saved - attach it to the message that just opened.":"PDF saved - no email address on file for this tenant, add one on their record.");
+    });
+  }, 400);
+};
+
+/* ---- Receipts: one screen to enter a payment ------------------------------
+   Entering and splitting are the same job, so they are the same screen: put in
+   what arrived, and allocate it across whatever it settles - several months,
+   several tenants, rent or charges, in any combination.
+
+   Allocation follows the matching principle: money is applied to the OLDEST
+   outstanding month first, rent before charges, so a payment clears the debt
+   it was actually for rather than the month it happened to arrive in. The
+   proposal is editable - nothing is written until you save. */
+
+// Every unsettled (month, category) for a tenant, oldest first.
+function outstandingLines(t){
+  var out=[]; var ys=yearList();
+  ys.forEach(function(y){
+    var cap=capM(y);
+    for(var m=0;m<=Math.min(cap,11);m++){
+      if(!due(t,y,m))continue;
+      var rentBal=rentOf(t,y,m)-paidCat(t,y,m,"Rent");
+      if(rentBal>0.005)out.push({y:y,m:m,cat:"Rent",bal:rentBal});
+      monthCharges(t,y,m).forEach(function(c){
+        var nm=ctName(c.typeId);
+        var bal=num(c.amount)-paidCat(t,y,m,nm);
+        if(bal>0.005)out.push({y:y,m:m,cat:nm,bal:bal});
+      });
+    }
+  });
+  return out;
+}
+// Spread an amount over a tenant's arrears, oldest first.
+function proposeAllocation(tid,amount){
+  var t=DATA.tenants.find(function(x){return x.id==tid;});
+  if(!t)return [];
+  var left=num(amount), lines=[];
+  outstandingLines(t).forEach(function(o){
+    if(left<=0.005)return;
+    var take=Math.min(left,o.bal); left-=take;
+    lines.push({tid:tid,y:o.y,m:o.m,cat:o.cat,amount:Math.round(take*100)/100});
+  });
+  // Anything above what is owed still has to land somewhere: the current month.
+  if(left>0.005){ var y=yr(); lines.push({tid:tid,y:y,m:Math.max(0,capM(y)),cat:"Rent",amount:Math.round(left*100)/100}); }
+  return lines;
+}
+
+window.openReceipt=function(){
+  if(!canEdit())return;
+  window._rcpt={date:todayIso(),ref:"",total:"",tid:"",lines:[]};
+  renderReceipt();
+};
+function renderReceipt(){
+  var R=window._rcpt;
+  var ys=yearList();
+  var rows=R.lines.map(function(l,i){
+    return '<tr>'+
+      '<td><select class="rcz" data-k="tid" data-i="'+i+'" style="width:100%;min-width:210px">'+tenantOpts(l.tid)+'</select></td>'+
+      '<td><select class="rcz" data-k="y" data-i="'+i+'">'+ys.map(function(y){return '<option'+(String(l.y)===String(y)?" selected":"")+'>'+y+'</option>';}).join("")+'</select></td>'+
+      '<td><select class="rcz" data-k="m" data-i="'+i+'">'+MONTHS.map(function(mn,mi){return '<option value="'+mi+'"'+(+l.m===mi?" selected":"")+'>'+mn+'</option>';}).join("")+'</select></td>'+
+      '<td><select class="rcz" data-k="cat" data-i="'+i+'">'+catOptions(l.cat)+'</select></td>'+
+      '<td class="num"><input class="rcz num" data-k="amount" data-i="'+i+'" type="number" step="0.01" value="'+esc(l.amount)+'" style="width:100px"></td>'+
+      '<td><button class="iconbtn" data-h="rmRcptLine('+i+')">&#128465;</button></td></tr>';
+  }).join("");
+  var alloc=R.lines.reduce(function(a,l){return a+num(l.amount);},0);
+  var tot=num(R.total);
+  var diff=Math.round((tot-alloc)*100)/100;
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(1000px,97vw)"><h3>Enter a receipt</h3>'+
+    '<div class="hint">Put in the payment, pick the tenant, then <b>Match</b> &mdash; it is applied to the oldest unpaid month first, rent before charges. Change any line, or add lines to split one payment across several tenants or months.</div>'+
+    '<div class="frow">'+
+      '<label>Date received<input id="rc_date" type="date" value="'+esc(R.date)+'"></label>'+
+      '<label>Reference<input id="rc_ref" value="'+esc(R.ref)+'" placeholder="bank ref / cash"></label>'+
+      '<label>Amount received (&euro;)<input id="rc_total" type="number" step="0.01" value="'+esc(R.total)+'"></label>'+
+      '<label>Paid by<select id="rc_tid" style="min-width:220px">'+tenantOpts(R.tid)+'</select></label>'+
+      '<label>&nbsp;<button class="primary" data-h="matchReceipt()">&#8627; Match</button></label>'+
+    '</div>'+
+    '<div class="tblwrap"><table style="width:100%"><thead><tr><th>Tenant / unit</th><th>Year</th><th>Month</th><th>Applied to</th><th class="num">Amount</th><th></th></tr></thead><tbody>'+
+      (rows||'<tr><td colspan="6" class="hint">Nothing allocated yet &mdash; enter the amount and tenant, then press Match.</td></tr>')+
+    '</tbody></table></div>'+
+    '<div class="frow" style="align-items:center;margin-top:6px">'+
+      '<button class="ghost" data-h="addRcptLine()">+ Add a line</button>'+
+      '<span class="hint" style="margin:0 0 0 10px">Allocated <b>'+money(alloc)+'</b> of '+(tot?money(tot):"&mdash;")+
+        (tot&&Math.abs(diff)>0.005?' &middot; <span style="color:'+(diff>0?"#b45309":"#b91c1c")+'">'+(diff>0?money(diff)+" unallocated":money(-diff)+" over")+'</span>':"")+'</span>'+
+      '<div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveReceipt()">Save receipt</button></div>'+
+    '</div></div>';
+}
+function collectReceipt(){
+  var R=window._rcpt;
+  var g=function(id){ var e=document.getElementById(id); return e?e.value:""; };
+  R.date=g("rc_date")||R.date; R.ref=g("rc_ref"); R.total=g("rc_total"); R.tid=g("rc_tid");
+  document.querySelectorAll(".rcz").forEach(function(inp){ var i=+inp.dataset.i,k=inp.dataset.k; if(R.lines[i])R.lines[i][k]=inp.value; });
+}
+window.matchReceipt=function(){
+  collectReceipt();
+  var R=window._rcpt;
+  if(!R.tid){ alert("Choose who the payment came from."); return; }
+  if(num(R.total)<=0){ alert("Enter the amount received."); return; }
+  R.lines=proposeAllocation(R.tid,R.total);
+  if(!R.lines.length){ alert("That tenant has nothing outstanding - add a line by hand to record the payment."); }
+  renderReceipt();
+};
+window.addRcptLine=function(){ collectReceipt(); var R=window._rcpt; var y=yr(); R.lines.push({tid:R.tid||"",y:y,m:Math.max(0,capM(y)),cat:"Rent",amount:""}); renderReceipt(); };
+window.rmRcptLine=function(i){ collectReceipt(); window._rcpt.lines.splice(i,1); renderReceipt(); };
+window.saveReceipt=function(){
+  collectReceipt();
+  var R=window._rcpt;
+  var dt=R.date||todayIso();
+  var n=0;
+  R.lines.forEach(function(l){
+    var amt=num(l.amount); if(!l.tid||amt===0)return;
+    var t=DATA.tenants.find(function(x){return x.id==l.tid;}); if(!t)return;
+    var y=String(l.y||yr()), m=+l.m||0;
+    ensureYear(t,y)[m].receipts.push({date:dt,ref:R.ref||"",amount:amt,cat:l.cat||"Rent"});
+    n++;
+  });
+  if(!n){ alert("Nothing to save - allocate the payment first."); return; }
+  var tot=num(R.total), alloc=R.lines.reduce(function(a,l){return a+num(l.amount);},0);
+  window._rcpt=null;
+  persist(n+" receipt allocation(s)");
+  closeModal(); render();
+  flash(n+" allocation(s) saved"+(tot&&Math.abs(tot-alloc)>0.5?" - received "+money(tot)+" vs allocated "+money(alloc):""));
+};
+
+/* ---- Toolbar dropdowns ---- */
+window.toggleMenu=function(id){
+  var el=document.getElementById(id); if(!el)return;
+  var wasOpen=el.classList.contains("open");
+  document.querySelectorAll(".menu.open").forEach(function(m){ m.classList.remove("open"); });
+  if(!wasOpen)el.classList.add("open");
+};
+// Any click that is not on a menu or the button that opened it closes them.
+document.addEventListener("click",function(e){
+  if(e.target.closest && (e.target.closest(".menu")||e.target.closest("[data-h^='toggleMenu']")))return;
+  document.querySelectorAll(".menu.open").forEach(function(m){ m.classList.remove("open"); });
+});
+
+/* ---- Bulk charge editor: one charge type across every tenant and month ----
+   The same grid as the rent editor, for common fees / electricity / water /
+   refuse. A blank cell means the tenant's standing charge still applies; a
+   figure pins that month. */
+window.openChargeEditor=function(typeId){
+  if(!canEdit())return;
+  var ct=ctById(typeId); if(!ct){ alert("That charge type no longer exists."); return; }
+  var y=yr();
+  var list=DATA.tenants.filter(function(t){return t.name&&t.name!=="NO TENANT";});
+  var rows=list.map(function(t){
+    var std=(t.charges||[]).find(function(c){return +c.typeId===+typeId;});
+    var cells="";
+    for(var m=0;m<12;m++){
+      var mc=monthCharges(t,y,m).find(function(c){return +c.typeId===+typeId;});
+      cells+='<td class="num"><input class="cez" data-id="'+t.id+'" data-m="'+m+'" type="number" step="0.01" value="'+esc(mc?mc.amount:"")+'" style="width:66px;text-align:right;padding:3px 4px"></td>';
+    }
+    return '<tr><td style="position:sticky;left:0;background:#fff;min-width:150px">'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+'</div></td>'+
+      '<td class="num" style="color:#94a3b8">'+(std?money(num(std.amount)):"—")+'</td>'+cells+'</tr>';
+  }).join("");
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(1320px,98vw)"><h3>Enter / adjust '+esc(ct.name.toLowerCase())+' — '+y+'</h3>'+
+    '<div class="hint">Every month is pre-filled with what the tenant is currently charged. Type the real figure when a bill comes in; clear a cell to drop the charge for that month. '+
+    (ct.kind==="monthly"?'The “standing” column is the amount set on the tenant’s file.':'This is an '+esc(ct.kind==="annual"?"annual":"one-off")+' charge — fill in only the month it falls in.')+'</div>'+
+    '<div class="tblwrap" style="max-height:62vh"><table style="width:100%"><thead><tr><th style="position:sticky;left:0">Tenant</th><th class="num">Standing</th>'+MONTHS.map(function(m){return '<th class="num">'+m+'</th>';}).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="frow" style="align-items:center;margin-top:6px"><span class="hint" style="margin:0">Saved figures apply to this charge only — rent and other charges are untouched.</span><div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveChargeEditor('+typeId+')">Save '+esc(ct.name.toLowerCase())+'</button></div></div></div>';
+};
+window.saveChargeEditor=function(typeId){
+  var y=yr(), n=0;
+  var vals={};
+  document.querySelectorAll(".cez").forEach(function(inp){
+    var id=+inp.dataset.id, m=+inp.dataset.m;
+    if(!vals[id])vals[id]={};
+    vals[id][m]=inp.value.trim();
+  });
+  Object.keys(vals).forEach(function(id){
+    var t=DATA.tenants.find(function(x){return x.id===+id;}); if(!t)return;
+    ensureYear(t,y);
+    for(var m=0;m<12;m++){
+      var raw=vals[id][m];
+      // Writing any month pins that month's whole charge set, so start from
+      // what it shows today and change only this one charge.
+      var cur=monthCharges(t,y,m).map(function(c){return {typeId:+c.typeId,amount:num(c.amount)};});
+      var had=cur.find(function(c){return c.typeId===+typeId;});
+      var want=(raw===""?null:num(raw));
+      if((had?had.amount:null)===want)continue;
+      var next=cur.filter(function(c){return c.typeId!==+typeId;});
+      if(want!==null)next.push({typeId:+typeId,amount:want});
+      var std=standingCharges(t).map(function(c){return {typeId:+c.typeId,amount:num(c.amount)};});
+      var same=next.length===std.length && next.every(function(c){return std.some(function(x){return x.typeId===c.typeId&&x.amount===c.amount;});});
+      if(same) delete t.pay[y][m].charges; else t.pay[y][m].charges=next;
+      n++;
+    }
+  });
+  persist("Adjusted "+ctName(typeId)+" — "+y); closeModal(); render(); flash(n?n+" month(s) updated.":"Nothing changed.");
+};
+
 /* ---- Bulk rent editor (per year) ---- */
 window.openRentEditor=function(){ if(!canEdit())return; const y=yr();
   const list=DATA.tenants.filter(t=>t.name&&t.name!=="NO TENANT");
@@ -649,49 +936,9 @@ window.saveRent=function(){ const y=yr(); DATA.tenants.forEach(t=>ensureYear(t,y
 
 /* ---- Batch receipt entry (table) ---- */
 function tenantOpts(sel){ return '<option value="">— select tenant —</option>'+DATA.tenants.filter(t=>t.name&&t.name!=="NO TENANT").sort((a,b)=>a.name.localeCompare(b.name)).map(t=>'<option value="'+t.id+'"'+(t.id==sel?' selected':'')+'>'+esc(t.name)+' — '+esc(t.unit)+'</option>').join(""); }
-window.openBatchReceipts=function(){ if(!canEdit())return; if(!window._batch||!window._batch.length)window._batch=Array.from({length:6},()=>({tid:"",ref:"",date:"",amount:""})); renderBatch(); };
-function renderBatch(){
-  const rows=window._batch.map((r,i)=>'<tr><td><select class="bz" data-k="tid" data-i="'+i+'" style="width:100%;min-width:260px">'+tenantOpts(r.tid)+'</select></td>'+
-    '<td><input class="bz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'" style="width:100%;min-width:120px"></td>'+
-    '<td><input class="bz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'" style="width:100%"></td>'+
-    '<td class="num"><input class="bz num" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'" style="width:100px"></td>'+
-    '<td><button class="iconbtn" data-h="rmBatch('+i+')">🗑</button></td></tr>').join("");
-  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(1150px,98vw)"><h3>Enter receipts</h3>'+
-    '<div class="hint">One receipt per line — pick the tenant, receipt no., date and amount. Each receipt is filed into the month of its date. Add as many lines as you need.</div>'+
-    '<div><table style="width:100%"><thead><tr><th style="min-width:280px">Tenant</th><th>Receipt No.</th><th>Date</th><th class="num">Amount (€)</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<div class="frow" style="align-items:center"><button class="ghost" data-h="addBatchRow()">+ Add line</button><div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveBatch()">Save receipts</button></div></div></div>';
-}
-function collectBatch(){ document.querySelectorAll(".bz").forEach(inp=>{ const i=+inp.dataset.i,k=inp.dataset.k; if(window._batch[i])window._batch[i][k]=inp.value; }); }
-window.addBatchRow=function(){ collectBatch(); window._batch.push({tid:"",ref:"",date:"",amount:""}); renderBatch(); };
-window.rmBatch=function(i){ collectBatch(); window._batch.splice(i,1); if(!window._batch.length)window._batch.push({tid:"",ref:"",date:"",amount:""}); renderBatch(); };
-window.saveBatch=function(){ collectBatch(); let n=0;
-  window._batch.forEach(r=>{ const amt=num(r.amount); if(!r.tid||amt<=0)return; const t=DATA.tenants.find(x=>x.id==r.tid); if(!t)return;
-    let dt=r.date; if(!dt){ dt=new Date().toISOString().slice(0,10); } const y=dt.slice(0,4), m=parseInt(dt.slice(5,7),10)-1; if(m<0||m>11)return;
-    ensureYear(t,y)[m].receipts.push({date:dt,ref:r.ref||"",amount:amt}); n++; });
-  window._batch=null; persist(n+" receipt(s) entered (bulk)"); closeModal(); render(); flash(n+" receipt"+(n===1?"":"s")+" saved."); };
-
-/* ---- Split one receipt across units & cost types ---- */
-window.openSplit=function(){ if(!canEdit())return; if(!window._split)window._split={date:new Date().toISOString().slice(0,10),ref:"",total:"",lines:[{tid:"",cat:"Rent",amount:""},{tid:"",cat:"Rent",amount:""},{tid:"",cat:"Rent",amount:""}]}; renderSplit(); };
-function renderSplit(){ const S=window._split;
-  const catOpt=function(c){return catOptions(c);};
-  const rows=S.lines.map((l,i)=>'<tr><td><select class="sz" data-k="tid" data-i="'+i+'" style="width:100%;min-width:240px">'+tenantOpts(l.tid)+'</select></td>'+
-    '<td><select class="sz" data-k="cat" data-i="'+i+'">'+catOpt(l.cat||"Rent")+'</select></td>'+
-    '<td class="num"><input class="sz num" data-k="amount" data-i="'+i+'" type="number" value="'+esc(l.amount)+'" style="width:100px"></td>'+
-    '<td><button class="iconbtn" data-h="rmSplit('+i+')">🗑</button></td></tr>').join("");
-  const alloc=S.lines.reduce((s,l)=>s+num(l.amount),0);
-  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(920px,97vw)"><h3>Split a receipt</h3>'+
-    '<div class="hint">Enter the payment once, then allocate it across units and cost types — e.g. one ALION payment → rent for 3 flats + electricity. Electricity/Other are tracked separately and do not affect rent arrears.</div>'+
-    '<div class="frow"><label>Date<input id="sp_date" type="date" value="'+esc(S.date)+'"></label><label>Reference<input id="sp_ref" value="'+esc(S.ref)+'"></label><label>Total received (€)<input id="sp_total" type="number" value="'+esc(S.total||"")+'"></label></div>'+
-    '<div class="tblwrap"><table style="width:100%"><thead><tr><th>Tenant / unit</th><th>Cost type</th><th class="num">Amount</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-    '<div class="frow" style="align-items:center"><button class="ghost" data-h="addSplit()">+ Add line</button><div style="flex:1"></div><span class="hint" style="margin:0">Allocated €'+Math.round(alloc)+(num(S.total)?" of €"+Math.round(num(S.total)):"")+'</span> <button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveSplit()">Save split</button></div></div></div>';
-}
-function collectSplit(){ const S=window._split; document.querySelectorAll(".sz").forEach(inp=>{ const i=+inp.dataset.i,k=inp.dataset.k; if(S.lines[i])S.lines[i][k]=inp.value; }); const d=document.getElementById("sp_date"),rf=document.getElementById("sp_ref"),tt=document.getElementById("sp_total"); if(d)S.date=d.value; if(rf)S.ref=rf.value; if(tt)S.total=tt.value; }
-window.addSplit=function(){ collectSplit(); window._split.lines.push({tid:"",cat:"Rent",amount:""}); renderSplit(); };
-window.rmSplit=function(i){ collectSplit(); window._split.lines.splice(i,1); if(!window._split.lines.length)window._split.lines.push({tid:"",cat:"Rent",amount:""}); renderSplit(); };
-window.saveSplit=function(){ collectSplit(); const S=window._split; const dt=S.date||new Date().toISOString().slice(0,10); const y=dt.slice(0,4),m=parseInt(dt.slice(5,7),10)-1; if(m<0||m>11){alert("Enter a valid date.");return;}
-  let n=0; S.lines.forEach(l=>{ const amt=num(l.amount); if(!l.tid||amt===0)return; const t=DATA.tenants.find(x=>x.id==l.tid); if(!t)return; ensureYear(t,y)[m].receipts.push({date:dt,ref:S.ref||"",amount:amt,cat:l.cat||"Rent"}); n++; });
-  const tot=num(S.total),alloc=S.lines.reduce((s,l)=>s+num(l.amount),0);
-  window._split=null; persist(n+" split allocation(s)"); closeModal(); render(); flash(n+" allocation(s) saved"+(tot&&Math.abs(tot-alloc)>0.5?" · total €"+Math.round(tot)+" vs allocated €"+Math.round(alloc):"")); };
+// Bulk entry and receipt-splitting used to be separate modals; both are now
+// the one Receipts screen above, which also matches each payment to the month
+// it settles.
 
 /* ---- All receipts (browse & correct) ---- */
 var receiptsFilter="ALL";

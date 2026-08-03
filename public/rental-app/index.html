@@ -5,6 +5,10 @@
 <title>Property Rentals</title>
 <script src="./vendor/chart.umd.min.js"></script>
 <script src="./vendor/xlsx.full.min.js"></script>
+<!-- Invoices and statements are saved as real PDF files so they can be
+     attached to an email; both libraries are vendored, nothing is fetched. -->
+<script src="./vendor/html2canvas.min.js"></script>
+<script src="./vendor/jspdf.umd.min.js"></script>
 <style>
 :root{--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--brand:#1e2a78;--brand2:#f04e23;--accent:#10b981;--bad:#ef4444;--warn:#f59e0b;--soft:#eef1fb;}
 *{box-sizing:border-box}
@@ -35,10 +39,22 @@ button.ghost:hover,.filebtn:hover{background:var(--soft);}
 .card .v{font-size:23px;font-weight:700;margin:5px 0 2px;} .card .d{font-size:12px;color:var(--muted);font-weight:600;}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
 .panel h3{margin:0 0 4px;font-size:15px;} .panel .hint{font-size:12px;color:var(--muted);margin-bottom:12px;}
+/* Toolbar dropdowns (Invoice ▾ / Reports ▾) */
+.menuwrap{position:relative;display:inline-block;}
+.menu{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:60;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.16);min-width:230px;padding:5px;}
+.menu.open{display:block;}
+.menu button{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--ink);}
+.menu button:hover{background:var(--soft);}
 .tblwrap{overflow-x:auto;position:relative;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
 thead th{background:var(--soft);color:var(--muted);font-weight:700;text-transform:uppercase;font-size:11px;}
+/* Column headings stay put while a long list scrolls, so you can still tell
+   which month a figure belongs to halfway down the schedule. Sits below the
+   tab bar (z-index 20) and above the sticky first column. */
+thead th{position:sticky;top:34px;z-index:6;}
+.tblwrap thead th:first-child{z-index:8;}
+@media print{ thead th{position:static;} }
 tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#eef1fb;}
 .num{text-align:right;}
 .st{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;}

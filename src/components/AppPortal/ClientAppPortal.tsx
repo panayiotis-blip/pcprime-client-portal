@@ -127,6 +127,10 @@ export default function ClientAppPortal() {
         }, 400);
       } else if (m.type === 'logout') {
         signOut();
+      } else if (m.type === 'mailto') {
+        // App saved a PDF and wants a message opened for it — mailto only.
+        const href = String(m.href || '');
+        if (href.startsWith('mailto:')) window.location.href = href;
       } else if (m.type === 'users') {
         const win = iframeRef.current?.contentWindow;
         const reply = (payload: any) => win?.postMessage({ type: 'users:reply', reqId: m.reqId, ...payload }, '*');
