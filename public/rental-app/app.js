@@ -4,7 +4,10 @@ let DATA=load(), user=null, activeTab="overview", schedYear="2026", stmtTenant=n
 let chart=null;
 const VIEWED=new Date();
 
-function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["statement","Statement"],["invoice","Invoice"]]; return t; }
+// Statement has no tab of its own — it is a report, opened per tenant from the
+// Rent Schedule's Reports menu or from the invoice list. The view still exists
+// and goTab("statement") still reaches it; it just isn't a top-level place.
+function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["invoice","Invoices"]]; return t; }
 function load(){ return norm({meta:{},tenants:[],properties:[],users:[],audit:[]}); }
 function norm(d){ if(!d.meta)d.meta={}; if(!d.tenants)d.tenants=[]; if(!d.properties)d.properties=[]; if(!d.users)d.users=[]; if(!d.audit)d.audit=[];
   // Charges billed alongside rent. The list is the firm's own — edit it in
@@ -296,7 +299,66 @@ window.runImport=function(){ if(!canEdit()){alert("Read-only access.");return;}
 var invTenant=null, invYear=null, invMonth=null;
 var stmtFrom=null, stmtTo=null;
 function ymKey(iso){ var y=parseInt((iso||"").slice(0,4),10), m=parseInt((iso||"").slice(5,7),10)-1; return (y||0)*12+(m||0); }
+/* ---- Invoices: the year's bills, one row each -----------------------------
+   Every month a tenant is charged for is an invoice: rent plus that month's
+   charges. The list shows what was billed, what came in against it and what is
+   left, so you can see the whole year at a glance and open, print or send any
+   one of them. invView holds which single invoice is open, if any. */
+var invView=null, invFilter="ALL";
+
 function vInvoice(){
+  if(invView==="doc")return vInvoiceDoc();
+  var y=yr(), cap=capM(y);
+  var opts='<option value="ALL">All tenants</option>'+DATA.tenants.filter(function(t){return t.name&&t.name!=="NO TENANT";})
+    .sort(function(a,b){return (a.name||"").localeCompare(b.name||"");})
+    .map(function(t){return '<option value="'+t.id+'"'+(String(t.id)===String(invFilter)?" selected":"")+'>'+esc(t.name)+'</option>';}).join("");
+
+  var rows=[], billed=0, recvd=0;
+  sortedTenants().forEach(function(t){
+    if(invFilter!=="ALL"&&String(t.id)!==String(invFilter))return;
+    if(!t.name||t.name==="NO TENANT")return;
+    for(var m=0;m<=Math.min(cap,11);m++){
+      if(!due(t,y,m))continue;
+      var tot=dueTotal(t,y,m); if(tot<=0)continue;
+      var pa=paidAll(t,y,m), bal=tot-pa;
+      billed+=tot; recvd+=pa;
+      rows.push({t:t,m:m,tot:tot,pa:pa,bal:bal,ch:chargesTotal(t,y,m)});
+    }
+  });
+  rows.sort(function(a,b){ return b.m-a.m || (a.t.name||"").localeCompare(b.t.name||""); });
+
+  var s1=(DATA.settings||{}); var pref=s1.invoicePrefix||"INV";
+  var h='<div class="cards">'+
+    card("Invoices",String(rows.length),"Jan\u2013"+(cap<0?"\u2014":MONTHS[cap])+" "+y)+
+    card("Billed",money(billed),"rent + charges")+
+    card("Received",money(recvd),"against these invoices")+
+    card("Outstanding",money(billed-recvd),(billed-recvd>0?"still owed":"all settled"))+
+    '</div>';
+  h+='<div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+    '<h3 style="margin:0">Invoices '+y+'</h3>'+
+    '<span style="flex:1"></span>'+
+    '<span style="font-size:12px;color:#64748b">Tenant <select id="invFilter">'+opts+'</select></span></div>'+
+    '<div class="hint">One invoice per tenant per month \u2014 rent plus that month\u2019s charges. Open one to print or email it.</div>'+
+    '<div class="tblwrap freeze"><table><thead><tr><th>Invoice</th><th>Tenant</th><th>Month</th><th class="num">Rent + charges</th><th class="num">Received</th><th class="num">Balance</th><th></th></tr></thead><tbody>';
+  if(!rows.length)h+='<tr><td colspan="7" class="hint">Nothing billed yet for '+y+'.</td></tr>';
+  rows.forEach(function(r){
+    var no=pref+"-"+y+p2(r.m+1)+"-"+r.t.id;
+    h+='<tr><td style="font-weight:600">'+esc(no)+'</td>'+
+      '<td>'+esc(r.t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(r.t.unit)+'</div></td>'+
+      '<td>'+MONTHS[r.m]+' '+y+'</td>'+
+      '<td class="num">'+money(r.tot)+(r.ch?'<div style="font-size:10px;color:#b45309">incl. '+money(r.ch)+' charges</div>':'')+'</td>'+
+      '<td class="num">'+(r.pa?money(r.pa):"\u2014")+'</td>'+
+      '<td class="num'+(r.bal>0.005?" warn":"")+'">'+(r.bal>0.005?money(r.bal):"paid")+'</td>'+
+      '<td class="actions"><button class="ghost" data-h="openInvoice('+r.t.id+',&#39;'+y+'&#39;,'+r.m+')">Open</button></td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  document.getElementById("view").innerHTML=h;
+  var f=document.getElementById("invFilter"); if(f)f.onchange=function(e){ invFilter=e.target.value; render(); };
+}
+window.openInvoice=function(tid,y,m){ invTenant=+tid; invYear=String(y); invMonth=+m; invView="doc"; activeTab="invoice"; render(); };
+window.closeInvoice=function(){ invView=null; render(); };
+
+function vInvoiceDoc(){
   if(invTenant==null && DATA.tenants.length)invTenant=DATA.tenants[0].id;
   var now=new Date(); if(invYear==null)invYear=String(now.getFullYear()); if(invMonth==null)invMonth=now.getMonth();
   var ys=yearList();
@@ -307,7 +369,9 @@ function vInvoice(){
     '<label>Tenant<select id="invSel">'+topts+'</select></label>'+
     '<label>Year<select id="invY">'+yopts+'</select></label>'+
     '<label>Month<select id="invM">'+mopts+'</select></label>'+
-    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label></div></div>';
+    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label>'+
+    '<label>&nbsp;<button class="ghost" data-h="openSendDoc(&#39;invoice&#39;)">✉ Email</button></label>'+
+    '<label>&nbsp;<button class="ghost" data-h="closeInvoice()">← All invoices</button></label></div></div>';
   var t=DATA.tenants.find(function(x){return x.id===invTenant;});
   if(t){ var p=propById(t.propertyId); var rent=rentOf(t,invYear,invMonth);
     // The invoice bills the month in full — rent plus its charges — and credits
@@ -554,6 +618,7 @@ function vSchedule(){
       '<span class="menuwrap"><button class="ghost" data-h="toggleMenu(&#39;mInv&#39;)">🧾 Invoice ▾</button>'+
         '<div class="menu" id="mInv">'+
           '<button data-h="openRentEditor()">Enter / adjust rents</button>'+
+          '<button data-h="openPeriods()">Close / reopen a period</button>'+
           chargeTypes().map(function(c){return '<button data-h="openChargeEditor('+c.id+')">Enter / adjust '+esc(c.name.toLowerCase())+'</button>';}).join('')+
         '</div></span>'+
       '<span class="menuwrap"><button class="ghost" data-h="toggleMenu(&#39;mRep&#39;)">📄 Reports ▾</button>'+
@@ -567,7 +632,7 @@ function vSchedule(){
     '<span style="font-size:12px;color:#64748b">Sort by <select id="schSort"><option value="tenant"'+(schedSort==="tenant"?" selected":"")+'>Tenant name</option><option value="property"'+(schedSort==="property"?" selected":"")+'>Property</option><option value="rent"'+(schedSort==="rent"?" selected":"")+'>Rent (high to low)</option></select></span>'+
     '</div>'+
     '<div class="hint">'+(canEdit()?"Click a month to set that tenant’s rent, charges and receipts. ":"")+'“due” is rent plus that month’s charges — hover it for the split. Only due months up to the current period are shown; future rent is not flagged as unpaid.</div>'+
-    '<div class="tblwrap"><table><thead><tr><th>Tenant</th><th class="num">Rent</th>'+MONTHS.map((m,i)=>'<th class="num">'+m+'</th>').join("")+'</tr></thead><tbody>';
+    '<div class="tblwrap freeze"><table><thead><tr><th>Tenant</th><th class="num">Rent</th>'+MONTHS.map((m,i)=>'<th class="num" title="'+(isClosed(y,i)?"Period closed":"")+'">'+m+(isClosed(y,i)?' \u{1F512}':'')+'</th>').join("")+'</tr></thead><tbody>';
   sortedTenants().forEach(t=>{ const _p=propById(t.propertyId); h+='<tr><td>'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+(_p?' · '+esc(_p.name):'')+'</div></td><td class="num">'+money(t.rent)+'</td>';
     for(let m=0;m<12;m++){ const st=statusOf(t,y,m); const pa=paidAll(t,y,m); const rd=dueTotal(t,y,m); const ch=chargesTotal(t,y,m);
       let disp;
@@ -587,7 +652,7 @@ function vSchedule(){
   document.getElementById("view").innerHTML=h;
   const ss=document.getElementById("schSort"); if(ss)ss.onchange=e=>{schedSort=e.target.value;render();};
 }
-window.openReceipts=function(id,m){ if(!canEdit())return; const y=yr(); const t=DATA.tenants.find(x=>x.id===id); const recs=ensureYear(t,y)[m].receipts;
+window.openReceipts=function(id,m){ if(!canEdit())return; if(!assertOpen(yr(),m))return; const y=yr(); const t=DATA.tenants.find(x=>x.id===id); const recs=ensureYear(t,y)[m].receipts;
   let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'">'+catOptions(r.cat)+'</select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
   window._mcharges=monthCharges(t,y,m).map(c=>({typeId:c.typeId,amount:c.amount}));
   window._mchTenant=t;
@@ -748,6 +813,7 @@ function outstandingLines(t){
     var cap=capM(y);
     for(var m=0;m<=Math.min(cap,11);m++){
       if(!due(t,y,m))continue;
+      if(isClosed(y,m))continue; // settled and locked
       var rentBal=rentOf(t,y,m)-paidCat(t,y,m,"Rent");
       if(rentBal>0.005)out.push({y:y,m:m,cat:"Rent",bal:rentBal});
       monthCharges(t,y,m).forEach(function(c){
@@ -770,7 +836,12 @@ function proposeAllocation(tid,amount){
     lines.push({tid:tid,y:o.y,m:o.m,cat:o.cat,amount:Math.round(take*100)/100});
   });
   // Anything above what is owed still has to land somewhere: the current month.
-  if(left>0.005){ var y=yr(); lines.push({tid:tid,y:y,m:Math.max(0,capM(y)),cat:"Rent",amount:Math.round(left*100)/100}); }
+  if(left>0.005){
+    // Land the surplus on the newest month that is still open.
+    var y=yr(), m=Math.max(0,capM(y));
+    while(m>0&&isClosed(y,m))m--;
+    if(!isClosed(y,m))lines.push({tid:tid,y:y,m:m,cat:"Rent",amount:Math.round(left*100)/100});
+  }
   return lines;
 }
 
@@ -835,19 +906,84 @@ window.saveReceipt=function(){
   var R=window._rcpt;
   var dt=R.date||todayIso();
   var n=0;
+  var blocked=[];
   R.lines.forEach(function(l){
     var amt=num(l.amount); if(!l.tid||amt===0)return;
     var t=DATA.tenants.find(function(x){return x.id==l.tid;}); if(!t)return;
     var y=String(l.y||yr()), m=+l.m||0;
+    // A closed month is settled — nothing new may be posted into it.
+    if(isClosed(y,m)){ blocked.push(MONTHS[m]+" "+y); return; }
     ensureYear(t,y)[m].receipts.push({date:dt,ref:R.ref||"",amount:amt,cat:l.cat||"Rent"});
     n++;
   });
+  if(blocked.length){ alert("Nothing was saved: "+[...new Set(blocked)].join(", ")+" "+(blocked.length===1?"is a closed period":"are closed periods")+".\n\nAllocate to an open month, or reopen the period."); return; }
   if(!n){ alert("Nothing to save - allocate the payment first."); return; }
   var tot=num(R.total), alloc=R.lines.reduce(function(a,l){return a+num(l.amount);},0);
   window._rcpt=null;
   persist(n+" receipt allocation(s)");
   closeModal(); render();
   flash(n+" allocation(s) saved"+(tot&&Math.abs(tot-alloc)>0.5?" - received "+money(tot)+" vs allocated "+money(alloc):""));
+};
+
+/* ---- Closing a period -----------------------------------------------------
+   Once the month's receipts are posted you close it, and nothing in it can be
+   changed again: no rent or charge adjustments, no new receipts, no edits to
+   the ones already there. Reopening is deliberate and admin-only, so a closed
+   month is a statement of fact rather than a suggestion. Kept as a plain map
+   of "YYYY-M" -> who closed it and when, so it travels with the data. */
+function closedMap(){ if(!DATA.closed)DATA.closed={}; return DATA.closed; }
+function isClosed(y,m){ return !!closedMap()[String(y)+"-"+m]; }
+function closedInfo(y,m){ return closedMap()[String(y)+"-"+m]||null; }
+// One place every writer asks before touching a month.
+function assertOpen(y,m){
+  if(!isClosed(y,m))return true;
+  var c=closedInfo(y,m);
+  alert(MONTHS[m]+" "+y+" is closed"+(c&&c.at?" (closed "+c.at.slice(0,10)+(c.by?" by "+c.by:"")+")":"")+".\n\nReopen the period first if it really has to change.");
+  return false;
+}
+
+window.openPeriods=function(){
+  if(!canEdit())return;
+  var y=yr(), cap=capM(y);
+  var rows=MONTHS.map(function(mn,m){
+    var c=closedInfo(y,m);
+    var recs=0, billed=0, out=0;
+    DATA.tenants.forEach(function(t){
+      if(!due(t,y,m))return;
+      recs+=(ensureYear(t,y)[m].receipts||[]).length;
+      billed+=dueTotal(t,y,m);
+      out+=owed(t,y,m);
+    });
+    var future=(m>cap);
+    return '<tr'+(future?' style="opacity:.5"':'')+'><td style="font-weight:600">'+mn+' '+y+'</td>'+
+      '<td class="num">'+(billed?money(billed):"\u2014")+'</td>'+
+      '<td class="num">'+recs+'</td>'+
+      '<td class="num'+(out>0.005?" warn":"")+'">'+(out>0.005?money(out):"\u2014")+'</td>'+
+      '<td>'+(c?'<span class="st PAID">closed</span><div style="font-size:10px;color:#94a3b8">'+esc((c.at||"").slice(0,10))+(c.by?" \u00B7 "+esc(c.by):"")+'</div>':'<span class="st UPCOMING">open</span>')+'</td>'+
+      '<td class="actions">'+(c
+        ? (isAdmin()?'<button class="ghost" data-h="reopenPeriod('+m+')">Reopen</button>':'<span class="hint" style="margin:0">admins only</span>')
+        : (future?'<span class="hint" style="margin:0">not yet</span>':'<button class="ghost" data-h="closePeriod('+m+')">Close</button>'))+'</td></tr>';
+  }).join("");
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(760px,96vw)"><h3>Periods \u2014 '+y+'</h3>'+
+    '<div class="hint">Close a month once its receipts are posted: rent, charges and receipts in it are then locked. Outstanding balances do not stop a close \u2014 arrears carry on showing \u2014 but you cannot post into a closed month afterwards.</div>'+
+    '<div class="tblwrap" style="max-height:60vh"><table style="width:100%"><thead><tr><th>Month</th><th class="num">Billed</th><th class="num">Receipts</th><th class="num">Outstanding</th><th>Status</th><th class="actions"></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Done</button></div></div></div>';
+};
+window.closePeriod=function(m){
+  var y=yr();
+  var out=0; DATA.tenants.forEach(function(t){ out+=owed(t,y,m); });
+  var msg="Close "+MONTHS[m]+" "+y+"?\n\nRent, charges and receipts for that month can no longer be changed.";
+  if(out>0.005)msg+="\n\nNote: "+money(out)+" is still outstanding for the month. Closing does not write it off \u2014 it stays in arrears \u2014 but later payments cannot be posted into "+MONTHS[m]+".";
+  if(!confirm(msg))return;
+  closedMap()[String(y)+"-"+m]={at:stamp(new Date()),by:(user?(user.name||user.username):"")};
+  persist("Closed period "+MONTHS[m]+" "+y); closeModal(); render(); flash(MONTHS[m]+" "+y+" closed.");
+};
+window.reopenPeriod=function(m){
+  if(!isAdmin()){ alert("Only an admin can reopen a period."); return; }
+  var y=yr();
+  if(!confirm("Reopen "+MONTHS[m]+" "+y+"? It becomes editable again."))return;
+  delete closedMap()[String(y)+"-"+m];
+  persist("Reopened period "+MONTHS[m]+" "+y); closeModal(); render(); flash(MONTHS[m]+" "+y+" reopened.");
 };
 
 /* ---- Toolbar dropdowns ---- */
@@ -877,7 +1013,8 @@ window.openChargeEditor=function(typeId){
     var cells="";
     for(var m=0;m<12;m++){
       var mc=monthCharges(t,y,m).find(function(c){return +c.typeId===+typeId;});
-      cells+='<td class="num"><input class="cez" data-id="'+t.id+'" data-m="'+m+'" type="number" step="0.01" value="'+esc(mc?mc.amount:"")+'" style="width:66px;text-align:right;padding:3px 4px"></td>';
+      var lk=isClosed(y,m);
+      cells+='<td class="num"><input class="cez" data-id="'+t.id+'" data-m="'+m+'" type="number" step="0.01" value="'+esc(mc?mc.amount:"")+'"'+(lk?' disabled title="Period closed"':'')+' style="width:66px;text-align:right;padding:3px 4px'+(lk?';background:#f1f5f9;color:#94a3b8':'')+'"></td>';
     }
     return '<tr><td style="position:sticky;left:0;background:#fff;min-width:150px">'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+'</div></td>'+
       '<td class="num" style="color:#94a3b8">'+(std?money(num(std.amount)):"—")+'</td>'+cells+'</tr>';
@@ -900,6 +1037,7 @@ window.saveChargeEditor=function(typeId){
     var t=DATA.tenants.find(function(x){return x.id===+id;}); if(!t)return;
     ensureYear(t,y);
     for(var m=0;m<12;m++){
+      if(isClosed(y,m))continue; // closed months are not re-billed
       var raw=vals[id][m];
       // Writing any month pins that month's whole charge set, so start from
       // what it shows today and change only this one charge.
@@ -922,7 +1060,8 @@ window.saveChargeEditor=function(typeId){
 window.openRentEditor=function(){ if(!canEdit())return; const y=yr();
   const list=DATA.tenants.filter(t=>t.name&&t.name!=="NO TENANT");
   const rows=list.map(t=>{ let cells="";
-    for(let m=0;m<12;m++){ cells+='<td class="num"><input class="rez" data-id="'+t.id+'" data-m="'+m+'" type="number" value="'+esc(rentOf(t,y,m))+'" style="width:62px;text-align:right;padding:3px 4px"></td>'; }
+    // Closed months are shown but not editable — the figure they were billed at.
+    for(let m=0;m<12;m++){ const lk=isClosed(y,m); cells+='<td class="num"><input class="rez" data-id="'+t.id+'" data-m="'+m+'" type="number" value="'+esc(rentOf(t,y,m))+'"'+(lk?' disabled title="Period closed"':'')+' style="width:62px;text-align:right;padding:3px 4px'+(lk?';background:#f1f5f9;color:#94a3b8':'')+'"></td>'; }
     return '<tr><td style="position:sticky;left:0;background:#fff;min-width:150px">'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+'</div></td><td class="num" style="color:#94a3b8">'+money(t.rent)+'</td>'+cells+'</tr>'; }).join("");
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(1320px,98vw)"><h3>Enter / adjust rent — '+y+'</h3>'+
     '<div class="hint">Every month of '+y+' is pre-filled with the agreement rent. Change any month\'s figure to adjust what is charged. Blank a cell to reset it to the agreement rent.</div>'+
@@ -930,9 +1069,13 @@ window.openRentEditor=function(){ if(!canEdit())return; const y=yr();
     '<div class="frow" style="align-items:center;margin-top:6px"><span class="hint" style="margin:0">Tip: use the month cells in the schedule to change a single tenant, or this grid to set the whole year.</span><div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveRent()">Save rents</button></div></div></div>';
 };
 window.saveRent=function(){ const y=yr(); DATA.tenants.forEach(t=>ensureYear(t,y));
+  var skipped=0;
   document.querySelectorAll(".rez").forEach(inp=>{ const t=DATA.tenants.find(x=>x.id==inp.dataset.id); if(!t)return; const m=+inp.dataset.m; const v=inp.value.trim();
+    // A closed month keeps the rent it was billed at.
+    if(isClosed(y,m)){ skipped++; return; }
     if(v===""||num(v)===(t.rent||0)){ delete t.pay[y][m].rent; } else { t.pay[y][m].rent=num(v); } });
-  persist("Adjusted rent — "+y); closeModal(); render(); flash("Rents updated for "+y+"."); };
+  persist("Adjusted rent — "+y); closeModal(); render();
+  flash("Rents updated for "+y+"."+(skipped?" Closed months were left alone.":"")); };
 
 /* ---- Batch receipt entry (table) ---- */
 function tenantOpts(sel){ return '<option value="">— select tenant —</option>'+DATA.tenants.filter(t=>t.name&&t.name!=="NO TENANT").sort((a,b)=>a.name.localeCompare(b.name)).map(t=>'<option value="'+t.id+'"'+(t.id==sel?' selected':'')+'>'+esc(t.name)+' — '+esc(t.unit)+'</option>').join(""); }
@@ -1022,7 +1165,10 @@ function vStatement(){
     '<label>Tenant<select id="stSel">'+topts+'</select></label>'+
     '<label>From<input id="stFrom" type="date" value="'+esc(stmtFrom)+'"></label>'+
     '<label>To<input id="stTo" type="date" value="'+esc(stmtTo)+'"></label>'+
-    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label></div></div>';
+    '<label>&nbsp;<button class="ghost" data-h="window.print()">🖨 Print / PDF</button></label>'+
+    '<label>&nbsp;<button class="ghost" data-h="openSendDoc(&#39;statement&#39;)">✉ Email</button></label>'+
+    // Statements are a report now, not a tab — this is the way back.
+    '<label>&nbsp;<button class="ghost" data-h="goTab(&#39;schedule&#39;)">← Rent schedule</button></label></div></div>';
   h+=letterheadHtml();
   const fYM=ymKey(stmtFrom), tYM=ymKey(stmtTo);
   const t=DATA.tenants.find(x=>x.id===stmtTenant);

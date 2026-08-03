@@ -49,12 +49,17 @@ button.ghost:hover,.filebtn:hover{background:var(--soft);}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th,td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
 thead th{background:var(--soft);color:var(--muted);font-weight:700;text-transform:uppercase;font-size:11px;}
-/* Column headings stay put while a long list scrolls, so you can still tell
-   which month a figure belongs to halfway down the schedule. Sits below the
-   tab bar (z-index 20) and above the sticky first column. */
-thead th{position:sticky;top:34px;z-index:6;}
-.tblwrap thead th:first-child{z-index:8;}
-@media print{ thead th{position:static;} }
+/* Frozen headings. A .tblwrap already scrolls horizontally, which makes it a
+   scroll container on BOTH axes — so the table has to scroll inside it for
+   sticky to bite (sticking to the page would never fire). .tblwrap.freeze
+   gives the grid its own height and pins the heading row, and the first column
+   with it, so tenant and month stay readable however far you scroll. */
+.tblwrap.freeze{max-height:calc(100vh - 250px);overflow:auto;}
+.tblwrap.freeze thead th{position:sticky;top:0;z-index:6;}
+.tblwrap.freeze tbody td:first-child,
+.tblwrap.freeze thead th:first-child{position:sticky;left:0;background:#fff;z-index:5;}
+.tblwrap.freeze thead th:first-child{background:var(--soft);z-index:7;}
+@media print{ .tblwrap.freeze{max-height:none;overflow:visible;} .tblwrap.freeze thead th,.tblwrap.freeze tbody td:first-child{position:static;} }
 tr.total td{border-top:2px solid var(--ink);font-weight:700;background:#eef1fb;}
 .num{text-align:right;}
 .st{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;}
