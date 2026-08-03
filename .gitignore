@@ -42,3 +42,15 @@ supabase/xsd-tep-ext-2024/**/Samples/
 
 # Client rental app (contains real tenant data — seed goes to Supabase, not git)
 Greson_Property_Rentals.html
+SEED_greson_rental.sql
+SEED_greson_live.sql
+
+# Client management app (real client data — data goes to Supabase, not git)
+Greson_Management_Dashboard.html
+greson_mgmt_live.json
+greson_mgmt_clean.json
+SEED_greson_mgmt.sql
+
+# Client payroll app (real employee data — seed goes to Supabase, not git)
+km-payroll-app.html
+SEED_km_payroll.sql

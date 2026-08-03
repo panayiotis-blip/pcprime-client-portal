@@ -1,0 +1,2717 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --navy1:#1e3179; --navy2:#293e87; --navyD:#1c2e75;
+    --page:#f4f6f9; --panel:#ffffff; --rule:#e2e8ef; --hdbg:#f7f9fc; --zebra:#fbfcfe;
+    --ink:#0f1b33; --ink2:#44546e; --ink3:#8394ab; --label:#6b7f9c;
+    --blueT:#eaf1fb; --blueB:#c3d7ef;
+    --red:#d6392b; --redT:#fbeae8;
+    --green:#0f6350; --greenT:#e4f1ed;
+    --gold:#8f6704; --goldT:#fbf2d9; --goldBar:#c9911a;
+    --sans: ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono: ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sh: 0 1px 2px rgba(15,27,51,.05), 0 1px 10px rgba(15,27,51,.04);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  .app{font-family:var(--sans);color:var(--ink);background:var(--page);
+    height:100vh; height:100dvh; min-height:560px;
+    border:1px solid var(--rule);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+  .app h1,.app h2,.app h3,.app h4{margin:0;font-weight:600}
+  .app button{font-family:inherit;cursor:pointer}
+  .app p{margin:0}
+
+  /* header */
+  .hdr{background:linear-gradient(90deg,var(--navy1),var(--navy2));color:#fff;padding:15px 22px;display:flex;align-items:flex-start;gap:14px;flex:none;position:relative;z-index:60}
+  .logo{width:46px;height:46px;border-radius:8px;background:#fff;color:var(--navyD);display:grid;place-items:center;font:700 16px/1 var(--sans);letter-spacing:-.03em;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.22)}
+  .hgroup{min-width:0}
+  .hgroup h1{font-size:20px;font-weight:700;letter-spacing:-.012em;line-height:1.25}
+  .hgroup p{margin-top:6px;font-size:11.5px;color:#c2cfe9;line-height:1.5}
+  .acct{margin-left:auto;text-align:right;position:relative;flex:none}
+  .pill{background:#fff;color:var(--navyD);border:0;border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;display:inline-flex;gap:8px;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+  .pill:hover{background:#eef2fa}
+  .car{font-size:9px;opacity:.65}
+  .stamp{font:400 10.5px/1.5 var(--mono);color:#b7c5e2;margin-top:8px;white-space:nowrap}
+  .menu{position:absolute;right:0;top:44px;background:#fff;border-radius:8px;box-shadow:0 10px 30px rgba(15,27,51,.24);min-width:206px;padding:6px;display:none;z-index:40;text-align:left}
+  .menu.open{display:block}
+  .menu button{display:flex;gap:10px;width:100%;background:none;border:0;padding:9px 11px;border-radius:6px;font-size:13px;color:var(--ink);align-items:center;text-align:left}
+  .menu button:hover{background:var(--page)}
+  .menu .ic{width:15px;text-align:center;opacity:.7;font-size:12px}
+  .menu .sep{height:1px;background:var(--rule);margin:5px 8px}
+  .menu button.out{color:var(--red)}
+  .menu button.out:hover{background:var(--redT)}
+
+  /* tabs */
+  .tabs{background:#fff;border-bottom:1px solid var(--rule);display:flex;gap:2px;padding:0 22px;overflow-x:auto;overflow-y:hidden;flex:none;position:relative;z-index:50}
+  .tabs button{background:none;border:0;padding:15px 14px 12px;font-size:13.5px;color:#5b6b83;border-bottom:3px solid transparent;white-space:nowrap;font-weight:500}
+  .tabs button:hover{color:var(--navyD)}
+  .tabs button[aria-current="true"]{color:var(--navyD);font-weight:600;border-bottom-color:var(--navyD)}
+
+  .body{padding:20px 22px 26px;overflow:auto;flex:1 1 auto;min-height:0;overscroll-behavior:contain}
+
+  /* sticky block on the timesheet */
+  .stick{position:sticky;top:-20px;z-index:30;background:var(--page);
+    margin:-20px -22px 12px;padding:10px 22px 10px;
+    border-bottom:1px solid var(--rule);box-shadow:0 4px 10px -6px rgba(15,27,51,.28)}
+  .stick .period{margin-bottom:8px;padding:9px 14px}
+  .stick .card{margin-top:0}
+  .strip{display:flex;align-items:center;gap:22px;flex-wrap:wrap;padding:10px 16px}
+  .strip .f{display:flex;align-items:baseline;gap:7px}
+  .strip .f span{font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--label)}
+  .strip .f b{font:700 16px/1 var(--mono);letter-spacing:-.02em;color:var(--navyD);font-variant-numeric:tabular-nums}
+  .strip .f.ot b{color:var(--gold)}
+  .strip .rate{margin-left:auto;font:400 11px/1.4 var(--mono);color:var(--ink3);text-align:right}
+  .strip .bar{flex:1 1 160px;min-width:120px;height:10px}
+
+  /* period bar */
+  .period{background:#fff;border:1px solid var(--rule);border-radius:10px;padding:13px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:var(--sh);margin-bottom:16px}
+  .period .lb{font:600 10px/1 var(--mono);letter-spacing:.15em;color:var(--label);text-transform:uppercase}
+  .period .spacer{flex:1}
+  .tagpill{background:var(--page);border:1px solid var(--rule);border-radius:999px;padding:6px 13px;font:400 11.5px/1 var(--mono);color:var(--ink2)}
+  .hint{font-size:12px;color:var(--ink3)}
+  .hint b{color:var(--navyD);font-weight:600}
+
+  select,input[type=text],input[type=number],input[type=password],input[type=date],textarea{font-family:var(--sans);font-size:13px;padding:7px 10px;border:1px solid var(--rule);border-radius:6px;background:#fff;color:var(--ink)}
+  textarea{resize:vertical;min-height:62px;line-height:1.5}
+  select:hover,input:hover,textarea:hover{border-color:var(--blueB)}
+  select:focus,input:focus,textarea:focus{outline:2px solid var(--navyD);outline-offset:-1px;border-color:var(--navyD)}
+
+  .btn{background:var(--navyD);color:#fff;border:0;padding:8px 15px;border-radius:6px;font-size:12.5px;font-weight:600}
+  .btn:hover{background:#16255e}
+  .btn.ghost{background:#fff;color:var(--ink2);border:1px solid var(--rule)}
+  .btn.ghost:hover{background:var(--blueT);color:var(--navyD);border-color:var(--blueB)}
+  .btn.danger{background:#fff;color:var(--red);border:1px solid #eec9c4}
+  .btn.danger:hover{background:var(--redT)}
+  .btn.sm{padding:6px 11px;font-size:11.5px}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  /* generic dropdown */
+  .dd{position:relative;display:inline-block}
+  .dd-menu{position:absolute;right:0;top:38px;background:#fff;border-radius:8px;box-shadow:0 10px 30px rgba(15,27,51,.22);min-width:190px;padding:6px;display:none;z-index:30}
+  .dd-menu.open{display:block}
+  .dd-menu button{display:block;width:100%;background:none;border:0;padding:9px 11px;border-radius:6px;font-size:12.5px;color:var(--ink);text-align:left}
+  .dd-menu button:hover{background:var(--page)}
+  .dd-menu .sep{height:1px;background:var(--rule);margin:5px 8px}
+
+  .card{background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--sh)}
+  .card + .card{margin-top:16px}
+  .card .hd{padding:14px 18px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .card .hd h3{font-size:13.5px;letter-spacing:-.01em;color:var(--ink);font-weight:600}
+  .card .hd .spacer{flex:1}
+  .card .bd{padding:18px}
+  .note{font-size:12px;line-height:1.65;color:var(--ink2)}
+
+  /* meter */
+  .meter{padding:18px}
+  .meter .row{display:flex;align-items:flex-start;gap:30px;flex-wrap:wrap;margin-bottom:15px}
+  .meter .lb{font:600 10px/1.3 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--label)}
+  .meter .big{font:700 26px/1 var(--mono);letter-spacing:-.03em;color:var(--navyD);margin-top:8px}
+  .meter .big span{font-size:12.5px;color:var(--ink3);margin-left:4px;font-weight:400}
+  .tag{font:600 10px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;padding:6px 10px;border-radius:999px}
+  .tag.ot{background:var(--goldT);color:var(--gold)}
+  .tag.ok{background:var(--greenT);color:var(--green)}
+  .bar{height:20px;background:#e9edf4;border-radius:6px;display:flex;position:relative;overflow:hidden}
+  .bar i{display:block;height:100%}
+  .bar .n{background:var(--navyD)}
+  .bar .o{background:var(--goldBar)}
+  .bar .std{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:9px;font:400 11px/1 var(--mono);color:var(--ink2)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+  /* tables */
+  .scroll{overflow-x:auto}
+  .scroll.tall{max-height:calc(100dvh - 360px);min-height:220px;overflow:auto}
+  .scroll.tall thead th{position:sticky;top:0;z-index:4}
+  .scroll.tall th:first-child{z-index:5}
+  th:first-child{position:sticky;left:0;z-index:2;box-shadow:1px 0 0 var(--rule)}
+  td:first-child{position:sticky;left:0;z-index:1;background:#fff;box-shadow:1px 0 0 var(--rule)}
+  tbody tr:nth-child(even) td:first-child{background:var(--zebra)}
+  tbody tr:hover td:first-child{background:var(--blueT)}
+  tr.tot td:first-child,tr.tot:hover td:first-child{background:var(--hdbg)}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th{font:600 9.5px/1.3 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--label);text-align:right;padding:11px 9px;background:var(--hdbg);border-bottom:1px solid var(--rule);white-space:nowrap;vertical-align:bottom}
+  th:first-child,th.l{text-align:left}
+  td{padding:6px 9px;border-bottom:1px solid #eef1f6;text-align:right;white-space:nowrap}
+  td:first-child,td.l{text-align:left}
+  td.num,th.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  tbody tr:nth-child(even) td{background:var(--zebra)}
+  tbody tr:hover td{background:var(--blueT)}
+  tr.tot td,tr.tot:hover td{border-top:2px solid var(--navyD);border-bottom:0;font-weight:600;background:var(--hdbg);color:var(--navyD)}
+  tr.sub td,tr.sub:hover td{background:var(--hdbg);font-weight:600}
+  .muted{color:var(--ink3)}
+  .ok{color:var(--green);font-weight:600}
+  .bad{color:var(--red);font-weight:600}
+
+  /* chips */
+  .chip{display:inline-block;font:600 9px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;padding:5px 7px;border-radius:4px;min-width:46px;text-align:center}
+  .chip.wd{background:#eaeff6;color:var(--ink2)}
+  .chip.sat{background:var(--greenT);color:var(--green)}
+  .chip.hol{background:var(--redT);color:var(--red)}
+  .chip.lv{background:var(--goldT);color:var(--gold)}
+  tr.r-hol td:first-child{box-shadow:inset 3px 0 0 var(--red),1px 0 0 var(--rule)}
+  tr.r-sat td:first-child{box-shadow:inset 3px 0 0 var(--green),1px 0 0 var(--rule)}
+  tr.r-lv td:first-child{box-shadow:inset 3px 0 0 var(--goldBar),1px 0 0 var(--rule)}
+  .hrs{width:68px;text-align:right;font-family:var(--mono);background:var(--blueT);border:1px solid var(--blueB)}
+  .hrs:hover{background:#dfe9f8}
+  .nt{width:100%;min-width:150px;border:1px solid transparent;background:transparent;font-size:12px;padding:5px 7px;border-radius:6px}
+  .nt:hover{border-color:var(--rule);background:#fff}
+  .holname{font:600 10px/1 var(--mono);color:var(--red);text-transform:uppercase;letter-spacing:.06em}
+  .workname{font:600 10px/1 var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.06em}
+
+  /* kpi */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px;margin-bottom:16px}
+  .kpi{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:15px 17px;box-shadow:var(--sh)}
+  .kpi .lb{font:600 10px/1.3 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--label)}
+  .kpi .vl{font:700 22px/1.1 var(--mono);letter-spacing:-.028em;margin-top:10px;font-variant-numeric:tabular-nums;color:var(--navyD)}
+  .kpi .fn{font-size:11px;color:var(--ink3);margin-top:7px}
+  .kpi .fn b{color:var(--ink2);font-weight:600}
+  .kpi.accent{background:linear-gradient(135deg,var(--navy1),var(--navy2));border-color:var(--navy1);color:#fff}
+  .kpi.accent .lb{color:#b7c5e2}.kpi.accent .fn{color:#b7c5e2}.kpi.accent .vl{color:#fff}
+  .kpi.accent .fn b{color:#fff}
+
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+  .kv{display:grid;grid-template-columns:1fr auto;gap:10px 12px;align-items:center;font-size:12.5px}
+  .kv label{color:var(--ink2)}
+  .kv input{width:106px;text-align:right;font-family:var(--mono)}
+  .kv .ro{width:106px;text-align:right;font-family:var(--mono);font-weight:600;color:var(--navyD);background:var(--hdbg);border:1px solid var(--rule);border-radius:6px;padding:7px 10px;font-size:13px}
+  .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+  .fld{display:flex;flex-direction:column;gap:6px}
+  .fld label{font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--label)}
+  .fld.wide{grid-column:1/-1}
+  .warn{background:var(--goldT);border-left:3px solid var(--goldBar);padding:12px 15px;font-size:12px;line-height:1.65;color:#6b4d05;border-radius:6px}
+  .formula{font:400 11.5px/1.6 var(--mono);color:var(--ink2);background:var(--hdbg);border:1px solid var(--rule);border-radius:6px;padding:10px 12px;margin-top:12px}
+  .prose{font-size:13px;line-height:1.7;color:var(--ink2);max-width:74ch}
+  .prose h4{margin:18px 0 6px;font-size:12.5px;color:var(--ink);font-weight:600}
+  .prose h4:first-child{margin-top:0}
+  .rolebadge{display:inline-block;font:600 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;border-radius:4px;background:var(--blueT);color:var(--navyD)}
+  .file{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--hdbg);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;font-size:12.5px}
+  .file .nm{font-family:var(--mono);color:var(--navyD);font-weight:600}
+
+  /* login */
+  .app.locked .hdr,.app.locked .tabs{display:none}
+  .app.locked .body{padding:0;display:grid;place-items:center;background:linear-gradient(135deg,var(--navy1),var(--navy2))}
+  .login{background:#fff;border-radius:12px;box-shadow:0 20px 50px rgba(8,18,40,.35);padding:28px;width:340px;max-width:92vw}
+  .login .lg{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  .login .lg .logo{box-shadow:none;border:1px solid var(--rule)}
+  .login .lg b{font-size:14px;letter-spacing:-.01em;display:block}
+  .login .lg span{font:400 10.5px/1.5 var(--mono);color:var(--ink3)}
+  .login .fld{margin-bottom:13px}
+  .login input{width:100%}
+  .login .btn{width:100%;padding:10px;font-size:13px;margin-top:6px}
+  .login .err{background:var(--redT);color:var(--red);font-size:12px;padding:9px 11px;border-radius:6px;margin-bottom:13px}
+
+  /* record card, following the portal's client record layout */
+  .rec{position:sticky;top:-20px;z-index:20;background:var(--page);margin:-20px -22px 16px;padding:14px 22px 0}
+  .rec-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .rec-top h2{font-size:19px;font-weight:700;letter-spacing:-.015em;color:var(--navyD)}
+  .code{font:600 11px/1 var(--mono);letter-spacing:.06em;background:var(--navyD);color:#fff;padding:7px 10px;border-radius:5px}
+  .spill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px}
+  .spill.on{background:var(--greenT);color:var(--green)}
+  .spill.off{background:#eef1f6;color:var(--ink3)}
+  .spill i{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+  .rec-act{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .rec-act .grp{display:flex;gap:8px;flex-wrap:wrap}
+  .rec-tabs{display:flex;gap:2px;margin-top:12px;border-bottom:1px solid var(--rule);overflow-x:auto}
+  .rec-tabs button{background:none;border:0;padding:11px 13px 9px;font-size:13px;color:#5b6b83;
+    border-bottom:3px solid transparent;white-space:nowrap;font-weight:500}
+  .rec-tabs button:hover{color:var(--navyD)}
+  .rec-tabs button[aria-current="true"]{color:var(--navyD);font-weight:600;border-bottom-color:var(--navyD)}
+
+  /* T.D.59A form layout */
+  .form59 .sec{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#fff;
+    background:var(--navyD);padding:9px 14px;border-radius:5px;margin:18px 0 0}
+  .form59 .sec:first-child{margin-top:0}
+  .f59{width:100%;border-collapse:collapse;font-size:12.5px}
+  .f59 th{background:var(--hdbg);font:600 9px/1.3 var(--mono);letter-spacing:.11em;text-transform:uppercase;
+    color:var(--label);padding:8px 10px;text-align:right;border-bottom:1px solid var(--rule)}
+  .f59 th:first-child{text-align:left}
+  .f59 td{padding:5px 10px;border-bottom:1px solid #eef1f6;vertical-align:middle}
+  .f59 td:first-child{color:var(--ink2);line-height:1.45}
+  .f59 td.n{width:34px;color:var(--ink3);font-family:var(--mono);text-align:right;padding-right:4px}
+  .f59 input{width:118px;text-align:right;font-family:var(--mono);font-size:12.5px;padding:5px 8px}
+  .f59 .ro{width:118px;text-align:right;font-family:var(--mono);font-size:12.5px;padding:6px 8px;
+    background:var(--hdbg);border:1px solid var(--rule);border-radius:5px;color:var(--navyD);font-weight:600}
+  .f59 tr.calc td{background:var(--zebra)}
+  .f59 tr.res td{background:var(--hdbg);font-weight:600;color:var(--navyD)}
+  .f59 .cell{display:flex;justify-content:flex-end}
+
+  /* payslip */
+  .payslip{padding:0;overflow:hidden}
+  .sl-top{background:linear-gradient(90deg,var(--navy1),var(--navy2));color:#fff;padding:15px 20px;display:flex;align-items:flex-start;gap:14px}
+  .sl-co{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .sl-addr{font:400 10.5px/1.6 var(--mono);color:#c2cfe9;margin-top:5px;white-space:pre-line}
+  .sl-sub{font:400 11.5px/1.5 var(--mono);color:#dbe4f5;margin-top:7px}
+  .sl-badge{margin-left:auto;font:600 9.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;background:rgba(255,255,255,.16);padding:7px 11px;border-radius:999px;flex:none}
+  .sl-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--rule);border-bottom:1px solid var(--rule)}
+  .sl-meta > div{background:var(--hdbg);padding:11px 20px}
+  .sl-meta span{display:block;font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--label)}
+  .sl-meta b{display:block;font-size:13px;margin-top:6px;color:var(--ink)}
+  .sl-cols{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rule)}
+  .sl-col{background:#fff;padding:16px 20px}
+  .sl-h{font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--label);margin-bottom:12px}
+  .sl-row{display:flex;align-items:baseline;gap:12px;padding:7px 0;border-bottom:1px solid #f1f4f8;font-size:12.5px}
+  .sl-row:last-child{border-bottom:0}
+  .sl-lb{flex:1;color:var(--ink2)}
+  .sl-lb em{display:block;font-style:normal;font:400 10.5px/1.5 var(--mono);color:var(--ink3);margin-top:3px}
+  .sl-amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px}
+  .sl-row.strong{border-top:1.5px solid var(--navyD);border-bottom:0;margin-top:6px;padding-top:9px;font-weight:600;color:var(--navyD)}
+  .sl-row.strong .sl-lb{color:var(--navyD)}
+  .sl-net{background:var(--navyD);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between}
+  .sl-net span{font:600 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#b7c5e2}
+  .sl-net b{font:700 21px/1 var(--mono);letter-spacing:-.025em}
+  .sl-foot{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--rule);border-top:1px solid var(--rule)}
+  .sl-fcol{background:#fff;padding:16px 20px}
+  .sl-mini{display:grid;grid-template-columns:1fr auto;gap:7px 12px;font-size:12px;align-items:baseline}
+  .sl-mini span{color:var(--ink2)}
+  .sl-mini b{font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:500}
+  .sl-mini .tt{border-top:1px solid var(--rule);padding-top:8px;margin-top:2px;color:var(--navyD);font-weight:600}
+  .sl-note{padding:13px 20px;background:var(--hdbg);border-top:1px solid var(--rule);font-size:11px;line-height:1.6;color:var(--ink3)}
+  @media (max-width:680px){.sl-cols,.sl-foot,.sl-meta{grid-template-columns:1fr}}
+
+  @media print{
+    html,body{height:auto}
+    .app{height:auto;min-height:0;border:0;border-radius:0;background:#fff}
+    .hdr,.tabs,.period,.stick{display:none!important}
+    .body{overflow:visible;padding:0}
+    .card{box-shadow:none;break-inside:avoid;page-break-inside:avoid;border-color:#cfd8e4}
+    .card + .card{margin-top:12px}
+    .payslip{break-after:page;page-break-after:always}
+    .payslip:last-child{break-after:auto;page-break-after:auto}
+    .kpis{break-inside:avoid}
+    .btn,.btnrow,.dd{display:none!important}
+    .sl-top,.sl-net,.kpi.accent{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+  @media (max-width:760px){
+    .hdr{flex-wrap:wrap;padding:14px 15px}
+    .acct{margin-left:0;width:100%;text-align:left}
+    .menu{right:auto;left:0}
+    .hgroup h1{font-size:17px}
+    .tabs{padding:0 12px}
+    .body{padding:15px 14px 22px}
+    .stick{top:-15px;margin:-15px -14px 10px;padding:8px 14px}
+    .rec{top:-15px;margin:-15px -14px 12px;padding:10px 14px 0}
+  }
+  @media (prefers-reduced-motion:no-preference){.bar i{transition:width .25s ease}}
+</style>
+
+<div class="app locked" id="app">
+  <header class="hdr">
+    <div class="logo" id="logoTile">KM</div>
+    <div class="hgroup">
+      <h1 id="hTitle">Payroll &amp; Hours Control</h1>
+      <p>Timesheets · Overtime · Social insurance · GHS · Employer cost · 2026</p>
+    </div>
+    <div class="acct">
+      <button class="pill" id="acctBtn" aria-haspopup="true" aria-expanded="false">
+        <span id="acctName">—</span><span class="car">▼</span>
+      </button>
+      <div class="stamp" id="stamp"></div>
+      <div class="menu" id="acctMenu" role="menu"></div>
+    </div>
+  </header>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="body" id="body"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY="payroll_2026", YEAR=2026;
+  var MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var MSHORT=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  var HOL_DEFAULT={
+    "2026-01-01":"New Year's Day","2026-01-06":"Epiphany","2026-02-23":"Clean Monday",
+    "2026-03-25":"Greek Independence Day","2026-04-01":"EOKA Day","2026-04-10":"Good Friday",
+    "2026-04-13":"Easter Monday","2026-04-14":"Easter Tuesday","2026-05-01":"Labour Day",
+    "2026-06-01":"Whit Monday","2026-08-15":"Assumption Day","2026-10-01":"Independence Day",
+    "2026-10-28":"Ochi Day","2026-12-25":"Christmas Day","2026-12-26":"Boxing Day"
+  };
+  function defaultHolidays(){
+    var o={}; Object.keys(HOL_DEFAULT).forEach(function(k){ o[k]={name:HOL_DEFAULT[k],work:false}; }); return o;
+  }
+
+  // Every absence reduces pay from this employer: annual leave is met by the Central
+  // Holiday Fund and sick leave by Social Insurance, so neither is paid by the company.
+  var ABSTYPES=[
+    {k:"V",label:"Annual leave",       si:"V", hint:"paid by the Central Holiday Fund"},
+    {k:"S",label:"Sick leave",         si:"A", hint:"paid by Social Insurance"},
+    {k:"M",label:"Maternity/paternity",si:"M", hint:"paid by Social Insurance"},
+    {k:"U",label:"Unpaid leave",       si:"A", hint:"not paid by anyone"}
+  ];
+  function absType(k){ for(var i=0;i<ABSTYPES.length;i++) if(ABSTYPES[i].k===k) return ABSTYPES[i]; return null; }
+  var SEED_ENTRIES = {};  // per-client data lives in the portal, not in the template
+
+  var DEFAULTS={
+    employer:{name:"",reg:"",tic:"",siReg:"",address:"",phone:"",email:"",contact:"",contactTel:""},
+    employees:[],
+    users:[{u:"Admin",p:"Admin",name:"Administrator",role:"admin"}],
+    rates:{siEE:8.8, siER:8.8, holER:8, redER:1.2, itfER:0.5, scfER:2, ghsEE:2.65, ghsER:2.9},
+    params:{stdDay:8, stdMonth:176, capMonth:5742, capWeek:1325, ghsCapYear:180000, recording:"exceptions",
+      stdBasis:"calendar", weekEnd:6, payLag:7},
+    paye:{enabled:true, borneBy:"employee", method:"td59", periods:13, employerType:"Private Sector",
+      bands:[{upTo:22000,rate:0},{upTo:32000,rate:20},{upTo:42000,rate:25},{upTo:72000,rate:30},{upTo:0,rate:35}]},
+    holidays:defaultHolidays(),
+    updated:null, entries:{}
+  };
+
+  var TABS=[["sheet","Timesheet"],["month","Monthly summary"],["year","Annual summary"],["reports","Reports"],["employees","Employees"],["data","Data & exports"]];
+  var S=null, me=null, view="sheet", curEmp="andri", curMonth=new Date().getMonth();
+  var reportKind="payslips", slipEmp="all", cardEmp=null, loginErr="";
+  var $body=document.getElementById("body"), $tabs=document.getElementById("tabs"), $app=document.getElementById("app");
+  var $menu=document.getElementById("acctMenu"), $acctBtn=document.getElementById("acctBtn");
+  var $acctName=document.getElementById("acctName"), $stamp=document.getElementById("stamp");
+  var $hTitle=document.getElementById("hTitle"), $logo=document.getElementById("logoTile");
+  var opened=new Date();
+
+  /* ---------- calendar ---------- */
+  function absKey(m){ return YEAR+"-"+String(m+1).padStart(2,"0"); }
+  function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  var CAL=[];
+  (function(){ var d=new Date(YEAR,0,1);
+    while(d.getFullYear()===YEAR){ if(d.getDay()!==0) CAL.push({iso:iso(d),m:d.getMonth(),dow:d.getDay(),day:DAYS[d.getDay()]}); d.setDate(d.getDate()+1); }
+  })();
+  function monthDays(m){ return CAL.filter(function(c){return c.m===m;}); }
+  function weeks(){
+    var we=Number(S.params.weekEnd); if(isNaN(we)) we=6;
+    var lag=Number(S.params.payLag)||0, out=[];
+    var d=new Date(YEAR,0,1);
+    while(d.getFullYear()===YEAR){
+      if(d.getDay()===we){
+        var end=new Date(d), start=new Date(d); start.setDate(start.getDate()-6);
+        var pay=new Date(d); pay.setDate(pay.getDate()+lag);
+        out.push({start:iso(start),end:iso(end),pay:iso(pay),
+          days:CAL.filter(function(c){ return c.iso>=iso(start) && c.iso<=iso(end); })});
+      }
+      d.setDate(d.getDate()+1);
+    }
+    return out;
+  }
+  function weekDetail(e,wk){
+    var std=stdHoursFor(e,wk.days), ot=0, abs=0;
+    wk.days.forEach(function(c){ var d=dayRaw(e,c); ot=r2(ot+(d.ot||0)); abs=r2(abs+(d.abs||0)); });
+    var started = !e.dateEmployed || e.dateEmployed<=wk.end;
+    var left = e.dateLeft && e.dateLeft<wk.start;
+    var base = (e.active===false||left||!started) ? 0 : std;
+    var paid=r2(Math.max(0,base-abs)+ot);
+    var target = e.type==="FIXED" ? r2((Number(e.net)||0)*12/52*(std?paid/std:0)) : r2(paid*(Number(e.net)||0));
+    var gross = grossForNet(target,"W");
+    var c=contribs(gross,"W");
+    c.std=base; c.absHrs=abs; c.otHrs=ot; c.paidHrs=paid; c.target=target;
+    return c;
+  }
+  function hol(i){ return S.holidays ? S.holidays[i] : null; }
+  function isHoliday(i){ var x=hol(i); return !!x && !x.work; }
+  function dayType(c,e){
+    if(isHoliday(c.iso)) return "hol";
+    if(c.dow===6) return (e && weekDays(e)>=6) ? "wd" : "sat";
+    return "wd";
+  }
+  function isWorkDay(c,e){ return dayType(c,e)==="wd"; }
+
+  /* ---------- payroll engine ---------- */
+  function emp(id){ for(var i=0;i<S.employees.length;i++) if(S.employees[i].id===id) return S.employees[i]; return null; }
+  function r2(n){ return Math.round((n+Number.EPSILON)*100)/100; }
+  // Net -> gross divisor, derived from the statutory rates in Settings.
+  // SI and GHS are charged on gross + holiday fund; net = gross - employee SI - employee GHS.
+  // net = gross - gross*(1 + hol%)*(siEE% + ghsEE%)  =>  divisor = 1 - (1 + hol%)*(siEE% + ghsEE%)
+  function divisor(){
+    var R=S.rates;
+    var d=1-(1+(Number(R.holER)||0)/100)*((Number(R.siEE)||0)+(Number(R.ghsEE)||0))/100;
+    return d>0?d:1;
+  }
+  function weekHours(e){ return Number(e.weekHours)|| (String(e.weekPattern)==="6"?46:40); }
+  function weekDays(e){ return Number(e.weekPattern)||5; }
+  function stdDayHours(e){ var d=weekDays(e); return d?r2(weekHours(e)/d):8; }
+  function stdBasis(e){ return e.stdBasis || S.params.stdBasis || "calendar"; }
+  function workDaysIn(days,e){ var n=0; days.forEach(function(c){ if(isWorkDay(c,e)) n++; }); return n; }
+  function stdHoursFor(e,days){
+    if(stdBasis(e)==="fixed") return Number(e.stdMonth)||Math.round(weekHours(e)*52/12);
+    return r2(workDaysIn(days,e)*stdDayHours(e));
+  }
+  function stdMonthHours(e,m){
+    if(m===undefined) return Number(e.stdMonth)||Math.round(weekHours(e)*52/12);
+    return stdHoursFor(e,monthDays(m));
+  }
+  function exceptionMode(){ return (S.params.recording||"exceptions")==="exceptions"; }
+  function monthRecording(e,m){
+    var d=S.entries[e.id];
+    if(!d) return S.params.recording||"exceptions";
+    var hasExc=false, hasH=false;
+    monthDays(m).forEach(function(c){
+      var x=d[c.iso]; if(!x) return;
+      if(x.ot!==undefined||x.ab!==undefined) hasExc=true;
+      if(x.h!==undefined && x.h!=="") hasH=true;
+    });
+    if(hasExc) return "exceptions";
+    if(hasH) return "hours";
+    return S.params.recording||"exceptions";
+  }
+  function grossRate(e){
+    if(e.type==="FIXED") return (Number(e.net)||0)/divisor();
+    return (Number(e.net)||0)/divisor();
+  }
+  function otRate(e){ return e.type==="FIXED" ? grossRate(e)/(Number(e.stdMonth)||Math.round(weekHours(e)*52/12)) : grossRate(e); }
+  // Bases: social insurance, redundancy and training are capped at the monthly (or weekly)
+  // maximum insurable earnings; social cohesion is not capped; GHS has its own annual cap.
+  function bases(gross,payInd){
+    var R=S.rates, h=r2(gross*R.holER/100), base=r2(gross+h);
+    var cap = payInd==="W" ? (Number(S.params.capWeek)||0) : (Number(S.params.capMonth)||0);
+    var gcap = (Number(S.params.ghsCapYear)||0)/12;
+    return {hol:h, base:base,
+      insurable: cap ? Math.min(base,cap) : base,
+      ghsBase:   gcap ? Math.min(base,gcap) : base};
+  }
+  function netOf(gross,payInd){
+    var R=S.rates, b=bases(gross,payInd);
+    return r2(gross - r2(b.insurable*R.siEE/100) - r2(b.ghsBase*R.ghsEE/100));
+  }
+  // The client pays an agreed NET rate, so gross is the derived figure: find the gross,
+  // to the cent, whose net equals the agreed net exactly.
+  function grossForNet(target,payInd){
+    target=r2(target);
+    if(!target) return 0;
+    var g0=r2(target/divisor());
+    if(netOf(g0,payInd)<target-0.005){            // capped: deductions stop rising, widen by bisection
+      var lo=g0, hi=g0+target, i;
+      for(i=0;i<60;i++){ var mid=(lo+hi)/2; if(netOf(r2(mid),payInd)<target) lo=mid; else hi=mid; }
+      g0=r2(hi);
+    }
+    var best=g0, bestd=Infinity;
+    for(var j=-4;j<=4;j++){
+      var g=r2(g0+j/100), d=Math.abs(netOf(g,payInd)-target);
+      if(d<bestd-1e-9 || (Math.abs(d-bestd)<1e-9 && Math.abs(g-g0)<Math.abs(best-g0))){ bestd=d; best=g; }
+    }
+    return best;
+  }
+  function entry(id,i){ var d=S.entries[id]; return (d&&d[i])||{}; }
+  function dayRaw(e,c,mode){
+    var en=entry(e.id,c.iso), t=dayType(c,e);
+    if((mode||monthRecording(e,c.m))==="exceptions"){
+      var ot2=(en.ot===undefined||en.ot===null||en.ot==="")?null:Number(en.ot);
+      var ab=(en.ab===undefined||en.ab===null||en.ab==="")?null:Number(en.ab);
+      var sd=stdDayHours(e);
+      var worked = t==="wd" ? Math.max(0, r2(sd-(ab||0)+(ot2||0))) : (ot2||0);
+      return {type:t, ot:ot2||0, abs:ab||0, at:en.at||"", hours:null, worked:worked, normal:0,
+        nEarn:0, oEarn:(ot2||0)*otRate(e), gross:0, note:en.n||""};
+    }
+    var h=(en.h===undefined||en.h===null||en.h==="")?null:Number(en.h);
+    var std=Number(S.params.stdDay)||8, normal=0, ot=0;
+    if(h!==null){ if(t==="wd"){ normal=Math.min(h,std); ot=Math.max(0,h-std); } else { ot=h; } }
+    var nEarn = e.type==="FIXED" ? 0 : normal*grossRate(e);
+    var oEarn = ot*otRate(e);
+    return {hours:h,type:t,normal:normal,ot:ot,abs:0,at:"",worked:h||0,nEarn:nEarn,oEarn:oEarn,gross:nEarn+oEarn,note:en.n||""};
+  }
+  // Month detail: gross solved from the agreed net, then the daily earnings columns are
+  // scaled so they foot exactly to that gross.
+  var MDCACHE={}, MDBUSY={};
+  function monthDetail(e,m){
+    var key=e.id+"|"+m;
+    if(MDCACHE[key]) return MDCACHE[key];
+    if(MDBUSY[key]) return monthDetailCalc(e,m,true);   // re-entry: pre-tax basis, no gross-up
+    MDBUSY[key]=1;
+    var res;
+    try{ res=monthDetailCalc(e,m,false); } finally { delete MDBUSY[key]; }
+    MDCACHE[key]=res;
+    return res;
+  }
+  function monthDetailCalc(e,m,noGrossUp){
+    var mode=monthRecording(e,m);
+    var rows=monthDays(m).map(function(c){ return {c:c,d:dayRaw(e,c,mode)}; });
+    var hours=0,normal=0,ot=0,raw=0,absH=0;
+    var workedH=0;
+    rows.forEach(function(x){ hours+=x.d.hours||0; normal+=x.d.normal; ot+=x.d.ot; raw+=x.d.gross; absH+=x.d.abs||0; workedH+=x.d.worked||0; });
+    var stdM=Number(S.params.stdMonth)||176, stdEmp=stdMonthHours(e,m), paid=0;
+    var bonus = (S.bonus && S.bonus[e.id] && S.bonus[e.id][absKey(m)] && Number(S.bonus[e.id][absKey(m)].amt)) || 0;
+    var target;
+    if(mode==="exceptions"){
+      var started = !e.dateEmployed || e.dateEmployed<=(absKey(m)+"-31");
+      var left = e.dateLeft && e.dateLeft<(absKey(m)+"-01");
+      var base = (e.active===false||left||!started) ? 0 : stdEmp;
+      paid = Math.max(0, base-absH) + ot;
+      normal = Math.max(0, base-absH); hours = paid;
+      target = (e.type==="FIXED" ? (Number(e.net)||0)*(stdEmp?paid/stdEmp:0) : paid*(Number(e.net)||0)) + bonus;
+    } else {
+      target = (e.type==="FIXED" ? (Number(e.net)||0)*(1+(stdM?ot/stdM:0)) : hours*(Number(e.net)||0)) + bonus;
+    }
+    var gross = grossForNet(target,e.payInd||"M");
+    if(!noGrossUp && S.paye && S.paye.enabled && S.paye.borneBy==="employer" && target && payeAt(e,m,gross)>0){
+      // net after tax rises with gross, so bisect for the gross that delivers the agreed net
+      var lo=gross, hi=r2(gross*1.8), k;
+      for(k=0;k<50;k++){
+        var mid=(lo+hi)/2, cM=contribs(r2(mid),e.payInd||"M");
+        if(r2(mid)-cM.eeSI-cM.ghsEE-payeAt(e,m,r2(mid)) < target) lo=mid; else hi=mid;
+      }
+      var best=r2(hi), bd=Infinity;
+      for(k=-3;k<=3;k++){
+        var g2=r2(hi+k/100), c2=contribs(g2,e.payInd||"M");
+        var d2=Math.abs(r2(g2-c2.eeSI-c2.ghsEE-payeAt(e,m,g2))-target);
+        if(d2<bd-1e-9){ bd=d2; best=g2; }
+      }
+      gross=best;
+    }
+    var nE=0,oE=0;
+    if(mode==="exceptions"){
+      var otR=otRate(e);
+      rows.forEach(function(x){ x.d.oEarn=r2((x.d.ot||0)*otR); x.d.gross=x.d.oEarn; oE=r2(oE+x.d.oEarn); });
+      nE=r2(gross-oE);
+      return {rows:rows,hours:hours,normal:normal,ot:ot,abs:r2(absH),std:stdEmp,paid:paid,worked:r2(workedH),
+              nEarn:nE,oEarn:oE,gross:gross,target:r2(target),bonus:r2(bonus)};
+    }
+    if(e.type!=="FIXED"){
+      var k = raw ? gross/raw : 1, last=null;
+      rows.forEach(function(x){
+        if(x.d.hours){ x.d.nEarn=r2(x.d.nEarn*k); x.d.oEarn=r2(x.d.oEarn*k);
+          x.d.gross=r2(x.d.nEarn+x.d.oEarn); nE+=x.d.nEarn; oE+=x.d.oEarn; last=x; }
+        else { x.d.nEarn=0; x.d.oEarn=0; x.d.gross=0; }
+      });
+      var diff=r2(gross-r2(nE+oE));
+      if(last && diff){
+        if(last.d.normal){ last.d.nEarn=r2(last.d.nEarn+diff); nE=r2(nE+diff); }
+        else { last.d.oEarn=r2(last.d.oEarn+diff); oE=r2(oE+diff); }
+        last.d.gross=r2(last.d.nEarn+last.d.oEarn);
+      }
+      nE=r2(nE); oE=r2(oE);
+    } else {
+      rows.forEach(function(x){ x.d.oEarn=r2(x.d.oEarn); x.d.gross=x.d.oEarn; oE=r2(oE+x.d.oEarn); });
+      nE=r2(gross-oE);
+    }
+    return {rows:rows,hours:hours,normal:normal,ot:ot,abs:r2(absH),std:stdEmp,paid:hours,worked:r2(workedH),nEarn:nE,oEarn:oE,gross:gross,target:r2(target),bonus:r2(bonus)};
+  }
+  function monthCalc(e,m){ return monthDetail(e,m); }
+  function payeAt(e,m,gross){                        // tax for a trial gross, used when grossing up
+    if(!S.paye||!S.paye.enabled) return 0;
+    var c=contribs(gross,e.payInd||"M");
+    var taxable=r2(gross-c.eeSI-c.ghsEE);
+    if(S.paye.method==="td59"){ var t=td59Calc(e,m); return t?t.C3:0; }
+    if(S.paye.method==="annualised") return r2(annualTax(taxable*12)/12);
+    var ytd=0, paid=0, i;
+    for(i=0;i<m;i++){ var x=taxableOf(e,i); ytd=r2(ytd+x.taxable); paid=r2(paid+payeFor(e,i)); }
+    ytd=r2(ytd+taxable);
+    var months=m+1, due=r2(annualTax(ytd*12/months)*months/12);
+    var t=r2(due-paid); return t>0?t:0;
+  }
+  function contribs(gross,payInd){
+    var R=S.rates;
+    gross=r2(gross);
+    var b=bases(gross,payInd), h=b.hol, ins=b.insurable, gb=b.ghsBase;
+    var eeSI=r2(ins*R.siEE/100), ghsEE=r2(gb*R.ghsEE/100), ded=r2(eeSI+ghsEE);
+    var erSI=r2(ins*R.siER/100), ghsER=r2(gb*R.ghsER/100);
+    var red=r2(ins*R.redER/100), itf=r2(ins*R.itfER/100);
+    var scf=r2(b.base*R.scfER/100);            // social cohesion is not capped
+    return {gross:gross,hol:h,base:b.base,insurable:ins,ghsBase:gb,
+            eeSI:eeSI,ghsEE:ghsEE,ded:ded,net:r2(gross-ded),
+            erSI:erSI,red:red,itf:itf,scf:scf,ghsER:ghsER,
+            cost:r2(gross+erSI+h+red+itf+scf+ghsER)};
+  }
+  // Cyprus PAYE: progressive on taxable income, which is gross less the employee's own
+  // social insurance and GHS. Bands and method are set in Settings.
+  function annualTax(taxable){
+    var bands=(S.paye&&S.paye.bands)||[], t=0, prev=0;
+    for(var i=0;i<bands.length;i++){
+      var cap=Number(bands[i].upTo)||Infinity, rate=(Number(bands[i].rate)||0)/100;
+      if(taxable>prev) t+=(Math.min(taxable,cap)-prev)*rate;
+      prev=cap;
+      if(taxable<=cap) break;
+    }
+    return t;
+  }
+  // Form T.D.59A: build the year, apply the declared allowances, tax the chargeable
+  // income, take the share relating to this employer, then divide by the pay periods.
+  function td59Year(e,m){
+    var ytdG=0,ytdSI=0,ytdGHS=0,i;
+    for(i=0;i<=m;i++){ var mc=monthDetail(e,i), c=contribs(mc.gross,e.payInd||"M");
+      ytdG=r2(ytdG+mc.gross); ytdSI=r2(ytdSI+c.eeSI); ytdGHS=r2(ytdGHS+c.ghsEE); }
+    var f=12/(m+1);
+    return {A1:r2(ytdG*f), si:r2(ytdSI*f), ghs:r2(ytdGHS*f)};
+  }
+  function td59Calc(e,m){
+    var d=e.td59||{}, a=td59Year(e,m), N=function(k){ return Number(d[k])||0; };
+    var A1=a.A1, A6=r2(A1+N("A2")+N("A3")+N("A4")+N("A5"));
+    if(!A6) return null;
+    var A8=r2(A6-N("A7"));
+    var B1to5=r2(N("B1")+N("B2")+N("B3")+N("B4")+N("B5"));
+    var B6=r2(A8-B1to5);
+    var B7=r2(a.si+N("B7")), B8=r2(a.ghs+N("B8")), B9=N("B9");
+    var cap=r2(B6/5), claimed=r2(B7+B8+B9), allowed=Math.min(claimed,cap);
+    var B1013=r2(N("B10")+N("B11")+N("B12")+N("B13"));
+    var B15=r2(B1to5+allowed+B1013), B16=r2(A8-B15);
+    if(B16<0) B16=0;
+    var C1=r2(annualTax(B16));
+    var C2=r2(C1*(A1+N("A2")+N("A3"))/A6);
+    var periods=(e.payInd==="W")?52:(Number(e.periods)||Number(S.paye.periods)||13);
+    return {A1:A1,A6:A6,A8:A8,B6:B6,B7:B7,B8:B8,B9:B9,claimed:claimed,cap:cap,allowed:allowed,
+      restricted:claimed>cap, B15:B15,B16:B16,C1:C1,C2:C2,periods:periods,C3:r2(C2/periods)};
+  }
+  var PCACHE={};
+  function clearCache(){ PCACHE={}; MDCACHE={}; MDBUSY={}; }
+  function taxableOf(e,m){
+    var mc=monthDetail(e,m), c=contribs(mc.gross,e.payInd||"M");
+    return {taxable:r2(mc.gross-c.eeSI-c.ghsEE), gross:mc.gross};
+  }
+  function payeFor(e,m){
+    if(!S.paye||!S.paye.enabled) return 0;
+    var key=e.id+"|"+m;
+    if(PCACHE[key]!==undefined) return PCACHE[key];
+    if(!monthDetail(e,m).gross) return 0;        // nothing paid this period, nothing to withhold
+    PCACHE[key]=0;                                   // guard against re-entry
+    var ytd=0, paid=0, any=false, i;
+    for(i=0;i<=m;i++){
+      var x=taxableOf(e,i);
+      ytd=r2(ytd+x.taxable);
+      if(x.gross) any=true;
+      if(i<m) paid=r2(paid+payeFor(e,i));
+    }
+    if(!any){ PCACHE[key]=0; return 0; }
+    var months=m+1, due;
+    if(S.paye.method==="td59"){
+      var t59=td59Calc(e,m);
+      PCACHE[key]= t59 && t59.C3>0 ? t59.C3 : 0;
+      return PCACHE[key];
+    }
+    if(S.paye.method==="annualised"){
+      var x2=taxableOf(e,m);
+      due=r2(annualTax(x2.taxable*12)/12);
+      PCACHE[key]=due>0?due:0; return PCACHE[key];
+    }
+    var projected = ytd*12/months;                   // cumulative: project the year, take the share earned
+    due = r2(annualTax(projected)*months/12);
+    var thisMonth = r2(due-paid);
+    if(thisMonth<0) thisMonth=0;
+    PCACHE[key]=thisMonth;
+    return thisMonth;
+  }
+  function empMonth(e,m){
+    var mc=monthDetail(e,m), c=contribs(mc.gross,e.payInd||"M");
+    c.paye=payeFor(e,m);
+    c.ded=r2(c.eeSI+c.ghsEE+c.paye);
+    c.net=r2(c.gross-c.ded);
+    c.taxable=r2(c.gross-c.eeSI-c.ghsEE);
+    c.normalHrs=mc.normal; c.otHrs=mc.ot; c.hours=mc.hours; c.target=mc.target;
+    c.nEarn=mc.nEarn; c.oEarn=mc.oEarn; c.bonus=mc.bonus;
+    c.absHrs=mc.abs||0; c.stdHrs=mc.std||0; c.paidHrs=mc.paid||0; c.workedHrs=mc.worked||0; return c;
+  }
+  function actives(){ return S.employees.filter(function(e){return e.active!==false;}); }
+  var MKEYS=["normalHrs","otHrs","hours","absHrs","stdHrs","paidHrs","workedHrs","gross","hol","base","insurable","ghsBase","eeSI","ghsEE","paye","taxable","ded","net","erSI","red","itf","scf","ghsER","cost","target"];
+  function monthTotals(m){ var t={}; MKEYS.forEach(function(k){t[k]=0;});
+    actives().forEach(function(e){ var r=empMonth(e,m); MKEYS.forEach(function(k){ t[k]+=r[k]; }); });
+    MKEYS.forEach(function(k){ t[k]=r2(t[k]); }); return t; }
+  function ytdTotals(upto){ var a={}; MKEYS.forEach(function(k){a[k]=0;});
+    for(var m=0;m<=upto;m++){ var t=monthTotals(m); MKEYS.forEach(function(k){ a[k]+=t[k]; }); }
+    MKEYS.forEach(function(k){ a[k]=r2(a[k]); }); return a; }
+  function ytd(e,upto){ var a={}; MKEYS.forEach(function(k){a[k]=0;});
+    for(var m=0;m<=upto;m++){ var r=empMonth(e,m); MKEYS.forEach(function(k){ a[k]+=r[k]; }); }
+    MKEYS.forEach(function(k){ a[k]=r2(a[k]); }); return a; }
+  function siRemit(t){ return r2(t.eeSI+t.erSI+t.hol+t.red+t.itf+t.scf); }
+  function ghsRemit(t){ return r2(t.ghsEE+t.ghsER); }
+
+  /* ---------- formatting ---------- */
+  function coName(){ return (S.employer&&S.employer.name)||"Employer"; }
+  function coSlug(){ return coName().replace(/[^A-Za-z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,28)||"payroll"; }
+  function coInitials(){
+    var w=coName().replace(/[^A-Za-z\u0370-\u03ff ]/g," ").split(/\s+/).filter(Boolean);
+    return ((w[0]||"P")[0]+((w[1]||w[0]||"R")[0])).toUpperCase();
+  }
+  function eur(n){ if(!isFinite(n)) n=0; return (n<0?"-":"")+Math.abs(n).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function eur4(n){ if(!isFinite(n)) n=0; return n.toLocaleString("en-GB",{minimumFractionDigits:4,maximumFractionDigits:4}); }
+  function hrs(n){ if(!n) return "–"; return (Math.round(n*100)/100).toLocaleString("en-GB",{maximumFractionDigits:2}); }
+  function hrs2(n){ return (Math.round(n*100)/100).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function z(n){ return n?eur(n):"–"; }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+  function ddmm(i){ var p=i.split("-"); return p[2]+"/"+p[1]; }
+  function ddmmyy(i){ if(!i) return "—"; var p=i.split("-"); return p[2]+"/"+p[1]+"/"+p[0]; }
+  function stampFmt(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+  function delta(now,prev){
+    if(!prev) return "";
+    var p=(now-prev)/prev*100, pm=MSHORT[curMonth-1<0?11:curMonth-1];
+    if(!isFinite(p)||Math.abs(p)<0.05) return "<b>level</b> on "+pm;
+    return "<b>"+(p>0?"▲":"▼")+" "+Math.abs(Math.round(p*10)/10)+"%</b> on "+pm;
+  }
+
+  /* ---------- storage ---------- */
+  var saveTimer=null;
+  function setStamp(){ $stamp.innerHTML = me ? "Viewed: "+stampFmt(opened)+" · Updated: "+esc(S.updated||"—") : ""; }
+  function save(){
+    clearCache();
+    clearTimeout(saveTimer);
+    S.updated=stampFmt(new Date()); setStamp();
+    saveTimer=setTimeout(function(){
+      if(!window.storage) return;
+      window.storage.set(KEY, JSON.stringify(S)).catch(function(){});
+    },500);
+  }
+  function load(){
+    if(!window.storage) return Promise.resolve(null);
+    return window.storage.get(KEY).then(function(r){ return r&&r.value?JSON.parse(r.value):null; }).catch(function(){ return null; });
+  }
+  function ckey(id){ return KEY+"_contract_"+id; }
+  var MEMC={};                                  // session fallback when storage is unavailable
+  function loadContract(id){
+    if(!window.storage) return Promise.resolve(MEMC[id]||null);
+    return window.storage.get(ckey(id)).then(function(r){ return r&&r.value?JSON.parse(r.value):null; })
+      .catch(function(){ return MEMC[id]||null; });
+  }
+  function saveContract(id,obj){
+    MEMC[id]=obj;
+    if(!window.storage) return Promise.resolve();
+    return window.storage.set(ckey(id), JSON.stringify(obj)).catch(function(){ return null; });
+  }
+  function delContract(id){
+    delete MEMC[id];
+    if(!window.storage) return Promise.resolve();
+    return window.storage.delete(ckey(id)).catch(function(){});
+  }
+  function setEntry(id,d,f,v){
+    clearCache();
+    if(!S.entries[id]) S.entries[id]={};
+    var o=S.entries[id]; if(!o[d]) o[d]={};
+    if(v===""||v===null||v===undefined) delete o[d][f]; else o[d][f]=v;
+    if(Object.keys(o[d]).length===0) delete o[d];
+    save();
+  }
+  function isAdmin(){ return !!me && me.role==="admin"; }
+
+  /* ---------- csv ---------- */
+  function csv(rows,name){
+    var txt=rows.map(function(r){ return r.map(function(c){
+      c=(c===null||c===undefined)?"":String(c);
+      return /[",\n]/.test(c) ? '"'+c.replace(/"/g,'""')+'"' : c; }).join(","); }).join("\r\n");
+    try{
+      var a=document.createElement("a");
+      a.href=URL.createObjectURL(new Blob(["\ufeff"+txt],{type:"text/csv;charset=utf-8"}));
+      a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    }catch(err){ alert("Download blocked here — copy the figures from the table instead."); }
+  }
+  function monthCsvRows(m){
+    var rows=[["Employee","Basis","Normal hrs","OT hrs","Gross EUR","EE SI","GHS EE","Deductions","NET pay","ER SI","Holiday fund","Redundancy","ITF","SCF","GHS ER","Employer cost"]];
+    actives().forEach(function(e){ var r=empMonth(e,m);
+      rows.push([e.name,e.type,r.normalHrs,r.otHrs,r.gross,r.eeSI,r.ghsEE,r.ded,r.net,r.erSI,r.hol,r.red,r.itf,r.scf,r.ghsER,r.cost]); });
+    var t=monthTotals(m);
+    rows.push(["TOTAL","",t.normalHrs,t.otHrs,t.gross,t.eeSI,t.ghsEE,t.ded,t.net,t.erSI,t.hol,t.red,t.itf,t.scf,t.ghsER,t.cost]);
+    return rows;
+  }
+
+  /* ---------- menus ---------- */
+  function closeMenus(){
+    $menu.classList.remove("open"); $acctBtn.setAttribute("aria-expanded","false");
+    document.querySelectorAll(".dd-menu.open").forEach(function(m){ m.classList.remove("open"); });
+  }
+  $acctBtn.onclick=function(ev){
+    ev.stopPropagation();
+    var wasOpen=$menu.classList.contains("open"); closeMenus();
+    if(!wasOpen){ $menu.classList.add("open"); $acctBtn.setAttribute("aria-expanded","true"); }
+  };
+  document.addEventListener("click",closeMenus);
+  function dropdown(label,items,primary){
+    var w=document.createElement("div"); w.className="dd";
+    var b=document.createElement("button"); b.className="btn"+(primary?"":" ghost");
+    b.innerHTML=esc(label)+' <span class="car">▼</span>';
+    var m=document.createElement("div"); m.className="dd-menu";
+    items.forEach(function(it){
+      if(it==="-"){ var s=document.createElement("div"); s.className="sep"; m.appendChild(s); return; }
+      var x=document.createElement("button"); x.textContent=it[0];
+      x.onclick=function(ev){ ev.stopPropagation(); closeMenus(); it[1](); };
+      m.appendChild(x);
+    });
+    b.onclick=function(ev){ ev.stopPropagation(); var open=m.classList.contains("open"); closeMenus(); if(!open) m.classList.add("open"); };
+    w.appendChild(b); w.appendChild(m); return w;
+  }
+
+  /* ---------- chrome ---------- */
+  function renderChrome(){
+    $hTitle.textContent=coName()+" — Payroll & Hours Control";
+    $logo.textContent=coInitials();
+    $acctName.textContent=me.name+" · "+me.role;
+    $tabs.innerHTML="";
+    TABS.forEach(function(t){
+      if(t[0]==="employees" && !isAdmin()) return;
+      var b=document.createElement("button"); b.textContent=t[1]; b.dataset.v=t[0];
+      b.setAttribute("aria-current", view===t[0]?"true":"false");
+      b.onclick=function(){ view=t[0]; render(); };
+      $tabs.appendChild(b);
+    });
+    var items=[];
+    if(isAdmin()) items.push(["setup","⚙","Settings"],["users","👥","Users & access"]);
+    items.push(["privacy","🔒","Privacy policy"]);
+    $menu.innerHTML="";
+    items.forEach(function(it){
+      var b=document.createElement("button"); b.innerHTML='<span class="ic">'+it[1]+'</span>'+esc(it[2]);
+      b.onclick=function(){ view=it[0]; closeMenus(); render(); };
+      $menu.appendChild(b);
+    });
+    var sep=document.createElement("div"); sep.className="sep"; $menu.appendChild(sep);
+    var lo=document.createElement("button"); lo.className="out"; lo.innerHTML='<span class="ic">⏻</span>Log out';
+    lo.onclick=function(){ closeMenus(); me=null; view="sheet"; render(); };
+    $menu.appendChild(lo);
+  }
+
+  /* ---------- period bar ---------- */
+  function periodBar(opts,host){
+    opts=opts||{};
+    var bar=document.createElement("div"); bar.className="period";
+    var lb=document.createElement("span"); lb.className="lb"; lb.textContent="Period"; bar.appendChild(lb);
+    var ys=document.createElement("select"); var o=document.createElement("option"); o.textContent=YEAR; ys.appendChild(o); ys.disabled=true; bar.appendChild(ys);
+    if(opts.month!==false){
+      var ms=document.createElement("select");
+      MONTHS.forEach(function(m,i){ var op=document.createElement("option"); op.value=i; op.textContent=MSHORT[i]; if(i===curMonth) op.selected=true; ms.appendChild(op); });
+      ms.onchange=function(){ curMonth=+ms.value; render(); };
+      bar.appendChild(ms);
+      var pill=document.createElement("span"); pill.className="tagpill"; pill.textContent=MSHORT[curMonth]+" "+YEAR; bar.appendChild(pill);
+    } else {
+      var p2=document.createElement("span"); p2.className="tagpill"; p2.textContent="Full year "+YEAR; bar.appendChild(p2);
+    }
+    if(opts.employee){
+      var el=document.createElement("span"); el.className="lb"; el.style.marginLeft="8px"; el.textContent="Employee"; bar.appendChild(el);
+      var es=document.createElement("select");
+      actives().forEach(function(e){ var op=document.createElement("option"); op.value=e.id; op.textContent=e.name; if(e.id===curEmp) op.selected=true; es.appendChild(op); });
+      es.onchange=function(){ curEmp=es.value; render(); };
+      bar.appendChild(es);
+    }
+    (opts.picks||[]).forEach(function(pk){
+      var l=document.createElement("span"); l.className="lb"; l.style.marginLeft="8px"; l.textContent=pk.label; bar.appendChild(l);
+      var s=document.createElement("select");
+      pk.options.forEach(function(op2){ var op=document.createElement("option"); op.value=op2.v; op.textContent=op2.t;
+        if(String(op2.v)===String(pk.val)) op.selected=true; s.appendChild(op); });
+      s.onchange=function(){ pk.fn(s.value); };
+      bar.appendChild(s);
+    });
+    var sp=document.createElement("span"); sp.className="spacer"; bar.appendChild(sp);
+    if(opts.hint){ var h=document.createElement("span"); h.className="hint"; h.innerHTML=opts.hint; bar.appendChild(h); }
+    if(opts.dd) bar.appendChild(dropdown(opts.dd[0],opts.dd[1],opts.dd[2]));
+    if(opts.action){ var b=document.createElement("button"); b.className="btn"; b.textContent=opts.action[0]; b.onclick=opts.action[1]; bar.appendChild(b); }
+    (host||$body).appendChild(bar);
+    return bar;
+  }
+
+  /* ---------- render ---------- */
+  function render(){
+    closeMenus();
+    if(!me){ $app.classList.add("locked"); $tabs.innerHTML=""; $menu.innerHTML=""; $stamp.textContent=""; $acctName.textContent="—"; viewLogin(); return; }
+    $app.classList.remove("locked");
+    if(!isAdmin() && (view==="setup"||view==="users"||view==="empcard"||view==="employees")) view="sheet";
+    clearCache(); renderChrome(); setStamp(); $body.innerHTML="";
+    if(view==="sheet") viewSheet();
+    else if(view==="month") viewMonth();
+    else if(view==="year") viewYear();
+    else if(view==="reports") viewReports();
+    else if(view==="employees") viewEmployees();
+    else if(view==="data") viewData();
+    else if(view==="setup") viewSetup();
+    else if(view==="empcard") viewEmpCard();
+    else if(view==="users") viewUsers();
+    else if(view==="privacy") viewPrivacy();
+  }
+  function card(title,right){
+    var c=document.createElement("div"); c.className="card";
+    var hd=document.createElement("div"); hd.className="hd";
+    var h=document.createElement("h3"); h.textContent=title; hd.appendChild(h);
+    var sp=document.createElement("span"); sp.className="spacer"; hd.appendChild(sp);
+    if(right) hd.appendChild(right);
+    c.appendChild(hd); return c;
+  }
+  function kpi(lb,vl,fn,accent){
+    return '<div class="kpi'+(accent?" accent":"")+'"><div class="lb">'+esc(lb)+'</div><div class="vl">'+vl+'</div><div class="fn">'+(fn||"")+'</div></div>';
+  }
+  function fld(label,val,type,fn,wide){
+    var w=document.createElement("div"); w.className="fld"+(wide?" wide":"");
+    var l=document.createElement("label"); l.textContent=label; w.appendChild(l);
+    var i=document.createElement(type==="area"?"textarea":"input");
+    if(type!=="area") i.type=type||"text";
+    i.value=val==null?"":val;
+    i.onchange=function(){ fn(i.value); };
+    w.appendChild(i); return w;
+  }
+
+  /* ---------- login ---------- */
+  function viewLogin(){
+    $body.innerHTML="";
+    var box=document.createElement("div"); box.className="login";
+    box.innerHTML='<div class="lg"><div class="logo" id="logoTile2">PR</div><div><b>'+
+      esc(coName())+
+      '</b><span>Payroll &amp; Hours Control · '+YEAR+'</span></div></div>'+
+      (loginErr?'<div class="err">'+esc(loginErr)+'</div>':'')+
+      '<div class="fld"><label>User name</label><input type="text" id="lu" autocomplete="username"></div>'+
+      '<div class="fld"><label>Password</label><input type="password" id="lp" autocomplete="current-password"></div>'+
+      '<button class="btn" id="lb">Sign in</button>';
+    $body.appendChild(box);
+    var u=document.getElementById("lu"), p=document.getElementById("lp");
+    function go(){
+      var un=(u.value||"").trim().toLowerCase(), pw=p.value||"";
+      var hit=(S.users||[]).filter(function(x){ return String(x.u).toLowerCase()===un && String(x.p)===pw; })[0];
+      if(!hit){ loginErr="That user name and password do not match."; render(); return; }
+      loginErr=""; me=hit; opened=new Date(); view="sheet"; render();
+    }
+    document.getElementById("lb").onclick=go;
+    [u,p].forEach(function(el){ el.onkeydown=function(ev){ if(ev.key==="Enter"){ ev.preventDefault(); go(); } }; });
+    u.focus();
+  }
+
+  /* ---------- 01 timesheet ---------- */
+  function viewSheet(){
+    if(!emp(curEmp)||emp(curEmp).active===false){ var a=actives()[0]; curEmp=a?a.id:S.employees[0].id; }
+    var e=emp(curEmp), det=monthDetail(e,curMonth), mode=monthRecording(e,curMonth);
+
+    var stick=document.createElement("div"); stick.className="stick"; $body.appendChild(stick);
+    periodBar({employee:true, hint:"Saturdays and holidays: <b>all hours are overtime</b>",
+      dd:["Actions",[
+        ["Mark a full week of annual leave",function(){
+          var d=prompt("First day of the week to mark as annual leave (DD)"); if(!d) return;
+          var n=parseInt(d,10); if(!n) return;
+          var cnt=0;
+          monthDays(curMonth).forEach(function(c){
+            var day=parseInt(c.iso.slice(8),10);
+            if(day>=n && day<n+7 && isWorkDay(c,e) && cnt<weekDays(e)){
+              setEntry(curEmp,c.iso,"ab",stdDayHours(e)); setEntry(curEmp,c.iso,"at","V"); cnt++; }
+          });
+          render(); }],
+        ["Clear month",function(){
+          if(!confirm("Clear every exception for "+e.name+" in "+MONTHS[curMonth]+"?")) return;
+          monthDays(curMonth).forEach(function(c){
+            setEntry(curEmp,c.iso,"ot",""); setEntry(curEmp,c.iso,"ab",""); setEntry(curEmp,c.iso,"at",""); });
+          render(); }],
+        "-",
+        ["Export month",function(){
+          var rows=[[coName()+" — Timesheet",e.name,MONTHS[curMonth]+" "+YEAR],
+                    ["Date","Day","Type","Overtime","Absence","Reason","OT EUR","Notes"]];
+          det.rows.forEach(function(x){ rows.push([x.c.iso,x.c.day,
+            x.d.type==="hol"?"Holiday":x.d.type==="sat"?"Saturday":"Weekday",
+            x.d.ot||"",x.d.abs||"",(absType(x.d.at)||{}).label||"",x.d.oEarn||"",x.d.note]); });
+          rows.push(["Standard hours",det.std,"","","","","",""]);
+          rows.push(["Total","","",det.ot,det.abs,"",det.oEarn,""]);
+          rows.push(["Paid hours",det.paid,"","","","","",""]);
+          csv(rows,coSlug()+"_timesheet_"+e.id+"_"+MSHORT[curMonth]+YEAR+".csv"); }]
+      ],true]}, stick);
+
+    var stdM=stdMonthHours(e,curMonth);
+    var otPct=det.paid?(det.ot/det.paid*100):0, scale=Math.max(det.paid,stdM)*1.06||1;
+    var netNow=empMonth(e,curMonth).net;
+    var rateTxt = e.type==="FIXED"
+      ? "Salary €"+eur(grossRate(e))+" gross/month · OT €"+eur4(otRate(e))+"/hr"
+      : "Gross €"+eur4(grossRate(e))+"/hr · net €"+eur(e.net)+"/hr · OT 1:1";
+    var m=document.createElement("div"); m.className="card";
+    m.innerHTML='<div class="strip">'+
+      (mode==="hours"
+        ? '<div class="f"><span>Normal</span><b>'+hrs2(det.normal)+'</b></div>'+
+          '<div class="f ot"><span>Overtime</span><b>'+(det.ot?"+"+hrs2(det.ot):"–")+'</b></div>'
+        : '<div class="f"><span>Standard</span><b>'+hrs2(det.std)+'</b></div>'+
+          '<div class="f"><span>Absence</span><b'+(det.abs?' style="color:var(--red)"':'')+'>'+(det.abs?"−"+hrs2(det.abs):"–")+'</b></div>'+
+          '<div class="f ot"><span>Overtime</span><b>'+(det.ot?"+"+hrs2(det.ot):"–")+'</b></div>')+
+      '<div class="f"><span>Worked</span><b>'+hrs2(det.worked)+'</b></div>'+'<div class="f"><span>Paid hrs</span><b>'+hrs2(det.paid)+'</b></div>'+
+      '<div class="f"><span>Gross</span><b>€'+eur(det.gross)+'</b></div>'+
+      '<div class="f"><span>Net</span><b>€'+eur(netNow)+'</b></div>'+
+      '<div class="bar"><i class="n" style="width:'+(det.normal/scale*100)+'%"></i>'+
+        '<i class="o" style="width:'+(det.ot/scale*100)+'%"></i>'+
+        '<span class="std" style="left:'+(stdM/scale*100)+'%"></span></div>'+
+      '<span class="tag '+(otPct>15?"ot":"ok")+'">'+(Math.round(otPct*10)/10)+'% OT</span>'+
+      '<div class="rate">'+esc(rateTxt)+'</div>'+
+      '</div>';
+    stick.appendChild(m);
+
+    /* month build-up */
+    var bu=document.createElement("div"); bu.className="card";
+    var buw=document.createElement("div"); buw.className="scroll";
+    var but=document.createElement("table");
+    but.innerHTML='<thead><tr><th class="l">How the month is built</th><th class="num">Hours</th><th class="num">€ net</th></tr></thead>';
+    var butb=document.createElement("tbody");
+    var nr=Number(e.net)||0, perHr=e.type==="FIXED"?(det.std?nr/det.std:0):nr;
+    function bur(lb,hh,vv,cls){
+      var tr=document.createElement("tr"); if(cls) tr.className=cls;
+      tr.innerHTML='<td class="l">'+esc(lb)+'</td><td class="num">'+(hh===null?"":hrs2(hh))+'</td>'+
+        '<td class="num">'+(vv===null?"":eur(vv))+'</td>';
+      butb.appendChild(tr);
+    }
+    if(mode==="hours"){
+      bur("Normal hours worked",det.normal,r2(det.normal*perHr));
+      if(det.ot) bur("Plus overtime, paid 1:1",det.ot,r2(det.ot*perHr));
+    } else {
+      bur("Standard hours for the month ("+weekHours(e)+" a week over "+weekDays(e)+" days)",det.std,r2(det.std*perHr));
+      if(det.abs) bur("Less absence — not paid by the company",-det.abs,-r2(det.abs*perHr));
+      if(det.ot) bur("Plus overtime, paid 1:1",det.ot,r2(det.ot*perHr));
+    }
+    if(det.bonus) bur("Plus bonus",null,det.bonus);
+    bur("Paid hours and net pay",det.paid,det.target,"tot");
+    but.appendChild(butb); buw.appendChild(but); bu.appendChild(buw);
+    var contract=Number(e.stdMonth)||Math.round(weekHours(e)*52/12);
+    if(stdBasis(e)!=="fixed" && Math.abs(contract-det.std)>0.01){
+      var tr2=document.createElement("tr");
+      tr2.innerHTML='<td class="l muted">Contractual standard — '+weekHours(e)+' hours a week averages '+
+        hrs2(contract)+' a month; '+MONTHS[curMonth]+' has '+workDaysIn(monthDays(curMonth),e)+
+        ' working days</td><td class="num muted">'+hrs2(contract)+'</td><td class="num muted"></td>';
+      butb.appendChild(tr2);
+    }
+    var bun=document.createElement("div"); bun.className="bd note";
+    bun.textContent = mode==="hours"
+      ? "Read straight from the hours recorded each day, split at "+hrs2(stdDayHours(e))+" hours — the same normal and overtime split as the workbook."
+      : "Annual leave is met by the Central Holiday Fund and sick leave by Social Insurance, so neither is paid by the company — every absence reduces the hours paid here.";
+    bu.appendChild(bun); $body.appendChild(bu);
+
+    if(false){
+      var bn=document.createElement("div"); bn.className="card";
+      var bnb=document.createElement("div"); bnb.className="bd";
+      var bw=document.createElement("div"); bw.className="warn";
+      bw.textContent="This month is still stored as hours worked each day. It is being read correctly, and the totals agree with the workbook — but overtime and absence are derived rather than recorded. Convert it to record them properly.";
+      bnb.appendChild(bw);
+      var br=document.createElement("div"); br.className="btnrow"; br.style.marginTop="12px";
+      var bcv=document.createElement("button"); bcv.className="btn"; bcv.textContent="Convert "+MONTHS[curMonth]+" for "+e.name;
+      bcv.onclick=function(){
+        var r=convertMonth(e,curMonth,false);
+        if(!r){ alert("Nothing to convert."); return; }
+        if(!confirm("Convert "+MONTHS[curMonth]+" for "+e.name+"?\n\nHours recorded "+hrs2(r.recorded)+
+          "\nHours paid after conversion "+hrs2(r.paid)+(r.ok?"\n\nThese agree.":"\n\nWARNING: these do not agree."))) return;
+        convertMonth(e,curMonth,true); save(); render(); };
+      br.appendChild(bcv); bnb.appendChild(br); bn.appendChild(bnb); $body.appendChild(bn);
+    }
+
+    var c=document.createElement("div"); c.className="card";
+    var ch=document.createElement("div"); ch.className="hd";
+    ch.innerHTML='<h3>'+(mode==="hours"?"Hours worked each day":"Exceptions — record only overtime and absence")+
+      '</h3><span class="spacer"></span>'+
+      '<span class="hint">A full day is '+hrs2(stdDayHours(e))+' hours</span>';
+    c.appendChild(ch);
+    var wrap=document.createElement("div"); wrap.className="scroll tall";
+    var t=document.createElement("table");
+    t.innerHTML='<thead><tr><th class="l">Date</th><th class="l">Day</th><th class="num">Hours worked</th>'+
+      '<th class="num">Overtime</th><th class="num">Absence</th><th class="l">Reason</th>'+
+      '<th class="num">OT €</th><th class="l">Notes</th></tr></thead>';
+    var tb=document.createElement("tbody");
+    det.rows.forEach(function(x){
+      var d=x.d, cc=x.c, tr=document.createElement("tr");
+      var hh=hol(cc.iso);
+      tr.className="r-"+(d.type==="hol"?"hol":d.type==="sat"?"sat":(d.abs?"lv":"wd"));
+      var chip=d.type==="hol"?'<span class="chip hol">Holiday</span>':d.type==="sat"?'<span class="chip sat">Sat</span>':'<span class="chip wd">'+cc.day+'</span>';
+      var tail = hh ? ' <span class="'+(hh.work?"workname":"holname")+'">'+esc(hh.name)+(hh.work?" — working day":"")+'</span>' : '';
+      var opts=['<option value="">—</option>'].concat(ABSTYPES.map(function(a){
+        return '<option value="'+a.k+'"'+(d.at===a.k?" selected":"")+'>'+esc(a.label)+'</option>'; })).join("");
+      tr.innerHTML='<td class="l num">'+ddmm(cc.iso)+'</td>'+
+        '<td class="l">'+chip+tail+'</td>'+
+        (mode==="hours"
+          ? '<td><input class="hrs hw" type="number" step="0.25" min="0" max="24" value="'+(d.hours===null?"":d.hours)+'" data-iso="'+cc.iso+'"></td>'+
+            '<td class="num muted">'+(d.ot?hrs2(d.ot):"–")+'</td>'+
+            '<td class="num muted">–</td><td class="l muted">derived</td>'
+          : '<td class="num'+(d.worked?'':' muted')+'">'+(d.worked?hrs2(d.worked):"–")+'</td>'+
+            '<td><input class="hrs ot" type="number" step="0.25" min="0" max="24" value="'+(d.ot||"")+'" data-iso="'+cc.iso+'"></td>'+
+            '<td><input class="hrs ab" type="number" step="0.25" min="0" max="24" value="'+(d.abs||"")+'" data-iso="'+cc.iso+'"></td>'+
+            '<td class="l"><select class="at" data-iso="'+cc.iso+'" style="padding:4px 6px;font-size:12px">'+opts+'</select></td>')+
+        '<td class="num muted">'+z(d.oEarn)+'</td>'+
+        '<td class="l"><input class="nt" type="text" placeholder="—" value="'+esc(d.note)+'" data-note="'+cc.iso+'"></td>';
+      tb.appendChild(tr);
+    });
+    var tf=document.createElement("tr"); tf.className="tot";
+    tf.innerHTML='<td class="l" colspan="2">Total — '+MONTHS[curMonth]+'</td>'+
+      '<td class="num">'+hrs2(det.worked)+'</td>'+
+      '<td class="num">'+hrs(det.ot)+'</td><td class="num">'+hrs(det.abs)+'</td><td></td>'+
+      '<td class="num">'+z(det.oEarn)+'</td><td></td>';
+    tb.appendChild(tf); t.appendChild(tb); wrap.appendChild(t); c.appendChild(wrap); $body.appendChild(c);
+
+    tb.querySelectorAll("input.hw").forEach(function(i2){
+      i2.onchange=function(){ setEntry(curEmp,i2.dataset.iso,"h", i2.value===""?"":Number(i2.value)); render(); };
+    });
+    tb.querySelectorAll("input.ot").forEach(function(i2){
+      i2.onchange=function(){ setEntry(curEmp,i2.dataset.iso,"ot", i2.value===""?"":Number(i2.value)); render(); };
+    });
+    tb.querySelectorAll("input.ab").forEach(function(i2){
+      i2.onchange=function(){
+        setEntry(curEmp,i2.dataset.iso,"ab", i2.value===""?"":Number(i2.value));
+        if(i2.value!=="" && !entry(curEmp,i2.dataset.iso).at) setEntry(curEmp,i2.dataset.iso,"at","V");
+        render(); };
+    });
+    tb.querySelectorAll("select.at").forEach(function(s){
+      s.onchange=function(){ setEntry(curEmp,s.dataset.iso,"at",s.value); render(); };
+    });
+    tb.querySelectorAll("input.nt").forEach(function(i2){
+      i2.onchange=function(){ setEntry(curEmp,i2.dataset.note,"n",i2.value.trim()); };
+    });
+  }
+
+  /* ---------- convert recorded hours into exceptions ---------- */
+  function monthHasHours(e,m){
+    var d=S.entries[e.id]; if(!d) return false;
+    var any=false;
+    monthDays(m).forEach(function(c){ var x=d[c.iso]; if(x && x.h!==undefined && x.h!=="") any=true; });
+    return any;
+  }
+  function convertMonth(e,m,write){
+    if(!monthHasHours(e,m)) return null;
+    var d=S.entries[e.id], sd=stdDayHours(e), recorded=0, ot=0, abs=0, plan=[];
+    monthDays(m).forEach(function(c){
+      var x=d[c.iso]||{}, has=(x.h!==undefined && x.h!=="");
+      var hh=has?Number(x.h):0;
+      recorded+=hh;
+      if(isWorkDay(c,e)){
+        var o=Math.max(0,r2(hh-sd)), a=Math.max(0,r2(sd-hh));
+        ot=r2(ot+o); abs=r2(abs+a);
+        plan.push({iso:c.iso,ot:o,ab:a,at:a?(x.n&&/sick/i.test(x.n)?"S":(x.n&&/annual/i.test(x.n)?"V":"U")):"",note:x.n||""});
+      } else if(hh){
+        ot=r2(ot+hh);
+        plan.push({iso:c.iso,ot:hh,ab:0,at:"",note:x.n||""});
+      }
+    });
+    var std=stdHoursFor(e,monthDays(m));
+    var paid=r2(Math.max(0,std-abs)+ot);
+    if(write){
+      plan.forEach(function(p){
+        if((p.ot||p.ab) && !d[p.iso]) d[p.iso]={};      // a working day with no record at all
+        if(p.ot){ d[p.iso].ot=p.ot; } else if(d[p.iso]) delete d[p.iso].ot;
+        if(p.ab){ d[p.iso].ab=p.ab; d[p.iso].at=p.at||"U"; }
+        else if(d[p.iso]){ delete d[p.iso].ab; delete d[p.iso].at; }
+        if(d[p.iso] && !Object.keys(d[p.iso]).length) delete d[p.iso];   // h is kept as the original record
+      });
+    }
+    return {recorded:r2(recorded),std:std,ot:ot,abs:abs,paid:paid,ok:Math.abs(paid-recorded)<0.005};
+  }
+
+  /* ---------- 02 monthly ---------- */
+  var MCOLS=[["normalHrs","Normal hrs",1],["otHrs","OT hrs",1],["gross","Gross €",0],["eeSI","EE SI €",0],
+    ["ghsEE","GHS EE €",0],["ded","Deductions €",0],["net","NET pay €",0],["erSI","ER SI €",0],["hol","Hol fund €",0],
+    ["red","Redund €",0],["itf","ITF €",0],["scf","SCF €",0],["ghsER","GHS ER €",0],["cost","Employer cost €",0]];
+
+  function viewMonth(){
+    periodBar({action:["Export month",function(){
+      csv([[coName()+" — Monthly payroll summary",MONTHS[curMonth]+" "+YEAR]].concat(monthCsvRows(curMonth)),
+        coSlug()+"_monthly_summary_"+MSHORT[curMonth]+YEAR+".csv"); }]});
+    var t=monthTotals(curMonth), p=curMonth>0?monthTotals(curMonth-1):null;
+    var contrib=r2(siRemit(t)+ghsRemit(t));
+    var otEarn=0; actives().forEach(function(e){ otEarn+=empMonth(e,curMonth).oEarn; });
+
+    var k=document.createElement("div"); k.className="kpis";
+    k.innerHTML=
+      kpi("Gross payroll","€"+eur(t.gross),delta(t.gross,p?p.gross:0)||hrs(t.hours)+" hrs recorded")+
+      kpi("Net pay to staff","€"+eur(t.net),delta(t.net,p?p.net:0)||"Bank transfers due")+
+      kpi("Contributions payable","€"+eur(contrib),delta(contrib,p?r2(siRemit(p)+ghsRemit(p)):0)||"SI, funds and GHS")+
+      kpi("Overtime","€"+eur(otEarn),hrs(t.otHrs)+" OT hrs of "+hrs(t.hours))+
+      kpi("Total employer cost","€"+eur(t.cost),delta(t.cost,p?p.cost:0)||"All-in cost to company",true);
+    $body.appendChild(k);
+
+    var c=card("Per employee — "+MONTHS[curMonth]+" "+YEAR);
+    var wrap=document.createElement("div"); wrap.className="scroll";
+    var tab=document.createElement("table");
+    tab.innerHTML='<thead><tr><th class="l">Employee</th>'+MCOLS.map(function(x){return '<th class="num">'+x[1]+'</th>';}).join("")+'</tr></thead>';
+    var tb=document.createElement("tbody");
+    actives().forEach(function(e){
+      var r=empMonth(e,curMonth), tr=document.createElement("tr");
+      tr.innerHTML='<td class="l">'+esc(e.name)+'</td>'+MCOLS.map(function(x){
+        return '<td class="num">'+(x[2]?hrs(r[x[0]]):z(r[x[0]]))+'</td>'; }).join("");
+      tb.appendChild(tr);
+    });
+    var tr=document.createElement("tr"); tr.className="tot";
+    tr.innerHTML='<td class="l">Total — '+MONTHS[curMonth]+'</td>'+MCOLS.map(function(x){
+      return '<td class="num">'+(x[2]?hrs(t[x[0]]):eur(t[x[0]]))+'</td>'; }).join("");
+    tb.appendChild(tr); tab.appendChild(tb); wrap.appendChild(tab); c.appendChild(wrap);
+    var f=document.createElement("div"); f.className="bd note";
+    f.textContent="Social insurance and GHS are charged on gross plus the "+S.rates.holER+"% holiday fund. Net pay = gross − employee SI − employee GHS. The holiday fund is remitted with the social insurance contributions, so it sits in employer cost and not in net pay.";
+    c.appendChild(f); $body.appendChild(c);
+
+    /* net pay check against the client's own method */
+    var c2=card("Net pay check — against the way the client pays");
+    var w2=document.createElement("div"); w2.className="scroll";
+    var t2=document.createElement("table");
+    t2.innerHTML='<thead><tr><th class="l">Employee</th><th class="l">Client\u2019s calculation</th>'+
+      '<th class="num">Should be €</th><th class="num">App net pay €</th><th class="l">Agrees</th></tr></thead>';
+    var tb2=document.createElement("tbody"), allOk=true;
+    actives().forEach(function(e){
+      var r=empMonth(e,curMonth), ok=Math.abs(r.net-r.target)<0.005; if(!ok) allOk=false;
+      var calc = e.type==="FIXED"
+        ? "Salary "+eur(e.net)+(r.otHrs?" + "+hrs2(r.otHrs)+" OT hrs × "+eur4(Number(e.net)/(Number(S.params.stdMonth)||176)):"")
+        : hrs2(r.hours)+" hrs × "+eur(e.net);
+      var tr2=document.createElement("tr");
+      tr2.innerHTML='<td class="l">'+esc(e.name)+'</td><td class="l muted mono">'+esc(calc)+'</td>'+
+        '<td class="num">'+eur(r.target)+'</td><td class="num">'+eur(r.net)+'</td>'+
+        '<td class="l '+(ok?"ok":"bad")+'">'+(ok?"✓ exact":"✗ out by "+eur(r.net-r.target))+'</td>';
+      tb2.appendChild(tr2);
+    });
+    var trT=document.createElement("tr"); trT.className="tot";
+    trT.innerHTML='<td class="l">Total</td><td class="l"></td><td class="num">'+eur(t.target)+'</td>'+
+      '<td class="num">'+eur(t.net)+'</td><td class="l '+(allOk?"ok":"bad")+'">'+(allOk?"✓ all exact":"✗ check")+'</td>';
+    tb2.appendChild(trT); t2.appendChild(tb2); w2.appendChild(t2); c2.appendChild(w2);
+    var f2=document.createElement("div"); f2.className="bd note";
+    f2.textContent="The client pays an agreed net rate on every hour worked, overtime included. Gross is therefore the derived figure: the app solves for the gross, to the cent, whose net equals the agreed net after social insurance and GHS.";
+    c2.appendChild(f2); $body.appendChild(c2);
+  }
+
+  /* ---------- 03 annual ---------- */
+  function viewYear(){
+    var tot={}; MCOLS.forEach(function(x){tot[x[0]]=0;}); tot.hours=0;
+    var rows=[];
+    for(var m=0;m<12;m++){ var t=monthTotals(m); rows.push(t); MCOLS.forEach(function(x){tot[x[0]]=r2(tot[x[0]]+t[x[0]]);}); tot.hours=r2(tot.hours+t.hours); }
+    periodBar({month:false, action:["Export year",function(){
+      var out=[[coName()+" — Annual payroll summary "+YEAR],["Month"].concat(MCOLS.map(function(x){return x[1];}))];
+      rows.forEach(function(t2,i){ out.push([MONTHS[i]].concat(MCOLS.map(function(x){return t2[x[0]];}))); });
+      out.push(["ANNUAL TOTAL"].concat(MCOLS.map(function(x){return tot[x[0]];})));
+      csv(out,coSlug()+"_annual_summary_"+YEAR+".csv"); }]});
+    var contrib=r2(siRemit(tot)+ghsRemit(tot));
+    var otShare=tot.hours?tot.otHrs/tot.hours*100:0;
+
+    var k=document.createElement("div"); k.className="kpis";
+    k.innerHTML=
+      kpi("Annual gross","€"+eur(tot.gross),hrs(tot.hours)+" hrs recorded")+
+      kpi("Annual net pay","€"+eur(tot.net),"Paid to staff")+
+      kpi("Overtime share",(Math.round(otShare*10)/10)+"%",hrs(tot.otHrs)+" OT hrs")+
+      kpi("Contributions payable","€"+eur(contrib),"Remitted to the state")+
+      kpi("Annual employer cost","€"+eur(tot.cost),"Avg <b>€"+eur(tot.cost/12)+"</b> a month",true);
+    $body.appendChild(k);
+
+    var c=card("Month by month");
+    var wrap=document.createElement("div"); wrap.className="scroll";
+    var tab=document.createElement("table");
+    tab.innerHTML='<thead><tr><th class="l">Month</th>'+MCOLS.map(function(x){return '<th class="num">'+x[1]+'</th>';}).join("")+'</tr></thead>';
+    var tb=document.createElement("tbody");
+    rows.forEach(function(t2,i){
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="l">'+MONTHS[i]+'</td>'+MCOLS.map(function(x){
+        return '<td class="num">'+(x[2]?hrs(t2[x[0]]):z(t2[x[0]]))+'</td>'; }).join("");
+      tb.appendChild(tr);
+    });
+    var tr2=document.createElement("tr"); tr2.className="tot";
+    tr2.innerHTML='<td class="l">Annual total '+YEAR+'</td>'+MCOLS.map(function(x){
+      return '<td class="num">'+(x[2]?hrs(tot[x[0]]):eur(tot[x[0]]))+'</td>'; }).join("");
+    tb.appendChild(tr2); tab.appendChild(tb); wrap.appendChild(tab); c.appendChild(wrap); $body.appendChild(c);
+
+    var kc=card("Key metrics");
+    var kw=document.createElement("div"); kw.className="scroll";
+    var kt=document.createElement("table");
+    kt.innerHTML='<thead><tr><th class="l">Metric</th><th class="num">Amount €</th><th class="l">Basis</th></tr></thead>';
+    var ktb=document.createElement("tbody");
+    [["Total annual gross payroll",tot.gross,"All earnings including overtime"],
+     ["Total net pay to staff",tot.net,"Amounts transferred to employees"],
+     ["Social insurance payable",siRemit(tot),"Employee and employer SI, holiday, redundancy, ITF and cohesion funds"],
+     ["GHS payable",ghsRemit(tot),"Employee GHS plus employer GHS"],
+     ["Total contributions payable",contrib,"Everything remitted to the state"],
+     ["Total employer cost",tot.cost,"Full cost to the company"],
+     ["Average monthly gross",tot.gross/12,"Annual gross ÷ 12"],
+     ["Average monthly employer cost",tot.cost/12,"Annual cost ÷ 12"]].forEach(function(r){
+      var x=document.createElement("tr");
+      x.innerHTML='<td class="l">'+esc(r[0])+'</td><td class="num">'+eur(r[1])+'</td><td class="l muted">'+esc(r[2])+'</td>';
+      ktb.appendChild(x);
+    });
+    kt.appendChild(ktb); kw.appendChild(kt); kc.appendChild(kw); $body.appendChild(kc);
+  }
+
+  /* ---------- 04 reports ---------- */
+  function viewReports(){
+    periodBar({picks:[{label:"Report",options:[{v:"payslips",t:"Monthly payslips"},{v:"ctc",t:"Cost to company"},{v:"si",t:"Social insurance schedule"},{v:"paye",t:"PAYE monthly return"},{v:"weekly",t:"Weekly pay run"},{v:"hours",t:"Hours worked — day by day"}],
+      val:reportKind,fn:function(v){ reportKind=v; render(); }}].concat(reportKind==="payslips"?
+      [{label:"Employee",options:[{v:"all",t:"All employees"}].concat(actives().map(function(e){return {v:e.id,t:e.name};})),
+        val:slipEmp,fn:function(v){ slipEmp=v; render(); }}]:[]),
+      action:["Print / save as PDF",function(){ try{ window.print(); }catch(err){ alert("Printing is blocked in this preview — open the file in a browser tab to print."); } }]});
+    if(reportKind==="payslips") reportPayslips();
+    else if(reportKind==="si") reportSI();
+    else if(reportKind==="paye") reportPAYE();
+    else if(reportKind==="weekly") reportWeekly();
+    else if(reportKind==="hours") reportHours();
+    else reportCTC();
+  }
+  function slipRow(lb,detail,amt,strong){
+    return '<div class="sl-row'+(strong?" strong":"")+'"><span class="sl-lb">'+lb+
+      (detail?'<em>'+detail+'</em>':'')+'</span><span class="sl-amt">'+amt+'</span></div>';
+  }
+  function reportPayslips(){
+    var list = slipEmp==="all" ? actives() : [emp(slipEmp)].filter(Boolean);
+    if(!list.length){ var n=card("Payslips"); var b=document.createElement("div"); b.className="bd note";
+      b.textContent="No active employees."; n.appendChild(b); $body.appendChild(n); return; }
+    var er=S.employer||{};
+    var erLines=[er.address,[er.reg?"Reg. no "+er.reg:"",er.siReg?"Employer SI no "+er.siReg:"",er.tic?"TIC "+er.tic:""].filter(Boolean).join("  ·  ")].filter(Boolean).join("\n");
+    list.forEach(function(e){
+      var r=empMonth(e,curMonth), y=ytd(e,curMonth), fixed=e.type==="FIXED";
+      var days=0; monthDetail(e,curMonth).rows.forEach(function(x){ if(x.d.hours) days++; });
+      var earn = fixed
+        ? slipRow("Basic salary","gross monthly salary",eur(r2(r.gross-r.oEarn)))+
+          slipRow("Overtime",hrs2(r.otHrs)+" hrs @ "+eur4(otRate(e))+" (salary ÷ "+S.params.stdMonth+")",z(r.oEarn))
+        : slipRow("Normal hours",hrs2(r.normalHrs)+" hrs @ "+eur4(grossRate(e)),z(r.nEarn))+
+          slipRow("Overtime",hrs2(r.otHrs)+" hrs @ "+eur4(otRate(e))+", paid 1:1",z(r.oEarn));
+      var d=document.createElement("div"); d.className="card payslip";
+      d.innerHTML=
+        '<div class="sl-top"><div>'+
+          '<div class="sl-co">'+esc(er.name||coName())+'</div>'+
+          (erLines?'<div class="sl-addr">'+esc(erLines)+'</div>':'')+
+          '<div class="sl-sub">Payslip · '+MONTHS[curMonth]+" "+YEAR+'</div></div>'+
+          '<div class="sl-badge">Payslip</div></div>'+
+        '<div class="sl-meta">'+
+          '<div><span>Employee</span><b>'+esc(e.fullName||e.name)+'</b></div>'+
+          '<div><span>ID number</span><b>'+esc(e.idNo||"—")+'</b></div>'+
+          '<div><span>Social insurance no</span><b>'+esc(e.siNo||"—")+'</b></div>'+
+          '<div><span>Date employed</span><b>'+ddmmyy(e.dateEmployed)+'</b></div>'+
+          '<div><span>Basis</span><b>'+(fixed?"Fixed monthly":"Hourly")+'</b></div>'+
+          '<div><span>Days worked</span><b>'+days+'</b></div>'+
+          '<div><span>Hours</span><b>'+hrs(r.hours)+(r.otHrs?' ('+hrs(r.otHrs)+' OT)':'')+'</b></div>'+
+        '</div>'+
+        '<div class="sl-cols">'+
+          '<div class="sl-col"><div class="sl-h">Earnings</div>'+earn+slipRow("Gross pay","",eur(r.gross),true)+'</div>'+
+          '<div class="sl-col"><div class="sl-h">Deductions</div>'+
+            slipRow("Social insurance",S.rates.siEE+"% of gross + holiday fund","("+eur(r.eeSI)+")")+
+            slipRow("GHS",S.rates.ghsEE+"% of gross + holiday fund","("+eur(r.ghsEE)+")")+
+            slipRow("Total deductions","","("+eur(r.ded)+")",true)+'</div>'+
+        '</div>'+
+        '<div class="sl-net"><span>Net pay</span><b>€'+eur(r.net)+'</b></div>'+
+        '<div class="sl-foot">'+
+          '<div class="sl-fcol"><div class="sl-h">Employer contributions — not deducted from you</div><div class="sl-mini">'+
+            '<span>Social insurance '+S.rates.siER+'%</span><b>'+eur(r.erSI)+'</b>'+
+            '<span>Holiday fund '+S.rates.holER+'%</span><b>'+eur(r.hol)+'</b>'+
+            '<span>Redundancy '+S.rates.redER+'%</span><b>'+eur(r.red)+'</b>'+
+            '<span>Industrial training '+S.rates.itfER+'%</span><b>'+eur(r.itf)+'</b>'+
+            '<span>Social cohesion '+S.rates.scfER+'%</span><b>'+eur(r.scf)+'</b>'+
+            '<span>GHS '+S.rates.ghsER+'%</span><b>'+eur(r.ghsER)+'</b>'+
+            '<span class="tt">Total cost to company</span><b class="tt">'+eur(r.cost)+'</b>'+
+          '</div></div>'+
+          '<div class="sl-fcol"><div class="sl-h">Year to date to '+MSHORT[curMonth]+' '+YEAR+'</div><div class="sl-mini">'+
+            '<span>Gross pay</span><b>'+eur(y.gross)+'</b>'+
+            '<span>Social insurance</span><b>'+eur(y.eeSI)+'</b>'+
+            '<span>GHS</span><b>'+eur(y.ghsEE)+'</b>'+
+            '<span>Hours worked</span><b>'+hrs(y.hours)+'</b>'+
+            '<span>Overtime hours</span><b>'+hrs(y.otHrs)+'</b>'+
+            '<span class="tt">Net pay to date</span><b class="tt">'+eur(y.net)+'</b>'+
+          '</div></div>'+
+        '</div>'+
+        '<div class="sl-note">Overtime is paid at the same rate as normal hours. Social insurance and GHS are charged on gross plus the '+
+          S.rates.holER+'% holiday fund; the holiday fund is remitted by the employer and is not part of your pay. '+
+          'Prepared by PC Prime &amp; Calculate Consultants Ltd.</div>';
+      $body.appendChild(d);
+    });
+  }
+  function reportCTC(){
+    var t=monthTotals(curMonth), y=ytdTotals(curMonth);
+    var si=siRemit(t), ghs=ghsRemit(t), outflow=r2(t.net+si+ghs);
+    var k=document.createElement("div"); k.className="kpis";
+    k.innerHTML=
+      kpi("Net pay to staff","€"+eur(t.net),"Bank transfers")+
+      kpi("Social insurance services","€"+eur(si),"SI, holiday, redundancy, ITF, cohesion")+
+      kpi("General healthcare system","€"+eur(ghs),"Employee and employer GHS")+
+      kpi("Total cost to company","€"+eur(t.cost),"<b>€"+eur(t.cost/(t.hours||1))+"</b> per hour worked",true);
+    $body.appendChild(k);
+
+    var c=card("What is payable — "+MONTHS[curMonth]+" "+YEAR);
+    var w=document.createElement("div"); w.className="scroll";
+    var tab=document.createElement("table");
+    tab.innerHTML='<thead><tr><th class="l">Payable to</th><th class="l">Component</th><th class="num">'+MSHORT[curMonth]+' €</th><th class="num">Year to date €</th></tr></thead>';
+    var tb=document.createElement("tbody");
+    function row(a,b,m,yv,cls){
+      var tr=document.createElement("tr"); if(cls) tr.className=cls;
+      tr.innerHTML='<td class="l">'+esc(a)+'</td><td class="l'+(b?"":" muted")+'">'+esc(b||"—")+'</td>'+
+        '<td class="num">'+eur(m)+'</td><td class="num">'+eur(yv)+'</td>';
+      tb.appendChild(tr);
+    }
+    row("Employees","Net pay",t.net,y.net);
+    row("Social Insurance Services","Employee social insurance "+S.rates.siEE+"%",t.eeSI,y.eeSI);
+    row("Social Insurance Services","Employer social insurance "+S.rates.siER+"%",t.erSI,y.erSI);
+    row("Social Insurance Services","Holiday fund "+S.rates.holER+"%",t.hol,y.hol);
+    row("Social Insurance Services","Redundancy fund "+S.rates.redER+"%",t.red,y.red);
+    row("Social Insurance Services","Industrial training "+S.rates.itfER+"%",t.itf,y.itf);
+    row("Social Insurance Services","Social cohesion fund "+S.rates.scfER+"%",t.scf,y.scf);
+    row("Social Insurance Services","Subtotal",si,siRemit(y),"sub");
+    row("General Healthcare System","Employee GHS "+S.rates.ghsEE+"%",t.ghsEE,y.ghsEE);
+    row("General Healthcare System","Employer GHS "+S.rates.ghsER+"%",t.ghsER,y.ghsER);
+    row("General Healthcare System","Subtotal",ghs,ghsRemit(y),"sub");
+    row("Total outflow","Net pay + contributions",outflow,r2(y.net+siRemit(y)+ghsRemit(y)),"tot");
+    tab.appendChild(tb); w.appendChild(tab); c.appendChild(w);
+    var tie=document.createElement("div"); tie.className="bd note";
+    var diff=Math.abs(outflow-t.cost);
+    tie.innerHTML = diff<0.02
+      ? "Total outflow of €"+eur(outflow)+" equals the employer cost of €"+eur(t.cost)+" — gross pay plus every employer contribution. Reconciled."
+      : "Total outflow €"+eur(outflow)+" against employer cost €"+eur(t.cost)+" — difference €"+eur(diff)+" to investigate.";
+    c.appendChild(tie); $body.appendChild(c);
+
+    var c2=card("Cost by employee");
+    var w2=document.createElement("div"); w2.className="scroll";
+    var t2=document.createElement("table");
+    t2.innerHTML='<thead><tr><th class="l">Employee</th><th class="num">Hours</th><th class="num">Gross €</th>'+
+      '<th class="num">Net €</th><th class="num">Employer contributions €</th><th class="num">Cost to company €</th>'+
+      '<th class="num">Cost / hour €</th><th class="num">% of total</th></tr></thead>';
+    var tb2=document.createElement("tbody");
+    actives().forEach(function(e){
+      var r=empMonth(e,curMonth), erc=r2(r.erSI+r.hol+r.red+r.itf+r.scf+r.ghsER);
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="l">'+esc(e.name)+'</td><td class="num">'+hrs(r.hours)+'</td>'+
+        '<td class="num">'+z(r.gross)+'</td><td class="num">'+z(r.net)+'</td><td class="num">'+z(erc)+'</td>'+
+        '<td class="num">'+z(r.cost)+'</td><td class="num">'+(r.hours?eur(r.cost/r.hours):"–")+'</td>'+
+        '<td class="num">'+(t.cost?(Math.round(r.cost/t.cost*1000)/10)+"%":"–")+'</td>';
+      tb2.appendChild(tr);
+    });
+    var erT=r2(t.erSI+t.hol+t.red+t.itf+t.scf+t.ghsER);
+    var trT=document.createElement("tr"); trT.className="tot";
+    trT.innerHTML='<td class="l">Total</td><td class="num">'+hrs(t.hours)+'</td><td class="num">'+eur(t.gross)+'</td>'+
+      '<td class="num">'+eur(t.net)+'</td><td class="num">'+eur(erT)+'</td><td class="num">'+eur(t.cost)+'</td>'+
+      '<td class="num">'+(t.hours?eur(t.cost/t.hours):"–")+'</td><td class="num">100%</td>';
+    tb2.appendChild(trT); t2.appendChild(tb2); w2.appendChild(t2); c2.appendChild(w2);
+    var ex=document.createElement("div"); ex.className="bd";
+    var bt=document.createElement("button"); bt.className="btn ghost"; bt.textContent="Export cost summary";
+    bt.onclick=function(){
+      var rows=[[coName()+" — Cost to company",MONTHS[curMonth]+" "+YEAR],
+        ["Payable to","Component",MSHORT[curMonth]+" EUR","Year to date EUR"],
+        ["Employees","Net pay",t.net,y.net],
+        ["Social Insurance Services","Employee SI",t.eeSI,y.eeSI],
+        ["Social Insurance Services","Employer SI",t.erSI,y.erSI],
+        ["Social Insurance Services","Holiday fund",t.hol,y.hol],
+        ["Social Insurance Services","Redundancy fund",t.red,y.red],
+        ["Social Insurance Services","Industrial training",t.itf,y.itf],
+        ["Social Insurance Services","Social cohesion fund",t.scf,y.scf],
+        ["Social Insurance Services","Subtotal",si,siRemit(y)],
+        ["General Healthcare System","Employee GHS",t.ghsEE,y.ghsEE],
+        ["General Healthcare System","Employer GHS",t.ghsER,y.ghsER],
+        ["General Healthcare System","Subtotal",ghs,ghsRemit(y)],
+        ["Total outflow","Net pay + contributions",outflow,r2(y.net+siRemit(y)+ghsRemit(y))],
+        [],["Employee","Hours","Gross","Net","Employer contributions","Cost to company","Cost per hour"]];
+      actives().forEach(function(e){ var r=empMonth(e,curMonth), erc=r2(r.erSI+r.hol+r.red+r.itf+r.scf+r.ghsER);
+        rows.push([e.name,r.hours,r.gross,r.net,erc,r.cost,r.hours?r2(r.cost/r.hours):""]); });
+      rows.push(["TOTAL",t.hours,t.gross,t.net,erT,t.cost,t.hours?r2(t.cost/t.hours):""]);
+      csv(rows,coSlug()+"_cost_to_company_"+MSHORT[curMonth]+YEAR+".csv");
+    };
+    ex.appendChild(bt); c2.appendChild(ex); $body.appendChild(c2);
+  }
+
+  /* ---------- hours worked, day by day ---------- */
+  function reportHours(){
+    var days=monthDays(curMonth), list=actives();
+    var T={}, grand={worked:0,ot:0,abs:0,std:0};
+    var k=document.createElement("div"); k.className="kpis";
+    list.forEach(function(e){ var r=empMonth(e,curMonth);
+      grand.worked=r2(grand.worked+r.workedHrs); grand.ot=r2(grand.ot+r.otHrs);
+      grand.abs=r2(grand.abs+r.absHrs); grand.std=r2(grand.std+r.stdHrs); });
+    k.innerHTML=
+      kpi("Standard hours","="+hrs2(grand.std),"Working days in "+MONTHS[curMonth]+" × hours a day")+
+      kpi("Absence","−"+hrs2(grand.abs),"Not paid by the company")+
+      kpi("Overtime","+"+hrs2(grand.ot),"Beyond the standard day")+
+      kpi("Hours actually worked",hrs2(grand.worked),"Across "+list.length+" employees",true);
+    $body.appendChild(k);
+
+    var c=card("Hours worked each day — "+MONTHS[curMonth]+" "+YEAR);
+    var w=document.createElement("div"); w.className="scroll tall";
+    var t=document.createElement("table");
+    var head='<thead><tr><th class="l">Employee</th>';
+    days.forEach(function(c2){
+      var ty=dayType(c2);
+      head+='<th class="num" title="'+esc(c2.day)+'" style="'+
+        (ty==="hol"?"color:var(--red)":ty==="sat"?"color:var(--green)":"")+'">'+
+        c2.iso.slice(8)+'</th>';
+    });
+    head+='<th class="num">Worked</th><th class="num">OT</th><th class="num">Absent</th><th class="num">Paid</th></tr></thead>';
+    t.innerHTML=head;
+    var tb=document.createElement("tbody");
+    list.forEach(function(e){
+      var det=monthDetail(e,curMonth), r=empMonth(e,curMonth);
+      var tr=document.createElement("tr");
+      var cells='<td class="l">'+esc(e.name)+'</td>';
+      det.rows.forEach(function(x){
+        var v=x.d.worked||0, style="";
+        if(x.d.abs) style='color:var(--red)';
+        else if(x.d.ot) style='color:var(--gold);font-weight:600';
+        cells+='<td class="num" style="'+style+'">'+(v?hrs(v):"–")+'</td>';
+      });
+      cells+='<td class="num"><strong>'+hrs2(r.workedHrs)+'</strong></td>'+
+        '<td class="num" style="color:var(--gold)">'+(r.otHrs?hrs2(r.otHrs):"–")+'</td>'+
+        '<td class="num" style="color:var(--red)">'+(r.absHrs?hrs2(r.absHrs):"–")+'</td>'+
+        '<td class="num">'+hrs2(r.paidHrs)+'</td>';
+      tr.innerHTML=cells; tb.appendChild(tr);
+    });
+    var tot=document.createElement("tr"); tot.className="tot";
+    var tc='<td class="l">Total</td>';
+    days.forEach(function(c2){
+      var s=0; list.forEach(function(e){ s=r2(s+(dayRaw(e,c2).worked||0)); });
+      tc+='<td class="num">'+(s?hrs(s):"–")+'</td>';
+    });
+    tc+='<td class="num">'+hrs2(grand.worked)+'</td><td class="num">'+hrs2(grand.ot)+'</td>'+
+        '<td class="num">'+hrs2(grand.abs)+'</td><td class="num">'+hrs2(r2(grand.std-grand.abs+grand.ot))+'</td>';
+    tot.innerHTML=tc; tb.appendChild(tot);
+    t.appendChild(tb); w.appendChild(t); c.appendChild(w);
+    var n=document.createElement("div"); n.className="bd note";
+    n.textContent="Hours worked are reconstructed from the standard day, less absence, plus overtime — the same figures that were captured day by day before the change. Red is a day with absence, amber a day with overtime. Saturdays and public holidays show only the hours actually worked on them.";
+    c.appendChild(n); $body.appendChild(c);
+
+    var cx=card("Export");
+    var bx=document.createElement("div"); bx.className="bd btnrow";
+    var bt=document.createElement("button"); bt.className="btn ghost"; bt.textContent="Export hours worked";
+    bt.onclick=function(){
+      var rows=[[coName()+" — Hours worked",MONTHS[curMonth]+" "+YEAR],
+        ["Employee"].concat(days.map(function(c2){return c2.iso.slice(8)+"/"+c2.iso.slice(5,7);}))
+          .concat(["Worked","Overtime","Absent","Paid"])];
+      list.forEach(function(e){
+        var det=monthDetail(e,curMonth), r=empMonth(e,curMonth);
+        rows.push([e.name].concat(det.rows.map(function(x){ return x.d.worked||""; }))
+          .concat([r.workedHrs,r.otHrs,r.absHrs,r.paidHrs]));
+      });
+      csv(rows,coSlug()+"_hours_worked_"+MSHORT[curMonth]+YEAR+".csv");
+    };
+    bx.appendChild(bt); cx.appendChild(bx); $body.appendChild(cx);
+  }
+
+  /* ---------- weekly pay run ---------- */
+  function reportWeekly(){
+    var all=weeks(), inMonth=all.filter(function(w){ return w.pay.slice(5,7)===String(curMonth+1).padStart(2,"0"); });
+    var DAYN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var c0=card("Weekly cycle");
+    var b0=document.createElement("div"); b0.className="bd";
+    b0.innerHTML='<div class="note">The week ends on <strong>'+DAYN[Number(S.params.weekEnd)]+
+      '</strong> and is paid <strong>'+(Number(S.params.payLag)||0)+' days</strong> later. '+
+      all.length+' weeks fall in '+YEAR+'; '+inMonth.length+' are paid in '+MONTHS[curMonth]+'. Change either setting in Settings.</div>';
+    c0.appendChild(b0); $body.appendChild(c0);
+
+    if(!inMonth.length){
+      var n0=card("No pay runs"); var bn=document.createElement("div"); bn.className="bd note";
+      bn.textContent="No weekly pay date falls in "+MONTHS[curMonth]+".";
+      n0.appendChild(bn); $body.appendChild(n0); return;
+    }
+    inMonth.forEach(function(wk){
+      var rows=actives().map(function(e){ return {e:e,r:weekDetail(e,wk)}; })
+                        .filter(function(x){ return x.r.paidHrs>0 || x.r.gross>0; });
+      var T={paid:0,ot:0,abs:0,gross:0,net:0,cost:0};
+      rows.forEach(function(x){ T.paid=r2(T.paid+x.r.paidHrs); T.ot=r2(T.ot+x.r.otHrs);
+        T.abs=r2(T.abs+x.r.absHrs); T.gross=r2(T.gross+x.r.gross); T.net=r2(T.net+x.r.net); T.cost=r2(T.cost+x.r.cost); });
+      var c=document.createElement("div"); c.className="card payslip";
+      c.innerHTML='<div class="sl-top"><div>'+
+        '<div class="sl-co">Pay run — '+esc(ddmmyy(wk.pay))+'</div>'+
+        '<div class="sl-addr">Week worked '+esc(ddmmyy(wk.start))+' to '+esc(ddmmyy(wk.end))+'</div>'+
+        '<div class="sl-sub">'+rows.length+' employees · net €'+eur(T.net)+'</div></div>'+
+        '<div class="sl-badge">Weekly</div></div>';
+      var w=document.createElement("div"); w.className="scroll";
+      var t=document.createElement("table");
+      t.innerHTML='<thead><tr><th class="l">Employee</th><th class="num">Standard</th><th class="num">Absence</th>'+
+        '<th class="num">Overtime</th><th class="num">Paid hrs</th><th class="num">Gross €</th>'+
+        '<th class="num">SI €</th><th class="num">GHS €</th><th class="num">Net €</th><th class="num">Cost €</th></tr></thead>';
+      var tb=document.createElement("tbody");
+      rows.forEach(function(x){
+        var r=x.r, tr=document.createElement("tr");
+        tr.innerHTML='<td class="l">'+esc(x.e.name)+'</td><td class="num muted">'+hrs2(r.std)+'</td>'+
+          '<td class="num">'+(r.absHrs?"−"+hrs2(r.absHrs):"–")+'</td>'+
+          '<td class="num" style="color:var(--gold)">'+(r.otHrs?"+"+hrs2(r.otHrs):"–")+'</td>'+
+          '<td class="num">'+hrs2(r.paidHrs)+'</td><td class="num">'+eur(r.gross)+'</td>'+
+          '<td class="num muted">'+eur(r.eeSI)+'</td><td class="num muted">'+eur(r.ghsEE)+'</td>'+
+          '<td class="num"><strong>'+eur(r.net)+'</strong></td><td class="num muted">'+eur(r.cost)+'</td>';
+        tb.appendChild(tr);
+      });
+      var trT=document.createElement("tr"); trT.className="tot";
+      trT.innerHTML='<td class="l">Total</td><td class="num"></td><td class="num">'+(T.abs?"−"+hrs2(T.abs):"–")+'</td>'+
+        '<td class="num">'+(T.ot?"+"+hrs2(T.ot):"–")+'</td><td class="num">'+hrs2(T.paid)+'</td>'+
+        '<td class="num">'+eur(T.gross)+'</td><td class="num"></td><td class="num"></td>'+
+        '<td class="num">'+eur(T.net)+'</td><td class="num">'+eur(T.cost)+'</td>';
+      tb.appendChild(trT); t.appendChild(tb); w.appendChild(t); c.appendChild(w);
+      var nn=document.createElement("div"); nn.className="sl-note";
+      nn.textContent="Weekly insurable earnings are capped at €"+eur(S.params.capWeek)+". Tax is spread over 52 pay periods for weekly staff.";
+      c.appendChild(nn); $body.appendChild(c);
+    });
+
+    var cx=card("Export");
+    var bx=document.createElement("div"); bx.className="bd btnrow";
+    var bt=document.createElement("button"); bt.className="btn ghost"; bt.textContent="Export the pay runs for "+MSHORT[curMonth];
+    bt.onclick=function(){
+      var rows=[[coName()+" — Weekly pay runs",MONTHS[curMonth]+" "+YEAR],
+        ["Pay date","Week from","Week to","Employee","Standard","Absence","Overtime","Paid hours","Gross","SI","GHS","Net","Employer cost"]];
+      inMonth.forEach(function(wk){
+        actives().forEach(function(e){ var r=weekDetail(e,wk);
+          if(!r.gross) return;
+          rows.push([wk.pay,wk.start,wk.end,e.name,r.std,r.absHrs,r.otHrs,r.paidHrs,r.gross,r.eeSI,r.ghsEE,r.net,r.cost]); });
+      });
+      csv(rows,coSlug()+"_weekly_"+MSHORT[curMonth]+YEAR+".csv");
+    };
+    bx.appendChild(bt); cx.appendChild(bx); $body.appendChild(cx);
+  }
+
+  /* ---------- 05 data ---------- */
+  function viewData(){
+    var c=card("Exports");
+    var b=document.createElement("div"); b.className="bd";
+    b.innerHTML='<div class="note" style="margin-bottom:14px">Send the monthly summary to the appointed accountants by the last working day of each month.</div>';
+    var row=document.createElement("div"); row.className="btnrow";
+    row.innerHTML='<button class="btn" id="dMonth">Monthly summary — '+MSHORT[curMonth]+' '+YEAR+'</button>'+
+      '<button class="btn ghost" id="dYear">Annual summary '+YEAR+'</button>'+
+      '<button class="btn ghost" id="dAll">All timesheets — hours log</button>';
+    b.appendChild(row); c.appendChild(b); $body.appendChild(c);
+
+    if(isAdmin()){
+      var cc=card("Convert recorded hours into overtime and absence");
+      var bc=document.createElement("div"); bc.className="bd";
+      bc.innerHTML='<div class="note" style="margin-bottom:14px">Months captured as full hours are read across to the new basis: '+
+        'time over the standard day on a working day becomes overtime, time under it becomes absence. '+
+        'The hours paid do not change — check it below before anything is written.</div>';
+      var row=document.createElement("div"); row.className="btnrow";
+      row.innerHTML='<select id="cvA">'+MONTHS.map(function(mn,i){return '<option value="'+i+'"'+(i===0?" selected":"")+'>'+mn+'</option>';}).join("")+'</select>'+
+        '<span class="hint">to</span>'+
+        '<select id="cvB">'+MONTHS.map(function(mn,i){return '<option value="'+i+'"'+(i===5?" selected":"")+'>'+mn+'</option>';}).join("")+'</select>'+
+        '<button class="btn ghost" id="cvPrev">Check the conversion</button>'+
+        '<button class="btn" id="cvGo">Convert</button>';
+      bc.appendChild(row);
+      var out=document.createElement("div"); out.id="cvOut"; out.style.marginTop="16px";
+      bc.appendChild(out); cc.appendChild(bc); $body.appendChild(cc);
+      var preview=function(write){
+        var a=+document.getElementById("cvA").value, b2=+document.getElementById("cvB").value;
+        if(b2<a){ alert("The second month must not be before the first."); return; }
+        var rows=[], allOk=true, tR=0, tP=0;
+        S.employees.forEach(function(e){
+          for(var mm=a;mm<=b2;mm++){
+            var r=convertMonth(e,mm,write);
+            if(!r) continue;
+            rows.push({e:e,m:mm,r:r}); tR=r2(tR+r.recorded); tP=r2(tP+r.paid); if(!r.ok) allOk=false;
+          }
+        });
+        if(write){ S.params.recording="exceptions"; save(); }
+        out.innerHTML="";
+        if(!rows.length){ out.innerHTML='<div class="warn">No months in that range hold recorded hours.</div>'; return; }
+        var w=document.createElement("div"); w.className="scroll";
+        var t=document.createElement("table");
+        t.innerHTML='<thead><tr><th class="l">Employee</th><th class="l">Month</th><th class="num">Hours recorded</th>'+
+          '<th class="num">Standard</th><th class="num">Overtime</th><th class="num">Absence</th>'+
+          '<th class="num">Hours paid</th><th class="l">Ties</th></tr></thead>';
+        var tb=document.createElement("tbody");
+        rows.forEach(function(x){
+          var tr=document.createElement("tr");
+          tr.innerHTML='<td class="l">'+esc(x.e.name)+'</td><td class="l">'+MONTHS[x.m]+'</td>'+
+            '<td class="num">'+hrs2(x.r.recorded)+'</td><td class="num muted">'+hrs2(x.r.std)+'</td>'+
+            '<td class="num">'+hrs2(x.r.ot)+'</td><td class="num">'+hrs2(x.r.abs)+'</td>'+
+            '<td class="num"><strong>'+hrs2(x.r.paid)+'</strong></td>'+
+            '<td class="l '+(x.r.ok?"ok":"bad")+'">'+(x.r.ok?"✓":"✗")+'</td>';
+          tb.appendChild(tr);
+        });
+        var trT=document.createElement("tr"); trT.className="tot";
+        trT.innerHTML='<td class="l" colspan="2">Total</td><td class="num">'+hrs2(tR)+'</td>'+
+          '<td class="num"></td><td class="num"></td><td class="num"></td><td class="num">'+hrs2(tP)+'</td>'+
+          '<td class="l '+(allOk?"ok":"bad")+'">'+(allOk?"✓ all tie":"✗ check")+'</td>';
+        tb.appendChild(trT); t.appendChild(tb); w.appendChild(t); out.appendChild(w);
+        var msg=document.createElement("div"); msg.className=allOk?"note":"warn"; msg.style.marginTop="12px";
+        msg.textContent = write
+          ? "Converted. Recording is set to exceptions and the hours paid are unchanged at "+hrs2(tP)+"."
+          : (allOk ? "Every month reconciles — "+hrs2(tR)+" hours recorded, "+hrs2(tP)+" hours paid after conversion. Nothing written yet."
+                   : "Some months do not reconcile. Do not convert until that is understood.");
+        out.appendChild(msg);
+      };
+      document.getElementById("cvPrev").onclick=function(){ preview(false); };
+      document.getElementById("cvGo").onclick=function(){
+        if(!confirm("Rewrite those months as overtime and absence? Export a backup first.")) return;
+        preview(true); };
+    }
+
+    var c2=card("Backup and restore");
+    var b2=document.createElement("div"); b2.className="bd";
+    var row2=document.createElement("div"); row2.className="btnrow";
+    row2.innerHTML='<button class="btn ghost" id="rst">Restore original workbook hours</button>'+
+      (isAdmin()?'<button class="btn danger" id="wipe">Erase all hours</button>':'');
+    b2.appendChild(row2);
+    var w=document.createElement("div"); w.className="warn"; w.style.marginTop="14px";
+    w.textContent="Entries are held in this browser profile until the app moves onto the client portal. Export the hours log before making structural changes.";
+    b2.appendChild(w); c2.appendChild(b2); $body.appendChild(c2);
+
+    document.getElementById("dMonth").onclick=function(){
+      csv([[coName()+" — Monthly payroll summary",MONTHS[curMonth]+" "+YEAR]].concat(monthCsvRows(curMonth)),
+        coSlug()+"_monthly_summary_"+MSHORT[curMonth]+YEAR+".csv"); };
+    document.getElementById("dYear").onclick=function(){
+      var out=[[coName()+" — Annual payroll summary "+YEAR],["Month"].concat(MCOLS.map(function(x){return x[1];}))];
+      var tot={}; MCOLS.forEach(function(x){tot[x[0]]=0;});
+      for(var m=0;m<12;m++){ var t=monthTotals(m); out.push([MONTHS[m]].concat(MCOLS.map(function(x){return t[x[0]];})));
+        MCOLS.forEach(function(x){tot[x[0]]=r2(tot[x[0]]+t[x[0]]);}); }
+      out.push(["ANNUAL TOTAL"].concat(MCOLS.map(function(x){return tot[x[0]];})));
+      csv(out,coSlug()+"_annual_summary_"+YEAR+".csv"); };
+    document.getElementById("dAll").onclick=function(){
+      var rows=[[coName()+" — hours log",YEAR],["Employee","Date","Day","Type","Hours","Notes"]];
+      S.employees.forEach(function(e){
+        CAL.forEach(function(cc){ var en=entry(e.id,cc.iso);
+          if(en.h!==undefined||en.n) rows.push([e.name,cc.iso,cc.day,
+            dayType(cc)==="hol"?"Holiday":dayType(cc)==="sat"?"Saturday":"Weekday",
+            en.h===undefined?"":en.h, en.n||""]); }); });
+      csv(rows,coSlug()+"_hours_log_"+YEAR+".csv"); };
+    document.getElementById("rst").onclick=function(){
+      if(!confirm("Replace all hours with the original workbook data?")) return;
+      S.entries=JSON.parse(JSON.stringify(SEED_ENTRIES));
+      S.params.recording="hours"; save(); render(); };
+    if(isAdmin()) document.getElementById("wipe").onclick=function(){
+      if(!confirm("Erase every recorded hour for "+YEAR+"?")) return;
+      S.entries={}; save(); render(); };
+  }
+
+  /* ---------- settings ---------- */
+  function viewSetup(){
+    /* employer */
+    var c0=card("Employer details — printed on payslips and returns");
+    var b0=document.createElement("div"); b0.className="bd";
+    var g0=document.createElement("div"); g0.className="fields";
+    var er=S.employer;
+    [["Registered name","name","text",1],["Registration number (HE)","reg","text",0],
+     ["Employer social insurance no","siReg","text",0],["Tax identification code (TIC)","tic","text",0],
+     ["Phone","phone","text",0],["Email","email","text",0]].forEach(function(f){
+      g0.appendChild(fld(f[0],er[f[1]],f[2],function(v){ er[f[1]]=v; save(); render(); },f[3]));
+    });
+    g0.appendChild(fld("Registered address","address","area",function(v){ er.address=v; save(); },1));
+    g0.lastChild.querySelector("textarea").value=er.address||"";
+    b0.appendChild(g0);
+    var n0=document.createElement("div"); n0.className="note"; n0.style.marginTop="12px";
+    n0.textContent="These details print in the payslip header and will feed the TD63 when it is added.";
+    b0.appendChild(n0); c0.appendChild(b0); $body.appendChild(c0);
+
+    /* rates + parameters */
+    var g=document.createElement("div"); g.className="grid2"; g.style.marginTop="16px";
+    var c2=card("Statutory rates %"); c2.style.marginTop="0";
+    var b2=document.createElement("div"); b2.className="bd";
+    var kv=document.createElement("div"); kv.className="kv";
+    [["siEE","Social insurance — employee"],["siER","Social insurance — employer"],
+     ["ghsEE","GHS — employee"],["ghsER","GHS — employer"],["holER","Holiday fund — employer"],
+     ["redER","Redundancy fund — employer"],["itfER","Industrial training — employer"],
+     ["scfER","Social cohesion fund — employer"]].forEach(function(r){
+      var l=document.createElement("label"); l.textContent=r[1];
+      var i=document.createElement("input"); i.type="number"; i.step="0.01"; i.value=S.rates[r[0]];
+      i.onchange=function(){ S.rates[r[0]]=Number(i.value)||0; save(); render(); };
+      kv.appendChild(l); kv.appendChild(i);
+    });
+    b2.appendChild(kv); c2.appendChild(b2); g.appendChild(c2);
+
+    var c3=card("Parameters"); c3.style.marginTop="0";
+    var b3=document.createElement("div"); b3.className="bd";
+    var kv3=document.createElement("div"); kv3.className="kv";
+    [["stdDay","Standard hours per day"],["stdMonth","Standard hours per month"]].forEach(function(r){
+      var l=document.createElement("label"); l.textContent=r[1];
+      var i=document.createElement("input"); i.type="number"; i.step="0.01"; i.value=S.params[r[0]];
+      i.onchange=function(){ S.params[r[0]]=Number(i.value)||0; save(); render(); };
+      kv3.appendChild(l); kv3.appendChild(i);
+    });
+    var rl=document.createElement("label"); rl.textContent="Net → gross divisor (calculated)";
+    var rv=document.createElement("div"); rv.className="ro"; rv.textContent=divisor().toFixed(5);
+    kv3.appendChild(rl); kv3.appendChild(rv);
+    b3.appendChild(kv3);
+    var fm=document.createElement("div"); fm.className="formula";
+    fm.textContent="divisor = 1 − (1 + "+S.rates.holER+"% holiday fund) × ("+S.rates.siEE+"% SI + "+S.rates.ghsEE+"% GHS) = "+divisor().toFixed(5);
+    b3.appendChild(fm);
+    var n3=document.createElement("div"); n3.className="note"; n3.style.marginTop="12px";
+    n3.textContent="Working week Monday to Friday. Saturday hours and hours on a non-working holiday are all overtime.";
+    b3.appendChild(n3); c3.appendChild(b3); g.appendChild(c3);
+    $body.appendChild(g);
+
+    /* recording */
+    var cR=card("Time recording");
+    var bR=document.createElement("div"); bR.className="bd";
+    var gR=document.createElement("div"); gR.className="fields";
+    var wR=document.createElement("div"); wR.className="fld";
+    wR.innerHTML='<label>How time is recorded</label>';
+    var sR=document.createElement("select");
+    sR.innerHTML='<option value="exceptions"'+(exceptionMode()?" selected":"")+'>Exceptions — standard hours, less absence, plus overtime</option>'+
+      '<option value="hours"'+(exceptionMode()?"":" selected")+'>Full hours — every hour worked each day</option>';
+    sR.onchange=function(){ S.params.recording=sR.value; save(); render(); };
+    wR.appendChild(sR); gR.appendChild(wR); bR.appendChild(gR);
+    var wA=document.createElement("div"); wA.className="scroll"; wA.style.marginTop="16px";
+    var tA=document.createElement("table");
+    tA.innerHTML='<thead><tr><th class="l">Absence</th><th class="l">Who pays it</th><th class="l">Reduces pay here</th><th class="l">Code on the SI schedule</th></tr></thead><tbody>'+
+      ABSTYPES.map(function(a){ return '<tr><td class="l">'+esc(a.label)+'</td><td class="l muted">'+esc(a.hint)+
+        '</td><td class="l">Yes</td><td class="l"><span class="chip hol">'+a.si+'</span></td></tr>'; }).join("")+'</tbody>';
+    wA.appendChild(tA); bR.appendChild(wA);
+    var nR=document.createElement("div"); nR.className="note"; nR.style.marginTop="12px";
+    nR.textContent="Historic months were captured as full hours. Switching the mode changes how every month is read, so use it to compare rather than as a one-way move.";
+    bR.appendChild(nR); cR.appendChild(bR); $body.appendChild(cR);
+
+    /* weekly cycle */
+    var cW=card("Weekly pay cycle");
+    var bW=document.createElement("div"); bW.className="bd";
+    var gW=document.createElement("div"); gW.className="fields";
+    var DAYN=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    var wW=document.createElement("div"); wW.className="fld";
+    wW.innerHTML='<label>The working week ends on</label>';
+    var sW=document.createElement("select");
+    DAYN.forEach(function(dn,i){ var o=document.createElement("option"); o.value=i; o.textContent=dn;
+      if(Number(S.params.weekEnd)===i) o.selected=true; sW.appendChild(o); });
+    sW.onchange=function(){ S.params.weekEnd=+sW.value; save(); render(); };
+    wW.appendChild(sW); gW.appendChild(wW);
+    gW.appendChild(fld("Paid this many days after the week ends",S.params.payLag,"number",
+      function(v){ S.params.payLag=Number(v)||0; save(); render(); }));
+    var wB=document.createElement("div"); wB.className="fld";
+    wB.innerHTML='<label>Standard hours are based on</label>';
+    var sB=document.createElement("select");
+    sB.innerHTML='<option value="calendar"'+((S.params.stdBasis||"calendar")==="calendar"?" selected":"")+'>Working days in the period × hours a day</option>'+
+      '<option value="fixed"'+(S.params.stdBasis==="fixed"?" selected":"")+'>A fixed monthly figure per employee</option>';
+    sB.onchange=function(){ S.params.stdBasis=sB.value; save(); render(); };
+    wB.appendChild(sB); gW.appendChild(wB);
+    bW.appendChild(gW);
+    var ws=weeks().slice(0,4);
+    var pw=document.createElement("div"); pw.className="formula";
+    pw.textContent="First four weeks — "+ws.map(function(x){
+      return ddmmyy(x.start)+" to "+ddmmyy(x.end)+", paid "+ddmmyy(x.pay); }).join("  ·  ");
+    bW.appendChild(pw);
+    var nW=document.createElement("div"); nW.className="note"; nW.style.marginTop="12px";
+    nW.textContent="Weekly pay runs appear under Reports. Social insurance and PAYE reporting stays monthly.";
+    bW.appendChild(nW); cW.appendChild(bW); $body.appendChild(cW);
+
+    /* PAYE */
+    var cP=card("PAYE — income tax withheld");
+    var bP=document.createElement("div"); bP.className="bd";
+    var gP=document.createElement("div"); gP.className="fields";
+    [["enabled","Calculate PAYE",[["1","Yes"],["0","No"]]],
+     ["borneBy","Who bears the tax",[["employee","Employee — deducted from their pay"],["employer","Employer — grossed up so net is unchanged"]]],
+     ["method","Calculation method",[["td59","Form T.D.59A — annual tax ÷ pay periods"],["cumulative","Cumulative — project the year to date"],["annualised","Annualised — each month on its own"]]],
+     ["periods","Pay periods a year (monthly staff)",[["13","13 — with a 13th salary"],["12","12 — no 13th salary"]]],
+     ["employerType","Employer type for the return",[["Private Sector","Private Sector"],["Broader Public Sector","Broader Public Sector"]]]
+    ].forEach(function(f){
+      var w2=document.createElement("div"); w2.className="fld";
+      w2.innerHTML='<label>'+esc(f[1])+'</label>';
+      var s2=document.createElement("select");
+      f[2].forEach(function(o){ var op=document.createElement("option"); op.value=o[0]; op.textContent=o[1];
+        var cur = f[0]==="enabled" ? (S.paye.enabled?"1":"0") : String(S.paye[f[0]]);
+        if(cur===o[0]) op.selected=true; s2.appendChild(op); });
+      s2.onchange=function(){ if(f[0]==="enabled") S.paye.enabled=(s2.value==="1"); else S.paye[f[0]]=s2.value; save(); render(); };
+      w2.appendChild(s2); gP.appendChild(w2);
+    });
+    bP.appendChild(gP);
+    var wB=document.createElement("div"); wB.className="scroll"; wB.style.marginTop="16px";
+    var tB=document.createElement("table");
+    tB.innerHTML='<thead><tr><th class="l">Taxable income band</th><th class="num">Up to €</th><th class="num">Rate %</th><th class="l"></th></tr></thead>';
+    var tbB=document.createElement("tbody");
+    S.paye.bands.forEach(function(bd,i){
+      var prev=i?(Number(S.paye.bands[i-1].upTo)||0):0;
+      var lbl = Number(bd.upTo) ? eur(prev)+" to "+eur(bd.upTo) : "Above "+eur(prev);
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="l">'+esc(lbl)+'</td>'+
+        '<td><input type="number" step="1" value="'+(Number(bd.upTo)||0)+'" data-bd="'+i+'" data-f="upTo" style="width:100px;text-align:right;font-family:var(--mono)"></td>'+
+        '<td><input type="number" step="0.01" value="'+bd.rate+'" data-bd="'+i+'" data-f="rate" style="width:80px;text-align:right;font-family:var(--mono)"></td>'+
+        '<td class="l">'+(Number(bd.upTo)?'<button class="btn danger sm" data-bdel="'+i+'">Remove</button>':'<span class="muted">top band — leave the ceiling at 0</span>')+'</td>';
+      tbB.appendChild(tr);
+    });
+    tB.appendChild(tbB); wB.appendChild(tB); bP.appendChild(wB);
+    var addB=document.createElement("div"); addB.className="btnrow"; addB.style.marginTop="12px";
+    var abB=document.createElement("button"); abB.className="btn ghost"; abB.textContent="Add band";
+    abB.onclick=function(){ S.paye.bands.splice(S.paye.bands.length-1,0,{upTo:0,rate:0}); save(); render(); };
+    addB.appendChild(abB); bP.appendChild(addB);
+    var nP=document.createElement("div"); nP.className="note"; nP.style.marginTop="12px";
+    nP.textContent="Taxable income is gross pay less the employee's own social insurance and GHS. Bands shown are the Cyprus rates from 1 January 2026 — check them against the legislation before filing.";
+    bP.appendChild(nP); cP.appendChild(bP); $body.appendChild(cP);
+    tbB.querySelectorAll("[data-bd]").forEach(function(i2){
+      i2.onchange=function(){ S.paye.bands[+i2.dataset.bd][i2.dataset.f]=Number(i2.value)||0; save(); render(); };
+    });
+    tbB.querySelectorAll("[data-bdel]").forEach(function(b2){
+      b2.onclick=function(){ S.paye.bands.splice(+b2.dataset.bdel,1); save(); render(); };
+    });
+
+    /* holidays */
+    var c4=card("Holidays and non-working days "+YEAR);
+    var n4=document.createElement("div"); n4.className="bd note";
+    n4.textContent="Tick a day the company works. Unticked days are treated as holidays, so every hour worked on them counts as overtime. Add any extra day the company grants.";
+    c4.appendChild(n4);
+    var w4=document.createElement("div"); w4.className="scroll";
+    var t4=document.createElement("table");
+    t4.innerHTML='<thead><tr><th class="l">Date</th><th class="l">Day</th><th class="l">Name</th><th class="l">We work this day</th><th class="l">Treated as</th><th class="l"></th></tr></thead>';
+    var tb4=document.createElement("tbody");
+    Object.keys(S.holidays).sort().forEach(function(k){
+      var x=S.holidays[k], dt=new Date(k+"T00:00:00"), tr=document.createElement("tr");
+      tr.innerHTML='<td class="l num">'+ddmmyy(k)+'</td><td class="l">'+DAYS[dt.getDay()]+'</td>'+
+        '<td class="l"><input type="text" value="'+esc(x.name)+'" data-hn="'+k+'" style="width:210px"></td>'+
+        '<td class="l"><input type="checkbox" data-hw="'+k+'" '+(x.work?"checked":"")+'></td>'+
+        '<td class="l">'+(x.work?'<span class="chip sat">Working</span>':'<span class="chip hol">Holiday</span>')+'</td>'+
+        '<td class="l">'+(x.custom?'<button class="btn danger sm" data-hd="'+k+'">Remove</button>':'<span class="muted">statutory</span>')+'</td>';
+      tb4.appendChild(tr);
+    });
+    t4.appendChild(tb4); w4.appendChild(t4); c4.appendChild(w4);
+    var addBar=document.createElement("div"); addBar.className="bd btnrow";
+    addBar.innerHTML='<input type="date" id="nhD" min="'+YEAR+'-01-01" max="'+YEAR+'-12-31">'+
+      '<input type="text" id="nhN" placeholder="Name, e.g. company day off" style="width:250px">'+
+      '<button class="btn" id="nhA">Add day</button>';
+    c4.appendChild(addBar); $body.appendChild(c4);
+    tb4.querySelectorAll("[data-hn]").forEach(function(i){ i.onchange=function(){ S.holidays[i.dataset.hn].name=i.value; save(); }; });
+    tb4.querySelectorAll("[data-hw]").forEach(function(i){ i.onchange=function(){ S.holidays[i.dataset.hw].work=i.checked; save(); render(); }; });
+    tb4.querySelectorAll("[data-hd]").forEach(function(b){ b.onclick=function(){ delete S.holidays[b.dataset.hd]; save(); render(); }; });
+    document.getElementById("nhA").onclick=function(){
+      var d=document.getElementById("nhD").value, n=document.getElementById("nhN").value.trim();
+      if(!d){ alert("Pick a date first."); return; }
+      if(d.slice(0,4)!==String(YEAR)){ alert("The date must fall inside "+YEAR+"."); return; }
+      S.holidays[d]={name:n||"Non-working day",work:false,custom:true}; save(); render();
+    };
+  }
+
+  /* ---------- employees list ---------- */
+  function viewEmployees(){
+    var add=document.createElement("button"); add.className="btn"; add.textContent="Add employee";
+    add.onclick=function(){ var id="emp"+Date.now();
+      S.employees.push({id:id,name:"NEW EMPLOYEE",type:"HOURLY",net:0,active:true,cat:"M1",payInd:"M"});
+      cardEmp=id; view="empcard"; save(); render(); };
+    var bar=document.createElement("div"); bar.className="period";
+    bar.innerHTML='<span class="lb">Employees</span><span class="tagpill">'+S.employees.length+' on the register</span>';
+    var sp=document.createElement("span"); sp.className="spacer"; bar.appendChild(sp);
+    bar.appendChild(add); $body.appendChild(bar);
+
+    var c=document.createElement("div"); c.className="card";
+    var w=document.createElement("div"); w.className="scroll tall";
+    var t=document.createElement("table");
+    t.innerHTML='<thead><tr><th class="l">Employee</th><th class="l">Job title</th><th class="l">Basis</th>'+
+      '<th class="num">Net rate</th><th class="num">Gross</th><th class="l">Cat.</th><th class="l">SI number</th>'+
+      '<th class="l">ID / ARC</th><th class="l">TIN</th><th class="l">TD59A</th><th class="l">Employed</th><th class="l">Status</th><th class="l"></th></tr></thead>';
+    var tb=document.createElement("tbody");
+    S.employees.forEach(function(e){
+      var tr=document.createElement("tr");
+      var td59 = (e.td59 && e.td59.received) ? '<span class="chip sat">on file</span>' : '<span class="chip hol">missing</span>';
+      tr.innerHTML='<td class="l"><strong>'+esc(e.name)+'</strong></td>'+
+        '<td class="l muted">'+esc(e.jobTitle||"—")+'</td>'+
+        '<td class="l">'+(e.type==="FIXED"?"Fixed monthly":"Hourly")+'</td>'+
+        '<td class="num">'+eur(e.net)+'</td><td class="num muted">'+eur4(grossRate(e))+'</td>'+
+        '<td class="l">'+esc(e.cat||"M1")+'</td>'+
+        '<td class="l num'+(e.siNo?"":" bad")+'">'+esc(e.siNo||"missing")+'</td>'+
+        '<td class="l num'+((e.idNo||e.arcNo||e.passport)?"":" bad")+'">'+esc(e.idNo||e.arcNo||e.passport||"missing")+'</td>'+
+        '<td class="l num'+(e.tin?"":" bad")+'">'+esc(e.tin||"missing")+'</td>'+
+        '<td class="l">'+td59+'</td>'+
+        '<td class="l num">'+(e.dateEmployed?ddmmyy(e.dateEmployed):"—")+'</td>'+
+        '<td class="l">'+(e.active!==false?'<span class="ok">Active</span>':'<span class="muted">Left</span>')+'</td>'+
+        '<td class="l"><button class="btn ghost sm" data-card="'+e.id+'">Open card</button></td>';
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); w.appendChild(t); c.appendChild(w);
+    var n=document.createElement("div"); n.className="bd note";
+    n.textContent="Everyone on this list appears on the social insurance schedule, including anyone with no earnings in the month — the Social Insurance system rejects a return that leaves a registered employee out.";
+    c.appendChild(n); $body.appendChild(c);
+    tb.querySelectorAll("[data-card]").forEach(function(b){
+      b.onclick=function(){ cardEmp=b.dataset.card; view="empcard"; render(); };
+    });
+  }
+
+  /* ---------- employee record card ---------- */
+  var cardTab="details";
+  function empCode(e,i){
+    if(e.code) return e.code;
+    var ini=(e.name||"EMP").replace(/[^A-Za-z\u0370-\u03ff ]/g,"").split(/\s+/)[0].slice(0,3).toUpperCase();
+    return "EM-"+ini+String(i+1).padStart(3,"0");
+  }
+  function viewEmpCard(){
+    var idx=-1;
+    S.employees.forEach(function(x,i){ if(x.id===cardEmp) idx=i; });
+    if(idx<0){ view="employees"; render(); return; }
+    var e=S.employees[idx];
+    if(!e.td59) e.td59={};
+
+    var rec=document.createElement("div"); rec.className="rec";
+    var top=document.createElement("div"); top.className="rec-top";
+    top.innerHTML='<h2>'+esc(e.fullName||e.name)+'</h2>'+
+      '<span class="code">'+esc(empCode(e,idx))+'</span>'+
+      '<span class="spill '+(e.active!==false?"on":"off")+'"><i></i>'+(e.active!==false?"Active":"Left")+'</span>';
+    var sp=document.createElement("span"); sp.className="spacer"; sp.style.flex="1"; top.appendChild(sp);
+    var st=document.createElement("select");
+    st.innerHTML='<option value="1"'+(e.active!==false?" selected":"")+'>Active</option>'+
+      '<option value="0"'+(e.active===false?" selected":"")+'>Left</option>';
+    st.onchange=function(){ e.active=(st.value==="1"); save(); render(); };
+    top.appendChild(st); rec.appendChild(top);
+
+    var act=document.createElement("div"); act.className="rec-act";
+    var g1=document.createElement("div"); g1.className="grp";
+    function ab(label,fn,dis){
+      var b=document.createElement("button"); b.className="btn ghost sm"; b.textContent=label;
+      if(dis){ b.disabled=true; b.style.opacity=".45"; b.style.cursor="default"; } else b.onclick=fn;
+      return b;
+    }
+    g1.appendChild(ab("✕  Close",function(){ view="employees"; render(); }));
+    g1.appendChild(ab("‹  Prev",function(){ cardEmp=S.employees[idx-1].id; render(); }, idx===0));
+    g1.appendChild(ab("Next  ›",function(){ cardEmp=S.employees[idx+1].id; render(); }, idx===S.employees.length-1));
+    g1.appendChild(ab("Find",function(){ view="employees"; render(); }));
+    g1.appendChild(dropdown("More actions",[
+      ["Open timesheet",function(){ curEmp=e.id; view="sheet"; render(); }],
+      ["Open payslip",function(){ slipEmp=e.id; reportKind="payslips"; view="reports"; render(); }],
+      "-",
+      ["Duplicate this employee",function(){
+        var c=JSON.parse(JSON.stringify(e)); c.id="emp"+Date.now(); c.name=e.name+" (COPY)";
+        c.code=""; c.siNo=""; c.idNo=""; c.arcNo=""; c.tin="";
+        S.employees.splice(idx+1,0,c); cardEmp=c.id; save(); render(); }]
+    ]));
+    act.appendChild(g1);
+    var sp2=document.createElement("span"); sp2.style.flex="1"; act.appendChild(sp2);
+    var g2=document.createElement("div"); g2.className="grp";
+    var del=document.createElement("button"); del.className="btn danger sm"; del.textContent="🗑  Delete";
+    del.onclick=function(){
+      if(!confirm("Remove "+e.name+" and everything recorded for them?")) return;
+      delete S.entries[e.id]; delContract(e.id); S.employees.splice(idx,1);
+      view="employees"; save(); render(); };
+    g2.appendChild(del);
+    var sv=document.createElement("button"); sv.className="btn sm"; sv.textContent="Save";
+    sv.onclick=function(){ save(); sv.textContent="Saved"; setTimeout(function(){ sv.textContent="Save"; },1400); };
+    g2.appendChild(sv); act.appendChild(g2); rec.appendChild(act);
+
+    var TABS2=[["details","Personal"],["employment","Employment & pay"],["td59","T.D.59A"],
+               ["si","Social insurance"],["docs","Documents"]];
+    var tabs=document.createElement("div"); tabs.className="rec-tabs";
+    TABS2.forEach(function(t){
+      var b=document.createElement("button"); b.textContent=t[1];
+      b.setAttribute("aria-current", cardTab===t[0]?"true":"false");
+      b.onclick=function(){ cardTab=t[0]; render(); };
+      tabs.appendChild(b);
+    });
+    rec.appendChild(tabs); $body.appendChild(rec);
+
+    if(cardTab==="details") cardDetails(e);
+    else if(cardTab==="employment") cardEmployment(e);
+    else if(cardTab==="td59") cardTD59(e);
+    else if(cardTab==="si") cardSI(e);
+    else cardDocs(e);
+  }
+
+  function cardDetails(e){
+    var c=card("Personal details");
+    var b=document.createElement("div"); b.className="bd";
+    var g=document.createElement("div"); g.className="fields";
+    [["Name as shown in the app","name","text",0],["Full legal name","fullName","text",1],
+     ["Identity card number","idNo","text",0],["Alien registration number (ARC)","arcNo","text",0],
+     ["Passport number","passport","text",0],["Social insurance number","siNo","text",0],
+     ["Tax identification number (TIN)","tin","text",0],["Date of birth","dob","date",0],
+     ["Phone","phone","text",0],["Email","email","text",0]].forEach(function(f){
+      g.appendChild(fld(f[0],e[f[1]],f[2],function(v){ e[f[1]]=v; save(); if(f[1]==="name"||f[1]==="fullName") render(); },f[3]));
+    });
+    var addr=fld("Home address","address","area",function(v){ e.address=v; save(); },1);
+    addr.querySelector("textarea").value=e.address||"";
+    g.appendChild(addr);
+    b.appendChild(g);
+    var n=document.createElement("div"); n.className="note"; n.style.marginTop="14px";
+    n.textContent="These identifiers are entered once here and reused everywhere else — the social insurance schedule and text file, the PAYE return and the T.D.59A all read them from this page.";
+    b.appendChild(n); c.appendChild(b); $body.appendChild(c);
+  }
+
+  function cardEmployment(e){
+    var c=card("Employment");
+    var b=document.createElement("div"); b.className="bd";
+    var g=document.createElement("div"); g.className="fields";
+    g.appendChild(fld("Employee code","code","text",function(v){ e.code=v; save(); render(); }));
+    g.appendChild(fld("Job title","jobTitle","text",function(v){ e.jobTitle=v; save(); render(); }));
+    g.appendChild(fld("Date employed","dateEmployed","date",function(v){ e.dateEmployed=v; save(); }));
+    g.appendChild(fld("Date left","dateLeft","date",function(v){ e.dateLeft=v; save(); }));
+    g.appendChild(fld("IBAN for payment","iban","text",function(v){ e.iban=v; save(); }));
+    b.appendChild(g); c.appendChild(b); $body.appendChild(c);
+
+    var c2=card("Pay");
+    var b2=document.createElement("div"); b2.className="bd";
+    var g2=document.createElement("div"); g2.className="fields";
+    function sel2(label,key,opts,after){
+      var w=document.createElement("div"); w.className="fld";
+      w.innerHTML='<label>'+esc(label)+'</label>';
+      var s=document.createElement("select");
+      opts.forEach(function(o){ var op=document.createElement("option"); op.value=o[0]; op.textContent=o[1];
+        if(String(e[key]==null?o[0]:e[key])===o[0]) op.selected=true; s.appendChild(op); });
+      if(e[key]!=null) s.value=String(e[key]);
+      s.onchange=function(){ e[key]=s.value; save(); render(); if(after) after(); };
+      w.appendChild(s); g2.appendChild(w);
+    }
+    sel2("Pay basis","type",[["HOURLY","Hourly"],["FIXED","Fixed monthly"]]);
+    g2.appendChild(fld(e.type==="FIXED"?"Net salary per month €":"Net rate per hour €",e.net,"number",
+      function(v){ e.net=Number(v)||0; save(); render(); }));
+    sel2("Payment frequency","payInd",[["M","Monthly"],["W","Weekly"]]);
+    sel2("Payments a year","periods",[["13","13 — with a 13th salary"],["12","12 — no 13th salary"]]);
+    sel2("Standard week","weekPattern",[["5","Five days"],["6","Six days"]]);
+    g2.appendChild(fld("Hours a week",weekHours(e),"number",function(v){ e.weekHours=Number(v)||0; save(); render(); }));
+    g2.appendChild(fld("Standard hours a month",stdMonthHours(e),"number",function(v){ e.stdMonth=Number(v)||0; save(); render(); }));
+    b2.appendChild(g2);
+    var fm=document.createElement("div"); fm.className="formula";
+    var per=Number(e.periods)||Number(S.paye.periods)||13;
+    fm.textContent = "Standard "+weekHours(e)+" hours a week over "+weekDays(e)+" days — "+
+      hrs2(stdDayHours(e))+" a day. Contractually that averages "+
+      (Number(e.stdMonth)||Math.round(weekHours(e)*52/12))+" hours a month; pay is worked out on the working days each month actually has. "+ (e.type==="FIXED"
+      ? "Net salary "+eur(e.net)+" → gross "+eur(grossRate(e))+" a month · overtime "+eur4(otRate(e))+" an hour"
+      : "Net "+eur(e.net)+" an hour → gross "+eur4(grossRate(e))+" an hour · overtime paid 1:1")
+      + " · tax spread over "+(e.payInd==="W"?52:per)+" payments a year";
+    b2.appendChild(fm); c2.appendChild(b2); $body.appendChild(c2);
+
+    var c3=card("Bonus and thirteenth salary");
+    var b3=document.createElement("div"); b3.className="bd";
+    var n3=document.createElement("div"); n3.className="note"; n3.style.marginBottom="14px";
+    n3.textContent="Enter the bonus as a net amount, in the month it is paid. It is grossed up the same way as ordinary pay and carried into that month's payslip, social insurance schedule and PAYE return.";
+    b3.appendChild(n3);
+    var w3=document.createElement("div"); w3.className="scroll";
+    var t3=document.createElement("table");
+    t3.innerHTML='<thead><tr><th class="l">Month</th><th class="num">Net bonus €</th><th class="l">Description</th></tr></thead>';
+    var tb3=document.createElement("tbody");
+    MONTHS.forEach(function(mn,i){
+      var bo=(S.bonus&&S.bonus[e.id]&&S.bonus[e.id][absKey(i)])||{};
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="l">'+mn+'</td>'+
+        '<td><input type="number" step="0.01" value="'+(bo.amt==null?"":bo.amt)+'" data-bm="'+i+'" data-f="amt" style="width:110px;text-align:right;font-family:var(--mono)"></td>'+
+        '<td class="l"><input type="text" value="'+esc(bo.note||"")+'" data-bm="'+i+'" data-f="note" placeholder="13th salary, ex gratia…" style="width:240px"></td>';
+      tb3.appendChild(tr);
+    });
+    t3.appendChild(tb3); w3.appendChild(t3); b3.appendChild(w3); c3.appendChild(b3); $body.appendChild(c3);
+    tb3.querySelectorAll("[data-bm]").forEach(function(i2){
+      i2.onchange=function(){
+        if(!S.bonus) S.bonus={};
+        if(!S.bonus[e.id]) S.bonus[e.id]={};
+        var k=absKey(+i2.dataset.bm);
+        if(!S.bonus[e.id][k]) S.bonus[e.id][k]={};
+        var v=i2.dataset.f==="amt" ? (i2.value===""?"":Number(i2.value)||0) : i2.value;
+        if(v===""||v===null) delete S.bonus[e.id][k][i2.dataset.f]; else S.bonus[e.id][k][i2.dataset.f]=v;
+        if(!Object.keys(S.bonus[e.id][k]).length) delete S.bonus[e.id][k];
+        save(); render();
+      };
+    });
+  }
+
+  function cardSI(e){
+    var c=card("Social insurance classification");
+    var b=document.createElement("div"); b.className="bd";
+    var g=document.createElement("div"); g.className="fields";
+    g.appendChild(fld("Occupation","occupation","text",function(v){ e.occupation=v; save(); }));
+    [["cat","Employee category",[["M1","M1 — social insurance due"],["M2","M2 — no social insurance (pensioners)"],
+      ["L1","L1 — port workers, SI due"],["L2","L2 — port workers, no SI"],["MP","MP — embassies"],
+      ["KB","KB — British bases"],["K1","K1 — government, SI due"],["K2","K2 — government, no SI"]]],
+     ["gender","Gender",[["","—"],["M","M — male"],["F","F — female"]]],
+     ["community","Community code",[["E","E — Greek Cypriot"],["T","T — Turkish Cypriot"],["A","A — Armenian Cypriot"],
+      ["M","M — Maronite Cypriot"],["L","L — Latin Cypriot"],["D","D — third country national"],["K","K — EU citizen"]]],
+     ["chfExempt","Central Holiday Fund",[["0","0 — contributions paid"],["1","1 — exempt"]]]].forEach(function(f){
+      var w=document.createElement("div"); w.className="fld";
+      w.innerHTML='<label>'+esc(f[1])+'</label>';
+      var s=document.createElement("select");
+      f[2].forEach(function(o){ var op=document.createElement("option"); op.value=o[0]; op.textContent=o[1];
+        var cur=e[f[0]]==null?(f[0]==="cat"?"M1":f[0]==="community"?"E":f[0]==="chfExempt"?"0":""):String(e[f[0]]);
+        if(cur===o[0]) op.selected=true; s.appendChild(op); });
+      s.onchange=function(){ e[f[0]]=s.value; save(); render(); };
+      w.appendChild(s); g.appendChild(w);
+    });
+    b.appendChild(g);
+    var w2=document.createElement("div"); w2.className="scroll"; w2.style.marginTop="16px";
+    var t2=document.createElement("table");
+    t2.innerHTML='<thead><tr><th class="l">Identifier used in the return</th><th class="l">Value</th><th class="l">Source</th></tr></thead>'+
+      '<tbody>'+
+      [["Social insurance number",e.siNo,1],["Identity card number",e.idNo,0],
+       ["Alien registration number",e.arcNo,0],["Passport number",e.passport,0],
+       ["Tax identification number",e.tin,1],["Date of birth",e.dob?ddmmyy(e.dob):"",0],
+       ["Date employed",e.dateEmployed?ddmmyy(e.dateEmployed):"",0]].map(function(r){
+        var cls = r[1] ? "" : (r[2] ? " bad" : " muted");
+        return '<tr><td class="l">'+esc(r[0])+'</td><td class="l num'+cls+'">'+
+          esc(r[1] || (r[2]?"required":"not required"))+'</td><td class="l muted">Personal tab</td></tr>'; }).join("")+
+      '</tbody>';
+    w2.appendChild(t2); b.appendChild(w2);
+    var n=document.createElement("div"); n.className="note"; n.style.marginTop="12px";
+    n.textContent="Identifiers are held once on the Personal tab and shown here read-only. One of identity card, alien registration or passport is enough — a Cypriot employee needs only the identity card, so the other two stay blank.";
+    b.appendChild(n); c.appendChild(b); $body.appendChild(c);
+  }
+
+  function cardDocs(e){
+    var c=card("Employment contract");
+    var b=document.createElement("div"); b.className="bd";
+    var slot=document.createElement("div"); slot.id="cslot"; slot.className="note"; slot.textContent="Checking for a stored contract…";
+    b.appendChild(slot);
+    var up=document.createElement("div"); up.className="btnrow"; up.style.marginTop="14px";
+    var fi=document.createElement("input"); fi.type="file"; fi.accept=".pdf,.doc,.docx,.jpg,.jpeg,.png";
+    up.appendChild(fi); b.appendChild(up);
+    var nn=document.createElement("div"); nn.className="warn"; nn.style.marginTop="14px";
+    nn.textContent="Keep the file under 1.5 MB while the app is standalone. On the client portal documents will go to proper storage.";
+    b.appendChild(nn); c.appendChild(b); $body.appendChild(c);
+    function paint(k){
+      slot.innerHTML="";
+      if(!k){ slot.textContent="No contract on file for "+(e.fullName||e.name)+"."; return; }
+      var d=document.createElement("div"); d.className="file";
+      d.innerHTML='<span class="nm">'+esc(k.name)+'</span><span class="muted">'+
+        (Math.round(k.size/1024))+' KB · uploaded '+esc(k.at||"—")+'</span>';
+      var s2=document.createElement("span"); s2.style.flex="1"; d.appendChild(s2);
+      var open=document.createElement("a"); open.className="btn ghost sm"; open.textContent="Open";
+      open.href=k.data; open.target="_blank"; open.download=k.name; open.style.textDecoration="none"; d.appendChild(open);
+      var rm=document.createElement("button"); rm.className="btn danger sm"; rm.textContent="Remove";
+      rm.onclick=function(){ if(!confirm("Remove the stored contract?")) return;
+        delContract(e.id).then(function(){ paint(null); }); };
+      d.appendChild(rm); slot.appendChild(d);
+    }
+    loadContract(e.id).then(paint);
+    fi.onchange=function(){
+      var f=fi.files&&fi.files[0]; if(!f) return;
+      if(f.size>1.5*1024*1024){ alert("That file is "+Math.round(f.size/1024)+" KB. Keep it under 1.5 MB."); fi.value=""; return; }
+      var fr=new FileReader();
+      fr.onload=function(){
+        var obj={name:f.name,type:f.type,size:f.size,at:stampFmt(new Date()),data:fr.result};
+        saveContract(e.id,obj).then(function(){ paint(obj); fi.value=""; })
+          .catch(function(){ alert("The file could not be stored. Try a smaller file."); });
+      };
+      fr.readAsDataURL(f);
+    };
+  }
+
+  /* ---------- T.D.59A, laid out like the form ---------- */
+  function cardTD59(e){
+    var t=td59Calc(e,curMonth) || {A1:0,A6:0,A8:0,B6:0,B15:0,B16:0,C1:0,C2:0,C3:0,periods:13,allowed:0,claimed:0,cap:0,restricted:false};
+    var d=e.td59, N=function(k){ return Number(d[k])||0; };
+
+    var c=card("Declaration for claiming tax deductions for the tax year "+YEAR);
+    var b=document.createElement("div"); b.className="bd form59";
+
+    var hdr=document.createElement("div"); hdr.className="fields"; hdr.style.marginBottom="6px";
+    [["Employee's name",e.fullName||e.name],["Social insurance no",e.siNo],
+     ["Tax identification number",e.tin],["E-mail address",e.email],
+     ["Telephone number",e.phone],["Home address",e.address]].forEach(function(f){
+      var w=document.createElement("div"); w.className="fld";
+      w.innerHTML='<label>'+esc(f[0])+'</label><div class="ro" style="width:auto;text-align:left">'+
+        esc(f[1]||"not entered on the Personal tab")+'</div>';
+      hdr.appendChild(w);
+    });
+    b.appendChild(hdr);
+
+    function section(title){ var s=document.createElement("div"); s.className="sec"; s.textContent=title; b.appendChild(s); return s; }
+    function table(rows){
+      var w=document.createElement("div"); w.className="scroll";
+      var t2=document.createElement("table"); t2.className="f59";
+      t2.innerHTML='<thead><tr><th></th><th>Line</th><th>€ declared</th><th>€ for use by employer</th></tr></thead>';
+      var tb=document.createElement("tbody");
+      rows.forEach(function(r){
+        var tr=document.createElement("tr");
+        if(r.kind) tr.className=r.kind;
+        var td0=document.createElement("td"); td0.className="n"; td0.textContent=r.no||""; tr.appendChild(td0);
+        var td1=document.createElement("td"); td1.className="l"; td1.textContent=r.label; tr.appendChild(td1);
+        var td2=document.createElement("td");
+        if(r.key){
+          var w2=document.createElement("div"); w2.className="cell";
+          var i=document.createElement("input"); i.type="number"; i.step="0.01";
+          i.value=d[r.key]==null?"":d[r.key];
+          i.onchange=function(){ d[r.key]=i.value===""?"":Number(i.value)||0; save(); render(); };
+          w2.appendChild(i); td2.appendChild(w2);
+        }
+        tr.appendChild(td2);
+        var td3=document.createElement("td");
+        var w3=document.createElement("div"); w3.className="cell";
+        var ro=document.createElement("div"); ro.className="ro";
+        ro.textContent = r.val===undefined ? "" : eur(r.val);
+        if(r.val===undefined) ro.style.visibility="hidden";
+        w3.appendChild(ro); td3.appendChild(w3); tr.appendChild(td3);
+        tb.appendChild(tr);
+      });
+      t2.appendChild(tb); w.appendChild(t2); b.appendChild(w);
+    }
+
+    section("Part A.  Income");
+    table([
+      {no:"1",label:"Salaried services and benefits that fall within the meaning of Social Insurance Services income",val:t.A1,kind:"calc"},
+      {no:"2",label:"Benefits and other amounts that do not fall within the meaning of Social Insurance Services income",key:"A2",val:N("A2"),kind:"calc"},
+      {no:"3",label:"Social Insurance Pension and Social Insurance Widow's pension taxable at normal rates",key:"A3"},
+      {no:"4",label:"Gross rents",key:"A4"},
+      {no:"5",label:"Income from other sources",key:"A5"},
+      {no:"6",label:"TOTAL INCOME",val:t.A6,kind:"res"},
+      {no:"7",label:"Less income that is not taxable",key:"A7"},
+      {no:"8",label:"TOTAL TAXABLE INCOME (A6 − A7) with normal rates",val:t.A8,kind:"res"}
+    ]);
+
+    section("Part B.  Less: allowances and deductions");
+    table([
+      {no:"1",label:"Subscriptions to unions and other professional bodies",key:"B1"},
+      {no:"2",label:"Deductions for first employment",key:"B2"},
+      {no:"3",label:"Home insurance for natural disasters (up to €500)",key:"B3"},
+      {no:"4",label:"Deductions for rented properties",key:"B4"},
+      {no:"5",label:"Other deductions",key:"B5"},
+      {no:"6",label:"INTERMEDIARY CALCULATION  A8 − (total B1 to B5)",val:t.B6,kind:"res"},
+      {no:"7",label:"Pension, provident, health and social insurance funds plus medical fund",key:"B7",val:t.B7,kind:"calc"},
+      {no:"8",label:"Contributions to G.H.S.",key:"B8",val:t.B8,kind:"calc"},
+      {no:"9",label:"Insurance premiums for life, permanent or temporary, total or partial disability",key:"B9"},
+      {no:"",label:"Restriction — lines 7 to 9 together cannot exceed one fifth of B6 ("+eur(t.cap)+")"+
+        (t.restricted?"  ·  restriction applies":""),val:t.allowed,kind:"calc"},
+      {no:"10",label:"Deduction for dependent children",key:"B10"},
+      {no:"11",label:"Deduction for rent of a primary residence or interest on a serviced primary residence loan",key:"B11"},
+      {no:"12",label:"Expenditure for energy upgrade of a primary residence or purchase of an electric vehicle",key:"B12"},
+      {no:"13",label:"Investment in innovative companies",key:"B13"},
+      {no:"15",label:"TOTAL ALLOWANCES",val:t.B15,kind:"res"},
+      {no:"16",label:"INCOME CHARGEABLE TO TAX AT NORMAL RATES  (A8 − B15)",val:t.B16,kind:"res"}
+    ]);
+
+    section("Part C.  Tax computation");
+    var w4=document.createElement("div"); w4.className="scroll";
+    var t4=document.createElement("table"); t4.className="f59";
+    t4.innerHTML='<thead><tr><th></th><th>Band</th><th>Chargeable income</th><th>Rate</th><th>Tax</th></tr></thead>';
+    var tb4=document.createElement("tbody");
+    var prev=0, chg=t.B16;
+    (S.paye.bands||[]).forEach(function(bd){
+      var cap=Number(bd.upTo)||Infinity;
+      var inBand=Math.max(0,Math.min(chg,cap)-prev);
+      var tax=r2(inBand*(Number(bd.rate)||0)/100);
+      var lbl = cap===Infinity ? "From "+eur(prev+1) : "From "+eur(prev===0?0:prev+1)+" to "+eur(cap);
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="n"></td><td class="l">'+esc(lbl)+'</td>'+
+        '<td style="text-align:right;font-family:var(--mono)">'+eur(inBand)+'</td>'+
+        '<td style="text-align:right;font-family:var(--mono)">'+bd.rate+' %</td>'+
+        '<td style="text-align:right;font-family:var(--mono)">'+(Number(bd.rate)?eur(tax):"—")+'</td>';
+      tb4.appendChild(tr); prev=cap;
+    });
+    [["1","TAX ON CHARGEABLE INCOME",t.C1],
+     ["2","TAX TO BE DEDUCTED — the share relating to this employment",t.C2],
+     ["3","DEDUCTION OF TAX per pay period  (C2 ÷ "+t.periods+")",t.C3]].forEach(function(r){
+      var tr=document.createElement("tr"); tr.className="res";
+      tr.innerHTML='<td class="n">'+r[0]+'</td><td class="l" colspan="3">'+esc(r[1])+'</td>'+
+        '<td style="text-align:right;font-family:var(--mono)">'+eur(r[2])+'</td>';
+      tb4.appendChild(tr);
+    });
+    t4.appendChild(tb4); w4.appendChild(t4); b.appendChild(w4);
+
+    var sign=document.createElement("div"); sign.className="fields"; sign.style.marginTop="18px";
+    var w5=document.createElement("div"); w5.className="fld";
+    w5.innerHTML='<label>Signed declaration held on file</label>';
+    var cb=document.createElement("input"); cb.type="checkbox"; cb.checked=!!d.received;
+    cb.onchange=function(){ d.received=cb.checked; save(); render(); };
+    w5.appendChild(cb); sign.appendChild(w5);
+    sign.appendChild(fld("Date signed",d.date,"date",function(v){ d.date=v; save(); }));
+    b.appendChild(sign);
+
+    var n=document.createElement("div"); n.className="note"; n.style.marginTop="14px";
+    n.textContent="Lines A1, A6, A8 and B6 are computed by the employer and cannot be typed. A1 is this employment projected over the year from the pay recorded so far. Social insurance and G.H.S. deducted here are added automatically to B7 and B8 — enter on those lines only what is not deducted by this employer.";
+    b.appendChild(n);
+    c.appendChild(b); $body.appendChild(c);
+
+    var c2=card("Print");
+    var b2=document.createElement("div"); b2.className="bd btnrow";
+    var pb=document.createElement("button"); pb.className="btn ghost"; pb.textContent="Print this declaration";
+    pb.onclick=function(){ try{ window.print(); }catch(err){ alert("Printing is blocked in this preview."); } };
+    b2.appendChild(pb); c2.appendChild(b2); $body.appendChild(c2);
+  }
+
+  /* ---------- users ---------- */
+  function viewUsers(){
+    var add=document.createElement("button"); add.className="btn ghost"; add.textContent="Add user";
+    add.onclick=function(){ S.users.push({u:"newuser",p:"change-me",name:"New user",role:"client"}); save(); render(); };
+    var c=card("Users & access",add);
+    var w=document.createElement("div"); w.className="scroll";
+    var t=document.createElement("table");
+    t.innerHTML='<thead><tr><th class="l">User name</th><th class="l">Display name</th><th class="l">Password</th><th class="l">Role</th><th class="l"></th></tr></thead>';
+    var tb=document.createElement("tbody");
+    S.users.forEach(function(u,i){
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="l"><input type="text" value="'+esc(u.u)+'" data-u="'+i+'" data-f="u" style="width:130px"></td>'+
+        '<td class="l"><input type="text" value="'+esc(u.name)+'" data-u="'+i+'" data-f="name" style="width:150px"></td>'+
+        '<td class="l"><input type="text" value="'+esc(u.p)+'" data-u="'+i+'" data-f="p" style="width:130px"></td>'+
+        '<td class="l"><select data-u="'+i+'" data-f="role"><option value="admin"'+(u.role==="admin"?" selected":"")+'>Admin</option>'+
+        '<option value="client"'+(u.role==="client"?" selected":"")+'>Client</option></select></td>'+
+        '<td class="l">'+(S.users.length>1?'<button class="btn danger sm" data-del="'+i+'">Remove</button>':'<span class="muted">last user</span>')+'</td>';
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); w.appendChild(t); c.appendChild(w);
+    var b=document.createElement("div"); b.className="bd";
+    var rt=document.createElement("div"); rt.className="note";
+    rt.innerHTML="<strong>Admin</strong> — PC Prime &amp; Calculate Consultants Ltd: everything, including employer details, employees, rates and parameters.<br>"+
+      "<strong>Client</strong> — the person keeping the times: timesheets, summaries, reports, exports and backups. No access to settings or rates.";
+    b.appendChild(rt);
+    var wn=document.createElement("div"); wn.className="warn"; wn.style.marginTop="14px";
+    wn.textContent="Passwords are held in plain text in this browser profile. That is adequate for a standalone build shared with one client, but it is not real security — proper sign-in comes with the portal.";
+    b.appendChild(wn); c.appendChild(b); $body.appendChild(c);
+    tb.querySelectorAll("[data-u]").forEach(function(el){
+      el.onchange=function(){ var u=S.users[+el.dataset.u]; u[el.dataset.f]=el.value; save();
+        if(me && u===me) renderChrome(); };
+    });
+    tb.querySelectorAll("[data-del]").forEach(function(bt){
+      bt.onclick=function(){ var u=S.users[+bt.dataset.del];
+        if(u===me){ alert("You cannot remove the user you are signed in as."); return; }
+        if(!confirm("Remove user "+u.u+"?")) return;
+        S.users.splice(+bt.dataset.del,1); save(); render(); };
+    });
+  }
+
+  /* ---------- privacy ---------- */
+  function viewPrivacy(){
+    var c=card("Privacy policy");
+    var b=document.createElement("div"); b.className="bd prose";
+    b.innerHTML=
+      "<h4>What this app holds</h4><p>Employee names and identifiers, social insurance numbers, pay rates, hours worked, employment contracts and the resulting payroll figures for "+
+      esc((S.employer&&S.employer.name)||"the employer")+". Nothing else is collected.</p>"+
+      "<h4>Where it is held</h4><p>On this standalone build, entries are stored in the browser profile of the person using the app and are not transmitted anywhere. When the app moves onto the PC Prime client portal, data will sit in the portal database under the same controls as the rest of the practice's client records.</p>"+
+      "<h4>Who can see it</h4><p>The person keeping the times, and PC Prime &amp; Calculate Consultants Ltd as the appointed accountants. Payroll data is not shared with anyone else without instruction.</p>"+
+      "<h4>Retention</h4><p>Payroll records are kept for the periods required by Cyprus tax and social insurance legislation.</p>"+
+      "<h4>Employee rights</h4><p>Employees may ask to see the personal data held about them. Requests should go to the employer, who may refer them to PC Prime &amp; Calculate Consultants Ltd.</p>";
+    c.appendChild(b); $body.appendChild(c);
+  }
+
+  /* ---------- social insurance schedule and text file ---------- */
+  function derivedWeeks(e,m){
+    var out=["","","","",""], buckets=[[],[],[],[],[]];
+    monthDays(m).forEach(function(c){
+      if(!isWorkDay(c,e)) return;
+      var wk=Math.min(4,Math.floor((parseInt(c.iso.slice(8),10)-1)/7));
+      buckets[wk].push(dayRaw(e,c));
+    });
+    buckets.forEach(function(days,i){
+      if(!days.length){ out[i]=" "; return; }
+      var full=days.every(function(d){ return (d.abs||0)>0; });
+      if(!full){ out[i]=" "; return; }
+      var t=absType(days[0].at)||absType("U");
+      out[i]=t.si;
+    });
+    return out.join("");
+  }
+  function absWeeks(e,m){
+    var a=S.absent&&S.absent[e.id]&&S.absent[e.id][absKey(m)];
+    if(a) return String(a).padEnd(5," ").slice(0,5);
+    if(monthRecording(e,m)==="exceptions") return derivedWeeks(e,m);
+    return "     ";
+  }
+  function setAbsWeek(e,m,i,v){
+    if(!S.absent) S.absent={};
+    if(!S.absent[e.id]) S.absent[e.id]={};
+    var cur=absWeeks(e,m).split("");
+    cur[i]=v||" ";
+    var s=cur.join("");
+    if(s.trim()==="") { delete S.absent[e.id][absKey(m)]; } else { S.absent[e.id][absKey(m)]=s; }
+    save();
+  }
+  function siRows(m){
+    var byCat={};
+    actives().forEach(function(e){
+      var cat=e.cat||"M1";
+      if(!byCat[cat]) byCat[cat]={cat:cat,rows:[],tot:{act:0,ghs:0,ins:0,chf:0,newE:0,term:0}};
+      var r=empMonth(e,m);
+      var act=Math.round(r.gross), ghsE=Math.round(r.gross), insE=Math.round(r.gross);
+      var chf=r2(act*(Number(S.rates.holER)||0)/100);   // 8% of the declared whole-euro earnings
+      var g=byCat[cat];
+      g.rows.push({e:e,r:r,act:act,ghs:ghsE,ins:insE,chf:chf,abs:absWeeks(e,m)});
+      g.tot.act+=act; g.tot.ghs+=ghsE; g.tot.ins+=insE; g.tot.chf=r2(g.tot.chf+chf);
+      if(e.dateEmployed && e.dateEmployed.slice(0,7)===absKey(m)) g.tot.newE++;
+      if(e.dateLeft && e.dateLeft.slice(0,7)===absKey(m)) g.tot.term++;
+    });
+    return Object.keys(byCat).sort().map(function(k){ return byCat[k]; });
+  }
+  function siSectionB(g){
+    var R=S.rates, cat=g.cat;
+    var grossInc=Math.round(g.tot.act+g.tot.chf);       // actual earnings + holiday fund, to the euro
+    var noSI = (cat==="M2"||cat==="L2"||cat==="K2");
+    return {grossInc:grossInc, insInc:grossInc, ghsInc:grossInc,
+      si: noSI?0:r2(grossInc*(R.siEE+R.siER)/100),
+      hol:g.tot.chf,
+      red:noSI?0:r2(grossInc*R.redER/100),
+      itf:noSI?0:r2(grossInc*R.itfER/100),
+      scf:r2(grossInc*R.scfER/100),
+      ghs:r2(grossInc*(R.ghsEE+R.ghsER)/100)};
+  }
+  function reportSI(){
+    var groups=siRows(curMonth), er=S.employer||{};
+    var CATN={M1:"NORMAL",M2:"PENSIONERS",L1:"PORT WORKERS",L2:"PORT WORKERS",MP:"EMBASSIES",KB:"BRITISH BASES",K1:"GOVERNMENT",K2:"GOVERNMENT"};
+    groups.forEach(function(g){
+      var b=siSectionB(g), tot=r2(b.si+b.hol+b.red+b.itf+b.scf+b.ghs);
+      var c=document.createElement("div"); c.className="card payslip";
+      c.innerHTML='<div class="sl-top"><div>'+
+        '<div class="sl-co">'+esc(er.name||"")+'</div>'+
+        '<div class="sl-addr">'+esc(er.address||"")+(er.phone?"\nTel: "+esc(er.phone):"")+'</div>'+
+        '<div class="sl-sub">Social insurance earnings and contributions · Reg. no '+esc(er.siReg||"—")+
+        ' · Month '+String(curMonth+1).padStart(2,"0")+"/"+YEAR+'</div></div>'+
+        '<div class="sl-badge">'+esc(g.cat)+' '+esc(CATN[g.cat]||"")+'</div></div>';
+      var w=document.createElement("div"); w.className="scroll";
+      var t=document.createElement("table");
+      t.innerHTML='<thead><tr><th class="l">Full name</th><th class="l">Identity card</th><th class="l">Social insur. no</th>'+
+        '<th class="l">Type</th><th class="num">Gross income</th><th class="num">Gross GHS</th><th class="num">Insurable income</th>'+
+        '<th class="num">Holiday fund</th><th class="l">Leav. date</th>'+
+        '<th class="l">1</th><th class="l">2</th><th class="l">3</th><th class="l">4</th><th class="l">5</th></tr></thead>';
+      var tb=document.createElement("tbody");
+      g.rows.forEach(function(x){
+        var tr=document.createElement("tr");
+        var wk="";
+        for(var i=0;i<5;i++){
+          wk+='<td class="l"><select data-aw="'+x.e.id+'" data-i="'+i+'" style="padding:3px 5px;font-size:11px">'+
+            ['',"A","V","M"].map(function(o){ return '<option value="'+o+'"'+(x.abs[i]===(o||" ")?" selected":"")+'>'+(o||"–")+'</option>'; }).join("")+
+            '</select></td>';
+        }
+        tr.innerHTML='<td class="l">'+esc(x.e.fullName||x.e.name)+'</td><td class="l num">'+esc(x.e.idNo||x.e.arcNo||"—")+'</td>'+
+          '<td class="l num">'+esc(x.e.siNo||"—")+'</td><td class="l">'+esc(x.e.payInd||"M")+'</td>'+
+          '<td class="num">'+x.act.toLocaleString("en-GB")+'</td><td class="num">'+x.ghs.toLocaleString("en-GB")+'</td>'+
+          '<td class="num">'+x.ins.toLocaleString("en-GB")+'</td><td class="num">'+eur(x.chf)+'</td>'+
+          '<td class="l">'+(x.e.dateLeft?ddmmyy(x.e.dateLeft):"")+'</td>'+wk;
+        tb.appendChild(tr);
+      });
+      var trT=document.createElement("tr"); trT.className="tot";
+      trT.innerHTML='<td class="l" colspan="4">Grand totals — '+g.rows.length+' transactions</td>'+
+        '<td class="num">'+g.tot.act.toLocaleString("en-GB")+'</td><td class="num">'+g.tot.ghs.toLocaleString("en-GB")+'</td>'+
+        '<td class="num">'+g.tot.ins.toLocaleString("en-GB")+'</td><td class="num">'+eur(g.tot.chf)+'</td><td colspan="6"></td>';
+      tb.appendChild(trT); t.appendChild(tb); w.appendChild(t); c.appendChild(w);
+
+      var w2=document.createElement("div"); w2.className="scroll";
+      var t2=document.createElement("table");
+      t2.innerHTML='<thead><tr><th class="l">Section B — payable contributions</th><th class="num">Gross income</th>'+
+        '<th class="num">Soc. insurance</th><th class="num">Hol. fund</th><th class="num">Redund.</th>'+
+        '<th class="num">Ind. training</th><th class="num">S. cohesion</th><th class="num">G.H.S.</th><th class="num">Total</th></tr></thead>'+
+        '<tbody><tr class="tot"><td class="l">Earnings and contributions totals</td>'+
+        '<td class="num">'+b.grossInc.toLocaleString("en-GB")+'</td><td class="num">'+eur(b.si)+'</td>'+
+        '<td class="num">'+eur(b.hol)+'</td><td class="num">'+eur(b.red)+'</td><td class="num">'+eur(b.itf)+'</td>'+
+        '<td class="num">'+eur(b.scf)+'</td><td class="num">'+eur(b.ghs)+'</td><td class="num">'+eur(tot)+'</td></tr></tbody>';
+      w2.appendChild(t2); c.appendChild(w2);
+      var nn=document.createElement("div"); nn.className="sl-note";
+      nn.textContent="Holiday fund is 8% of the declared whole-euro earnings, which is how the Social Insurance system recomputes it — a few cents from the payroll figure. Gross income is actual earnings plus the holiday fund. Social insurance, redundancy and industrial training are capped at "+
+        eur(S.params.capMonth)+" a month; social cohesion is not capped. Absent week codes: A absent without pay, V annual leave paid by the Central Holiday Fund, M maternity or paternity leave.";
+      c.appendChild(nn);
+      $body.appendChild(c);
+      c.querySelectorAll("[data-aw]").forEach(function(s){
+        s.onchange=function(){ setAbsWeek(emp(s.dataset.aw),curMonth,+s.dataset.i,s.value); render(); };
+      });
+    });
+    var cf=card("Submission file");
+    var bf=document.createElement("div"); bf.className="bd";
+    var rowf=document.createElement("div"); rowf.className="btnrow";
+    rowf.innerHTML='<button class="btn" id="siTxt">Download SI text file</button>'+
+      '<button class="btn ghost" id="siPrev">Preview the records</button>';
+    bf.appendChild(rowf);
+    var pre=document.createElement("div"); pre.id="siPre"; pre.className="formula"; pre.style.whiteSpace="pre"; pre.style.overflowX="auto"; pre.style.display="none";
+    bf.appendChild(pre);
+    var wf=document.createElement("div"); wf.className="warn"; wf.style.marginTop="14px";
+    wf.innerHTML="Two conventions in the specification are ambiguous and I have made a choice: the leading <strong>S</strong> in a signed field is written as <strong>+</strong>, and the Central Holiday Fund amount is written in <strong>cents with no decimal point</strong>. One accepted file would settle both.";
+    bf.appendChild(wf); cf.appendChild(bf); $body.appendChild(cf);
+    document.getElementById("siTxt").onclick=function(){ downloadText(siFile(curMonth),"SIS_SCHEDULE_"+String(curMonth+1).padStart(2,"0")+YEAR+".txt"); };
+    document.getElementById("siPrev").onclick=function(){
+      pre.style.display="block";
+      pre.textContent=siFile(curMonth).split("\r\n").map(function(l){ return (l?l.slice(0,2)+" | "+l.slice(2)+"   ["+l.length+" chars]":""); }).join("\n");
+    };
+  }
+  /* fixed-width helpers for the SI text file */
+  function fA(v,n){ return String(v==null?"":v).slice(0,n).padEnd(n," "); }              // alphanumeric, blank filled
+  function digits(v){ return String(v==null?"":v).replace(/[^0-9]/g,""); }
+  function fN(v,n){ var d=digits(v); return (d.length>n?d.slice(-n):d).padStart(n,"0"); }  // numeric, zero filled
+  function fS(v,n){ var d=n-1; return ((Number(v)||0)<0?"-":"+")+fN(v,d); }              // signed, S + digits
+  function fSc(v,n){ var d=n-1; var c=Math.round((Number(v)||0)*100); return (c<0?"-":"+")+String(Math.abs(c)).padStart(d,"0"); }
+  function siRegFmt(v){
+    var p=String(v||"").split("/");
+    if(p.length!==3) return String(v||"");
+    return digits(p[0]).padStart(8,"0")+"/"+digits(p[1]).padStart(1,"0")+"/"+digits(p[2]).padStart(4,"0");
+  }
+  function siFile(m){
+    var er=S.employer||{}, out=[], groups=siRows(m);
+    var d=new Date(), dp=String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();
+    out.push("01"+fA("S.I.S. SCHEDULE",25)+"01"+fA(dp,10)+fA(er.contact||er.name||"",30)+fA(er.contactTel||er.phone||"",20));
+    var G={act:0,ghs:0,ins:0,chf:0,newE:0,term:0,emp:0};
+    groups.forEach(function(g){
+      out.push("02"+fA(siRegFmt(er.siReg),15)+fA(g.cat,2)+"K"+fA(String(m+1).padStart(2,"0")+"/"+YEAR,7)+fA("",7)+fA("",7));
+      g.rows.forEach(function(x){
+        var e=x.e;
+        if(e.dateEmployed && e.dateEmployed.slice(0,7)===absKey(m)){
+          out.push("03"+fN(e.siNo,8)+fN(e.idNo,8)+fN(e.arcNo,8)+fA(e.passport||"",10)+
+            fA(e.fullName||e.name,30)+fA(e.dob?ddmmyy(e.dob):"",10)+fA(e.gender||"",1)+
+            fA(e.community||"E",1)+fA(ddmmyy(e.dateEmployed),10)+fA(e.payInd||"M",1)+
+            fA(e.chfExempt||"0",1)+fA(e.occupation||"",25));
+        }
+      });
+      g.rows.forEach(function(x){
+        var e=x.e;
+        out.push("04"+fN(e.siNo,8)+fN(e.idNo,8)+fN(e.arcNo,8)+fS(x.act,11)+fS(x.ghs,11)+fS(x.ins,11)+
+          fSc(x.chf,13)+x.abs+fA(e.dateLeft?ddmmyy(e.dateLeft):"",10)+"1");
+      });
+      out.push("05"+fS(g.tot.act,13)+fS(g.tot.ghs,13)+fS(g.tot.ins,13)+fSc(g.tot.chf,15)+
+        fN(g.tot.newE,5)+fN(g.tot.term,5)+fN(g.rows.length,6));
+      G.act+=g.tot.act; G.ghs+=g.tot.ghs; G.ins+=g.tot.ins; G.chf=r2(G.chf+g.tot.chf);
+      G.newE+=g.tot.newE; G.term+=g.tot.term; G.emp+=g.rows.length;
+    });
+    out.push("06"+fS(G.act,13)+fS(G.ghs,13)+fS(G.ins,13)+fSc(G.chf,15)+
+      fN(G.newE,5)+fN(G.term,5)+fN(G.emp,6)+fN(groups.length,2));
+    return out.join("\r\n");
+  }
+  function downloadText(txt,name){
+    try{
+      var a=document.createElement("a");
+      a.href=URL.createObjectURL(new Blob([txt],{type:"text/plain;charset=utf-8"}));
+      a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    }catch(err){ alert("Download blocked here — use Preview and copy the records."); }
+  }
+
+  /* ---------- PAYE monthly return ---------- */
+  function xnum(v){ return (Number(v)||0).toFixed(2).replace(".",","); }   // comma decimal separator
+  function xesc(s){ return String(s==null?"":s).replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+  function el(tag,val){ return "<"+tag+">"+xesc(val)+"</"+tag+">"; }
+  function payeRows(m){
+    return actives().map(function(e){
+      var r=empMonth(e,m);
+      return {e:e,r:r,
+        emol:r.gross, grossEmol:r.gross, tax:r.paye,
+        ghsEE:r.ghsEE, ghsER:r.ghsER};
+    }).filter(function(x){ return x.emol>0 || x.tax>0; });
+  }
+  function payeXml(m){
+    var er=S.employer||{}, rows=payeRows(m), out=[];
+    var T={gross:0,tax:0,ghsEE:0,ghsER:0};
+    out.push('<?xml version="1.0" encoding="UTF-8"?>');
+    var body=[];
+    body.push(el("PayeEmployerType",(S.paye&&S.paye.employerType)||"Private Sector"));
+    var emps=rows.map(function(x){
+      var e=x.e, f=[];
+      f.push(el("TaxpayerNumber",e.tin||""));
+      f.push(el("Name",e.fullName||e.name));
+      if(e.dateEmployed && e.dateEmployed.slice(0,7)===absKey(m)) f.push(el("EmployeeStartDate",e.dateEmployed));
+      if(e.dateLeft && e.dateLeft.slice(0,7)===absKey(m)) f.push(el("EmploymentEndDate",e.dateLeft));
+      f.push(el("Emoluments",xnum(x.emol)));
+      f.push(el("GrossEmoluments",xnum(x.grossEmol)));
+      f.push(el("TaxWithheldGrossEmoluments",xnum(x.tax)));
+      f.push(el("GhsWithheldEmployee",xnum(x.ghsEE)));
+      f.push(el("IsEmployeeOfficer","0"));
+      f.push(el("GhsEmployersContribution",xnum(x.ghsER)));
+      T.gross=r2(T.gross+x.grossEmol); T.tax=r2(T.tax+x.tax);
+      T.ghsEE=r2(T.ghsEE+x.ghsEE); T.ghsER=r2(T.ghsER+x.ghsER);
+      return "<PayeEmployee>"+f.join("")+"</PayeEmployee>";
+    }).join("");
+    body.push(emps?("<PayeEmployees>"+emps+"</PayeEmployees>"):"<PayeEmployees/>");
+    body.push(el("TotalGrossEmoluments",xnum(T.gross)));
+    body.push(el("TaxWithheld",xnum(T.tax)));
+    body.push(el("TaxWithheldFromBonus",xnum(0)));
+    body.push(el("TotalTaxWithheld",xnum(T.tax)));
+    body.push(el("TotalTaxdeducted",xnum(0)));
+    body.push(el("GHSWithheldPensioners",xnum(0)));
+    body.push(el("GHSWithheldOfficers",xnum(0)));
+    body.push(el("GHSWithheldEmployees",xnum(T.ghsEE)));
+    body.push(el("GHSEmployerContribution",xnum(T.ghsER)));
+    body.push(el("ContributionPensionableBenefits",xnum(0)));
+    out.push("<PayeReturn><PayeReturnHeader>"+el("TaxpayerNumber",er.tic||"")+
+      el("Year",YEAR)+el("Period",MSHORT[m])+"</PayeReturnHeader><PayeReturnBody>"+
+      body.join("")+"</PayeReturnBody></PayeReturn>");
+    return out.join("\r\n")+"\r\n";
+  }
+  function reportPAYE(){
+    var rows=payeRows(curMonth), er=S.employer||{};
+    var T={gross:0,tax:0,ghsEE:0,ghsER:0};
+    rows.forEach(function(x){ T.gross=r2(T.gross+x.grossEmol); T.tax=r2(T.tax+x.tax);
+      T.ghsEE=r2(T.ghsEE+x.ghsEE); T.ghsER=r2(T.ghsER+x.ghsER); });
+
+    var k=document.createElement("div"); k.className="kpis";
+    k.innerHTML=
+      kpi("Total gross emoluments","€"+eur(T.gross),MONTHS[curMonth]+" "+YEAR)+
+      kpi("Tax withheld","€"+eur(T.tax),(S.paye&&S.paye.enabled)?("PAYE borne by the "+S.paye.borneBy):"PAYE is switched off")+
+      kpi("GHS withheld from employees","€"+eur(T.ghsEE),"Employee contributions")+
+      kpi("GHS employer contribution","€"+eur(T.ghsER),"Employer contributions")+
+      kpi("Payable to the Tax Department","€"+eur(r2(T.tax+T.ghsEE+T.ghsER)),"Tax withheld plus GHS",true);
+    $body.appendChild(k);
+
+    var c=card("PAYE monthly return — "+MONTHS[curMonth]+" "+YEAR+" · TIN "+(er.tic||"not set"));
+    var w=document.createElement("div"); w.className="scroll";
+    var t=document.createElement("table");
+    t.innerHTML='<thead><tr><th class="l">Employee</th><th class="l">TIN</th><th class="num">Emoluments €</th>'+
+      '<th class="num">Gross emoluments €</th><th class="num">Taxable €</th><th class="num">Tax withheld €</th>'+
+      '<th class="num">GHS employee €</th><th class="num">GHS employer €</th></tr></thead>';
+    var tb=document.createElement("tbody");
+    rows.forEach(function(x){
+      var tr=document.createElement("tr");
+      tr.innerHTML='<td class="l">'+esc(x.e.fullName||x.e.name)+'</td>'+
+        '<td class="l num'+(x.e.tin?"":" bad")+'">'+esc(x.e.tin||"missing")+'</td>'+
+        '<td class="num">'+eur(x.emol)+'</td><td class="num">'+eur(x.grossEmol)+'</td>'+
+        '<td class="num muted">'+eur(x.r.taxable)+'</td><td class="num">'+z(x.tax)+'</td>'+
+        '<td class="num">'+eur(x.ghsEE)+'</td><td class="num">'+eur(x.ghsER)+'</td>';
+      tb.appendChild(tr);
+    });
+    var trT=document.createElement("tr"); trT.className="tot";
+    trT.innerHTML='<td class="l" colspan="2">Total — '+rows.length+' employees</td><td class="num">'+eur(T.gross)+'</td>'+
+      '<td class="num">'+eur(T.gross)+'</td><td class="num"></td><td class="num">'+eur(T.tax)+'</td>'+
+      '<td class="num">'+eur(T.ghsEE)+'</td><td class="num">'+eur(T.ghsER)+'</td>';
+    tb.appendChild(trT); t.appendChild(tb); w.appendChild(t); c.appendChild(w);
+    var n=document.createElement("div"); n.className="bd note";
+    n.textContent="Taxable income is gross less the employee's own social insurance and GHS. "+
+      ((S.paye&&S.paye.method==="cumulative")?"Tax is calculated cumulatively: year-to-date taxable income is projected over the year, the tax due to date is taken pro rata and tax already withheld is credited.":"Tax is calculated by annualising each month's taxable income.");
+    c.appendChild(n); $body.appendChild(c);
+
+    var cf=card("Submission file");
+    var bf=document.createElement("div"); bf.className="bd";
+    var rowf=document.createElement("div"); rowf.className="btnrow";
+    rowf.innerHTML='<button class="btn" id="pxDl">Download PAYE XML</button>'+
+      '<button class="btn ghost" id="pxPv">Preview the XML</button>';
+    bf.appendChild(rowf);
+    var pre=document.createElement("div"); pre.id="pxPre"; pre.className="formula";
+    pre.style.whiteSpace="pre-wrap"; pre.style.wordBreak="break-all"; pre.style.display="none";
+    bf.appendChild(pre);
+    var miss=rows.filter(function(x){ return !x.e.tin; });
+    if(miss.length){
+      var wn=document.createElement("div"); wn.className="warn"; wn.style.marginTop="14px";
+      wn.textContent=miss.length+" employee"+(miss.length>1?"s have":" has")+" no tax identification number. Add it on the employee card — the return will not validate without it.";
+      bf.appendChild(wn);
+    }
+    var nn=document.createElement("div"); nn.className="note"; nn.style.marginTop="12px";
+    nn.textContent="Built to the element order in your Excel macro: comma decimal separator, dates as yyyy-mm-dd, officer flag as 0. Pension, bonus, related-party and pensionable-benefit elements are omitted as they do not apply here.";
+    bf.appendChild(nn); cf.appendChild(bf); $body.appendChild(cf);
+    document.getElementById("pxDl").onclick=function(){
+      downloadText(payeXml(curMonth),"PayeReturnExport_"+((er.tic||"TIN")+"_"+MSHORT[curMonth]+"_"+YEAR)+".xml"); };
+    document.getElementById("pxPv").onclick=function(){
+      pre.style.display="block";
+      pre.textContent=payeXml(curMonth).replace(/></g,">\n<");
+    };
+  }
+
+  window.__kmp={monthRecordingPub:monthRecording,dayRawPub:dayRaw,convertMonth:convertMonth,monthHasHours:monthHasHours,monthDaysPub:monthDays,td59Calc:td59Calc,payeXml:payeXml,clearCache:clearCache,annualTax:annualTax,siFile:siFile,siRows:siRows,siSectionB:siSectionB,divisor:divisor,grossForNet:grossForNet,netOf:netOf,monthDetail:monthDetail,
+    monthCalc:monthCalc,empMonth:empMonth,monthTotals:monthTotals,actives:actives,
+    grossRate:grossRate,otRate:otRate,dayType:dayType,
+    boot:function(){ S=JSON.parse(JSON.stringify(DEFAULTS)); me=S.users[0]; },
+    state:function(){ return S; }};
+
+  /* ---------- boot ---------- */
+  load().then(function(saved){
+    S = saved || JSON.parse(JSON.stringify(DEFAULTS));
+    if(!S.entries) S.entries={};
+    if(!S.params) S.params=DEFAULTS.params;
+    if(!S.rates) S.rates=DEFAULTS.rates;
+    if(!S.employer) S.employer=JSON.parse(JSON.stringify(DEFAULTS.employer));
+    if(!S.users||!S.users.length) S.users=JSON.parse(JSON.stringify(DEFAULTS.users));
+    if(!S.holidays) S.holidays=defaultHolidays();
+    if(!S.paye) S.paye=JSON.parse(JSON.stringify(DEFAULTS.paye));
+    S.params.recording="exceptions";
+    S.employees.forEach(function(e){                       // lossless: the daily hours stay put
+      for(var m=0;m<12;m++) if(monthRecording(e,m)==="hours") convertMonth(e,m,true);
+    });
+    delete S.params.divisor; delete S.role;
+    render();
+  });
+})();
+</script>
