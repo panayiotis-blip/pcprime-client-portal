@@ -674,7 +674,11 @@ function vSchedule(){
   const ss=document.getElementById("schSort"); if(ss)ss.onchange=e=>{schedSort=e.target.value;render();};
 }
 window.openReceipts=function(id,m){ if(!canEdit())return; if(!assertOpen(yr(),m))return; const y=yr(); const t=DATA.tenants.find(x=>x.id===id); const recs=ensureYear(t,y)[m].receipts;
-  let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'">'+catOptions(r.cat)+'</select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
+  // "Applies to" is the month the receipt SETTLES, which is not always the
+  // month it arrived in — February's rent paid in March belongs against
+  // February. Changing it moves the receipt to that month on save.
+  const moveOpts=(sel)=>MONTHS.map((mn,mi)=>'<option value="'+mi+'"'+(mi===sel?" selected":"")+'>'+mn+'</option>').join("");
+  let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'">'+catOptions(r.cat)+'</select></label><label>Applies to<select class="rz" data-k="mv" data-i="'+i+'">'+moveOpts(m)+'</select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
   window._mcharges=monthCharges(t,y,m).map(c=>({typeId:c.typeId,amount:c.amount}));
   window._mchTenant=t;
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(760px,96vw)"><h3>'+esc(t.name)+' · '+MONTHS[m]+' '+y+'</h3>'+
@@ -722,8 +726,31 @@ window.addReceiptRow=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); ensu
 window.rmReceipt=function(id,m,i){ const y=yr(); ensureYear(DATA.tenants.find(x=>x.id===id),y)[m].receipts.splice(i,1); openReceipts(id,m); };
 function saveReceiptsDraft(id,m){ const y=yr(); const recs=ensureYear(DATA.tenants.find(x=>x.id===id),y)[m].receipts;
   document.querySelectorAll(".rz").forEach(inp=>{ const i=+inp.dataset.i,k=inp.dataset.k; if(recs[i])recs[i][k]=(k==="amount"?inp.value:inp.value); }); }
+/* Work out what a save does to a month's receipts: which stay, which are
+   re-allocated to another month, and which cannot move because the month they
+   point at is closed. Blank lines are dropped. Pure — no DOM, no writes — so
+   the rule can be checked directly. */
+function planReceiptMoves(list, y, m){
+  var keep=[], moved=[], blocked=[];
+  (list||[]).forEach(function(r){
+    var rec={date:r.date,ref:r.ref,amount:num(r.amount),cat:r.cat||"Rent"};
+    if(rec.amount===0 && !rec.date && !rec.ref) return;
+    var to=(r.mv===undefined||r.mv===null||r.mv==="")?m:+r.mv;
+    if(!(to>=0&&to<=11)) to=m;
+    if(to===m){ keep.push(rec); return; }
+    if(isClosed(y,to)){ blocked.push(MONTHS[to]); keep.push(rec); return; }
+    moved.push({to:to,rec:rec});
+  });
+  return {keep:keep, moved:moved, blocked:blocked};
+}
 window.saveReceipts=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); const t=DATA.tenants.find(x=>x.id===id);
-  t.pay[y][m].receipts=t.pay[y][m].receipts.map(r=>({date:r.date,ref:r.ref,amount:num(r.amount),cat:r.cat||"Rent"})).filter(r=>r.amount!==0||r.date||r.ref);
+  // Split the lines into the ones staying here and the ones re-allocated to
+  // another month. A closed month is not a valid destination — it has been
+  // reported — so those stay put and are reported back.
+  var plan=planReceiptMoves(t.pay[y][m].receipts,y,m);
+  var keep=plan.keep, moved=plan.moved, blocked=plan.blocked;
+  t.pay[y][m].receipts=keep;
+  moved.forEach(function(x){ ensureYear(t,y)[x.to].receipts.push(x.rec); });
   const ov=document.getElementById("rentOv"); if(ov){ const v=ov.value.trim(); if(v===""||num(v)===(t.rent||0)) delete t.pay[y][m].rent; else t.pay[y][m].rent=num(v); }
   // Charges are written on the month once it has been edited, so this month
   // stops following later changes to the tenant's standing charges. Matching
@@ -737,7 +764,11 @@ window.saveReceipts=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); const
     if(same) delete t.pay[y][m].charges; else t.pay[y][m].charges=L;
   }
   window._mcharges=null; window._mchTenant=null;
-  persist("Edited month — "+t.name+" · "+MONTHS[m]+" "+y); closeModal(); render(); flash("Saved."); };
+  persist("Edited month — "+t.name+" · "+MONTHS[m]+" "+y); closeModal(); render();
+  flash(moved.length
+    ? moved.length+" receipt(s) moved to "+[...new Set(moved.map(function(x){return MONTHS[x.to];}))].join(", ")
+      +(blocked.length?" · "+[...new Set(blocked)].join(", ")+" is closed, left as it was":"")
+    : (blocked.length?"Saved · "+[...new Set(blocked)].join(", ")+" is closed, that receipt was left as it was":"Saved.")); };
 
 /* ---- Sending an invoice or statement ---------------------------------------
    The app does not send mail itself: it saves the document as a PDF and opens
