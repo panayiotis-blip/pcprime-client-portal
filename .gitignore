@@ -54,3 +54,4 @@ SEED_greson_mgmt.sql
 # Client payroll app (real employee data — seed goes to Supabase, not git)
 km-payroll-app.html
 SEED_km_payroll.sql
+km-payroll-data.json

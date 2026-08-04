@@ -963,6 +963,28 @@ export const api = {
       .eq('client_id', clientId).eq('app_key', appKey);
     if (error) throw new Error(error.message);
   },
+  // Make sure this allocation has a token for the iframe to load by. Rows
+  // created before migration 170 — or by anything that inserted without the
+  // default — have none, and the app then refuses to open with no way forward
+  // from the UI. Generating one is safe: it is only an unguessable handle for
+  // an app this caller can already reach.
+  async ensureAppVariantToken(clientId: number, appKey: string): Promise<string | null> {
+    const token = (crypto as any)?.randomUUID?.().replace(/-/g, '')
+      ?? Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const { data, error } = await supabase.from('client_apps')
+      .update({ variant_token: token })
+      .eq('client_id', clientId).eq('app_key', appKey).is('variant_token', null)
+      .select('variant_token').maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as any)?.variant_token ?? null;
+  },
+
+  // Replace one client's document for an app — how a prepared book (an opening
+  // payroll, a migrated ledger) gets in without going near SQL.
+  async replaceClientAppData(clientId: number, appKey: string, doc: any) {
+    await api.saveClientAppData(clientId, appKey, doc);
+  },
+
   // What one client is running, and the token the iframe loads it by.
   async getClientAppVariant(clientId: number, appKey: string): Promise<{
     customised: boolean; pinned: boolean; pinned_version: number | null; variant_token: string | null; variant_at: string | null;

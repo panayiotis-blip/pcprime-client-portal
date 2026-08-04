@@ -69,8 +69,12 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
         // template. No token = no app; app HTML is not fetchable by key.
         let v = '';
         try { v = (await api.getClientAppVariant(clientId, appKey))?.variant_token || ''; } catch { /* handled below */ }
+        // An allocation with no token cannot be served. Mint one rather than
+        // dead-ending the user: it is just an unguessable handle for an app
+        // they can already reach, and there is no way to fix it from the UI.
+        if (!v) { try { v = (await api.ensureAppVariantToken(clientId, appKey)) || ''; } catch { /* fall through */ } }
         if (alive) {
-          if (!v) { setErr('This app is not available for this client.'); return; }
+          if (!v) { setErr('This app is not allocated to this client — add it on the Apps tab first.'); return; }
           setFrameUrl(`/api/app-frame?v=${encodeURIComponent(v)}`);
           setMode('frame');
         }

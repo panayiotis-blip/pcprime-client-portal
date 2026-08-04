@@ -18,7 +18,7 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
   const canManage = isSupervisorOrHigher(user);
   const [keys, setKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<{ mode: 'list' } | { mode: 'open'; key: string } | { mode: 'users'; key: string } | { mode: 'grants'; key: string } | { mode: 'version'; key: string }>({ mode: 'list' });
+  const [view, setView] = useState<{ mode: 'list' } | { mode: 'open'; key: string } | { mode: 'users'; key: string } | { mode: 'grants'; key: string } | { mode: 'version'; key: string } | { mode: 'data'; key: string }>({ mode: 'list' });
   const [busy, setBusy] = useState('');
 
   const loadKeys = () => {
@@ -60,6 +60,9 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
   if (view.mode === 'version') {
     return <AppVersionPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
   }
+  if (view.mode === 'data') {
+    return <AppDataPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
+  }
   if (view.mode === 'users') {
     return <AppUsersPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
   }
@@ -91,6 +94,7 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
                 {!app.staffOnly && <>
                   <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'grants', key: app.key })}>Access</button>
                   {app.source === 'template' && <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'version', key: app.key })}>Version</button>}
+                  <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'data', key: app.key })}>Data</button>
                   <button className="btn btn-secondary btn-sm" style={{ color: '#94a3b8' }} onClick={() => setView({ mode: 'users', key: app.key })}>App users (old)</button>
                 </>}
                 {canManage && <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} disabled={busy === app.key} onClick={() => removeApp(app.key)}>Remove</button>}
@@ -305,6 +309,94 @@ function AppVersionPanel({ clientId, appKey, canManage, onBack }: { clientId: nu
               )}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// This client's document for one app: download it, or load a prepared one.
+// A book that already exists — an opening payroll, a ledger carried over —
+// gets in here rather than through the SQL editor, and the data lands in the
+// per-client row where RLS covers it instead of inside the app's HTML, which
+// every signed-in portal user can read.
+function AppDataPanel({ clientId, appKey, canManage, onBack }: { clientId: number; appKey: string; canManage: boolean; onBack: () => void }) {
+  const app = getClientApp(appKey);
+  const [doc, setDoc] = useState<any | null>(null);
+  const [updated, setUpdated] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = () => {
+    setLoading(true); setErr('');
+    api.getClientAppData(clientId, appKey)
+      .then(r => { setDoc(r?.data ?? null); setUpdated(r?.updated_at ?? null); })
+      .catch(e => setErr(e?.message || String(e)))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [clientId, appKey]);
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(doc ?? {}, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${appKey}-client-${clientId}-data.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    let parsed: any;
+    try { parsed = JSON.parse(await file.text()); }
+    catch { alert('That file is not valid JSON.'); return; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { alert('The file must contain a JSON object.'); return; }
+    const had = doc && Object.keys(doc).length;
+    if (had && !confirm('This REPLACES the data this client already has in the app. Download the current data first if you might need it back.\n\nContinue?')) return;
+    setBusy(true); setNotice('');
+    try {
+      await api.replaceClientAppData(clientId, appKey, parsed);
+      setNotice(`Loaded ${file.name}. Open the app to check it.`);
+      load();
+    } catch (e: any) { alert(e?.message || 'Failed'); }
+    finally { setBusy(false); }
+  };
+
+  const keys = doc ? Object.keys(doc) : [];
+  const size = doc ? Math.round(JSON.stringify(doc).length / 1024) : 0;
+
+  return (
+    <div>
+      <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to apps</button>
+      <h3 style={{ color: '#1a365d', margin: '12px 0 4px' }}>{app?.icon} {app?.label} — Data</h3>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>
+        What this client has saved in the app. Download it as a backup before a big change, or load a prepared file to set the
+        app up with figures they already have. Only this client sees it.
+      </p>
+
+      {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>{notice}</div>}
+      {err && <div className="empty-state"><p style={{ color: '#b91c1c' }}>{err}</p></div>}
+
+      {loading ? <PanelSkeleton rows={2} /> : (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, maxWidth: 640 }}>
+          <div style={{ fontSize: 14, color: '#0f172a' }}>
+            {keys.length
+              ? <>Holding <strong>{size} KB</strong> under {keys.length} key{keys.length === 1 ? '' : 's'}: <code style={{ fontSize: 12 }}>{keys.join(', ')}</code></>
+              : <span style={{ color: '#94a3b8' }}>Nothing saved yet — the app starts blank for this client.</span>}
+          </div>
+          {updated && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>Last saved {new Date(updated).toLocaleString()}</div>}
+
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', marginTop: 16, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+            <button className="btn btn-secondary btn-sm" disabled={!keys.length} onClick={download}>Download data</button>
+            {canManage && (
+              <label style={{ fontSize: 12, color: '#64748b' }}>
+                Load a prepared file (replaces)<br />
+                <input type="file" accept=".json,application/json" disabled={busy} onChange={e => upload(e.target.files?.[0])} />
+              </label>
+            )}
+          </div>
         </div>
       )}
     </div>
