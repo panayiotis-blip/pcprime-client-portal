@@ -84,7 +84,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({ p_token: variant }),
     });
     const html = await r.json();
-    if (typeof html === 'string' && html) return sendHtml(200, html);
+    // The shim goes FIRST, so window.storage exists before the app's own code
+    // runs. Without it an app that stores anything loads blank and saves into
+    // nothing, with no error to show for it.
+    if (typeof html === 'string' && html) return sendHtml(200, STORAGE_SHIM + html);
     return notFound('This app is not available.');
   } catch (e) {
     return notFound('Failed to load the app.');
