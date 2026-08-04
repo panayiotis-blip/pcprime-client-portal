@@ -427,9 +427,10 @@ function yr(){ return document.getElementById("selYear").value||"2026"; }
 function render(){
   document.querySelectorAll("#tabs .tab").forEach((t,i)=>t.classList.toggle("active",TABS()[i]&&TABS()[i][0]===activeTab));
   if(chart){try{chart.destroy();}catch(e){}chart=null;}
-  const map={overview:vOverview,properties:vProperties,tenants:vTenants,schedule:vSchedule,receipts:vReceipts,arrears:vArrears,deposits:vDeposits,statement:vStatement,invoice:vInvoice,users:vUsers};
+  const map={overview:vOverview,properties:vProperties,tenants:vTenants,schedule:vSchedule,receipts:vReceipts,arrears:vArrears,deposits:vDeposits,statement:vStatement,invoice:vInvoice,tenant:vTenantLedger,users:vUsers};
   (map[activeTab]||vOverview)();
   fitFreeze();
+  restoreSchedScroll();
 }
 
 /* Give a frozen grid exactly the room left beneath it, so the grid itself is
@@ -437,6 +438,18 @@ function render(){
    this by measurement rather than a vh guess is what makes it work embedded:
    the app sits in an iframe whose height the portal sets, and if anything is
    left over the iframe's own document scrolls and takes the heading with it. */
+// The schedule is long; leaving it to edit a tenant and coming back to the top
+// means hunting for that tenant again. Remember the scroll and put it back.
+var __schedScroll=0;
+function rememberSchedScroll(){
+  var w=document.querySelector(".tblwrap.freeze");
+  if(w && activeTab==="schedule")__schedScroll=w.scrollTop;
+}
+function restoreSchedScroll(){
+  if(activeTab!=="schedule")return;
+  var w=document.querySelector(".tblwrap.freeze");
+  if(w && __schedScroll)w.scrollTop=__schedScroll;
+}
 function fitFreeze(){
   document.querySelectorAll(".tblwrap.freeze").forEach(function(w){
     var top=w.getBoundingClientRect().top;
@@ -654,7 +667,7 @@ function vSchedule(){
     '</div>'+
     '<div class="hint">'+(canEdit()?"Click a month to set that tenant’s rent, charges and receipts. ":"")+'“due” is rent plus that month’s charges — hover it for the split. Only due months up to the current period are shown; future rent is not flagged as unpaid.</div>'+
     '<div class="tblwrap freeze"><table><thead><tr><th>Tenant</th><th class="num">Rent</th>'+MONTHS.map((m,i)=>'<th class="num" title="'+(isClosed(y,i)?"Period closed":"")+'">'+m+(isClosed(y,i)?' \u{1F512}':'')+'</th>').join("")+'</tr></thead><tbody>';
-  sortedTenants().forEach(t=>{ const _p=propById(t.propertyId); h+='<tr><td>'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+(_p?' · '+esc(_p.name):'')+'</div></td><td class="num">'+money(t.rent)+'</td>';
+  sortedTenants().forEach(t=>{ const _p=propById(t.propertyId); h+='<tr><td><button class="linkish" data-h="openTenant('+t.id+')" title="Open this tenant\u2019s year">'+esc(t.name)+'</button><div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+(_p?' · '+esc(_p.name):'')+'</div></td><td class="num">'+money(t.rent)+'</td>';
     for(let m=0;m<12;m++){ const st=statusOf(t,y,m); const pa=paidAll(t,y,m); const rd=dueTotal(t,y,m); const ch=chargesTotal(t,y,m);
       let disp;
       if(st==="NA"){ disp='<span class="st NA">—</span>'; }
@@ -1037,6 +1050,87 @@ window.reopenPeriod=function(m){
   delete closedMap()[String(y)+"-"+m];
   persist("Reopened period "+MONTHS[m]+" "+y); closeModal(); render(); flash(MONTHS[m]+" "+y+" reopened.");
 };
+
+/* ---- One tenant, one year ------------------------------------------------
+   The schedule answers "how is everyone doing"; this answers "what is going on
+   with this tenant" — what was billed each month, what came in against it, and
+   what is left, without scrolling a wide grid to find them again. Every edit
+   goes through the same month editor the schedule uses, so a change made here
+   shows up everywhere. */
+var ledgerTenant=null;
+window.openTenant=function(id){ rememberSchedScroll(); ledgerTenant=id; activeTab="tenant"; render(); };
+window.backToSchedule=function(){ ledgerTenant=null; activeTab="schedule"; render(); };
+
+function vTenantLedger(){
+  var t=DATA.tenants.find(function(x){return x.id===ledgerTenant;});
+  if(!t){ backToSchedule(); return; }
+  var y=yr(), cap=capM(y), p=propById(t.propertyId), L=curLease(t);
+
+  var billed=0, recvd=0, out=0;
+  var rows="";
+  for(var m=0;m<12;m++){
+    var isDue=due(t,y,m);
+    var rent=isDue?rentOf(t,y,m):0;
+    var ch=isDue?chargesTotal(t,y,m):0;
+    var tot=isDue?dueTotal(t,y,m):0;
+    var pa=paidAll(t,y,m);
+    var recs=ensureYear(t,y)[m].receipts||[];
+    var allRecv=recs.reduce(function(a,r){return a+num(r.amount);},0);
+    var bal=tot-pa;
+    var st=statusOf(t,y,m);
+    var closed=isClosed(y,m);
+    if(isDue&&m<=cap){ billed+=tot; recvd+=pa; out+=owed(t,y,m); }
+
+    // What the charges are made of, so the month reads without opening it.
+    var chBits=monthCharges(t,y,m).filter(function(c){return num(c.amount)!==0;})
+      .map(function(c){return esc(ctName(c.typeId))+" "+money(num(c.amount));}).join(" · ");
+    // Every receipt on the month, including anything allocated to a charge.
+    var recBits=recs.length
+      ? recs.map(function(r){ return '<div style="font-size:11px;color:#475569">'+esc(r.date||"")+
+          (r.ref?" · "+esc(r.ref):"")+" · "+esc(catOf(r))+" <b>"+money(num(r.amount))+"</b></div>"; }).join("")
+      : '<span style="color:#cbd5e1">—</span>';
+
+    rows+='<tr'+(m>cap?' style="opacity:.55"':'')+'>'+
+      '<td style="font-weight:600;white-space:nowrap">'+MONTHS[m]+' '+y+(closed?' <span title="Period closed">\u{1F512}</span>':'')+'</td>'+
+      '<td class="num">'+(isDue?money(rent):"—")+'</td>'+
+      '<td class="num">'+(ch?money(ch):"—")+(chBits?'<div style="font-size:10px;color:#94a3b8">'+chBits+'</div>':'')+'</td>'+
+      '<td class="num" style="font-weight:600">'+(isDue?money(tot):"—")+'</td>'+
+      '<td>'+recBits+(allRecv!==pa?'<div style="font-size:10px;color:#b45309">'+money(allRecv-pa)+' not against this month\u2019s bill</div>':'')+'</td>'+
+      '<td class="num">'+(pa?money(pa):"—")+'</td>'+
+      '<td class="num'+(bal>0.005&&m<=cap?" warn":"")+'">'+(isDue?(bal>0.005?money(bal):"paid"):"—")+'</td>'+
+      '<td><span class="st '+st+'">'+(st==="NA"?"—":st.toLowerCase())+'</span></td>'+
+      '<td class="actions" style="white-space:nowrap">'+
+        (canEdit()&&!closed?'<button class="ghost" data-h="openReceipts('+t.id+','+m+')">Edit</button> ':'')+
+        (isDue?'<button class="ghost" data-h="openInvoice('+t.id+',&#39;'+y+'&#39;,'+m+')">Invoice</button>':'')+
+      '</td></tr>';
+  }
+
+  var h='<div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+    '<button class="ghost" data-h="backToSchedule()">\u2190 Rent schedule</button>'+
+    '<h3 style="margin:0">'+esc(t.name)+'</h3>'+
+    '<span class="hint" style="margin:0">'+esc(t.unit)+(p?' · '+esc(p.name):'')+' · lease '+esc(L.start||"?")+' \u2192 '+esc(L.end||"?")+'</span>'+
+    '<span style="flex:1"></span>'+
+    '<button class="ghost" data-h="openStatement('+t.id+')">Statement</button>'+
+    (canEdit()?'<button class="ghost" data-h="openReceipt()">\u{1F4B6} Receipts</button>':'')+
+    '</div>'+
+    '<div class="hint">Everything billed to this tenant in '+y+' and everything received against it. Edits here are the same as editing the month in the schedule \u2014 they show up everywhere.</div></div>';
+
+  h+='<div class="cards">'+
+    card("Agreement rent",money(t.rent),"per month")+
+    card("Billed "+y,money(billed),"rent + charges to "+(cap<0?"\u2014":MONTHS[cap]))+
+    card("Received",money(recvd),"against those months")+
+    card("Outstanding",money(out),(out>0.005?"owed":"up to date"))+
+    card("Deposit held",money(netDeposit(t)),"net of refunds")+
+    '</div>';
+
+  h+='<div class="panel"><div class="tblwrap freeze"><table><thead><tr>'+
+    '<th>Month</th><th class="num">Rent</th><th class="num">Charges</th><th class="num">Total due</th>'+
+    '<th>Receipts</th><th class="num">Received</th><th class="num">Balance</th><th>Status</th><th class="actions"></th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+
+  document.getElementById("view").innerHTML=h;
+}
+window.openStatement=function(id){ stmtTenant=id; activeTab="statement"; render(); };
 
 /* ---- Toolbar dropdowns ---- */
 window.toggleMenu=function(id){
