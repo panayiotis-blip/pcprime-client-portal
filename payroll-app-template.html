@@ -1163,6 +1163,7 @@
       kpi("Gross payroll","€"+eur(t.gross),delta(t.gross,p?p.gross:0)||hrs(t.hours)+" hrs recorded")+
       kpi("Net pay to staff","€"+eur(t.net),delta(t.net,p?p.net:0)||"Bank transfers due")+
       kpi("Contributions payable","€"+eur(contrib),delta(contrib,p?r2(siRemit(p)+ghsRemit(p)):0)||"SI, funds and GHS")+
+      ((t.paye>0.004)?kpi("Income tax (PAYE)","€"+eur(t.paye),(S.paye&&S.paye.borneBy==="employer")?"Borne by the employer":"Withheld from staff pay"):"")+
       kpi("Overtime","€"+eur(otEarn),hrs(t.otHrs)+" OT hrs of "+hrs(t.hours))+
       kpi("Total employer cost","€"+eur(t.cost),delta(t.cost,p?p.cost:0)||"All-in cost to company",true);
     $body.appendChild(k);
@@ -1183,7 +1184,7 @@
       return '<td class="num">'+(x[2]?hrs(t[x[0]]):eur(t[x[0]]))+'</td>'; }).join("");
     tb.appendChild(tr); tab.appendChild(tb); wrap.appendChild(tab); c.appendChild(wrap);
     var f=document.createElement("div"); f.className="bd note";
-    f.textContent="Social insurance and GHS are charged on gross plus the "+S.rates.holER+"% holiday fund. Net pay = gross − employee SI − employee GHS. The holiday fund is remitted with the social insurance contributions, so it sits in employer cost and not in net pay.";
+    f.textContent="Social insurance and GHS are charged on gross plus the "+S.rates.holER+"% holiday fund. Net pay = gross − employee SI − employee GHS − income tax (PAYE) where it is switched on and borne by the employee. The holiday fund is remitted with the social insurance contributions, so it sits in employer cost and not in net pay.";
     c.appendChild(f); $body.appendChild(c);
 
     /* net pay check against the client's own method */
@@ -1324,6 +1325,7 @@
           '<div class="sl-col"><div class="sl-h">Deductions</div>'+
             slipRow("Social insurance",S.rates.siEE+"% of gross + holiday fund","("+eur(r.eeSI)+")")+
             slipRow("GHS",S.rates.ghsEE+"% of gross + holiday fund","("+eur(r.ghsEE)+")")+
+            ((r.paye>0.004)?slipRow("Income tax (PAYE)","withheld under T.D.59","("+eur(r.paye)+")"):"")+
             slipRow("Total deductions","","("+eur(r.ded)+")",true)+'</div>'+
         '</div>'+
         '<div class="sl-net"><span>Net pay</span><b>€'+eur(r.net)+'</b></div>'+
@@ -1341,6 +1343,7 @@
             '<span>Gross pay</span><b>'+eur(y.gross)+'</b>'+
             '<span>Social insurance</span><b>'+eur(y.eeSI)+'</b>'+
             '<span>GHS</span><b>'+eur(y.ghsEE)+'</b>'+
+            ((y.paye>0.004)?'<span>Income tax (PAYE)</span><b>'+eur(y.paye)+'</b>':"")+
             '<span>Hours worked</span><b>'+hrs(y.hours)+'</b>'+
             '<span>Overtime hours</span><b>'+hrs(y.otHrs)+'</b>'+
             '<span class="tt">Net pay to date</span><b class="tt">'+eur(y.net)+'</b>'+
@@ -1354,7 +1357,7 @@
   }
   function reportCTC(){
     var t=monthTotals(curMonth), y=ytdTotals(curMonth);
-    var si=siRemit(t), ghs=ghsRemit(t), outflow=r2(t.net+si+ghs);
+    var si=siRemit(t), ghs=ghsRemit(t), outflow=r2(t.net+si+ghs+(t.paye||0));
     var k=document.createElement("div"); k.className="kpis";
     k.innerHTML=
       kpi("Net pay to staff","€"+eur(t.net),"Bank transfers")+
@@ -1385,7 +1388,8 @@
     row("General Healthcare System","Employee GHS "+S.rates.ghsEE+"%",t.ghsEE,y.ghsEE);
     row("General Healthcare System","Employer GHS "+S.rates.ghsER+"%",t.ghsER,y.ghsER);
     row("General Healthcare System","Subtotal",ghs,ghsRemit(y),"sub");
-    row("Total outflow","Net pay + contributions",outflow,r2(y.net+siRemit(y)+ghsRemit(y)),"tot");
+    if(t.paye>0.004) row("Tax Department","Income tax (PAYE) withheld from staff",t.paye,y.paye,"sub");
+    row("Total outflow","Net pay, contributions and tax",outflow,r2(y.net+siRemit(y)+ghsRemit(y)+(y.paye||0)),"tot");
     tab.appendChild(tb); w.appendChild(tab); c.appendChild(w);
     var tie=document.createElement("div"); tie.className="bd note";
     var diff=Math.abs(outflow-t.cost);
