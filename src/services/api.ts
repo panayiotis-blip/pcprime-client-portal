@@ -989,12 +989,23 @@ export const api = {
   async getClientAppVariant(clientId: number, appKey: string): Promise<{
     customised: boolean; pinned: boolean; pinned_version: number | null; variant_token: string | null; variant_at: string | null;
   } | null> {
-    const { data, error } = await supabase.from('client_apps')
-      .select('is_customised, is_pinned, pinned_version, variant_token, variant_at')
+    // Opening an app must not depend on the reporting columns. They are
+    // convenience flags; if a database is missing them the whole select 400s
+    // and the app becomes unopenable, which is a poor trade for a badge. Ask
+    // for the token first, then the flags separately.
+    const { data: core, error: coreErr } = await supabase.from('client_apps')
+      .select('variant_token, variant_at, pinned_version')
       .eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!data) return null;
-    const r: any = data;
+    if (coreErr) throw new Error(coreErr.message);
+    if (!core) return null;
+    let flags: any = {};
+    try {
+      const { data } = await supabase.from('client_apps')
+        .select('is_customised, is_pinned')
+        .eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
+      flags = data || {};
+    } catch { /* flags are optional — the app still opens without them */ }
+    const r: any = { ...(core as any), ...flags };
     return {
       customised: !!r.is_customised, pinned: !!r.is_pinned,
       pinned_version: r.pinned_version ?? null, variant_token: r.variant_token ?? null, variant_at: r.variant_at ?? null,
