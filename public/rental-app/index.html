@@ -103,6 +103,14 @@ canvas{max-height:300px;} .hidden{display:none;} .warn{color:var(--bad);font-wei
   .panel{ box-shadow:none !important; border:none !important; border-radius:0; padding:0; margin:0 0 10mm; }
   .actions{ position:static; box-shadow:none; }
   .invoice-doc,.stmt-doc{ font-size:12.5px; }
+  /* A document opened in a window prints on its own: the page behind it is
+     hidden and the window loses its chrome, so what comes out is the invoice
+     and nothing else. */
+  body.doc-window #view,
+  body.doc-window .kpis,
+  body.doc-window .cards{ display:none !important; }
+  body.doc-window .modal{ position:static; background:none; display:block; z-index:auto; }
+  body.doc-window .modal .box{ width:auto; max-height:none; overflow:visible; padding:0; border-radius:0; box-shadow:none; }
   .tblwrap{ overflow:visible; }
   table{ font-size:12px; } th,td{ padding:6px 8px; }
   tr,td,th,.panel{ break-inside:avoid; }

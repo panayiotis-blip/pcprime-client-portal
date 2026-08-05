@@ -356,8 +356,68 @@ function vInvoice(){
   var f=document.getElementById("invFilter"); if(f)f.onchange=function(e){ invFilter=e.target.value; render(); };
 }
 window.openInvoice=function(tid,y,m){ invTenant=+tid; invYear=String(y); invMonth=+m; invView="doc"; activeTab="invoice"; render(); };
+// The same invoice, over the top of whatever you were looking at.
+window.popInvoice=function(tid,y,m){
+  var t=DATA.tenants.find(function(x){return x.id===+tid;});
+  if(!t)return;
+  invTenant=+tid; invYear=String(y); invMonth=+m;
+  document.body.classList.add("doc-window");
+  document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(940px,97vw);max-height:92vh;overflow:auto">'+
+    '<div class="frow noprint" style="align-items:center;margin-bottom:10px">'+
+      '<b style="font-size:14px;color:#1e2a78">Invoice \u2014 '+esc(t.name)+' \u00B7 '+MONTHS[+m]+' '+y+'</b>'+
+      '<div style="flex:1"></div>'+
+      '<button class="btn" data-h="window.print()">\u{1F5A8} Print</button> '+
+      '<button class="btn ghost" data-h="pdfInvoice()">\u2193 PDF</button> '+
+      '<button class="btn ghost" data-h="openSendDoc(&#39;invoice&#39;)">\u2709 Email</button> '+
+      '<button class="btn ghost" data-h="closeModal()">Close</button>'+
+    '</div>'+ invoiceDocHtml(t,String(y),+m) + '</div></div>';
+};
+window.pdfInvoice=function(){
+  var t=DATA.tenants.find(function(x){return x.id===invTenant;});
+  var who=String(t&&t.name||"tenant").replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"");
+  savePdf("invoice-doc", who+"-invoice-"+invYear+p2(invMonth+1)+".pdf");
+};
 window.closeInvoice=function(){ invView=null; render(); };
 
+
+/* The invoice for one tenant and one month: rent, every charge billed that
+   month, what has been received against it and what is left. Built as a string
+   so the same document serves the page and the pop-up window. */
+function invoiceDocHtml(t, y, m){
+  var p=propById(t.propertyId);
+  var rent=rentOf(t,y,m);
+  var invCharges=monthCharges(t,y,m).filter(function(c){return num(c.amount)!==0;});
+  var totalDue=dueTotal(t,y,m), paidAmt=paidAll(t,y,m);
+  var s=DATA.settings||{}, cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
+  var invNo=(s.invoicePrefix||"INV")+"-"+y+p2(m+1)+"-"+t.id;
+  var now=new Date();
+  var issue=stamp(now).slice(0,10), due=y+"-"+p2(m+1)+"-01";
+  var invYear=y, invMonth=m;   // the markup below reads these names
+  return '<div class="panel invoice-doc">'+""+
+'<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px">'+
+        '<div style="display:flex;align-items:center;gap:14px">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:60px;width:auto">':'')+
+          '<div><div style="font-size:18px;font-weight:700">'+esc(cn)+'</div>'+
+          (s.address?'<div class="hint" style="white-space:pre-line;margin-top:2px">'+esc(s.address)+'</div>':'')+
+          ((s.regNo||s.vatNo)?'<div class="hint">'+[s.regNo?"Reg. "+esc(s.regNo):"",s.vatNo?"VAT "+esc(s.vatNo):""].filter(Boolean).join(" · ")+'</div>':'')+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--brand)">INVOICE</div>'+
+          '<div class="hint">No. '+esc(invNo)+'</div><div class="hint">Issued: '+issue+'</div><div class="hint">Due: '+due+'</div></div>'+
+      '</div>'+
+      '<div style="margin-top:16px"><div class="hint" style="text-transform:uppercase;letter-spacing:.05em">Bill to</div>'+
+        '<div style="font-weight:700">'+esc(t.name)+'</div>'+
+        '<div class="hint">'+esc(p?p.name:"")+' · '+esc(t.unit)+
+          ((t.contact1&&t.contact1.name)?'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone||""):"")+
+          (t.email?'<br>'+esc(t.email):"")+'</div></div>'+
+      '<div class="tblwrap" style="margin-top:14px"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>'+
+        '<tr><td>Rent — '+MONTHS[invMonth]+' '+invYear+' · '+esc(t.unit)+'</td><td class="num">'+money(rent)+'</td></tr>'+
+        // One line per charge, so the tenant sees exactly what makes up the month.
+        invCharges.map(function(c){return '<tr><td>'+esc(ctName(c.typeId))+' — '+MONTHS[invMonth]+' '+invYear+'</td><td class="num">'+money(num(c.amount))+'</td></tr>';}).join("")+
+        '<tr class="total"><td>Total due</td><td class="num">'+money(totalDue)+'</td></tr>'+
+        (paidAmt>0?'<tr><td>Received to date</td><td class="num">'+money(paidAmt)+'</td></tr><tr class="total"><td>Balance outstanding</td><td class="num'+((totalDue-paidAmt)>0?" warn":"")+'">'+money(totalDue-paidAmt)+'</td></tr>':'')+
+      '</tbody></table></div>'+
+      (s.bank?'<div class="hint" style="margin-top:14px"><b>Payment:</b> '+esc(s.bank)+'</div>':'')+
+      ((s.phone||s.email)?'<div class="hint" style="margin-top:6px">Enquiries: '+[esc(s.phone||""),esc(s.email||"")].filter(Boolean).join(" · ")+'</div>':'')+
+      '</div>';
+}
 function vInvoiceDoc(){
   if(invTenant==null && DATA.tenants.length)invTenant=DATA.tenants[0].id;
   var now=new Date(); if(invYear==null)invYear=String(now.getFullYear()); if(invMonth==null)invMonth=now.getMonth();
@@ -381,30 +441,7 @@ function vInvoiceDoc(){
     var s=DATA.settings||{}; var cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
     var invNo=(s.invoicePrefix||"INV")+"-"+invYear+p2(invMonth+1)+"-"+t.id;
     var issue=stamp(now).slice(0,10); var due=invYear+"-"+p2(invMonth+1)+"-01";
-    h+='<div class="panel invoice-doc">'+
-      '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px">'+
-        '<div style="display:flex;align-items:center;gap:14px">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:60px;width:auto">':'')+
-          '<div><div style="font-size:18px;font-weight:700">'+esc(cn)+'</div>'+
-          (s.address?'<div class="hint" style="white-space:pre-line;margin-top:2px">'+esc(s.address)+'</div>':'')+
-          ((s.regNo||s.vatNo)?'<div class="hint">'+[s.regNo?"Reg. "+esc(s.regNo):"",s.vatNo?"VAT "+esc(s.vatNo):""].filter(Boolean).join(" · ")+'</div>':'')+'</div></div>'+
-        '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--brand)">INVOICE</div>'+
-          '<div class="hint">No. '+esc(invNo)+'</div><div class="hint">Issued: '+issue+'</div><div class="hint">Due: '+due+'</div></div>'+
-      '</div>'+
-      '<div style="margin-top:16px"><div class="hint" style="text-transform:uppercase;letter-spacing:.05em">Bill to</div>'+
-        '<div style="font-weight:700">'+esc(t.name)+'</div>'+
-        '<div class="hint">'+esc(p?p.name:"")+' · '+esc(t.unit)+
-          ((t.contact1&&t.contact1.name)?'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone||""):"")+
-          (t.email?'<br>'+esc(t.email):"")+'</div></div>'+
-      '<div class="tblwrap" style="margin-top:14px"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>'+
-        '<tr><td>Rent — '+MONTHS[invMonth]+' '+invYear+' · '+esc(t.unit)+'</td><td class="num">'+money(rent)+'</td></tr>'+
-        // One line per charge, so the tenant sees exactly what makes up the month.
-        invCharges.map(function(c){return '<tr><td>'+esc(ctName(c.typeId))+' — '+MONTHS[invMonth]+' '+invYear+'</td><td class="num">'+money(num(c.amount))+'</td></tr>';}).join("")+
-        '<tr class="total"><td>Total due</td><td class="num">'+money(totalDue)+'</td></tr>'+
-        (paidAmt>0?'<tr><td>Received to date</td><td class="num">'+money(paidAmt)+'</td></tr><tr class="total"><td>Balance outstanding</td><td class="num'+((totalDue-paidAmt)>0?" warn":"")+'">'+money(totalDue-paidAmt)+'</td></tr>':'')+
-      '</tbody></table></div>'+
-      (s.bank?'<div class="hint" style="margin-top:14px"><b>Payment:</b> '+esc(s.bank)+'</div>':'')+
-      ((s.phone||s.email)?'<div class="hint" style="margin-top:6px">Enquiries: '+[esc(s.phone||""),esc(s.email||"")].filter(Boolean).join(" · ")+'</div>':'')+
-      '</div>';
+    h+=invoiceDocHtml(t,invYear,invMonth);
   } else { h+='<div class="panel">No tenants yet.</div>'; }
   document.getElementById("view").innerHTML=h;
   var sel=document.getElementById("invSel"); if(sel)sel.onchange=function(e){invTenant=+e.target.value;render();};
@@ -617,7 +654,7 @@ window.saveTenant=function(id){ const g=k=>document.getElementById(k).value; con
   if(id==null){const t={id:nextTid(),agreements:[],pay:{}};Object.assign(t,o);ensureYear(t,"2026");DATA.tenants.push(t);} else Object.assign(DATA.tenants.find(x=>x.id===id),o);
   persist((id==null?"Added":"Edited")+" tenant — "+o.name); closeModal();render();flash("Tenant saved."); };
 window.delTenant=function(id){ if(!isAdmin()){alert("Only admins can delete tenants.");return;} const t=DATA.tenants.find(x=>x.id===id); if(!confirm("Delete "+(t.name||"tenant")+"?"))return; DATA.tenants=DATA.tenants.filter(x=>x.id!==id); persist("Deleted tenant — "+t.name);render();flash("Deleted."); };
-window.closeModal=function(){ document.getElementById("modalHost").innerHTML=""; };
+window.closeModal=function(){ document.body.classList.remove("doc-window"); document.getElementById("modalHost").innerHTML=""; };
 function nextTid(){ return DATA.tenants.reduce((m,t)=>Math.max(m,t.id||0),0)+1; }
 function unitTaken(propId,unit,exceptId){ return DATA.tenants.some(x=>x.id!==exceptId && x.propertyId===propId && (x.unit||"")===unit && x.name && x.name!=="NO TENANT"); }
 function unitOptions(propId,current){ const p=propById(propId); const set=[]; if(p&&p.unitNames)p.unitNames.forEach(u=>{ if(u&&set.indexOf(u)<0)set.push(u); }); if(current&&set.indexOf(current)<0)set.push(current);
@@ -672,11 +709,11 @@ function vSchedule(){
       let disp;
       if(st==="NA"){ disp='<span class="st NA">—</span>'; }
       else if(st==="VACANT"){ disp='<span class="st NA">vacant</span>'; }
-      else { // "due" is rent + charges; the split is spelled out when charges exist.
-        const due='<div style="font-size:10px;color:#94a3b8;line-height:1.2" title="'+(ch?'Rent '+money(rentOf(t,y,m))+' + charges '+money(ch):'Rent only')+'">due '+money(rd)+(ch?' <span style="color:#b45309">+'+Math.round(ch)+'</span>':'')+'</div>';
-        const pay='<div style="font-weight:600;line-height:1.2">'+(pa>0?money(pa):(st==="UPCOMING"?'<span style="color:#cbd5e1">—</span>':'<span style="color:#ef4444">€0</span>'))+'</div>';
-        const pill=(st==="UPCOMING")?'<span class="st UPCOMING">upcoming</span>':'<span class="st '+st+'">'+st+'</span>';
-        disp=due+pay+pill; }
+      else { // Just the month's bill and how it stands. The breakdown — rent,
+        // each charge, every receipt — is on the tenant's own screen.
+        const amt='<div style="font-weight:600;line-height:1.3" title="'+(ch?'Rent '+money(rentOf(t,y,m))+' + charges '+money(ch):'Rent only')+'">'+money(rd)+'</div>';
+        const pill=(st==="UPCOMING")?'<span class="st UPCOMING">upcoming</span>':'<span class="st '+st+'">'+st.toLowerCase()+'</span>';
+        disp=amt+pill; }
       const clk=canEdit()?' style="cursor:pointer" data-h="openReceipts('+t.id+','+m+')"':'';
       h+='<td class="num" style="vertical-align:top"'+clk+'>'+disp+'</td>'; }
     h+='</tr>'; });
@@ -1101,7 +1138,7 @@ function vTenantLedger(){
       '<td><span class="st '+st+'">'+(st==="NA"?"—":st.toLowerCase())+'</span></td>'+
       '<td class="actions" style="white-space:nowrap">'+
         (canEdit()&&!closed?'<button class="ghost" data-h="openReceipts('+t.id+','+m+')">Edit</button> ':'')+
-        (isDue?'<button class="ghost" data-h="openInvoice('+t.id+',&#39;'+y+'&#39;,'+m+')">Invoice</button>':'')+
+        (isDue?'<button class="ghost" data-h="popInvoice('+t.id+',&#39;'+y+'&#39;,'+m+')">Invoice</button>':'')+
       '</td></tr>';
   }
 
