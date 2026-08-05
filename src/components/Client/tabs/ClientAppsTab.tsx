@@ -260,11 +260,14 @@ function AppVersionPanel({ clientId, appKey, canManage, onBack }: { clientId: nu
   };
 
   const reset = async () => {
-    if (!confirm('Put this client back on the shared app? Their customised copy is discarded — their saved data is untouched.')) return;
+    const msg = v?.customised
+      ? 'Update this client to the shared app? Their customised copy is discarded.\n\nTheir saved data is NOT affected — only the app itself changes.'
+      : `Update this client to v${sharedVersion ?? '?'}?\n\nTheir saved data is NOT affected — only the app itself changes.`;
+    if (!confirm(msg)) return;
     setBusy(true); setNotice('');
     try {
       await api.resetClientAppToShared(clientId, appKey);
-      setNotice(`Back on the shared app (v${sharedVersion ?? '?'}).`);
+      setNotice(`Updated to v${sharedVersion ?? '?'} — reopen the app to see it. Their data is unchanged.`);
       load();
     } catch (e: any) { alert(e?.message || 'Failed'); }
     finally { setBusy(false); }
@@ -277,8 +280,9 @@ function AppVersionPanel({ clientId, appKey, canManage, onBack }: { clientId: nu
       <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to apps</button>
       <h3 style={{ color: '#1a365d', margin: '12px 0 4px' }}>{app?.icon} {app?.label} — Version</h3>
       <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>
-        Which copy of the app this client runs. Give them their own copy to change the app for them alone — from then on
-        edits to the shared template skip them until you put them back.
+        Which version of the app this client runs, and whether it is the current one. Updating replaces the app only —
+        <strong>their saved data is never touched</strong>. Give a client their own copy to change the app for them alone;
+        shared updates then skip them until you bring them back.
       </p>
 
       {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>{notice}</div>}
@@ -287,9 +291,9 @@ function AppVersionPanel({ clientId, appKey, canManage, onBack }: { clientId: nu
       {loading ? <PanelSkeleton rows={2} /> : (
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, maxWidth: 640 }}>
           <div style={{ fontSize: 14, color: '#0f172a' }}>
-            {state === 'customised' && <><strong style={{ color: '#7c3aed' }}>Customised for this client.</strong> They run their own copy, not the shared app.</>}
-            {state === 'pinned' && <><strong style={{ color: '#b45309' }}>Held on v{v!.pinned_version ?? '?'}.</strong> The shared app has moved on to v{sharedVersion ?? '?'}; this client stayed where they were.</>}
-            {state === 'shared' && <><strong style={{ color: '#166534' }}>On the shared app (v{sharedVersion ?? '?'}).</strong> They pick up every edit you push to it.</>}
+            {state === 'customised' && <><strong style={{ color: '#7c3aed' }}>Customised — running their own copy, not the shared v{sharedVersion ?? '?'}.</strong> Shared updates do not reach them while this is in place.</>}
+            {state === 'pinned' && <><strong style={{ color: '#b45309' }}>Behind — running v{v!.pinned_version ?? '?'}, current is v{sharedVersion ?? '?'}.</strong> They were held here when the app was last updated. Update when you are ready; their data carries over untouched.</>}
+            {state === 'shared' && <><strong style={{ color: '#166534' }}>Up to date — running v{sharedVersion ?? '?'}, the current shared app.</strong> Every update you publish reaches them on their next load; nothing to do here.</>}
             {state === 'none' && <span style={{ color: '#94a3b8' }}>This app isn't allocated to the client.</span>}
           </div>
           {v?.variant_at && (state === 'customised' || state === 'pinned') && (
@@ -303,8 +307,10 @@ function AppVersionPanel({ clientId, appKey, canManage, onBack }: { clientId: nu
                 <input type="file" accept=".html,text/html" disabled={busy} onChange={e => upload(e.target.files?.[0])} />
               </label>
               {state !== 'shared' && (
-                <button className="btn btn-secondary btn-sm" disabled={busy} onClick={reset}>
-                  Put back on the shared app{sharedVersion ? ` (v${sharedVersion})` : ''}
+                <button className="btn btn-primary btn-sm" disabled={busy} onClick={reset}>
+                  {state === 'customised'
+                    ? `Update to the shared app${sharedVersion ? ` (v${sharedVersion})` : ''} — discards their copy`
+                    : `Update to v${sharedVersion ?? '?'}`}
                 </button>
               )}
             </div>
