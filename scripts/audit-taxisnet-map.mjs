@@ -78,9 +78,11 @@ for (const form of ['epr1m', 'epr1a']) {
   inSample += seen.length;
   console.log(`  · appear in a real sample filing: ${seen.length}/${rows.length}`);
   for (const r of seen) console.log(`      ${r.key} = ${JSON.stringify(sampleKeys.get(r.key))}  [${r.confidence}]`);
+  const der = rows.filter((r) => r.confidence === 'derived');
   const inf = rows.filter((r) => r.confidence === 'inferred');
   unconfirmed += inf.length;
-  console.log(`  · still inferred: ${inf.length}`);
+  console.log(`  · derived (column order matched to the printed form): ${der.length}`);
+  console.log(`  · still inferred (nothing to check against): ${inf.length}`);
 }
 
 // Value shapes in the real filings — what our formatters must produce.

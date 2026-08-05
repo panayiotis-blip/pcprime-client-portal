@@ -50,15 +50,24 @@ export function validateExport(inputData: any, year: number, formType: TaxReturn
   // Nothing to export.
   if (!flat.length && !grids.length) errors.push('There is nothing to export — the return has no data.');
 
-  // Inferred (unverified) mappings → warn so nothing unconfirmed ships silently.
+  // Unproven mappings → warn, but say how unproven. 'derived' means the table's
+  // columns line up one-for-one with the printed form and this key falls in a
+  // fixed position; 'inferred' means it was read off the layout with no such
+  // check. They deserve different levels of suspicion.
+  const derivedGroups = new Set<string>();
   const inferredGroups = new Set<string>();
   const scan = (f: { key: string; confidence: string }) => {
-    if (f.confidence === 'inferred') inferredGroups.add(f.key.replace(/c\d+[a-z]?$/i, ''));
+    const group = f.key.replace(/c\d+[a-z]?$/i, '');
+    if (f.confidence === 'derived') derivedGroups.add(group);
+    else if (f.confidence === 'inferred') inferredGroups.add(group);
   };
   flat.forEach(scan);
   grids.forEach((g) => g.rows.forEach((r) => r.forEach(scan)));
   if (inferredGroups.size) {
-    warnings.push(`${inferredGroups.size} field(s) use inferred mappings not yet confirmed against an official sample — verify with a TaxisNet test import before relying on the file.`);
+    warnings.push(`${inferredGroups.size} field(s) use inferred mappings — read off the form layout with nothing to check them against. Verify with a TaxisNet test import before relying on the file.`);
+  }
+  if (derivedGroups.size) {
+    warnings.push(`${derivedGroups.size} field(s) use derived mappings: their table's columns match the printed form one-for-one, but no filing has been seen carrying them. A TaxisNet test import would settle it.`);
   }
 
   // Benefits in kind have no column on the form: they are declared as their own

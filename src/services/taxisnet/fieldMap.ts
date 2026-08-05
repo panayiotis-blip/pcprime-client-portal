@@ -38,7 +38,14 @@
 
 import type { FieldKind } from './format';
 
-export type Confidence = 'confirmed' | 'inferred';
+//   'derived'   — the schema's key set for a table matches the printed form's
+//                 column list one-for-one, in order, and this key falls in a
+//                 position fixed by that mapping. Stronger than a guess and
+//                 weaker than a filing: the ordering rule itself is proven (see
+//                 the dividends table, where all nine columns line up and four
+//                 are confirmed arithmetically), but this particular column has
+//                 never been seen carrying a value.
+export type Confidence = 'confirmed' | 'derived' | 'inferred';
 
 export interface FlatEntry {
   key: string;
@@ -103,24 +110,25 @@ const EPR1M: FormMap = {
         { col: 'c3', field: 'code', kind: 'text', confidence: 'confirmed' },
         { col: 'c4', field: 'periodMonths', kind: 'text', confidence: 'confirmed' },
         { col: 'c5', field: 'grossInRepublic', kind: 'money', confidence: 'confirmed' },
-        { col: 'c6', field: 'grossOutsideRepublic', kind: 'money', confidence: 'inferred' },
-        { col: 'c7', field: 'taxWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c6', field: 'grossOutsideRepublic', kind: 'money', confidence: 'derived' },
+        { col: 'c7', field: 'taxWithheld', kind: 'money', confidence: 'derived' },
         { col: 'c8', field: 'ghsWithheld', kind: 'money', confidence: 'confirmed' },
       ],
     },
     {
-      // Part 4.B pensions — grid tb. Positional: tb has exactly c1–c6 and the
-      // pension model has exactly 6 fields, following the TIC/name/code lead
-      // pattern proven in 4.A. No sample populated tb, so all inferred.
+      // Part 4.B pensions — grid tb. The schema has exactly c1–c6 and the form
+      // prints exactly six columns: T.I.C. of the payer, name, code, pension
+      // amount, tax withheld, GHS withheld (TD1A Part B1 sets them out with the
+      // payer T.I.C. and name as one pair). One-for-one in order.
       gridId: 'epr1mm4tbr1',
       source: 'pensions',
       cols: [
-        { col: 'c1', field: 'payerTic', kind: 'tic', confidence: 'inferred' },
-        { col: 'c2', field: 'payerName', kind: 'text', confidence: 'inferred' },
-        { col: 'c3', field: 'code', kind: 'text', confidence: 'inferred' },
-        { col: 'c4', field: 'amount', kind: 'money', confidence: 'inferred' },
-        { col: 'c5', field: 'taxWithheld', kind: 'money', confidence: 'inferred' },
-        { col: 'c6', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c1', field: 'payerTic', kind: 'tic', confidence: 'derived' },
+        { col: 'c2', field: 'payerName', kind: 'text', confidence: 'derived' },
+        { col: 'c3', field: 'code', kind: 'text', confidence: 'derived' },
+        { col: 'c4', field: 'amount', kind: 'money', confidence: 'derived' },
+        { col: 'c5', field: 'taxWithheld', kind: 'money', confidence: 'derived' },
+        { col: 'c6', field: 'ghsWithheld', kind: 'money', confidence: 'derived' },
       ],
     },
     {
@@ -143,36 +151,40 @@ const EPR1M: FormMap = {
       gridId: 'epr1mm4tcr1',
       source: 'rentalProperties',
       cols: [
-        { col: 'c1', field: 'registrationNo', kind: 'text', confidence: 'inferred' },
+        { col: 'c1', field: 'registrationNo', kind: 'text', confidence: 'derived' },
         { col: 'c2', field: 'propertyTypeCode', kind: 'text', confidence: 'confirmed' },
         { col: 'c3', field: 'acquisitionDate', kind: 'date', confidence: 'confirmed' },
         { col: 'c7', field: 'lesseeTic', kind: 'tic', confidence: 'confirmed' },
         { col: 'c8', field: 'lesseeName', kind: 'text', confidence: 'confirmed' },
         { col: 'c9', field: 'ownershipShare', kind: 'text', confidence: 'confirmed' },
         { col: 'c10', field: 'annualGrossInRepublic', kind: 'money', confidence: 'confirmed' },
-        { col: 'c11', field: 'annualGrossOutsideRepublic', kind: 'money', confidence: 'inferred' },
-        { col: 'c12', field: 'capitalAllowances', kind: 'money', confidence: 'inferred' },
-        { col: 'c13', field: 'interestPayable', kind: 'money', confidence: 'inferred' },
+        { col: 'c11', field: 'annualGrossOutsideRepublic', kind: 'money', confidence: 'derived' },
+        { col: 'c12', field: 'capitalAllowances', kind: 'money', confidence: 'derived' },
+        { col: 'c13', field: 'interestPayable', kind: 'money', confidence: 'derived' },
         { col: 'c16', field: 'sdcWithheld', kind: 'money', confidence: 'confirmed' },
         { col: 'c17', field: 'ghsWithheld', kind: 'money', confidence: 'confirmed' },
       ],
     },
     {
-      // Part 4.E interest — grid te. c2/c3/c5 are CONFIRMED by the sample filing
-      // (payer name / interest code / gross). c1 (debtor TIC, omitted in the
-      // sample because the payers were foreign) and the withholding cols are
-      // inferred. `country` is intentionally NOT mapped — the sample uses a
-      // coded country format (e.g. OECD605) we don't capture as free text.
+      // Part 4.E interest — grid te. The form prints: 1 T.I.C., 2 name of
+      // debtor or bank, 3 code, 4 gross interest, 5 tax paid outside the
+      // Republic, 6 defence withheld, 7 GHS withheld. c5 is CONFIRMED as gross
+      // by the filing, which fixes the schema one place ahead of the form from
+      // there on, so 5/6/7 land on c6/c7/c7a.
+      //
+      // This corrects a swap: SDC was mapped to c6 and foreign tax to c7, which
+      // filed defence contribution as tax paid abroad and vice versa — two
+      // figures that pull opposite ways in the computation.
       gridId: 'epr1mm4ter1',
       source: 'interestSources',
       cols: [
-        { col: 'c1', field: 'debtorTic', kind: 'tic', confidence: 'inferred' },
+        { col: 'c1', field: 'debtorTic', kind: 'tic', confidence: 'derived' },
         { col: 'c2', field: 'debtorName', kind: 'text', confidence: 'confirmed' },
         { col: 'c3', field: 'code', kind: 'text', confidence: 'confirmed' },
         { col: 'c5', field: 'grossInterest', kind: 'money', confidence: 'confirmed' },
-        { col: 'c6', field: 'sdcWithheld', kind: 'money', confidence: 'inferred' },
-        { col: 'c7', field: 'taxPaidOutside', kind: 'money', confidence: 'inferred' },
-        { col: 'c7a', field: 'ghsWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c6', field: 'taxPaidOutside', kind: 'money', confidence: 'derived' },
+        { col: 'c7', field: 'sdcWithheld', kind: 'money', confidence: 'derived' },
+        { col: 'c7a', field: 'ghsWithheld', kind: 'money', confidence: 'derived' },
         // c11 = security / account identifier (e.g. VUTY, an IBKR account, an
         // ISIN). Confirmed by the real epr1m sample; maps to the portal's
         // `accountType` free-text field. c10 (country) is a coded value
@@ -222,9 +234,21 @@ const EPR1M: FormMap = {
 };
 
 // ---- epr1a — TD1A self-employed --------------------------------------------
-// Self-employed schedules from the official TD1A form layout (Part 4 Α1/Α2/Α3).
-// The sample filing doesn't populate these, so column meanings come from the
-// form's printed structure — all inferred, confirm via a TaxisNet import.
+// Self-employed schedules, read against the official TD1A form (Part 4
+// Α1/Α2/Α3). Neither filing populates them, but in each table the schema's key
+// set and the form's printed columns match one-for-one in order, and the
+// lettered keys sit exactly where the form letters its own numbering (r1a ↔
+// box 7a, r5a ↔ box 15 beside 14). Marked derived on that basis; a TaxisNet
+// import would move them to confirmed.
+//
+//   Α1  activity → r1c1 · 7a occupational category → r1ac1
+//       in the Republic 7-10 → r2c1-c4
+//       outside 11-13 → r4c1-c3 · 14 → r5c1 · 15 tax paid → r5ac1
+//   Α2  1-4 gains/losses → r1c2,r1c3,r2c2,r2c3 · 5 T.I.C. → r3c1 · 6 country → r4c1
+//   Α3  1 T.I.C. → c1 · 2 name → c1b · 3 code → c2 · 4 occupational → c2a
+//       5 % → c2b · 6 salary → c3 · 7 interest on capital → c4
+//       8 trading income → c5 · 9 trading loss → c6 · 10 tax withheld → c7
+//       11 tax paid outside → c7b   (c2a and c7b are not collected by the portal)
 const seActivity = (field: string) => `selfEmployedActivities.0.${field}`;
 const isOutside = (input: any) => !!input?.selfEmployedActivities?.[0]?.isOutsideRepublic;
 const isInRepublic = (input: any) => !isOutside(input);
@@ -234,27 +258,27 @@ const EPR1A: FormMap = {
   ticFieldKey: 'epr1am1t0r1c1', // Part 1 taxpayer T.I.C. — confirmed (sample)
   flat: [
     // Part 4.Α1 — Trade / industry / profession (single activity).
-    { key: 'epr1am4ta1r1c1', source: seActivity('mainCategory'), kind: 'text', confidence: 'inferred' },
-    { key: 'epr1am4ta1r1ac1', source: seActivity('occupationalCategory'), kind: 'text', confidence: 'inferred' },
+    { key: 'epr1am4ta1r1c1', source: seActivity('mainCategory'), kind: 'text', confidence: 'derived' },
+    { key: 'epr1am4ta1r1ac1', source: seActivity('occupationalCategory'), kind: 'text', confidence: 'derived' },
     // Income arising IN the Republic (r2: profit / loss / losses b/f 1997 / losses >5y).
-    { key: 'epr1am4ta1r2c1', source: seActivity('taxableProfit'), kind: 'money', confidence: 'inferred', when: isInRepublic },
-    { key: 'epr1am4ta1r2c2', source: seActivity('lossCurrentYear'), kind: 'money', confidence: 'inferred', when: isInRepublic },
-    { key: 'epr1am4ta1r2c3', source: seActivity('lossesBfFrom1997'), kind: 'money', confidence: 'inferred', when: isInRepublic },
-    { key: 'epr1am4ta1r2c4', source: seActivity('lossesMoreThan5yNotCarried'), kind: 'money', confidence: 'inferred', when: isInRepublic },
+    { key: 'epr1am4ta1r2c1', source: seActivity('taxableProfit'), kind: 'money', confidence: 'derived', when: isInRepublic },
+    { key: 'epr1am4ta1r2c2', source: seActivity('lossCurrentYear'), kind: 'money', confidence: 'derived', when: isInRepublic },
+    { key: 'epr1am4ta1r2c3', source: seActivity('lossesBfFrom1997'), kind: 'money', confidence: 'derived', when: isInRepublic },
+    { key: 'epr1am4ta1r2c4', source: seActivity('lossesMoreThan5yNotCarried'), kind: 'money', confidence: 'derived', when: isInRepublic },
     // Income arising OUTSIDE the Republic (r4 profit/loss/losses b/f, r5 losses>5y + tax paid).
-    { key: 'epr1am4ta1r4c1', source: seActivity('taxableProfit'), kind: 'money', confidence: 'inferred', when: isOutside },
-    { key: 'epr1am4ta1r4c2', source: seActivity('lossCurrentYear'), kind: 'money', confidence: 'inferred', when: isOutside },
-    { key: 'epr1am4ta1r4c3', source: seActivity('lossesBfFrom1997'), kind: 'money', confidence: 'inferred', when: isOutside },
-    { key: 'epr1am4ta1r5c1', source: seActivity('lossesMoreThan5yNotCarried'), kind: 'money', confidence: 'inferred', when: isOutside },
-    { key: 'epr1am4ta1r5ac1', source: seActivity('taxPaidOutside'), kind: 'money', confidence: 'inferred', when: isOutside },
+    { key: 'epr1am4ta1r4c1', source: seActivity('taxableProfit'), kind: 'money', confidence: 'derived', when: isOutside },
+    { key: 'epr1am4ta1r4c2', source: seActivity('lossCurrentYear'), kind: 'money', confidence: 'derived', when: isOutside },
+    { key: 'epr1am4ta1r4c3', source: seActivity('lossesBfFrom1997'), kind: 'money', confidence: 'derived', when: isOutside },
+    { key: 'epr1am4ta1r5c1', source: seActivity('lossesMoreThan5yNotCarried'), kind: 'money', confidence: 'derived', when: isOutside },
+    { key: 'epr1am4ta1r5ac1', source: seActivity('taxPaidOutside'), kind: 'money', confidence: 'derived', when: isOutside },
     // Part 4.Α2 — Gain/(loss) on disposal of immovable property or shares.
     // Form layout: r1 = gains (c2 immovable, c3 shares), r2 = losses (c2/c3), r3 = TIC, r4 = country.
-    { key: 'epr1am4ta2r1c2', source: 'disposalGainImmovable', kind: 'money', confidence: 'inferred' },
-    { key: 'epr1am4ta2r1c3', source: 'disposalGainShares', kind: 'money', confidence: 'inferred' },
-    { key: 'epr1am4ta2r2c2', source: 'disposalLossImmovable', kind: 'money', confidence: 'inferred' },
-    { key: 'epr1am4ta2r2c3', source: 'disposalLossShares', kind: 'money', confidence: 'inferred' },
-    { key: 'epr1am4ta2r3c1', source: 'disposalTicOfCompany', kind: 'tic', confidence: 'inferred' },
-    { key: 'epr1am4ta2r4c1', source: 'disposalCountry', kind: 'text', confidence: 'inferred' },
+    { key: 'epr1am4ta2r1c2', source: 'disposalGainImmovable', kind: 'money', confidence: 'derived' },
+    { key: 'epr1am4ta2r1c3', source: 'disposalGainShares', kind: 'money', confidence: 'derived' },
+    { key: 'epr1am4ta2r2c2', source: 'disposalLossImmovable', kind: 'money', confidence: 'derived' },
+    { key: 'epr1am4ta2r2c3', source: 'disposalLossShares', kind: 'money', confidence: 'derived' },
+    { key: 'epr1am4ta2r3c1', source: 'disposalTicOfCompany', kind: 'tic', confidence: 'derived' },
+    { key: 'epr1am4ta2r4c1', source: 'disposalCountry', kind: 'text', confidence: 'derived' },
   ],
   grids: [
     {
@@ -263,15 +287,15 @@ const EPR1A: FormMap = {
       gridId: 'epr1am4ta3r1',
       source: 'partnerships',
       cols: [
-        { col: 'c1', field: 'tic', kind: 'tic', confidence: 'inferred' },
-        { col: 'c1b', field: 'name', kind: 'text', confidence: 'inferred' },
-        { col: 'c2', field: 'code', kind: 'text', confidence: 'inferred' },
-        { col: 'c2b', field: 'percentage', kind: 'text', confidence: 'inferred' },
-        { col: 'c3', field: 'salary', kind: 'money', confidence: 'inferred' },
-        { col: 'c4', field: 'interestOnCapital', kind: 'money', confidence: 'inferred' },
-        { col: 'c5', field: 'tradingIncome', kind: 'money', confidence: 'inferred' },
-        { col: 'c6', field: 'tradingLoss', kind: 'money', confidence: 'inferred' },
-        { col: 'c7', field: 'taxWithheld', kind: 'money', confidence: 'inferred' },
+        { col: 'c1', field: 'tic', kind: 'tic', confidence: 'derived' },
+        { col: 'c1b', field: 'name', kind: 'text', confidence: 'derived' },
+        { col: 'c2', field: 'code', kind: 'text', confidence: 'derived' },
+        { col: 'c2b', field: 'percentage', kind: 'text', confidence: 'derived' },
+        { col: 'c3', field: 'salary', kind: 'money', confidence: 'derived' },
+        { col: 'c4', field: 'interestOnCapital', kind: 'money', confidence: 'derived' },
+        { col: 'c5', field: 'tradingIncome', kind: 'money', confidence: 'derived' },
+        { col: 'c6', field: 'tradingLoss', kind: 'money', confidence: 'derived' },
+        { col: 'c7', field: 'taxWithheld', kind: 'money', confidence: 'derived' },
       ],
     },
   ],

@@ -3,6 +3,7 @@
 // ISO <period>, comma decimals, D/M/YYYY field dates, zeros emitted.
 
 import { FIELD_MAPS } from './fieldMap';
+import type { Confidence } from './fieldMap';
 import { fmtByKind, formCode, xmlEscape } from './format';
 import type { TaxReturnFormType } from './format';
 
@@ -18,7 +19,9 @@ const versionFor = (year: number) => `${SUPPORTED_YEARS.includes(year) ? year : 
 const resolve = (obj: any, path: string): unknown =>
   path.split('.').reduce<any>((o, k) => (o == null ? undefined : o[k]), obj);
 
-export interface CollectedField { key: string; value: string; confidence: 'confirmed' | 'inferred' }
+// One definition of the levels, in fieldMap — repeating it here is how the two
+// drifted apart when 'derived' was added.
+export interface CollectedField { key: string; value: string; confidence: Confidence }
 export interface CollectedGrid { gridId: string; rows: CollectedField[][] }
 export interface Collected { tic: string; flat: CollectedField[]; grids: CollectedGrid[] }
 
