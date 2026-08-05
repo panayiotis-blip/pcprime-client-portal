@@ -18,6 +18,7 @@ type RouteItem = { path: string; label: string; keywords?: string; requires?: (u
 const STAFF_ROUTES: RouteItem[] = [
   { path: '/',                 label: 'Dashboard' },
   { path: '/clients',          label: 'Clients', keywords: 'customers companies' },
+  { path: '/apps',             label: 'Client Apps', keywords: 'rentals payroll app launcher open client app' },
   { path: '/clients/address-book', label: 'Address Book', keywords: 'addresses saved reuse' },
   { path: '/scan',             label: 'Scan Document', keywords: 'upload invoice ocr' },
   { path: '/tasks',            label: 'Tasks' },

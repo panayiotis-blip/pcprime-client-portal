@@ -57,6 +57,9 @@ const STAFF_GROUPS: NavGroup[] = [
     items: [
       { path: '/clients',     label: 'Clients',         icon: '⊡' },
       { path: '/clients/address-book', label: 'Address Book', icon: '📖' },
+      // Open a client's app directly. Full-screen by design (it is the same
+      // launcher staff land on when signing in at /app), with a way back.
+      { path: '/apps', label: 'Client Apps', icon: '🧩' },
       { path: '/client-apps', label: 'App Templates', icon: '📱', requires: (u) => isSupervisorOrHigher(u) },
       { path: '/clients/duplicates', label: 'Find Duplicates', icon: '⧉' },
       // Property ERP — a separate product on its own hosting, with its own

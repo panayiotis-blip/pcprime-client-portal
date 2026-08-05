@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom';
-import { ScanLine, UserPlus, SquareCheckBig, BarChart3, type LucideIcon } from 'lucide-react';
+import { ScanLine, UserPlus, SquareCheckBig, BarChart3, LayoutGrid, type LucideIcon } from 'lucide-react';
 
 const ACTIONS: { label: string; to: string; Icon: LucideIcon }[] = [
   { label: 'Scan Document', to: '/scan',    Icon: ScanLine },       // scanner/document-scan
   { label: 'Add Client',    to: '/clients', Icon: UserPlus },       // user-plus
   { label: 'New Task',      to: '/tasks',   Icon: SquareCheckBig }, // keep checkbox icon
   { label: 'Run Report',    to: '/reports', Icon: BarChart3 },      // bar-chart
+  // Every client's apps in one place — rentals, payroll and whatever comes
+  // next, without going through each client file to reach them.
+  { label: 'Client Apps',   to: '/apps',    Icon: LayoutGrid },
 ];
 
 export default function QuickActions() {
