@@ -15,6 +15,13 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.join(import.meta.dirname, '..');
+// The key the template was uploaded under (App Templates shows it on the card).
+// Override when it differs: node scripts/split-payroll-app.mjs <app-key>
+const APP_KEY = process.argv[2] || 'payroll-2026';
+// The key the app stores its document under, inside the per-client record.
+// The template is rewritten to use it, so every client shares one name and
+// the prepared data lands where the app actually looks.
+const STORE_KEY = 'payroll_2026';
 const SRC = path.join(ROOT, 'km-payroll-app.html');
 let html = readFileSync(SRC, 'utf8');
 
@@ -101,7 +108,8 @@ if (clean.includes(logoutItem)) {
 }
 clean = clean.replace(/^\s*var SEED_ENTRIES = \{[\s\S]*?\};\s*$/m, '  var SEED_ENTRIES = {};  // per-client data lives in the portal, not in the template\n');
 // The storage key must not be KM's, or two clients would share a document key.
-clean = clean.replace('var KEY="km_payroll_2026"', 'var KEY="payroll_2026"');
+clean = clean.replace('var KEY="km_payroll_2026"', 'var KEY="'+STORE_KEY+'"');
+must(clean.includes('var KEY="'+STORE_KEY+'"'), 'template storage key not rewritten');
 
 
 // Both screens are unreachable now; leaving a sign-in form in a file the whole
@@ -137,7 +145,7 @@ writeFileSync(path.join(ROOT, 'payroll-app-template.html'), clean);
 // the app writes JSON.stringify(state) under its KEY. KM keeps the original
 // key so an existing saved document (if any) still resolves.
 const state = { __rebuild: true };
-const doc = { km_payroll_2026: 'PLACEHOLDER' };
+const doc = {};
 void state; void doc;
 
 // Rebuilding the state literal by hand would drift from the app; instead ship
@@ -159,7 +167,8 @@ must(Object.keys(kmState.entries).length > 0, 'KM entries did not carry over');
 delete kmState.users;
 must(!/"p":"|"users":/.test(JSON.stringify(kmState)), 'app credentials still in the seeded document');
 
-const kmDoc = { km_payroll_2026: JSON.stringify(kmState) };
+const kmDoc = {}; kmDoc[STORE_KEY] = JSON.stringify(kmState);
+must(Object.keys(kmDoc)[0] === (clean.match(/var KEY="([^"]+)"/)||[])[1], 'document key does not match the key the app reads');
 const sql = `-- =============================================================
 -- Seed: KM Fix-It-All's payroll data
 -- Run in Supabase Dashboard → SQL Editor → New Query
@@ -183,7 +192,7 @@ with target as (
    limit 1
 )
 insert into public.client_app_data (client_id, app_key, data, updated_at)
-select t.id, 'payroll', $seed$${JSON.stringify(kmDoc)}$seed$::jsonb, now()
+select t.id, '${APP_KEY}', $seed$${JSON.stringify(kmDoc)}$seed$::jsonb, now()
   from target t
 on conflict (client_id, app_key) do update
   set data = excluded.data, updated_at = now();
@@ -193,17 +202,17 @@ with target as (
   select id from public.clients where name ilike '%FIX%IT%ALL%' order by id limit 1
 )
 insert into public.client_apps (client_id, app_key, enabled)
-select t.id, 'payroll', true from target t
+select t.id, '${APP_KEY}', true from target t
 on conflict (client_id, app_key) do update set enabled = true;
 
 commit;
 
 -- Verify — should show KM, the app enabled, and a document with 6 employees:
 --   select c.name, ca.enabled,
---          jsonb_array_length((cad.data->>'km_payroll_2026')::jsonb->'employees') as employees
+--          jsonb_array_length((cad.data->>'${STORE_KEY}')::jsonb->'employees') as employees
 --     from public.clients c
---     join public.client_apps ca on ca.client_id = c.id and ca.app_key = 'payroll'
---     left join public.client_app_data cad on cad.client_id = c.id and cad.app_key = 'payroll'
+--     join public.client_apps ca on ca.client_id = c.id and ca.app_key = '${APP_KEY}'
+--     left join public.client_app_data cad on cad.client_id = c.id and cad.app_key = '${APP_KEY}'
 --    where c.name ilike '%FIX%IT%ALL%';
 -- =============================================================
 `;
