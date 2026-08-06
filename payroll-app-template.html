@@ -537,18 +537,25 @@
     }
     var gross = grossForNet(target,e.payInd||"M");
     if(!noGrossUp && S.paye && S.paye.enabled && S.paye.borneBy==="employer" && target && payeAt(e,m,gross)>0){
-      // net after tax rises with gross, so bisect for the gross that delivers the agreed net
-      var lo=gross, hi=r2(gross*1.8), k;
-      for(k=0;k<50;k++){
-        var mid=(lo+hi)/2, cM=contribs(r2(mid),e.payInd||"M");
-        if(r2(mid)-cM.eeSI-cM.ghsEE-payeAt(e,m,r2(mid)) < target) lo=mid; else hi=mid;
-      }
-      var best=r2(hi), bd=Infinity;
-      for(k=-3;k<=3;k++){
-        var g2=r2(hi+k/100), c2=contribs(g2,e.payInd||"M");
-        var d2=Math.abs(r2(g2-c2.eeSI-c2.ghsEE-payeAt(e,m,g2))-target);
-        if(d2<bd-1e-9){ bd=d2; best=g2; }
-      }
+      // What the employee receives at a given gross, on the same basis the
+      // payslip uses: employee SI and GHS on gross plus holiday fund, less the
+      // tax for that gross.
+      var payIndE=e.payInd||"M";
+      var netAtGross=function(g){
+        g=r2(g);
+        var c=contribs(g,payIndE);
+        return r2(g-c.eeSI-c.ghsEE-payeAt(e,m,g));
+      };
+      // A fixed 1.8x bracket cannot reach the answer once the tax rises with the
+      // gross, and bisecting an unbracketed range returns the bound — paying
+      // short with nothing said. Grow it until it genuinely reaches the target.
+      var lo=gross, hi=r2(gross*1.4), guard=0, k;
+      while(netAtGross(hi)<target && guard++<40) hi=r2(hi*1.4);
+      for(k=0;k<60;k++){ var mid=(lo+hi)/2; if(netAtGross(mid)<target) lo=mid; else hi=mid; }
+      // Take the smallest gross that still delivers the agreed net: short is not
+      // an acceptable rounding when the net is what was agreed.
+      var best=r2(hi);
+      for(k=1;k<=10;k++){ var g2=r2(hi-k/100); if(netAtGross(g2)>=target-0.005) best=g2; else break; }
       gross=best;
     }
     var nE=0,oE=0;
@@ -584,7 +591,11 @@
     if(!S.paye||!S.paye.enabled) return 0;
     var c=contribs(gross,e.payInd||"M");
     var taxable=r2(gross-c.eeSI-c.ghsEE);
-    if(S.paye.method==="td59"){ var t=td59Calc(e,m); return t?t.C3:0; }
+    // It used to ignore the gross it was handed and answer for the month as
+    // already computed — the figure BEFORE grossing up. The solver therefore
+    // aimed at too little tax, and the employee received less than the agreed
+    // net by roughly the tax on the uplift.
+    if(S.paye.method==="td59"){ var t=td59Calc(e,m,gross); return t?t.C3:0; }
     if(S.paye.method==="annualised") return r2(annualTax(taxable*12)/12);
     var ytd=0, paid=0, i;
     for(i=0;i<m;i++){ var x=taxableOf(e,i); ytd=r2(ytd+x.taxable); paid=r2(paid+payeFor(e,i)); }
@@ -619,15 +630,22 @@
   }
   // Form T.D.59A: build the year, apply the declared allowances, tax the chargeable
   // income, take the share relating to this employer, then divide by the pay periods.
-  function td59Year(e,m){
+  // trialGross: evaluate the year as if THIS month's gross were that figure,
+  // instead of reading the month back from monthDetail. Grossing up needs it —
+  // the tax has to answer for the gross being tried, and asking monthDetail
+  // mid-calculation would re-enter the month being computed.
+  function td59Year(e,m,trialGross){
     var ytdG=0,ytdSI=0,ytdGHS=0,i;
-    for(i=0;i<=m;i++){ var mc=monthDetail(e,i), c=contribs(mc.gross,e.payInd||"M");
-      ytdG=r2(ytdG+mc.gross); ytdSI=r2(ytdSI+c.eeSI); ytdGHS=r2(ytdGHS+c.ghsEE); }
+    for(i=0;i<=m;i++){
+      var g=(i===m && trialGross!==undefined && trialGross!==null) ? r2(trialGross) : monthDetail(e,i).gross;
+      var c=contribs(g,e.payInd||"M");
+      ytdG=r2(ytdG+g); ytdSI=r2(ytdSI+c.eeSI); ytdGHS=r2(ytdGHS+c.ghsEE);
+    }
     var f=12/(m+1);
     return {A1:r2(ytdG*f), si:r2(ytdSI*f), ghs:r2(ytdGHS*f)};
   }
-  function td59Calc(e,m){
-    var d=e.td59||{}, a=td59Year(e,m), N=function(k){ return Number(d[k])||0; };
+  function td59Calc(e,m,trialGross){
+    var d=e.td59||{}, a=td59Year(e,m,trialGross), N=function(k){ return Number(d[k])||0; };
     var A1=a.A1, A6=r2(A1+N("A2")+N("A3")+N("A4")+N("A5"));
     if(!A6) return null;
     var A8=r2(A6-N("A7"));
