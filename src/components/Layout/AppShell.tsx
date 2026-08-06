@@ -57,6 +57,7 @@ const STAFF_GROUPS: NavGroup[] = [
     items: [
       { path: '/clients',     label: 'Clients',         icon: '⊡' },
       { path: '/clients/address-book', label: 'Address Book', icon: '📖' },
+      { path: '/notices', label: 'Notices', icon: '📢', requires: (u) => isSupervisorOrHigher(u) },
       // Open a client's app directly. Full-screen by design (it is the same
       // launcher staff land on when signing in at /app), with a way back.
       { path: '/apps', label: 'Client Apps', icon: '🧩' },
@@ -141,6 +142,7 @@ const CLIENT_GROUPS: NavGroup[] = [
   {
     key: 'client-with-us', label: 'Accountant',
     items: [
+      { path: '/my-notices',  label: 'Notices',     icon: '📢' },
       { path: '/my-billing',   label: 'My Account',  icon: '€' },
       { path: '/my-deadlines', label: 'Deadlines',   icon: '⏰' },
       { path: '/documents',    label: 'Documents',   icon: '⊟' },

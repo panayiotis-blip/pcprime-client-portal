@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
-const REPORT_TYPES = ['Profit & Loss', 'VAT report', 'Management accounts', 'Balance sheet', 'Other'];
+// 'Advice / Letter' covers written advice to a client — it uses the same path
+// as a report: uploaded to private storage, visible to that client alone.
+const REPORT_TYPES = ['Profit & Loss', 'VAT report', 'Management accounts', 'Balance sheet', 'Advice / Letter', 'Other'];
 
 // Staff tab on a client's folder: upload finished reports for the client to
 // view in their portal (advisor_report + advisor-reports bucket, migration 084).

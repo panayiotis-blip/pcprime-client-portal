@@ -3427,6 +3427,87 @@ export const api = {
     if (error) throw new Error(error.message);
     return data || [];
   },
+  // ---- Notices to clients (migration 175) ----
+  // A notice is a draft until published; RLS keeps drafts to staff and shows a
+  // client only what is addressed to them, so these calls need no filtering of
+  // their own beyond what the firm's screens ask for.
+  async listNotices(): Promise<any[]> {
+    const { data, error } = await supabase.from('client_notice')
+      .select('*').order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+  // What this client should see: published, unexpired, addressed to them.
+  async getMyNotices(): Promise<any[]> {
+    const { data, error } = await supabase.from('client_notice')
+      .select('*')
+      .not('published_at', 'is', null)
+      .order('published_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    const now = Date.now();
+    return (data || []).filter((n: any) => !n.expires_at || new Date(n.expires_at).getTime() > now);
+  },
+  async saveNotice(row: Record<string, any>, id?: number): Promise<number> {
+    if (id) {
+      const { error } = await supabase.from('client_notice').update(row).eq('id', id);
+      if (error) throw new Error(error.message);
+      return id;
+    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data, error } = await supabase.from('client_notice')
+      .insert({ ...row, created_by: session?.user?.id || null }).select('id').single();
+    if (error) throw new Error(error.message);
+    return (data as any).id as number;
+  },
+  // The clients a 'selected' notice is for. Replaces the list wholesale.
+  async setNoticeRecipients(noticeId: number, clientIds: number[]) {
+    const { error: delErr } = await supabase.from('client_notice_recipient').delete().eq('notice_id', noticeId);
+    if (delErr) throw new Error(delErr.message);
+    if (!clientIds.length) return;
+    const { error } = await supabase.from('client_notice_recipient')
+      .insert(clientIds.map(id => ({ notice_id: noticeId, client_id: id })));
+    if (error) throw new Error(error.message);
+  },
+  async getNoticeRecipients(noticeId: number): Promise<number[]> {
+    const { data, error } = await supabase.from('client_notice_recipient')
+      .select('client_id').eq('notice_id', noticeId);
+    if (error) throw new Error(error.message);
+    return (data || []).map((r: any) => r.client_id);
+  },
+  async uploadNoticeFile(noticeId: number, file: File): Promise<string> {
+    const safe = file.name.replace(/[^\w.\-]+/g, '_');
+    const path = `${noticeId}/${Date.now()}_${safe}`;
+    const { error } = await supabase.storage.from('client-notices')
+      .upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (error) throw new Error(error.message);
+    return path;
+  },
+  async noticeFileUrl(path: string): Promise<string> {
+    const { data, error } = await supabase.storage.from('client-notices').createSignedUrl(path, 300);
+    if (error) throw new Error(error.message);
+    return data.signedUrl;
+  },
+  async deleteNotice(id: number, storagePath?: string | null) {
+    if (storagePath) await supabase.storage.from('client-notices').remove([storagePath]);
+    const { error } = await supabase.from('client_notice').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+  // Who has opened it. Staff see every receipt; a client sees their own.
+  async getNoticeReads(noticeId: number): Promise<Array<{ client_id: number; read_at: string }>> {
+    const { data, error } = await supabase.from('client_notice_read')
+      .select('client_id, read_at').eq('notice_id', noticeId);
+    if (error) throw new Error(error.message);
+    return (data || []) as any[];
+  },
+  // Recorded the first time a client opens one. Ignores a repeat — the receipt
+  // is "when did they first see it", not a running count.
+  async markNoticeRead(noticeId: number, clientId: number) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('client_notice_read')
+      .insert({ notice_id: noticeId, client_id: clientId, user_id: session?.user?.id || null });
+    if (error && !/duplicate|unique/i.test(error.message)) throw new Error(error.message);
+  },
+
   async deleteAdvisorReport(id: number, storagePath?: string | null) {
     if (storagePath) await supabase.storage.from('advisor-reports').remove([storagePath]);
     const { error } = await supabase.from('advisor_report').delete().eq('id', id);

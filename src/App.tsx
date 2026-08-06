@@ -43,6 +43,8 @@ const AppsLauncher = lazy(() => import('./components/AppPortal/AppsLauncher'));
 const ClientEntry = lazy(() => import('./components/Client/ClientEntry'));
 const AppAccessRequests = lazy(() => import('./components/Admin/AppAccessRequests'));
 const ClientAppTemplates = lazy(() => import('./components/Admin/ClientAppTemplates'));
+const ClientNotices = lazy(() => import('./components/Admin/ClientNotices'));
+const MyNotices = lazy(() => import('./components/Client/MyNotices'));
 const UnlinkedDirectors = lazy(() => import('./components/Admin/UnlinkedDirectors'));
 const CredentialsVault = lazy(() => import('./components/Admin/CredentialsVault'));
 const ExportPage = lazy(() => import('./components/Export/ExportPage'));
@@ -162,6 +164,8 @@ function PortalRoutes() {
             <Route path="/clients/unlinked-directors" element={<UnlinkedDirectors />} />
             <Route path="/clients/address-book" element={<AddressBook />} />
             <Route path="/client-apps" element={<ClientAppTemplates />} />
+            <Route path="/notices" element={<ClientNotices />} />
+            <Route path="/my-notices" element={<MyNotices />} />
             <Route path="/clients/:id/print" element={<ClientCardPrint />} />
             <Route path="/clients/:id" element={<ClientDetail />} />
             <Route path="/export" element={<ExportPage />} />
