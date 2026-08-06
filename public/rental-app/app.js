@@ -1308,20 +1308,91 @@ function vReceipts(){
 }
 
 /* ---- Arrears (viewed period only) ---- */
+var arrProp="ALL";
+
+/* What a tenant still owes for a year, split by what it was owed FOR.
+   Each line is settled on its own: a payment allocated to rent does not cover
+   the common fees, which is the same rule the receipt matching follows. So
+   chasing can be specific — "the rent is paid, the water is not". */
+function arrearsFor(t,y){
+  var cap=capM(y);
+  var byCat={}, months=[], total=0;
+  for(var m=0;m<=Math.min(cap,11);m++){
+    if(!due(t,y,m))continue;
+    var owedHere=0;
+    var rentBal=r2x(rentOf(t,y,m)-paidCat(t,y,m,"Rent"));
+    if(rentBal>0.005){ byCat["Rent"]=r2x((byCat["Rent"]||0)+rentBal); owedHere+=rentBal; }
+    monthCharges(t,y,m).forEach(function(c){
+      var nm=ctName(c.typeId);
+      var bal=r2x(num(c.amount)-paidCat(t,y,m,nm));
+      if(bal>0.005){ byCat[nm]=r2x((byCat[nm]||0)+bal); owedHere+=bal; }
+    });
+    if(owedHere>0.005){ months.push(MONTHS[m]+(paidAll(t,y,m)>0.005?" (part)":"")); total=r2x(total+owedHere); }
+  }
+  return {byCat:byCat, months:months, total:total};
+}
+function r2x(n){ return Math.round(n*100)/100; }
+
 function vArrears(){
-  const y=yr(), cap=capM(y); const rows=[];
-  DATA.tenants.forEach(t=>{ let tot=0; const ms=[];
-    for(let m=0;m<=cap;m++){ const o=owed(t,y,m); if(o>0){ tot+=o; ms.push(MONTHS[m]+(statusOf(t,y,m)==="PARTIAL"?" (part)":"")); } }
-    if(tot>0)rows.push({t,tot,ms}); });
-  rows.sort((a,b)=>b.tot-a.tot); const total=rows.reduce((s,r)=>s+r.tot,0);
-  let h='<div class="cards"><div class="card"><div class="k">Tenants in arrears</div><div class="v">'+rows.length+'</div></div>'+
-    '<div class="card"><div class="k">Total outstanding</div><div class="v warn">'+money(total)+'</div><div class="d">Jan–'+(cap<0?"—":MONTHS[cap])+' '+y+'</div></div></div>';
-  h+='<div class="panel"><h3>Who has not paid — '+y+'</h3><div class="hint">Unpaid/partial for the period shown only. Future (not-due) rent is excluded.</div>'+
-    '<div class="tblwrap"><table><thead><tr><th>Tenant</th><th>Property</th><th class="num">Owed</th><th>Months</th><th>Contact</th><th>Phone</th><th>Email</th></tr></thead><tbody>';
-  if(!rows.length)h+='<tr><td colspan="7" style="color:#16a34a;font-weight:600">All tenants up to date for this period 🎉</td></tr>';
-  rows.forEach(r=>{ const p=propById(r.t.propertyId); h+='<tr><td>'+esc(r.t.name)+'</td><td>'+esc(p?p.name:r.t.unit)+'</td><td class="num warn">'+money(r.tot)+'</td><td>'+r.ms.join(", ")+'</td><td>'+esc(r.t.contact1.name)+'</td><td>'+esc(r.t.contact1.phone)+'</td><td>'+esc(r.t.email)+'</td></tr>'; });
+  var y=yr(), cap=capM(y);
+  // Which properties are in play, so a landlord can chase one building at a time.
+  var props=DATA.properties.slice().sort(function(a,b){return (a.name||"").localeCompare(b.name||"");});
+  var opts='<option value="ALL">All properties</option>'+props.map(function(pr){
+    return '<option value="'+pr.id+'"'+(String(pr.id)===String(arrProp)?" selected":"")+'>'+esc(pr.name)+'</option>';
+  }).join("")+'<option value="NONE"'+(arrProp==="NONE"?" selected":"")+'>(no property set)</option>';
+
+  var rows=[];
+  sortedTenants().forEach(function(t){
+    if(arrProp==="NONE"){ if(t.propertyId) return; }
+    else if(arrProp!=="ALL" && String(t.propertyId)!==String(arrProp)) return;
+    var a=arrearsFor(t,y);
+    if(a.total>0.005) rows.push({t:t,a:a});
+  });
+  rows.sort(function(x,z){ return z.a.total-x.a.total; });
+
+  // One column per thing actually owed, rent first, so the table stays narrow.
+  var cats=[]; rows.forEach(function(r){ Object.keys(r.a.byCat).forEach(function(k){ if(cats.indexOf(k)<0)cats.push(k); }); });
+  cats.sort(function(a,b){ return a==="Rent"?-1:b==="Rent"?1:a.localeCompare(b); });
+  var catTot={}; cats.forEach(function(c){ catTot[c]=0; });
+  rows.forEach(function(r){ cats.forEach(function(c){ catTot[c]=r2x(catTot[c]+(r.a.byCat[c]||0)); }); });
+  var total=rows.reduce(function(sm,r){ return r2x(sm+r.a.total); },0);
+
+  var h='<div class="cards">'+
+    card("Tenants in arrears",String(rows.length),arrProp==="ALL"?"across every property":"in this property")+
+    card("Total outstanding",money(total),"Jan\u2013"+(cap<0?"\u2014":MONTHS[cap])+" "+y)+
+    cats.slice(0,3).map(function(c){ return card(c+" owed",money(catTot[c]),"unpaid "+c.toLowerCase()); }).join("")+
+    '</div>';
+
+  h+='<div class="panel"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+    '<h3 style="margin:0">Who has not paid \u2014 '+y+'</h3>'+
+    '<span style="flex:1"></span>'+
+    '<span style="font-size:12px;color:#64748b">Property <select id="arrProp">'+opts+'</select></span></div>'+
+    '<div class="hint">Split by what is owed for. Each line settles on its own \u2014 rent paid does not cover the fees \u2014 so a part-paid month shows exactly which part is short. Only months due up to '+(cap<0?"\u2014":MONTHS[cap])+' are counted.</div>'+
+    '<div class="tblwrap freeze"><table><thead><tr><th>Tenant</th><th>Property / unit</th>'+
+      cats.map(function(c){ return '<th class="num">'+esc(c)+'</th>'; }).join("")+
+      '<th class="num">Total</th><th>Months</th><th>Contact</th><th>Phone</th></tr></thead><tbody>';
+
+  if(!rows.length){
+    h+='<tr><td colspan="'+(6+cats.length)+'" style="color:#16a34a;font-weight:600">Nothing outstanding for this period \u{1F389}</td></tr>';
+  }
+  rows.forEach(function(r){
+    var pr=propById(r.t.propertyId);
+    h+='<tr><td><button class="linkish" data-h="openTenant('+r.t.id+')">'+esc(r.t.name)+'</button></td>'+
+      '<td>'+esc(pr?pr.name:"\u2014")+'<div style="font-size:11px;color:#94a3b8">'+esc(r.t.unit)+'</div></td>'+
+      cats.map(function(c){ var v=r.a.byCat[c]||0; return '<td class="num'+(v>0.005?" warn":"")+'">'+(v>0.005?money(v):"\u2014")+'</td>'; }).join("")+
+      '<td class="num warn" style="font-weight:700">'+money(r.a.total)+'</td>'+
+      '<td style="font-size:11.5px">'+r.a.months.join(", ")+'</td>'+
+      '<td>'+esc(r.t.contact1.name)+'</td><td>'+esc(r.t.contact1.phone)+'</td></tr>';
+  });
+  if(rows.length){
+    h+='<tr class="total"><td>Total</td><td></td>'+
+      cats.map(function(c){ return '<td class="num">'+money(catTot[c])+'</td>'; }).join("")+
+      '<td class="num">'+money(total)+'</td><td></td><td></td><td></td></tr>';
+  }
   h+='</tbody></table></div></div>';
   document.getElementById("view").innerHTML=h;
+  var sel=document.getElementById("arrProp");
+  if(sel)sel.onchange=function(e){ arrProp=e.target.value; render(); };
 }
 
 /* ---- Deposits ---- */
