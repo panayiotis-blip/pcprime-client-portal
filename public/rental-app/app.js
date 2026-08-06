@@ -459,7 +459,16 @@ function letterheadHtml(){ var s=DATA.settings||{}; var cn=s.companyName||(DATA.
     (s.address?'<div class="hint" style="margin:3px 0 0;white-space:pre-line">'+esc(s.address)+'</div>':'')+
     (line?'<div class="hint" style="margin:3px 0 0">'+line+'</div>':'')+
     '</div></div>'; }
-function yearList(){ const ys=new Set(["2024","2025","2026"]); DATA.tenants.forEach(t=>Object.keys(t.pay||{}).forEach(y=>ys.add(y))); return [...ys].sort(); }
+function yearList(){
+  const ys=new Set(["2024","2025","2026"]);
+  DATA.tenants.forEach(t=>Object.keys(t.pay||{}).forEach(y=>ys.add(y)));
+  // Rent for January is commonly taken in the December before it, so the year
+  // after the latest one with data has to be offered before it holds anything.
+  ys.add(String(VIEWED.getFullYear()+1));
+  const latest=Math.max.apply(null,[...ys].map(Number));
+  ys.add(String(latest+1));
+  return [...ys].sort();
+}
 function yr(){ return document.getElementById("selYear").value||"2026"; }
 function render(){
   document.querySelectorAll("#tabs .tab").forEach((t,i)=>t.classList.toggle("active",TABS()[i]&&TABS()[i][0]===activeTab));
@@ -728,7 +737,8 @@ window.openReceipts=function(id,m){ if(!canEdit())return; if(!assertOpen(yr(),m)
   // month it arrived in — February's rent paid in March belongs against
   // February. Changing it moves the receipt to that month on save.
   const moveOpts=(sel)=>MONTHS.map((mn,mi)=>'<option value="'+mi+'"'+(mi===sel?" selected":"")+'>'+mn+'</option>').join("");
-  let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'">'+catOptions(r.cat)+'</select></label><label>Applies to<select class="rz" data-k="mv" data-i="'+i+'">'+moveOpts(m)+'</select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
+  const yearOpts=(sel)=>yearList().map(yy=>'<option value="'+yy+'"'+(String(yy)===String(sel)?" selected":"")+'>'+yy+'</option>').join("");
+  let rows=recs.map((r,i)=>'<div class="frow" data-r="'+i+'"><label>Date<input class="rz" data-k="date" data-i="'+i+'" type="date" value="'+esc(r.date)+'"></label><label>Reference<input class="rz" data-k="ref" data-i="'+i+'" value="'+esc(r.ref)+'"></label><label>Amount (€)<input class="rz" data-k="amount" data-i="'+i+'" type="number" value="'+esc(r.amount)+'"></label><label>Type<select class="rz" data-k="cat" data-i="'+i+'">'+catOptions(r.cat)+'</select></label><label>Applies to<select class="rz" data-k="mv" data-i="'+i+'">'+moveOpts(m)+'</select></label><label>Year<select class="rz" data-k="mvy" data-i="'+i+'">'+yearOpts(y)+'</select></label><button class="iconbtn" data-h="rmReceipt('+id+','+m+','+i+')">🗑</button></div>').join("");
   window._mcharges=monthCharges(t,y,m).map(c=>({typeId:c.typeId,amount:c.amount}));
   window._mchTenant=t;
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(760px,96vw)"><h3>'+esc(t.name)+' · '+MONTHS[m]+' '+y+'</h3>'+
@@ -782,14 +792,19 @@ function saveReceiptsDraft(id,m){ const y=yr(); const recs=ensureYear(DATA.tenan
    the rule can be checked directly. */
 function planReceiptMoves(list, y, m){
   var keep=[], moved=[], blocked=[];
+  var years=yearList().map(String);
   (list||[]).forEach(function(r){
     var rec={date:r.date,ref:r.ref,amount:num(r.amount),cat:r.cat||"Rent"};
     if(rec.amount===0 && !rec.date && !rec.ref) return;
     var to=(r.mv===undefined||r.mv===null||r.mv==="")?m:+r.mv;
     if(!(to>=0&&to<=11)) to=m;
-    if(to===m){ keep.push(rec); return; }
-    if(isClosed(y,to)){ blocked.push(MONTHS[to]); keep.push(rec); return; }
-    moved.push({to:to,rec:rec});
+    // The year it settles need not be the year it arrived in: a receipt taken
+    // on 28 December can be rent for the January that follows.
+    var toY=(r.mvy===undefined||r.mvy===null||r.mvy==="")?String(y):String(r.mvy);
+    if(years.indexOf(toY)<0) toY=String(y);
+    if(to===m && toY===String(y)){ keep.push(rec); return; }
+    if(isClosed(toY,to)){ blocked.push(MONTHS[to]+" "+toY); keep.push(rec); return; }
+    moved.push({to:to,toY:toY,rec:rec});
   });
   return {keep:keep, moved:moved, blocked:blocked};
 }
@@ -800,7 +815,7 @@ window.saveReceipts=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); const
   var plan=planReceiptMoves(t.pay[y][m].receipts,y,m);
   var keep=plan.keep, moved=plan.moved, blocked=plan.blocked;
   t.pay[y][m].receipts=keep;
-  moved.forEach(function(x){ ensureYear(t,y)[x.to].receipts.push(x.rec); });
+  moved.forEach(function(x){ ensureYear(t,x.toY||y)[x.to].receipts.push(x.rec); });
   const ov=document.getElementById("rentOv"); if(ov){ const v=ov.value.trim(); if(v===""||num(v)===(t.rent||0)) delete t.pay[y][m].rent; else t.pay[y][m].rent=num(v); }
   // Charges are written on the month once it has been edited, so this month
   // stops following later changes to the tenant's standing charges. Matching
@@ -816,7 +831,7 @@ window.saveReceipts=function(id,m){ saveReceiptsDraft(id,m); const y=yr(); const
   window._mcharges=null; window._mchTenant=null;
   persist("Edited month — "+t.name+" · "+MONTHS[m]+" "+y); closeModal(); render();
   flash(moved.length
-    ? moved.length+" receipt(s) moved to "+[...new Set(moved.map(function(x){return MONTHS[x.to];}))].join(", ")
+    ? moved.length+" receipt(s) moved to "+[...new Set(moved.map(function(x){return MONTHS[x.to]+" "+(x.toY||y);}))].join(", ")
       +(blocked.length?" · "+[...new Set(blocked)].join(", ")+" is closed, left as it was":"")
     : (blocked.length?"Saved · "+[...new Set(blocked)].join(", ")+" is closed, that receipt was left as it was":"Saved.")); };
 
@@ -902,6 +917,9 @@ window.sendDoc=function(kind){
    Entering and splitting are the same job, so they are the same screen: put in
    what arrived, and allocate it across whatever it settles - several months,
    several tenants, rent or charges, in any combination.
+
+   A receipt can settle a month in another YEAR — December's payment is often
+   January's rent — so both the month and the year are chosen per line.
 
    Allocation follows the matching principle: money is applied to the OLDEST
    outstanding month first, rent before charges, so a payment clears the debt
