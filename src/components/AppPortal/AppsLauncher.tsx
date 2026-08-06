@@ -4,6 +4,7 @@ import { api, isStaffRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import { EXTERNAL_SYSTEMS } from '../../services/externalSystems';
+import { ConnectingScreen } from '../ui';
 import ClientAppHost from '../Client/ClientAppHost';
 
 // Staff apps launcher (/apps) — the blank, chrome-free screen the firm lands on
@@ -84,7 +85,7 @@ export default function AppsLauncher() {
     );
   }
 
-  if (rows === null) return <div className="loading-screen">Loading…</div>;
+  if (rows === null) return <ConnectingScreen label="Loading client apps…" />;
 
   const name = (user as any)?.full_name || (user as any)?.display_name || (user as any)?.email || '';
 

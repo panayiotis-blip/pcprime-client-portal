@@ -6,7 +6,7 @@ import { ScanProvider } from './context/ScanContext';
 import { MFAStepUpProvider } from './context/MFAStepUpContext';
 import { ViewPreferencesProvider } from './context/ViewPreferencesContext';
 import { DashboardLayoutProvider } from './context/DashboardLayoutContext';
-import { PanelSkeleton } from './components/ui';
+import { PanelSkeleton, ConnectingScreen, PAGE_LOAD_HINT } from './components/ui';
 
 /* Eager: the shell, the auth gates, and the two entry points. These are needed
    on the very first paint, so deferring them would only add a round trip. */
@@ -242,13 +242,17 @@ function PublicApp() {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="loading-screen">Loading...</div>;
+  // Works out who you are before anything renders. If the server does not
+  // answer, say so rather than sitting on "Loading" indefinitely.
+  if (loading) return <ConnectingScreen label="Loading…" />;
 
   return (
     // Outer boundary for the standalone public pages below, which render
     // outside AppShell and so can't use its in-panel skeleton. Routes inside
     // AppShell resolve against its own nearer boundary, keeping the sidebar up.
-    <Suspense fallback={<div className="loading-screen">Loading…</div>}>
+    // A route chunk that never arrives should say so too, rather than leaving a
+    // blank Loading behind forever.
+    <Suspense fallback={<ConnectingScreen label="Loading…" hint={PAGE_LOAD_HINT} />}>
     <Routes>
       {/* Always-public routes */}
       <Route path="/tax" element={<TaxCalculator />} />

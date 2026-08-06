@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getClientApp, loadAppTemplates } from '../../services/clientApps';
+import { ConnectingScreen } from '../../components/ui';
 import ClientAppHost from './ClientAppHost';
 
 // Post-login entry for NON-STAFF users (App access Phase 3). Works out where a
@@ -57,7 +58,8 @@ export default function ClientEntry({ portalElement }: { portalElement: ReactNod
     return d;
   }, [apps, isPortalClient]);
 
-  if (apps === null) return <div className="loading-screen">Loading…</div>;
+  // Same reasoning as the auth gate: if the server is not answering, say so.
+  if (apps === null) return <ConnectingScreen label="Loading your apps…" />;
 
   // A remembered choice only counts if it still matches an available destination.
   const valid = !!choice && (choice.type === 'portal'

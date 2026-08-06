@@ -47,4 +47,6 @@ export type { RecordCounterProps } from './RecordCounter';
 export { default as EmptyState } from './EmptyState';
 export type { EmptyStateProps } from './EmptyState';
 
+export { default as ConnectingScreen, PAGE_LOAD_HINT } from './ConnectingScreen';
+
 export { cx } from './cx';
