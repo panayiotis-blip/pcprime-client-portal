@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/industry-77efe760-df59-45d2-a4fc-bf7b2d3a042c/styles.css">
+<style>
+:root{
+--color-bg:#F7F5F1;--color-surface:#FFFFFF;--color-text:#0F2A3B;
+--color-divider:color-mix(in srgb, #0F2A3B 16%, transparent);
+--color-accent:#B0813C;
+--color-accent-100:#FAF4E9;--color-accent-200:#F1E4CB;--color-accent-300:#E3CC9B;
+--color-accent-400:#D0AE68;--color-accent-500:#B0813C;--color-accent-600:#8F6830;
+--color-accent-700:#6E5025;--color-accent-800:#1D4257;--color-accent-900:#0F2A3B;
+--color-neutral-100:#EAE5DC;--color-neutral-200:#E9E5DE;--color-neutral-300:#D6D1C8;
+--color-neutral-400:#B4AEA4;--color-neutral-500:#93908A;--color-neutral-600:#7A8892;
+--color-neutral-700:#5C6A74;--color-neutral-800:#33454F;--color-neutral-900:#0F2A3B;
+}
+body{margin:0;background:var(--color-bg);font-family:var(--font-body);-webkit-font-smoothing:antialiased}
+a{color:var(--color-accent-700);text-decoration:none}a:hover{color:var(--color-accent-900)}
+.tag-outline{border:1px solid var(--color-divider);color:var(--color-neutral-700);background:transparent}
+.tag-accent{background:var(--color-accent-300);color:var(--color-accent-900);font-weight:600}
+@keyframes scr{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes sheetup{from{transform:translateY(100%)}to{transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+::-webkit-scrollbar{width:0;height:0}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;gap:54px;padding:54px 60px;box-sizing:border-box;align-items:flex-start;justify-content:center">
+
+<div style="width:262px;position:sticky;top:54px;display:flex;flex-direction:column;gap:20px">
+<div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:34px;line-height:1.02;color:var(--color-text);text-transform:uppercase;letter-spacing:.01em">Prime &amp;<br>Calculate</div>
+<div style="font-size:12px;color:var(--color-neutral-600);margin-top:8px;letter-spacing:.09em;text-transform:uppercase">Mobile app — prototype</div>
+</div>
+<div style="height:1px;background:var(--color-divider)"></div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Mode</div>
+<div style="display:flex;gap:7px">
+<button class="{{ clientCls }}" onClick="{{ setClient }}">Client</button>
+<button class="{{ staffCls }}" onClick="{{ setStaff }}">Staff</button>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Jump to screen</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<sc-for list="{{ jumps }}" as="j" hint-placeholder-count="6">
+<button class="{{ j.cls }}" onClick="{{ j.go }}">{{ j.label }}</button>
+</sc-for>
+</div>
+</div>
+<div style="height:1px;background:var(--color-divider)"></div>
+<div style="font-size:13px;line-height:1.6;color:var(--color-neutral-700)">
+Everything is live: sign in, upload a document, book a consultation, send a message, tick off staff tasks. Sign-in accepts any valid-looking email and a 6+ character password.
+</div>
+</div>
+
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" width="{{ 402 }}" height="{{ 874 }}" hint-size="402px,874px">
+<div style="height:100%;display:flex;flex-direction:column;background:var(--color-bg);font-family:var(--font-body);position:relative;overflow:hidden">
+
+<sc-if value="{{ isSignin }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;display:flex;flex-direction:column;padding:0 27px 34px;animation:scr .3s ease;background:var(--color-accent-900)">
+<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:34px">
+<div class="blueprint" style="width:56px;height:56px;display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;color:var(--color-bg);border-color:var(--color-accent-400);margin-bottom:30px">PC
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+</div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:46px;line-height:1;color:var(--color-bg);text-transform:uppercase;text-wrap:pretty">Precision.<br>Partnership.<br>Progress.</div>
+<div style="font-size:14.5px;color:var(--color-accent-300);margin-top:16px;line-height:1.55">Sign in to your client portal — documents, deadlines and your accountant, in one place.</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<input class="input" type="email" placeholder="Email address" value="{{ email }}" onChange="{{ onEmail }}" style="width:100%;box-sizing:border-box;padding:15px 16px;background:rgba(242,242,243,.07);border-color:var(--color-accent-600);color:var(--color-bg);font-size:15.5px;min-height:44px" />
+<input class="input" type="password" placeholder="Password" value="{{ pw }}" onChange="{{ onPw }}" style="width:100%;box-sizing:border-box;padding:15px 16px;background:rgba(242,242,243,.07);border-color:var(--color-accent-600);color:var(--color-bg);font-size:15.5px;min-height:44px" />
+<sc-if value="{{ err }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:12.5px;color:var(--color-accent-300);letter-spacing:.02em">{{ err }}</div>
+</sc-if>
+<button class="btn btn-primary" onClick="{{ signIn }}" style="width:100%;padding:16px;font-size:15px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;min-height:48px;margin-top:4px">Sign in</button>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+<button class="btn btn-ghost" onClick="{{ signIn }}" style="color:var(--color-accent-300);font-size:13px;min-height:44px">Use Face ID</button>
+<button class="btn btn-ghost" onClick="{{ noop }}" style="color:var(--color-accent-300);font-size:13px;min-height:44px">Forgot password</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease">
+<div style="background:var(--color-accent-900);padding:64px 22px 26px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
+<div>
+<div style="font-size:11px;color:var(--color-accent-300);letter-spacing:.13em;text-transform:uppercase">{{ today }}</div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:32px;color:var(--color-bg);margin-top:6px;text-transform:uppercase;line-height:1.05">Good morning,<br>Andreas</div>
+</div>
+<div class="blueprint" style="width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--color-bg);font-size:13px;border-color:var(--color-accent-600)">AK</div>
+</div>
+<div class="blueprint" style="margin-top:26px;padding:15px 16px;display:flex;gap:13px;align-items:center;border-color:var(--color-accent-400);background:rgba(89,128,166,.18)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="width:7px;height:7px;background:var(--color-accent-300);flex:none"></div>
+<div style="flex:1">
+<div style="font-size:14.5px;color:var(--color-bg);font-weight:600">VAT return due in 6 days</div>
+<div style="font-size:12.5px;color:var(--color-accent-300);margin-top:2px">Q2 2026 · we need 3 more invoices</div>
+</div>
+<button class="btn btn-primary" onClick="{{ goPortal }}" style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:10px 13px;min-height:40px">Upload</button>
+</div>
+</div>
+
+<div style="padding:22px 22px 0;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+<button class="card blueprint" onClick="{{ goPortal }}" style="text-align:left;align-items:flex-start;padding:16px;cursor:pointer;font-family:inherit" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 01-2-2V6a2 2 0 012-2h4l2 3h8a2 2 0 012 2v9a2 2 0 01-2 2z"/></svg>
+<div style="font-size:15px;font-weight:600;color:var(--color-text);margin-top:10px">Documents</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600)">3 need attention</div>
+</button>
+<button class="card blueprint" onClick="{{ goBook }}" style="text-align:left;align-items:flex-start;padding:16px;cursor:pointer;font-family:inherit" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/></svg>
+<div style="font-size:15px;font-weight:600;color:var(--color-text);margin-top:10px">Book a call</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600)">Free consultation</div>
+</button>
+</div>
+
+<div style="padding:28px 22px 0">
+<div style="display:flex;justify-content:space-between;align-items:baseline">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;color:var(--color-text);text-transform:uppercase;letter-spacing:.02em">Your calendar</div>
+<button class="btn btn-ghost" onClick="{{ goDeadlines }}" style="color:var(--color-accent-700);font-size:13px">All filings</button>
+</div>
+<div class="card blueprint" style="margin-top:12px;padding:0;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<sc-for list="{{ deadlines }}" as="d" hint-placeholder-count="3">
+<div style="display:flex;gap:14px;align-items:center;padding:15px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="width:42px;flex:none;text-align:center">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;color:var(--color-accent-700);line-height:1">{{ d.day }}</div>
+<div style="font-size:10px;color:var(--color-neutral-600);letter-spacing:.12em;text-transform:uppercase;margin-top:2px">{{ d.mon }}</div>
+</div>
+<div style="flex:1">
+<div style="font-size:14.5px;color:var(--color-text);font-weight:500">{{ d.title }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:2px">{{ d.sub }}</div>
+</div>
+<span class="{{ d.pill }}">{{ d.status }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:28px 22px 0">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;color:var(--color-text);text-transform:uppercase;letter-spacing:.02em">Services</div>
+<div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ services }}" as="s" hint-placeholder-count="4">
+<button class="card blueprint" onClick="{{ s.go }}" style="text-align:left;width:100%;padding:14px 16px;cursor:pointer;font-family:inherit;flex-direction:row;align-items:center;gap:12px" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="flex:1">
+<span style="display:block;font-size:15px;font-weight:600;color:var(--color-text)">{{ s.name }}</span>
+<span style="display:block;font-size:12.5px;color:var(--color-neutral-600);margin-top:3px;line-height:1.45">{{ s.desc }}</span>
+</span>
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+</button>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:28px 22px 30px">
+<div style="background:var(--color-accent-900);padding:24px">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:26px;color:var(--color-bg);line-height:1.1;text-transform:uppercase;text-wrap:pretty">Over 30 years helping businesses in Cyprus decide with confidence.</div>
+<a href="https://primeandcalculate.com/about" target="_blank" style="display:inline-block;margin-top:16px;color:var(--color-accent-300);font-size:13px;letter-spacing:.08em;text-transform:uppercase">About the firm →</a>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPortal }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease;padding:64px 22px 30px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:34px;color:var(--color-text);text-transform:uppercase;line-height:1">Documents</div>
+<button class="btn btn-primary" onClick="{{ openUpload }}" style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:11px 14px;min-height:42px">Upload</button>
+</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:6px">Kyriakou Trading Ltd</div>
+<button class="btn btn-secondary" onClick="{{ goWeb }}" style="width:100%;margin-top:14px;justify-content:space-between;padding:14px 16px;font-size:14px;min-height:48px">
+<span>Open the full client portal</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"/></svg>
+</button>
+
+<div style="display:flex;gap:7px;margin-top:20px;overflow:auto;padding-bottom:2px">
+<sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+<button class="{{ f.cls }}" onClick="{{ f.go }}" style="flex:none;font-size:13px;min-height:40px">{{ f.label }}</button>
+</sc-for>
+</div>
+
+<div style="margin-top:18px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ docs }}" as="d" hint-placeholder-count="5">
+<div class="card blueprint" style="padding:14px 16px;flex-direction:row;align-items:center;gap:13px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="width:34px;height:42px;border:1px solid var(--color-divider);flex:none;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;font-size:9px;color:var(--color-neutral-600);letter-spacing:.08em">{{ d.kind }}</div>
+<div style="flex:1;min-width:0">
+<div style="font-size:14.5px;font-weight:600;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.name }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:3px">{{ d.meta }}</div>
+</div>
+<span class="{{ d.pill }}">{{ d.status }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWeb }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;display:flex;flex-direction:column;animation:scr .3s ease;min-height:0;background:var(--color-bg)">
+<div style="padding:58px 16px 12px;background:var(--color-accent-900);display:flex;align-items:center;gap:10px">
+<button class="btn btn-ghost" onClick="{{ goPortal }}" style="color:var(--color-accent-300);font-size:13px;padding:8px 6px;min-height:40px">← Back</button>
+<div style="flex:1;border:1px solid var(--color-accent-600);padding:8px 12px;display:flex;align-items:center;gap:8px;min-width:0">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-300)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M7 11V7a5 5 0 0110 0v4M5 11h14v10H5z"/></svg>
+<span style="font-size:12.5px;color:var(--color-accent-300);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">portal.primeandcalculate.com</span>
+</div>
+<a href="https://portal.primeandcalculate.com" target="_blank" class="btn btn-ghost" style="color:var(--color-accent-300);font-size:13px;padding:8px 6px;min-height:40px">Open ↗</a>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 26px 60px;min-height:0">
+<div class="card blueprint" style="padding:24px;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0110 0v4M5 11h14v10H5z"/></svg>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:26px;color:var(--color-text);text-transform:uppercase;line-height:1;margin-top:16px">Your client portal</div>
+<div style="font-size:14px;color:var(--color-neutral-700);line-height:1.6;margin-top:10px">Signed in as Andreas Kyriakou. The portal opens in the browser with your session carried over — no second login.</div>
+<a class="btn btn-primary" href="https://portal.primeandcalculate.com" target="_blank" style="margin-top:20px;justify-content:center;padding:15px;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-bg);min-height:50px">Open portal ↗</a>
+<div style="font-size:12px;color:var(--color-neutral-600);margin-top:12px;line-height:1.5">portal.primeandcalculate.com</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDeadlines }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease;padding:64px 22px 30px">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:34px;color:var(--color-text);text-transform:uppercase;line-height:1">Filings</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:6px">Everything we file on your behalf this year.</div>
+<div style="margin-top:24px;display:flex;flex-direction:column;gap:14px">
+<sc-for list="{{ allFilings }}" as="f" hint-placeholder-count="6">
+<div class="card blueprint" style="padding:15px 16px;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+<div style="flex:1">
+<div style="font-size:15px;font-weight:600;color:var(--color-text)">{{ f.title }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:3px">{{ f.due }}</div>
+</div>
+<span class="{{ f.pill }}">{{ f.status }}</span>
+</div>
+<div style="margin-top:13px;height:4px;background:var(--color-neutral-200);overflow:hidden">
+<div style="{{ f.bar }}"></div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isBook }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease;padding:64px 22px 30px">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:34px;color:var(--color-text);text-transform:uppercase;line-height:1">Book a consultation</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:6px">30 minutes, no charge. Larnaca office or video.</div>
+
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:26px">What is it about</div>
+<div style="margin-top:12px;display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ bookServices }}" as="b" hint-placeholder-count="4">
+<button class="{{ b.cls }}" onClick="{{ b.go }}" style="width:100%;display:flex;align-items:center;gap:11px;padding:14px 16px;font-size:14.5px;font-weight:600;justify-content:flex-start;min-height:48px">
+<span style="{{ b.dot }}"></span>
+<span style="flex:1;text-align:left">{{ b.name }}</span>
+</button>
+</sc-for>
+</div>
+
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:26px">Day</div>
+<div style="display:flex;gap:7px;margin-top:12px;overflow:auto;padding-bottom:2px">
+<sc-for list="{{ days }}" as="d" hint-placeholder-count="6">
+<button class="{{ d.cls }}" onClick="{{ d.go }}" style="width:58px;flex:none;flex-direction:column;padding:10px 0 12px;min-height:62px">
+<span style="font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.7">{{ d.dow }}</span>
+<span style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;line-height:1.1">{{ d.num }}</span>
+</button>
+</sc-for>
+</div>
+
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:26px">Time</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:12px">
+<sc-for list="{{ slots }}" as="s" hint-placeholder-count="6">
+<button class="{{ s.cls }}" onClick="{{ s.go }}" style="justify-content:center;font-size:14px;min-height:46px">{{ s.label }}</button>
+</sc-for>
+</div>
+
+<button class="{{ confirmCls }}" onClick="{{ confirmBooking }}" style="width:100%;margin-top:28px;padding:16px;font-size:15px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;justify-content:center;min-height:52px">{{ confirmLabel }}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isBooked }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px 60px;animation:scr .35s ease;background:var(--color-accent-900)">
+<div class="blueprint" style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;border-color:var(--color-accent-400)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-300)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+</div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:42px;color:var(--color-bg);margin-top:26px;line-height:1;text-transform:uppercase">You're booked in.</div>
+<div style="font-size:15px;color:var(--color-accent-300);margin-top:14px;line-height:1.6">{{ bookingSummary }}</div>
+<div style="font-size:14px;color:var(--color-accent-400);margin-top:16px;line-height:1.6">Dikomou 12, Agora Courts 2, Kiti, Larnaca. A calendar invite is on its way to your email.</div>
+<button class="btn btn-primary" onClick="{{ goHome }}" style="margin-top:32px;padding:16px;font-size:15px;letter-spacing:.06em;text-transform:uppercase;justify-content:center;min-height:52px">Back to home</button>
+<button class="btn btn-secondary" onClick="{{ goChat }}" style="margin-top:10px;padding:15px;font-size:14.5px;color:var(--color-bg);border-color:var(--color-accent-600);justify-content:center;min-height:50px">Add a note for the team</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;display:flex;flex-direction:column;animation:scr .3s ease;min-height:0">
+<div style="padding:60px 22px 14px;border-bottom:1px solid var(--color-divider)">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:24px;color:var(--color-text);text-transform:uppercase;line-height:1.1">{{ chatTitle }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:4px">{{ chatSub }}</div>
+</div>
+<div style="flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ msgs }}" as="m" hint-placeholder-count="3">
+<div style="{{ m.wrap }}">
+<div style="{{ m.bubble }}">{{ m.text }}</div>
+</div>
+</sc-for>
+<sc-if value="{{ typing }}" hint-placeholder-val="{{ false }}">
+<div style="align-self:flex-start;border:1px solid var(--color-divider);padding:12px 15px;color:var(--color-neutral-600);font-size:14px;animation:fade .2s ease">typing…</div>
+</sc-if>
+</div>
+<div style="padding:12px 16px 30px;border-top:1px solid var(--color-divider);display:flex;gap:8px;align-items:center">
+<input class="input" placeholder="Message your accountant" value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onDraftKey }}" style="flex:1;padding:13px 15px;font-size:15px;min-width:0;min-height:46px" />
+<button class="btn btn-primary" onClick="{{ send }}" style="width:46px;height:46px;flex:none;justify-content:center;padding:0">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMore }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease;padding:64px 22px 30px">
+<div style="display:flex;gap:14px;align-items:center">
+<div class="blueprint" style="width:52px;height:52px;flex:none;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--color-accent-700)">AK
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+</div>
+<div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:24px;color:var(--color-text);text-transform:uppercase;line-height:1.1">Andreas Kyriakou</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:3px">Kyriakou Trading Ltd · VAT 10234567X</div>
+</div>
+</div>
+
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:28px">From our website</div>
+<div class="card blueprint" style="margin-top:12px;padding:0;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<sc-for list="{{ siteLinks }}" as="l" hint-placeholder-count="5">
+<a href="{{ l.href }}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:15px 16px;border-bottom:1px solid var(--color-divider);min-height:44px;box-sizing:border-box">
+<span style="flex:1;font-size:15px;color:var(--color-text);font-weight:500">{{ l.label }}</span>
+<span style="font-size:12px;color:var(--color-neutral-600)">{{ l.host }}</span>
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"/></svg>
+</a>
+</sc-for>
+</div>
+
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:26px">Get in touch</div>
+<div class="card blueprint" style="margin-top:12px;padding:16px;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:24px;color:var(--color-text)">+357 24 258346</div>
+<div style="font-size:13px;color:var(--color-neutral-700);margin-top:6px;line-height:1.6">Mon–Fri, 9:00–17:00<br>Dikomou 12, Agora Courts 2, Kiti, Larnaca 7550</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<a class="btn btn-primary" href="tel:+35724258346" style="flex:1;justify-content:center;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-bg);min-height:44px">Call</a>
+<a class="btn btn-secondary" href="mailto:info@primeandcalculate.com" style="flex:1;justify-content:center;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text);min-height:44px">Email</a>
+</div>
+</div>
+
+<button class="btn btn-secondary" onClick="{{ toStaff }}" style="width:100%;margin-top:16px;padding:14px;font-size:14px;letter-spacing:.06em;text-transform:uppercase;justify-content:center;min-height:48px">Switch to staff mode</button>
+<button class="btn btn-ghost" onClick="{{ signOut }}" style="width:100%;margin-top:8px;padding:14px;font-size:14px;color:var(--color-accent-700);justify-content:center;min-height:48px">Sign out</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isToday }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease">
+<div style="background:var(--color-accent-900);padding:64px 22px 24px">
+<div style="font-size:10.5px;color:var(--color-accent-300);letter-spacing:.13em;text-transform:uppercase">Staff · {{ today }}</div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:32px;color:var(--color-bg);margin-top:7px;text-transform:uppercase">{{ openCount }}</div>
+<div style="display:flex;gap:12px;margin-top:20px">
+<div class="blueprint" style="flex:1;padding:13px;border-color:var(--color-accent-600)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:28px;color:var(--color-accent-300);line-height:1">12</div>
+<div style="font-size:11.5px;color:var(--color-accent-400);margin-top:4px">VAT filings this week</div>
+</div>
+<div class="blueprint" style="flex:1;padding:13px;border-color:var(--color-accent-600)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:28px;color:var(--color-accent-300);line-height:1">5</div>
+<div style="font-size:11.5px;color:var(--color-accent-400);margin-top:4px">Clients missing docs</div>
+</div>
+</div>
+</div>
+<div style="padding:24px 22px 0">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;color:var(--color-text);text-transform:uppercase;letter-spacing:.02em">Today's tasks</div>
+<div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ tasks }}" as="t" hint-placeholder-count="4">
+<button class="card blueprint" onClick="{{ t.go }}" style="width:100%;flex-direction:row;gap:12px;align-items:flex-start;padding:14px 16px;cursor:pointer;font-family:inherit;text-align:left" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="{{ t.box }}">{{ t.tick }}</span>
+<span style="flex:1">
+<span style="{{ t.text }}">{{ t.title }}</span>
+<span style="display:block;font-size:12.5px;color:var(--color-neutral-600);margin-top:3px">{{ t.sub }}</span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="padding:26px 22px 30px">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:22px;color:var(--color-text);text-transform:uppercase;letter-spacing:.02em">Needs chasing</div>
+<div class="card blueprint" style="margin-top:14px;padding:0;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<sc-for list="{{ chasing }}" as="c" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="width:34px;height:34px;border:1px solid var(--color-divider);color:var(--color-accent-700);font-size:12px;display:flex;align-items:center;justify-content:center;flex:none">{{ c.initials }}</div>
+<div style="flex:1">
+<div style="font-size:14.5px;color:var(--color-text);font-weight:600">{{ c.name }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:2px">{{ c.need }}</div>
+</div>
+<button class="btn btn-secondary" onClick="{{ goChat }}" style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;min-height:40px">Nudge</button>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isClients }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease;padding:64px 22px 30px">
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:34px;color:var(--color-text);text-transform:uppercase;line-height:1">Clients</div>
+<input class="input" placeholder="Search clients" value="{{ query }}" onChange="{{ onQuery }}" style="width:100%;box-sizing:border-box;margin-top:16px;padding:13px 15px;font-size:15px;min-height:46px" />
+<div style="margin-top:16px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ clients }}" as="c" hint-placeholder-count="6">
+<button class="card blueprint" onClick="{{ c.go }}" style="width:100%;text-align:left;padding:14px 16px;cursor:pointer;font-family:inherit;flex-direction:row;align-items:center;gap:12px" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="width:34px;height:34px;border:1px solid var(--color-divider);color:var(--color-accent-700);font-size:12px;display:flex;align-items:center;justify-content:center;flex:none">{{ c.initials }}</span>
+<span style="flex:1;min-width:0">
+<span style="display:block;font-size:14.5px;color:var(--color-text);font-weight:600">{{ c.name }}</span>
+<span style="display:block;font-size:12.5px;color:var(--color-neutral-600);margin-top:2px">{{ c.type }}</span>
+</span>
+<span class="{{ c.pill }}">{{ c.status }}</span>
+</button>
+</sc-for>
+</div>
+<sc-if value="{{ noClients }}" hint-placeholder-val="{{ false }}">
+<div style="text-align:center;padding:40px 0;color:var(--color-neutral-600);font-size:14px">No clients match "{{ query }}"</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isClient }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;animation:scr .3s ease">
+<div style="background:var(--color-accent-900);padding:60px 22px 24px">
+<button class="btn btn-ghost" onClick="{{ goClients }}" style="color:var(--color-accent-300);font-size:13px;padding-left:0">← Clients</button>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:30px;color:var(--color-bg);margin-top:12px;line-height:1.05;text-transform:uppercase">{{ sel.name }}</div>
+<div style="font-size:12.5px;color:var(--color-accent-400);margin-top:6px">{{ sel.type }} · {{ sel.vat }}</div>
+</div>
+<div style="padding:20px 22px 30px">
+<div style="display:flex;gap:8px">
+<button class="btn btn-primary" onClick="{{ goChat }}" style="flex:1;justify-content:center;padding:13px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;min-height:46px">Message</button>
+<button class="btn btn-secondary" onClick="{{ goPortal }}" style="flex:1;justify-content:center;padding:13px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;min-height:46px">Their files</button>
+</div>
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:26px">Open items</div>
+<div class="card blueprint" style="margin-top:12px;padding:0;gap:0">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<sc-for list="{{ sel.items }}" as="i" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;padding:15px 16px;border-bottom:1px solid var(--color-divider)">
+<div style="flex:1">
+<div style="font-size:14.5px;color:var(--color-text);font-weight:500">{{ i.title }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:2px">{{ i.sub }}</div>
+</div>
+<span class="{{ i.pill }}">{{ i.status }}</span>
+</div>
+</sc-for>
+</div>
+<div style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:26px">Fees</div>
+<div class="card blueprint" style="margin-top:12px;padding:16px;flex-direction:row;justify-content:space-between;align-items:center">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:30px;color:var(--color-text);line-height:1">{{ sel.fee }}</div>
+<div style="font-size:12.5px;color:var(--color-neutral-600);margin-top:4px">{{ sel.feeNote }}</div>
+</div>
+<button class="btn btn-secondary" onClick="{{ noop }}" style="font-size:12px;letter-spacing:.06em;text-transform:uppercase;min-height:42px">Invoice</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showTabs }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;display:flex;padding:8px 6px 26px;background:var(--color-bg);border-top:1px solid var(--color-divider)">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+<button onClick="{{ t.go }}" style="{{ t.style }}">
+<span style="display:block;height:22px">{{ t.icon }}</span>
+<span style="font-size:10px;letter-spacing:.09em;text-transform:uppercase">{{ t.label }}</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ sheet }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" style="position:absolute;inset:0;z-index:80;display:flex;flex-direction:column;justify-content:flex-end;animation:fade .2s ease" onClick="{{ closeSheet }}">
+<div class="dialog blueprint" style="width:100%;box-sizing:border-box;background:var(--color-bg);padding:20px 22px 32px;animation:sheetup .3s cubic-bezier(.2,.8,.2,1);gap:0" onClick="{{ stop }}">
+<i class="corner tl"></i><i class="corner tr"></i>
+<div style="font-family:var(--font-heading);font-weight:var(--font-heading-weight);font-size:26px;color:var(--color-text);text-transform:uppercase;line-height:1">Add a document</div>
+<div style="font-size:13px;color:var(--color-neutral-600);margin-top:5px">It goes straight to your accountant, encrypted.</div>
+<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ uploadOpts }}" as="u" hint-placeholder-count="3">
+<button class="btn btn-secondary" onClick="{{ u.go }}" style="width:100%;justify-content:flex-start;padding:15px 16px;font-size:15px;font-weight:600;min-height:50px">{{ u.label }}</button>
+</sc-for>
+</div>
+<button class="btn btn-ghost" onClick="{{ closeSheet }}" style="width:100%;margin-top:10px;padding:14px;font-size:14px;justify-content:center;min-height:48px">Cancel</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:18px;right:18px;bottom:104px;z-index:90;background:var(--color-accent-900);color:var(--color-bg);padding:14px 16px;font-size:14px;animation:scr .25s ease;box-shadow:var(--shadow-lg)">{{ toast }}</div>
+</sc-if>
+
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:1010}}">
+const PILL = {
+  amber: 'tag tag-accent',
+  green: 'tag tag-neutral',
+  grey:  'tag tag-outline',
+  red:   'tag tag-accent'
+};
+
+const CLIENTS = [
+  { id:'kyr', name:'Kyriakou Trading Ltd', type:'Ltd · Wholesale', vat:'VAT 10234567X', status:'VAT due', pill:'amber', fee:'€480', feeNote:'Q2 retainer, unbilled',
+    items:[{title:'VAT return Q2 2026',sub:'Due 10 Aug',status:'Missing 3 invoices',pill:'red'},{title:'Payroll — July',sub:'8 employees',status:'Filed',pill:'green'},{title:'Management accounts',sub:'June',status:'In review',pill:'amber'}] },
+  { id:'ath', name:'Athina Georgiou', type:'Sole trader · Design', vat:'TIC 4471203', status:'Clear', pill:'green', fee:'€180', feeNote:'Annual return, paid',
+    items:[{title:'Personal income tax 2025',sub:'Submitted 14 Jun',status:'Filed',pill:'green'},{title:'Social insurance',sub:'Q2',status:'Filed',pill:'green'}] },
+  { id:'med', name:'Mediterra Foods Ltd', type:'Ltd · F&B', vat:'VAT 10998231Z', status:'Audit', pill:'grey', fee:'€1,250', feeNote:'Audit engagement 2025',
+    items:[{title:'Statutory audit 2025',sub:'Fieldwork week 3',status:'In progress',pill:'amber'},{title:'VAT return Q2 2026',sub:'Due 10 Aug',status:'Ready',pill:'green'}] },
+  { id:'nic', name:'Nicolaou & Sons', type:'Partnership · Construction', vat:'VAT 10553402K', status:'Overdue', pill:'red', fee:'€620', feeNote:'2 invoices outstanding',
+    items:[{title:'VAT return Q1 2026',sub:'Overdue 22 days',status:'Overdue',pill:'red'},{title:'Payroll — July',sub:'23 employees',status:'Filed',pill:'green'}] },
+  { id:'blu', name:'Blue Harbour Rentals', type:'Ltd · Property', vat:'VAT 10771190B', status:'Clear', pill:'green', fee:'€340', feeNote:'Monthly bookkeeping',
+    items:[{title:'Bookkeeping — July',sub:'Reconciled 2 Aug',status:'Done',pill:'green'}] },
+  { id:'ele', name:'Elena Papadopoulou', type:'Sole trader · Consulting', vat:'TIC 5590188', status:'New', pill:'grey', fee:'—', feeNote:'Onboarding',
+    items:[{title:'Engagement letter',sub:'Sent 1 Aug',status:'Awaiting',pill:'amber'}] }
+];
+
+const SITE = [
+  { label:'Home', href:'https://primeandcalculate.com/', host:'primeandcalculate.com' },
+  { label:'About us', href:'https://primeandcalculate.com/about', host:'primeandcalculate.com' },
+  { label:'Services', href:'https://primeandcalculate.com/services', host:'primeandcalculate.com' },
+  { label:'Blog', href:'https://primeandcalculate.com/blog', host:'primeandcalculate.com' },
+  { label:'Contact', href:'https://primeandcalculate.com/contact', host:'primeandcalculate.com' },
+  { label:'Client portal', href:'https://portal.primeandcalculate.com', host:'portal' }
+];
+
+const SERVICES = [
+  { name:'Accounting & Bookkeeping', desc:'Accurate, up-to-date records and reconciliations.' },
+  { name:'Tax Compliance & VAT', desc:'Timely filings and smart structuring under Cyprus and EU rules.' },
+  { name:'Payroll & HR', desc:'Payroll processing, social insurance filings, HR compliance.' },
+  { name:'Financial Reporting', desc:'Monthly reports, management accounts, KPI dashboards.' },
+  { name:'Cashflow & Budget Planning', desc:'Forecasts and budget models so there are no surprises.' },
+  { name:'Business Consultancy', desc:'Strategic advice for growth, restructuring or new ventures.' }
+];
+
+const BOOK_SERVICES = ['Tax & VAT question','New company setup','Payroll & HR','Something else'];
+const SLOTS = ['09:00','09:30','10:00','11:30','14:00','15:30'];
+const UPLOADS = ['Take a photo of a receipt','Choose from Files','Import from email'];
+
+const ICONS = {
+  home:'M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1z',
+  doc:'M4 20a2 2 0 01-2-2V6a2 2 0 012-2h4l2 3h8a2 2 0 012 2v9a2 2 0 01-2 2z',
+  cal:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z',
+  chat:'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z',
+  more:'M5 12h.01M12 12h.01M19 12h.01',
+  people:'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'
+};
+
+class Component extends DCLogic {
+  state = {
+    mode:'client', authed:false, screen:'signin', email:'', pw:'', err:'',
+    filter:'All', query:'', sel:'kyr', sheet:false, toast:'', typing:false, draft:'',
+    docs:[
+      { name:'Invoice 2026-114.pdf', kind:'PDF', meta:'Sales · 4 Aug · 1.2 MB', status:'Received', pill:'green', cat:'Invoices' },
+      { name:'Bank statement July.csv', kind:'CSV', meta:'Bank of Cyprus · 2 Aug', status:'Received', pill:'green', cat:'Bank' },
+      { name:'Supplier receipts (12).zip', kind:'ZIP', meta:'Purchases · 28 Jul', status:'In review', pill:'amber', cat:'Invoices' },
+      { name:'VAT return Q1 2026.pdf', kind:'PDF', meta:'Filed 10 May · signed', status:'Filed', pill:'grey', cat:'Filings' },
+      { name:'Payroll July.xlsx', kind:'XLS', meta:'8 employees · 31 Jul', status:'Filed', pill:'grey', cat:'Payroll' }
+    ],
+    msgs:[
+      { from:'them', text:'Morning Andreas — we have your July bank statement. Still missing three purchase invoices for the Q2 VAT return.' },
+      { from:'me', text:'Thanks Christina, I will get them up today.' },
+      { from:'them', text:'Perfect. Deadline is 10 August, so anything by Friday is comfortable.' }
+    ],
+    tasks:[
+      { title:'Review Mediterra VAT workings', sub:'Q2 2026 · 20 min', done:false },
+      { title:'Chase Nicolaou & Sons — Q1 overdue', sub:'22 days late', done:false },
+      { title:'Send engagement letter to E. Papadopoulou', sub:'Onboarding', done:true },
+      { title:'File July payroll — 4 clients', sub:'Due today', done:false }
+    ],
+    service:'Tax & VAT question', day:null, dayLabel:'', slot:null
+  };
+
+  go = (screen) => () => this.setState({ screen, sheet:false });
+  flash = (toast) => { this.setState({ toast }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ toast:'' }), 2400); };
+  componentWillUnmount() { clearTimeout(this._t); clearTimeout(this._r); }
+
+  dayList() {
+    const out = [], d = new Date(2026, 7, 6);
+    while (out.length < 7) {
+      d.setDate(d.getDate() + 1);
+      if (d.getDay() !== 0 && d.getDay() !== 6) out.push(new Date(d));
+    }
+    return out;
+  }
+
+  tabDef(key, label, icon, screens) {
+    const active = screens.indexOf(this.state.screen) > -1;
+    const col = active ? 'var(--color-accent-800)' : 'var(--color-neutral-500)';
+    return {
+      label, go: this.go(key),
+      style:'flex:1;background:none;border:none;cursor:pointer;font-family:var(--font-body);display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 0;min-height:52px;color:' + col,
+      icon: React.createElement('svg', { width:22, height:22, viewBox:'0 0 24 24', fill:'none' },
+        React.createElement('path', { d: ICONS[icon], stroke: col, strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round' }))
+    };
+  }
+
+  renderVals() {
+    const s = this.state, staff = s.mode === 'staff';
+    const scr = s.screen;
+    const chip = (on) => on ? 'btn btn-primary' : 'btn btn-secondary';
+
+    const docs = s.docs.filter(d => s.filter === 'All' || d.cat === s.filter)
+      .map(d => ({ name:d.name, kind:d.kind, meta:d.meta, status:d.status, pill: PILL[d.pill] }));
+
+    const days = this.dayList().map(d => {
+      const key = d.toDateString(), on = s.day === key;
+      const label = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+      return {
+        dow:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()],
+        num:d.getDate(),
+        go:() => this.setState({ day:key, dayLabel:label }),
+        cls: chip(on)
+      };
+    });
+
+    const ready = !!(s.day && s.slot);
+    const q = s.query.trim().toLowerCase();
+    const clients = CLIENTS.filter(c => !q || c.name.toLowerCase().indexOf(q) > -1 || c.type.toLowerCase().indexOf(q) > -1)
+      .map(c => ({
+        name:c.name, type:c.type, status:c.status, pill:PILL[c.pill],
+        initials:c.name.split(' ').filter(w => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.indexOf(w[0]) > -1).slice(0,2).map(w => w[0]).join(''),
+        go:() => this.setState({ sel:c.id, screen:'client' })
+      }));
+    const sel = CLIENTS.find(c => c.id === s.sel);
+
+    const tabs = staff
+      ? [this.tabDef('today','Today','home',['today']), this.tabDef('clients','Clients','people',['clients','client']), this.tabDef('chat','Messages','chat',['chat']), this.tabDef('more','More','more',['more'])]
+      : [this.tabDef('home','Home','home',['home']), this.tabDef('portal','Files','doc',['portal','web']), this.tabDef('book','Book','cal',['book']), this.tabDef('chat','Messages','chat',['chat']), this.tabDef('more','More','more',['more'])];
+
+    const jumpDefs = staff
+      ? [['today','Today'],['clients','Clients'],['client','Client'],['chat','Messages'],['more','More']]
+      : [['signin','Sign in'],['home','Home'],['portal','Documents'],['web','Portal'],['deadlines','Filings'],['book','Book'],['booked','Confirmed'],['chat','Messages'],['more','More']];
+
+    const uploadOpts = UPLOADS.map(label => ({
+      label,
+      go: () => {
+        this.setState({ sheet:false, docs:[{ name:'Purchase invoice 4 Aug.pdf', kind:'PDF', meta:'Just now · 480 KB', status:'Sent', pill:'green', cat:'Invoices' }].concat(s.docs) });
+        this.flash('Uploaded — Christina has been notified.');
+      }
+    }));
+
+    const bookServices = BOOK_SERVICES.map(name => ({
+      name,
+      go: () => this.setState({ service:name }),
+      cls: s.service === name ? 'btn btn-primary' : 'btn btn-secondary',
+      dot: 'width:16px;height:16px;flex:none;border:1.5px solid currentColor;background:' + (s.service === name ? 'currentColor' : 'transparent')
+    }));
+
+    const msgs = s.msgs.map(m => ({
+      text: m.text,
+      wrap: 'display:flex;justify-content:' + (m.from === 'me' ? 'flex-end' : 'flex-start'),
+      bubble: 'max-width:80%;padding:12px 15px;font-size:14.5px;line-height:1.5;border:1px solid ' +
+        (m.from === 'me' ? 'var(--color-accent-900)' : 'var(--color-divider)') +
+        ';background:' + (m.from === 'me' ? 'var(--color-accent-900)' : 'transparent') +
+        ';color:' + (m.from === 'me' ? 'var(--color-bg)' : 'var(--color-text)')
+    }));
+
+    const tasks = s.tasks.map((t, i) => ({
+      title:t.title, sub:t.sub, tick: t.done ? '✓' : '',
+      go: () => this.setState({ tasks: s.tasks.map((x, j) => j === i ? { title:x.title, sub:x.sub, done:!x.done } : x) }),
+      box: 'width:20px;height:20px;flex:none;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:12px;color:' +
+        (t.done ? 'var(--color-bg)' : 'transparent') + ';background:' + (t.done ? 'var(--color-accent)' : 'transparent') +
+        ';border:1.5px solid ' + (t.done ? 'var(--color-accent)' : 'var(--color-divider)'),
+      text: 'display:block;font-size:14.5px;font-weight:600;color:' + (t.done ? 'var(--color-neutral-500)' : 'var(--color-text)') +
+        ';text-decoration:' + (t.done ? 'line-through' : 'none')
+    }));
+
+    return {
+      isSignin: scr === 'signin', isHome: scr === 'home', isPortal: scr === 'portal',
+      isDeadlines: scr === 'deadlines', isBook: scr === 'book', isBooked: scr === 'booked',
+      isChat: scr === 'chat', isMore: scr === 'more', isToday: scr === 'today',
+      isClients: scr === 'clients', isClient: scr === 'client', isWeb: scr === 'web',
+      showTabs: ['signin','booked','web'].indexOf(scr) === -1,
+      goWeb: this.go('web'),
+      today: 'Thursday, 6 August 2026',
+      email:s.email, pw:s.pw, err:s.err, draft:s.draft, toast:s.toast, sheet:s.sheet, typing:s.typing, query:s.query,
+      onEmail:(e)=>this.setState({ email:e.target.value, err:'' }),
+      onPw:(e)=>this.setState({ pw:e.target.value, err:'' }),
+      onQuery:(e)=>this.setState({ query:e.target.value }),
+      onDraft:(e)=>this.setState({ draft:e.target.value }),
+      onDraftKey:(e)=>{ if (e.key === 'Enter') this.sendMsg(); },
+      noop:()=>{}, stop:(e)=>e.stopPropagation(),
+      signIn:()=>{
+        const at = s.email.indexOf('@');
+        if (at < 1 || s.email.indexOf('.', at) < at + 2 || s.email.indexOf(' ') > -1) return this.setState({ err:'Enter a valid email address.' });
+        if (s.pw.length < 6) return this.setState({ err:'Password must be at least 6 characters.' });
+        this.setState({ authed:true, screen:'home', err:'' });
+      },
+      signOut:()=>this.setState({ authed:false, screen:'signin', email:'', pw:'', mode:'client' }),
+      goHome:this.go('home'), goPortal:this.go('portal'), goBook:this.go('book'),
+      goChat:this.go('chat'), goDeadlines:this.go('deadlines'), goClients:this.go('clients'),
+      setClient:()=>this.setState({ mode:'client', screen: s.authed ? 'home' : 'signin' }),
+      setStaff:()=>this.setState({ mode:'staff', authed:true, screen:'today' }),
+      toStaff:()=>this.setState({ mode:'staff', screen:'today' }),
+      clientCls: chip(!staff), staffCls: chip(staff),
+      jumps: jumpDefs.map((j) => ({ label:j[1], go:this.go(j[0]), cls: chip(scr === j[0]) })),
+
+      deadlines:[
+        { day:'10', mon:'Aug', title:'VAT return Q2', sub:'3 invoices outstanding', status:'Action', pill:PILL.amber },
+        { day:'31', mon:'Aug', title:'Payroll & social insurance', sub:'August, 8 employees', status:'On track', pill:PILL.green },
+        { day:'30', mon:'Sep', title:'Provisional tax — 1st instalment', sub:'Estimate under review', status:'Draft', pill:PILL.grey }
+      ],
+      allFilings:[
+        { title:'VAT return Q1 2026', due:'Filed 10 May 2026', status:'Filed', pill:PILL.green, bar:'width:100%;height:100%;background:var(--color-accent-700)' },
+        { title:'VAT return Q2 2026', due:'Due 10 August 2026', status:'Action', pill:PILL.amber, bar:'width:62%;height:100%;background:var(--color-accent)' },
+        { title:'Payroll — July', due:'Filed 31 July 2026', status:'Filed', pill:PILL.green, bar:'width:100%;height:100%;background:var(--color-accent-700)' },
+        { title:'Payroll — August', due:'Due 31 August 2026', status:'Scheduled', pill:PILL.grey, bar:'width:20%;height:100%;background:var(--color-neutral-400)' },
+        { title:'Provisional tax 2026 — 1st', due:'Due 30 September 2026', status:'Draft', pill:PILL.grey, bar:'width:35%;height:100%;background:var(--color-neutral-400)' },
+        { title:'Corporate income tax 2025', due:'Due 31 March 2027', status:'Not started', pill:PILL.grey, bar:'width:5%;height:100%;background:var(--color-neutral-400)' }
+      ],
+      services: SERVICES.map(x => ({ name:x.name, desc:x.desc, go:this.go('book') })),
+      siteLinks: SITE,
+      filters: ['All','Invoices','Bank','Payroll','Filings'].map(f => ({ label:f, go:()=>this.setState({ filter:f }), cls: chip(s.filter === f) })),
+      docs,
+      openUpload:()=>this.setState({ sheet:true }),
+      closeSheet:()=>this.setState({ sheet:false }),
+      uploadOpts,
+      bookServices,
+      days,
+      slots: SLOTS.map(label => ({ label, go:()=>this.setState({ slot:label }), cls: chip(s.slot === label) })),
+      confirmCls: ready ? 'btn btn-primary' : 'btn btn-secondary',
+      confirmLabel: ready ? 'Confirm booking' : 'Pick a day and time',
+      confirmBooking:()=>{ if (ready) this.setState({ screen:'booked' }); },
+      bookingSummary: s.service + ' — ' + (s.dayLabel || '') + ' at ' + (s.slot || '') + ', with Christina Prodromou.',
+      chatTitle: staff ? 'Kyriakou Trading Ltd' : 'Christina Prodromou',
+      chatSub: staff ? 'Andreas Kyriakou · client since 2019' : 'Senior accountant · usually replies within an hour',
+      msgs,
+      send:()=>this.sendMsg(),
+      openCount: s.tasks.filter(t => !t.done).length + ' tasks open',
+      tasks,
+      chasing:[
+        { initials:'KT', name:'Kyriakou Trading', need:'3 purchase invoices · VAT Q2' },
+        { initials:'NS', name:'Nicolaou & Sons', need:'Q1 VAT overdue 22 days' },
+        { initials:'EP', name:'E. Papadopoulou', need:'Engagement letter unsigned' }
+      ],
+      clients,
+      noClients: clients.length === 0,
+      sel: sel ? { name:sel.name, type:sel.type, vat:sel.vat, fee:sel.fee, feeNote:sel.feeNote, items: sel.items.map(i => ({ title:i.title, sub:i.sub, status:i.status, pill:PILL[i.pill] })) } : null,
+      tabs
+    };
+  }
+
+  sendMsg() {
+    const text = this.state.draft.trim();
+    if (!text) return;
+    const next = this.state.msgs.concat([{ from:'me', text }]);
+    this.setState({ msgs: next, draft:'', typing:true });
+    clearTimeout(this._r);
+    this._r = setTimeout(() => this.setState({
+      typing:false,
+      msgs: next.concat([{ from:'them', text:'Got it — I will take a look this afternoon and come back to you before the deadline.' }])
+    }), 1400);
+  }
+}
+</script>
+</body>
+</html>
