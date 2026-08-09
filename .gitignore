@@ -55,3 +55,33 @@ SEED_greson_mgmt.sql
 km-payroll-app.html
 SEED_km_payroll.sql
 km-payroll-data.json
+
+# Supabase CLI local state (project link, not shared)
+supabase/.temp/
+
+# Credentials kept in a scratch file — passwords and host-verification tokens
+All Apps Notes and Users etc..txt
+
+# Greson working data, alongside the greson_mgmt_* rules above
+greson_*.json
+
+# Client documents and working spreadsheets dropped at the repo root.
+# Tax returns, chart-of-accounts exports, import sheets, engagement docs —
+# all real client data. Root only, so nothing under src/, docs/ or supabase/
+# is affected. Use `git add -f` if a specific one genuinely belongs in git.
+/*.pdf
+/*.xls
+/*.xlsx
+/*.docx
+/*.zip
+/*.txt
+
+# Task briefs, prompts and session notes written for a single piece of work.
+# Kept locally so `git status` stays readable — the durable docs live in
+# docs/, and future-roadmap.md / backlog-review-*.md remain tracked.
+/task-*.md
+/claude-code-prompt*.md
+/response-*.md
+/full-status-check*.md
+/session-handoff-*.md
+/engagement-letter-*.md
