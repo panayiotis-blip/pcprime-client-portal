@@ -26,10 +26,10 @@ and file picking all work in it, but remote push needs a development build.
 localStorage for the session — fine for reviewing the design, never for a real
 account.
 
-## Two migrations to run first
+## Three migrations and a function to deploy first
 
 Booking and push had no backend. `supabase/migrations/` in the portal repo now
-has two files to run in the Supabase SQL editor, in order:
+has three files to run in the Supabase SQL editor, in order:
 
 - `176_consultation_requests.sql` — a client asks for a consultation; staff
   confirm it into the diary. Appointments stay staff-only, as migration 020
@@ -37,8 +37,21 @@ has two files to run in the Supabase SQL editor, in order:
   `consultation_slots()`, which offers the firm's standard times minus anything
   already taken, without exposing whose appointment took them.
 - `177_push_devices.sql` — one row per install, readable only by its owner.
+- `178_push_outbox.sql` — what to say and when. Triggers on new firm messages
+  and firm-filed documents, a nightly deadline sweep, and the per-minute cron
+  that drains the queue.
 
-Until they are run, Book and push registration fail; everything else works.
+178 schedules a function that must exist, so deploy it first:
+
+```bash
+supabase functions deploy send-push --no-verify-jwt
+```
+
+Then set `CRON_SECRET` on the function and the matching Vault secret — the
+commented block at the bottom of 178 has the exact statement.
+
+Until 176 and 177 are run, Book and push registration fail; everything else
+works.
 
 ## Signing in
 
@@ -162,13 +175,52 @@ the system: a line of meta text on the paper ground, no illustration, no card.
 - Two staff screens the handoff does not design — **their files** and **staff
   More** — are built from the designed components and say so in a comment.
 
+## Push, end to end
+
+The app registers its Expo token against the signed-in user
+(`src/lib/push.ts`), and a tapped notification lands on the screen it was about
+(`src/lib/useNotificationRouting.ts` — every notification carries a `url`).
+
+The sending side is `supabase/functions/send-push`, drained from a queue rather
+than posted straight from a trigger: an HTTP call inside the transaction would
+tie someone's message being saved to Expo being up, and a failure would vanish
+with no record and no retry.
+
+Three things send a notification, and only three:
+
+| When | Collapsed by |
+| --- | --- |
+| The firm replies to your message | one per message |
+| The firm files a document to your account | one per client per hour, so a batch upload is one buzz, not twelve |
+| A filing is due in 7 days, then 1 day | one per client per lead time — Cyprus deadlines cluster, and three buzzes at 08:00 is how notifications get switched off |
+
+Dead tokens are removed by a receipts pass: a ticket only says Expo accepted
+the message, so the function asks again 15 minutes later and deletes anything
+reported `DeviceNotRegistered`. Without it, uninstalled apps stay in the table
+forever and every send drags a longer tail behind it.
+
+Watch it work:
+
+```sql
+select status, count(*) from public.push_outbox group by status;
+select id, title, status, attempts, last_error from public.push_outbox
+ order by created_at desc limit 20;
+```
+
+Stop it without un-deploying:
+
+```sql
+update cron.job set active = false where jobname = 'send-push';
+```
+
 ## Still to build
 
-- **The push send side.** The device table and registration are done; nothing
-  sends yet. It wants an Edge Function with the service role, triggered on a
-  new `client_messages` row and on a nightly deadline sweep, deleting any token
-  Expo reports as `DeviceNotRegistered`.
 - **SSO into the web portal** — the one-time code exchange described above.
+- **Staff notifications.** Push is client-facing, as the handoff specified — an
+  accountant is not told when a client replies or uploads. The outbox is
+  generic, so it is one trigger away.
+- **Nothing has been sent yet.** The queue, the triggers and the receipts pass
+  are written but have never run against Expo.
 - **Session persistence across a cold start is untested on device.** It is
   wired through the keystore but has only been exercised in the browser.
 - **`documents.review_status`**, if the four designed document states matter.

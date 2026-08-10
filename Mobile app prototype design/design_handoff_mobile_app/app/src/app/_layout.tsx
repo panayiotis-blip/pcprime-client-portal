@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '../components/Toast';
+import { useNotificationRouting } from '../lib/useNotificationRouting';
 import { SessionProvider, useSession } from '../state/session';
 import { color } from '../theme/tokens';
 
@@ -42,7 +43,11 @@ export default function RootLayout() {
 }
 
 function RootNavigator() {
+  const { account, mfaPending } = useSession();
+
   useAuthRedirect();
+  // Deep links from a tapped notification, once there is somewhere to land.
+  useNotificationRouting(!!account && !mfaPending);
 
   return (
     <Stack
