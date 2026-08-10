@@ -21,16 +21,16 @@ import { useTopPad } from '../../theme/layout';
  */
 export default function StaffMoreScreen() {
   const topPad = useTopPad(64);
-  const { staff, signOut } = useSession();
+  const { account, signOut } = useSession();
 
   return (
     <Screen scroll>
       <StatusBarStyle style="dark" />
       <View style={[moreStyles.body, { paddingTop: topPad }]}>
         <ProfileRow
-          initials={staff.initials}
-          name={staff.name}
-          meta={`${staff.role} · ${staff.firm}`}
+          initials={account?.initials ?? ''}
+          name={account?.name ?? ''}
+          meta={account?.email ?? ''}
         />
         <SiteLinksCard style={moreStyles.firstGroup} />
         <ContactCard style={moreStyles.group} />

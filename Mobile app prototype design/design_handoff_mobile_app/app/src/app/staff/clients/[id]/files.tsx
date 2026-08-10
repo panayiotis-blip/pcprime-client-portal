@@ -1,7 +1,9 @@
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useCallback } from 'react';
 
-import { findClient } from '../../../../api/portal';
+import * as portal from '../../../../api/portal';
 import { DocumentsView } from '../../../../features/documents/DocumentsView';
+import { useQuery } from '../../../../lib/useQuery';
 
 /**
  * A client's files, seen from the staff side.
@@ -12,9 +14,12 @@ import { DocumentsView } from '../../../../features/documents/DocumentsView';
  */
 export default function ClientFilesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const client = findClient(id);
+  const clientId = Number(id);
 
-  if (!client) return <Redirect href="/staff/clients" />;
+  const profile = useQuery(
+    useCallback(() => portal.loadProfile(clientId), [clientId]),
+    [clientId],
+  );
 
-  return <DocumentsView subtitle={client.name} />;
+  return <DocumentsView clientId={clientId} subtitle={profile.data?.name ?? ''} />;
 }

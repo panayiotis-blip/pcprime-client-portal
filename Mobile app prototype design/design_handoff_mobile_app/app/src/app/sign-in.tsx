@@ -13,16 +13,29 @@ import { font, tracking } from '../theme/type';
 /**
  * Sign in — full-bleed navy, content bottom-aligned, form pinned to the
  * bottom edge.
+ *
+ * The credentials are the portal's: the same account, over the same Supabase
+ * auth, so there is no separate app login to keep in step.
  */
 export default function SignInScreen() {
-  const { signIn, signInWithBiometrics } = useSession();
+  const { signIn, unlockWithBiometrics, biometricsAvailable } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const submit = () => {
-    const message = signIn(email, password);
-    setError(message ?? '');
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(await sanitise(() => signIn(email, password)));
+    setBusy(false);
+  };
+
+  const unlock = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(await sanitise(unlockWithBiometrics));
+    setBusy(false);
   };
 
   return (
@@ -55,6 +68,7 @@ export default function SignInScreen() {
             autoCapitalize="none"
             autoComplete="email"
             textContentType="emailAddress"
+            editable={!busy}
             style={styles.field}
             borderColor={color.accent600}
             focusColor={color.accent400}
@@ -72,6 +86,7 @@ export default function SignInScreen() {
             textContentType="password"
             onSubmitEditing={submit}
             returnKeyType="go"
+            editable={!busy}
             style={styles.field}
             borderColor={color.accent600}
             focusColor={color.accent400}
@@ -81,8 +96,9 @@ export default function SignInScreen() {
 
           <Button
             variant="primary"
-            label="Sign in"
+            label={busy ? 'Signing in…' : 'Sign in'}
             uppercase
+            disabled={busy}
             onPress={submit}
             style={styles.submit}
             labelStyle={styles.submitLabel}
@@ -92,14 +108,20 @@ export default function SignInScreen() {
             <Button
               variant="ghost"
               label="Use Face ID"
-              onPress={signInWithBiometrics}
+              onPress={unlock}
+              // Nothing to unlock into on a device that cannot, or has never
+              // held a session.
+              disabled={busy || !biometricsAvailable}
               style={styles.ghost}
               labelStyle={styles.ghostLabel}
             />
             <Button
               variant="ghost"
               label="Forgot password"
-              onPress={() => {}}
+              onPress={() =>
+                setError('Reset your password in the web portal, then sign in here.')
+              }
+              disabled={busy}
               style={styles.ghost}
               labelStyle={styles.ghostLabel}
             />
@@ -108,6 +130,15 @@ export default function SignInScreen() {
       </KeyboardAvoidingView>
     </Screen>
   );
+}
+
+/** Never let a raw network failure reach the user as a stack trace. */
+async function sanitise(run: () => Promise<string | null>): Promise<string> {
+  try {
+    return (await run()) ?? '';
+  } catch (caught) {
+    return caught instanceof Error ? caught.message : 'Could not reach the portal.';
+  }
 }
 
 const styles = StyleSheet.create({

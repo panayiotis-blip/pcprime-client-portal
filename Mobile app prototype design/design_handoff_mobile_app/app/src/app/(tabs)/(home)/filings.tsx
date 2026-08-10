@@ -1,12 +1,16 @@
+import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import * as portal from '../../../api/portal';
+import { Async, Empty, NoClientLinked } from '../../../components/Async';
 import { Blueprint } from '../../../components/Blueprint';
 import { ProgressBar } from '../../../components/Section';
 import { Screen } from '../../../components/Screen';
 import { StatusBarStyle } from '../../../components/StatusBarStyle';
 import { Tag } from '../../../components/Tag';
-import { filings } from '../../../data/mock';
 import { FilingProgress } from '../../../data/types';
+import { useQuery } from '../../../lib/useQuery';
+import { useClientId } from '../../../state/session';
 import { useTopPad } from '../../../theme/layout';
 import { color, space } from '../../../theme/tokens';
 import { font, text } from '../../../theme/type';
@@ -25,6 +29,17 @@ const BAR_FILL: Record<FilingProgress, string> = {
 
 export default function FilingsScreen() {
   const topPad = useTopPad(64);
+  const clientId = useClientId();
+
+  const query = useQuery(
+    useCallback(
+      () => (clientId == null ? Promise.resolve([]) : portal.loadFilings(clientId)),
+      [clientId],
+    ),
+    [clientId],
+  );
+
+  if (clientId == null) return <NoClientLinked />;
 
   return (
     <Screen scroll>
@@ -33,22 +48,30 @@ export default function FilingsScreen() {
         <Text style={text.screenTitle}>Filings</Text>
         <Text style={styles.sub}>Everything we file on your behalf this year.</Text>
 
-        <View style={styles.list}>
-          {filings.map((filing) => (
-            <Blueprint key={filing.id} style={styles.card}>
-              <View style={styles.cardHead}>
-                <View style={styles.cardText}>
-                  <Text style={text.cardTitle}>{filing.title}</Text>
-                  <Text style={styles.due}>{filing.due}</Text>
-                </View>
-                <Tag label={filing.status.label} tone={filing.status.tone} />
+        <Async query={query} loadingLabel="Fetching your filings…">
+          {(filings) =>
+            filings.length ? (
+              <View style={styles.list}>
+                {filings.map((filing) => (
+                  <Blueprint key={filing.id} style={styles.card}>
+                    <View style={styles.cardHead}>
+                      <View style={styles.cardText}>
+                        <Text style={text.cardTitle}>{filing.title}</Text>
+                        <Text style={styles.due}>{filing.due}</Text>
+                      </View>
+                      <Tag label={filing.status.label} tone={filing.status.tone} />
+                    </View>
+                    <View style={styles.bar}>
+                      <ProgressBar percent={filing.percent} fill={BAR_FILL[filing.progress]} />
+                    </View>
+                  </Blueprint>
+                ))}
               </View>
-              <View style={styles.bar}>
-                <ProgressBar percent={filing.percent} fill={BAR_FILL[filing.progress]} />
-              </View>
-            </Blueprint>
-          ))}
-        </View>
+            ) : (
+              <Empty>Nothing on your compliance calendar yet.</Empty>
+            )
+          }
+        </Async>
       </View>
     </Screen>
   );

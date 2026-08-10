@@ -1,16 +1,20 @@
 import { useRouter } from 'expo-router';
 import { Check } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import * as portal from '../../api/portal';
+import { Async, Empty } from '../../components/Async';
 import { Blueprint, BlueprintPressable } from '../../components/Blueprint';
 import { Button } from '../../components/Button';
 import { InitialsTile } from '../../components/InitialsTile';
 import { Screen } from '../../components/Screen';
 import { SectionHeader } from '../../components/Section';
 import { StatusBarStyle } from '../../components/StatusBarStyle';
-import { chasing, staffStats } from '../../data/staff';
+import { useToast } from '../../components/Toast';
 import { formatLongDate } from '../../lib/dates';
-import { useTasks } from '../../state/tasks';
+import { useQuery } from '../../lib/useQuery';
+import { useSession } from '../../state/session';
 import { useTopPad } from '../../theme/layout';
 import { HAIRLINE, color, space, tint } from '../../theme/tokens';
 import { font, tracking } from '../../theme/type';
@@ -19,89 +23,145 @@ import { font, tracking } from '../../theme/type';
  * Today — an accountant's morning triage.
  *
  * The header count is recomputed from the unchecked tasks, so ticking one off
- * is visible at the top of the screen straight away.
+ * is visible at the top of the screen straight away. The tick writes through
+ * to `staff_tasks` immediately; the row is updated locally first so the list
+ * does not lag behind the finger.
  */
 export default function TodayScreen() {
   const router = useRouter();
   const topPad = useTopPad(64);
-  const { tasks, openCount, toggle } = useTasks();
+  const toast = useToast();
+  const { account } = useSession();
+  const userId = account?.id ?? '';
+
+  const query = useQuery(
+    useCallback(
+      async () => ({
+        tasks: await portal.loadStaffTasks(userId),
+        summary: await portal.loadTodaySummary(),
+      }),
+      [userId],
+    ),
+    [userId],
+  );
+
+  // Ticks applied since the last load, so the UI stays ahead of the round trip.
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+
+  const toggle = async (id: string, next: boolean) => {
+    setPending((current) => ({ ...current, [id]: next }));
+    try {
+      await portal.setTaskDone(id, next);
+    } catch (caught) {
+      setPending((current) => {
+        const { [id]: _dropped, ...rest } = current;
+        return rest;
+      });
+      toast.show(caught instanceof Error ? caught.message : 'Could not update that task.');
+    }
+  };
 
   return (
     <Screen scroll>
       <StatusBarStyle style="light" />
 
-      <View style={[styles.header, { paddingTop: topPad }]}>
-        <Text style={styles.eyebrow}>Staff · {formatLongDate(new Date())}</Text>
-        <Text style={styles.title}>
-          {openCount} {openCount === 1 ? 'task' : 'tasks'} open
-        </Text>
+      <Async query={query} loadingLabel="Pulling together your morning…">
+        {({ tasks, summary }) => {
+          const resolved = tasks.map((task) => ({
+            ...task,
+            done: pending[task.id] ?? task.done,
+          }));
+          const open = resolved.filter((task) => !task.done).length;
 
-        <View style={styles.stats}>
-          {staffStats.map((stat) => (
-            <Blueprint
-              key={stat.label}
-              style={styles.stat}
-              borderColor={color.accent600}
-              ink={tint.markPaper}>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </Blueprint>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeader title="Today's tasks" />
-        <View style={styles.taskList}>
-          {tasks.map((task) => (
-            <BlueprintPressable
-              key={task.id}
-              style={styles.taskCard}
-              onPress={() => toggle(task.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: task.done }}>
-              <View style={[styles.checkbox, task.done && styles.checkboxDone]}>
-                {task.done ? <Check size={14} strokeWidth={2} color={color.bg} /> : null}
-              </View>
-              <View style={styles.taskText}>
-                <Text style={[styles.taskTitle, task.done && styles.taskTitleDone]}>
-                  {task.title}
+          return (
+            <>
+              <View style={[styles.header, { paddingTop: topPad }]}>
+                <Text style={styles.eyebrow}>Staff · {formatLongDate(new Date())}</Text>
+                <Text style={styles.title}>
+                  {open} {open === 1 ? 'task' : 'tasks'} open
                 </Text>
-                <Text style={styles.taskSub}>{task.sub}</Text>
-              </View>
-            </BlueprintPressable>
-          ))}
-        </View>
-      </View>
 
-      <View style={styles.lastSection}>
-        <SectionHeader title="Needs chasing" />
-        <Blueprint style={styles.chaseList}>
-          {chasing.map((target, index) => (
-            <View
-              key={target.id}
-              style={[styles.chaseRow, index < chasing.length - 1 && styles.divided]}>
-              <InitialsTile initials={target.initials} />
-              <View style={styles.chaseText}>
-                <Text style={styles.chaseName}>{target.name}</Text>
-                <Text style={styles.chaseNeed}>{target.need}</Text>
+                <View style={styles.stats}>
+                  {summary.stats.map((stat) => (
+                    <Blueprint
+                      key={stat.label}
+                      style={styles.stat}
+                      borderColor={color.accent600}
+                      ink={tint.markPaper}>
+                      <Text style={styles.statValue}>{stat.value}</Text>
+                      <Text style={styles.statLabel}>{stat.label}</Text>
+                    </Blueprint>
+                  ))}
+                </View>
               </View>
-              <Button
-                variant="secondary"
-                label="Nudge"
-                uppercase
-                onPress={() =>
-                  router.navigate({
-                    pathname: '/staff/messages',
-                    params: { client: target.clientId },
-                  })
-                }
-                labelStyle={styles.nudgeLabel}
-              />
-            </View>
-          ))}
-        </Blueprint>
-      </View>
+
+              <View style={styles.section}>
+                <SectionHeader title="Today's tasks" />
+                {resolved.length ? (
+                  <View style={styles.taskList}>
+                    {resolved.map((task) => (
+                      <BlueprintPressable
+                        key={task.id}
+                        style={styles.taskCard}
+                        onPress={() => toggle(task.id, !task.done)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: task.done }}>
+                        <View style={[styles.checkbox, task.done && styles.checkboxDone]}>
+                          {task.done ? <Check size={14} strokeWidth={2} color={color.bg} /> : null}
+                        </View>
+                        <View style={styles.taskText}>
+                          <Text style={[styles.taskTitle, task.done && styles.taskTitleDone]}>
+                            {task.title}
+                          </Text>
+                          {task.sub ? <Text style={styles.taskSub}>{task.sub}</Text> : null}
+                        </View>
+                      </BlueprintPressable>
+                    ))}
+                  </View>
+                ) : (
+                  <Empty>Nothing assigned to you. Enjoy it.</Empty>
+                )}
+              </View>
+
+              <View style={styles.lastSection}>
+                <SectionHeader title="Needs chasing" />
+                {summary.chasing.length ? (
+                  <Blueprint style={styles.chaseList}>
+                    {summary.chasing.map((target, index) => (
+                      <View
+                        key={target.id}
+                        style={[
+                          styles.chaseRow,
+                          index < summary.chasing.length - 1 && styles.divided,
+                        ]}>
+                        <InitialsTile initials={target.initials} />
+                        <View style={styles.chaseText}>
+                          <Text style={styles.chaseName}>{target.name}</Text>
+                          <Text style={styles.chaseNeed}>{target.need}</Text>
+                        </View>
+                        <Button
+                          variant="secondary"
+                          label="Nudge"
+                          uppercase
+                          onPress={() =>
+                            router.navigate({
+                              pathname: '/staff/messages',
+                              params: { client: target.clientId },
+                            })
+                          }
+                          labelStyle={styles.nudgeLabel}
+                        />
+                      </View>
+                    ))}
+                  </Blueprint>
+                ) : (
+                  <Empty>Nothing overdue anywhere. Rare and good.</Empty>
+                )}
+              </View>
+            </>
+          );
+        }}
+      </Async>
     </Screen>
   );
 }

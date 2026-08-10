@@ -9,10 +9,7 @@ import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '../components/Toast';
-import { DocumentsProvider } from '../state/documents';
-import { MessagesProvider } from '../state/messages';
 import { SessionProvider, useSession } from '../state/session';
-import { TasksProvider } from '../state/tasks';
 import { color } from '../theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
@@ -36,15 +33,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <SessionProvider>
-        <DocumentsProvider>
-          <MessagesProvider>
-            <TasksProvider>
-              <ToastProvider>
-                <RootNavigator />
-              </ToastProvider>
-            </TasksProvider>
-          </MessagesProvider>
-        </DocumentsProvider>
+        <ToastProvider>
+          <RootNavigator />
+        </ToastProvider>
       </SessionProvider>
     </SafeAreaProvider>
   );
@@ -60,6 +51,7 @@ function RootNavigator() {
         contentStyle: { backgroundColor: color.bg },
       }}>
       <Stack.Screen name="sign-in" />
+      <Stack.Screen name="mfa" />
       {/* Two tab sets. Which one you get is a consequence of your role. */}
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="staff" />
@@ -71,27 +63,40 @@ function RootNavigator() {
 }
 
 /**
- * Keeps the signed-out user on Sign in, the signed-in user off it, and each
- * role inside its own tab set — a client can never land on a staff screen by
- * deep link, and vice versa.
+ * Sends each session where it belongs: out to Sign in when there is none, to
+ * the second-factor screen when one is outstanding, and otherwise into the tab
+ * set for the role the portal gave us. A client can never land on a staff
+ * screen, and vice versa.
  */
 function useAuthRedirect() {
-  const { authed, role } = useSession();
+  const { ready, account, mfaPending, role } = useSession();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    const onSignIn = segments[0] === 'sign-in';
-    const inStaffArea = segments[0] === 'staff';
-    const home = role === 'staff' ? '/staff/today' : '/';
+    // Nothing is mounted until the stored session has been read; redirecting
+    // before then would bounce a signed-in user out to the sign-in screen.
+    if (!ready) return;
 
-    if (!authed) {
+    const first = segments[0];
+    const onSignIn = first === 'sign-in';
+    const onMfa = first === 'mfa';
+
+    if (mfaPending) {
+      if (!onMfa) router.replace('/mfa');
+      return;
+    }
+
+    if (!account) {
       if (!onSignIn) router.replace('/sign-in');
       return;
     }
 
-    if (onSignIn || inStaffArea !== (role === 'staff')) {
+    const inStaffArea = first === 'staff';
+    const home = role === 'staff' ? '/staff/today' : '/';
+
+    if (onSignIn || onMfa || inStaffArea !== (role === 'staff')) {
       router.replace(home);
     }
-  }, [authed, role, segments, router]);
+  }, [ready, account, mfaPending, role, segments, router]);
 }

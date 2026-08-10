@@ -1,25 +1,31 @@
-import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import * as portal from '../../../../api/portal';
+import { Async, Empty } from '../../../../components/Async';
 import { Blueprint } from '../../../../components/Blueprint';
 import { Button } from '../../../../components/Button';
 import { GroupLabel } from '../../../../components/Section';
 import { Screen } from '../../../../components/Screen';
 import { StatusBarStyle } from '../../../../components/StatusBarStyle';
 import { Tag } from '../../../../components/Tag';
-import { findClient } from '../../../../api/portal';
+import { useQuery } from '../../../../lib/useQuery';
 import { useTopPad } from '../../../../theme/layout';
 import { HAIRLINE, color, space } from '../../../../theme/tokens';
 import { font, text } from '../../../../theme/type';
 
-/** Client detail — open items and what is unbilled. */
+/** Client detail — open items and what is on the fee record. */
 export default function ClientDetailScreen() {
   const router = useRouter();
   const topPad = useTopPad(60);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const client = findClient(id);
+  const clientId = Number(id);
 
-  if (!client) return <Redirect href="/staff/clients" />;
+  const query = useQuery(
+    useCallback(() => portal.loadClient(clientId), [clientId]),
+    [clientId],
+  );
 
   return (
     <Screen scroll>
@@ -33,65 +39,74 @@ export default function ClientDetailScreen() {
           style={styles.back}
           labelStyle={styles.backLabel}
         />
-        <Text style={styles.name}>{client.name}</Text>
+        <Text style={styles.name}>{query.data?.name ?? ' '}</Text>
         <Text style={styles.meta}>
-          {client.type} · {client.vat}
+          {[query.data?.type, query.data?.vat].filter(Boolean).join(' · ')}
         </Text>
       </View>
 
-      <View style={styles.body}>
-        <View style={styles.actions}>
-          <Button
-            variant="primary"
-            label="Message"
-            uppercase
-            onPress={() =>
-              router.navigate({ pathname: '/staff/messages', params: { client: client.id } })
-            }
-            style={styles.action}
-            labelStyle={styles.actionLabel}
-          />
-          <Button
-            variant="secondary"
-            label="Their files"
-            uppercase
-            onPress={() => router.push(`/staff/clients/${client.id}/files`)}
-            style={styles.action}
-            labelStyle={styles.actionLabel}
-          />
-        </View>
-
-        <GroupLabel style={styles.group}>Open items</GroupLabel>
-        <Blueprint style={styles.list}>
-          {client.items.map((item, index) => (
-            <View
-              key={item.id}
-              style={[styles.itemRow, index < client.items.length - 1 && styles.divided]}>
-              <View style={styles.itemText}>
-                <Text style={text.rowTitle}>{item.title}</Text>
-                <Text style={styles.itemSub}>{item.sub}</Text>
-              </View>
-              <Tag label={item.status.label} tone={item.status.tone} />
+      <Async query={query} loadingLabel="Fetching the client…">
+        {(client) => (
+          <View style={styles.body}>
+            <View style={styles.actions}>
+              <Button
+                variant="primary"
+                label="Message"
+                uppercase
+                onPress={() =>
+                  router.navigate({ pathname: '/staff/messages', params: { client: client.id } })
+                }
+                style={styles.action}
+                labelStyle={styles.actionLabel}
+              />
+              <Button
+                variant="secondary"
+                label="Their files"
+                uppercase
+                onPress={() => router.push(`/staff/clients/${client.id}/files`)}
+                style={styles.action}
+                labelStyle={styles.actionLabel}
+              />
             </View>
-          ))}
-        </Blueprint>
 
-        <GroupLabel style={styles.group}>Fees</GroupLabel>
-        <Blueprint style={styles.fees}>
-          <View style={styles.feesText}>
-            <Text style={styles.feeAmount}>{client.fee}</Text>
-            <Text style={styles.feeNote}>{client.feeNote}</Text>
+            <GroupLabel style={styles.group}>Open items</GroupLabel>
+            {client.items.length ? (
+              <Blueprint style={styles.list}>
+                {client.items.map((item, index) => (
+                  <View
+                    key={item.id}
+                    style={[styles.itemRow, index < client.items.length - 1 && styles.divided]}>
+                    <View style={styles.itemText}>
+                      <Text style={text.rowTitle}>{item.title}</Text>
+                      <Text style={styles.itemSub}>{item.sub}</Text>
+                    </View>
+                    <Tag label={item.status.label} tone={item.status.tone} />
+                  </View>
+                ))}
+              </Blueprint>
+            ) : (
+              <Empty>Nothing outstanding.</Empty>
+            )}
+
+            <GroupLabel style={styles.group}>Fees</GroupLabel>
+            <Blueprint style={styles.fees}>
+              <View style={styles.feesText}>
+                <Text style={styles.feeAmount}>{client.fee}</Text>
+                <Text style={styles.feeNote}>{client.feeNote}</Text>
+              </View>
+              <Button
+                variant="secondary"
+                label="Invoice"
+                uppercase
+                // No action in the design, and no billing flow specified —
+                // invoicing lives in the web portal for now.
+                onPress={() => {}}
+                labelStyle={styles.invoiceLabel}
+              />
+            </Blueprint>
           </View>
-          <Button
-            variant="secondary"
-            label="Invoice"
-            uppercase
-            // No action in the design — the billing flow is not specified yet.
-            onPress={() => {}}
-            labelStyle={styles.invoiceLabel}
-          />
-        </Blueprint>
-      </View>
+        )}
+      </Async>
     </Screen>
   );
 }

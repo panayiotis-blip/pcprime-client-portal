@@ -3,18 +3,20 @@ import { TagTone } from '../components/Tag';
 /** A status label as it appears on a card, with the tone that carries it. */
 export type Status = { label: string; tone: TagTone };
 
-export type DocumentKind = 'PDF' | 'CSV' | 'ZIP' | 'XLS';
-
-export type DocumentCategory = 'Invoices' | 'Bank' | 'Payroll' | 'Filings';
+/**
+ * The short label in the 34×42 file box. Usually the extension, uppercased —
+ * the design shows PDF/CSV/ZIP/XLS but the portal accepts more than that.
+ */
+export type DocumentKind = string;
 
 export type ClientDocument = {
   id: string;
   name: string;
   kind: DocumentKind;
-  /** One line of provenance: source, date, size. */
+  /** One line of provenance: category and date. */
   meta: string;
   status: Status;
-  category: DocumentCategory;
+  category: string;
 };
 
 /**
@@ -44,6 +46,9 @@ export type Deadline = {
   status: Status;
 };
 
+/** The gold card at the top of Home: the one thing most worth knowing. */
+export type Alert = { title: string; sub: string } | null;
+
 export type Service = { name: string; description: string };
 
 export type SiteLink = { label: string; href: string; host: string };
@@ -53,22 +58,54 @@ export type Message = { id: string; from: 'me' | 'them'; text: string };
 /** Which tab set and which screens the signed-in user gets. */
 export type Role = 'client' | 'staff';
 
+/** The signed-in user, as the app needs them. */
+export type Account = {
+  id: string;
+  email: string;
+  name: string;
+  initials: string;
+  role: Role;
+  /** Clients this user is linked to. A client user normally has exactly one. */
+  clientIds: number[];
+};
+
+/** The client whose portal we are looking at. */
+export type Profile = {
+  id: number;
+  name: string;
+  /** "VAT 10234567X" or "TIC 4471203", whichever the record carries. */
+  taxLabel: string;
+};
+
+/** A bookable consultation time. */
+export type Slot = {
+  /** ISO timestamp — what the booking RPC wants back. */
+  iso: string;
+  /** Local day key, for grouping the day scroller. */
+  dayKey: string;
+  dow: string;
+  dayNumber: number;
+  /** "Friday 7 August" — the confirmation summary. */
+  dayLabel: string;
+  /** "09:30". */
+  time: string;
+};
+
 /** A line on a client's open-items list. */
 export type ClientItem = { id: string; title: string; sub: string; status: Status };
 
 export type Client = {
   id: string;
   name: string;
-  /** Two letters for the framed tile. */
   initials: string;
-  /** "Ltd · Wholesale" — entity type and sector. */
+  /** Business type, or "Client" when the record does not say. */
   type: string;
   /** VAT or TIC number. */
   vat: string;
   status: Status;
   /** "client since 2019" — shown on the staff message header. */
   since: string;
-  /** Unbilled amount, pre-formatted. */
+  /** Pre-formatted fee amount. */
   fee: string;
   feeNote: string;
   items: ClientItem[];

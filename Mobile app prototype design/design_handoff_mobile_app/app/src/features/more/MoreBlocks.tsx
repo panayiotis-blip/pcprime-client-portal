@@ -4,7 +4,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Blueprint } from '../../components/Blueprint';
 import { Button } from '../../components/Button';
 import { GroupLabel } from '../../components/Section';
-import { firm, siteLinks } from '../../data/mock';
+import { firm, siteLinks } from '../../data/content';
 import { HAIRLINE, color, space, tint } from '../../theme/tokens';
 import { font } from '../../theme/type';
 

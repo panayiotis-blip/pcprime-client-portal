@@ -7,7 +7,8 @@ import { Blueprint } from '../components/Blueprint';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusBarStyle } from '../components/StatusBarStyle';
-import { firm, profile } from '../data/mock';
+import { firm } from '../data/content';
+import { useSession } from '../state/session';
 import { useTopPad } from '../theme/layout';
 import { HAIRLINE, color } from '../theme/tokens';
 import { font } from '../theme/type';
@@ -20,12 +21,17 @@ import { font } from '../theme/type';
  * Tabs on Android — rather than an external jump or an iframe, which portals
  * block with X-Frame-Options anyway.
  *
- * TODO: carry the session token across so the portal does not ask for a
- * second login.
+ * TODO — true single sign-on. The session cannot simply ride along in the URL:
+ * an access token in a query string ends up in browser history, server logs
+ * and the address bar. The right shape is a one-time code minted by an Edge
+ * Function and exchanged by the portal for a session, which needs a change on
+ * the web side too. Until that exists the copy below does not promise
+ * otherwise.
  */
 export default function PortalScreen() {
   const router = useRouter();
   const topPad = useTopPad(58);
+  const { account } = useSession();
 
   const open = () =>
     WebBrowser.openBrowserAsync(firm.portalUrl, {
@@ -66,8 +72,8 @@ export default function PortalScreen() {
           <Lock size={26} strokeWidth={1.5} color={color.accent} />
           <Text style={styles.title}>Your client portal</Text>
           <Text style={styles.body}>
-            Signed in as {profile.name}. The portal opens in the browser with your session carried
-            over — no second login.
+            Signed in as {account?.name ?? 'your account'}. The portal opens in a secure browser
+            window, where you may be asked to sign in the first time.
           </Text>
           <Button
             variant="primary"

@@ -1,21 +1,29 @@
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { ArrowUpRight } from 'lucide-react-native';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Blueprint } from '../../components/Blueprint';
+import * as portal from '../../api/portal';
+import { Async, Empty } from '../../components/Async';
+import { BlueprintPressable } from '../../components/Blueprint';
 import { Button } from '../../components/Button';
 import { Screen } from '../../components/Screen';
 import { Sheet } from '../../components/Sheet';
 import { StatusBarStyle } from '../../components/StatusBarStyle';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
-import { documentCategories, uploadOptions, uploadToast } from '../../data/mock';
-import { useDocuments } from '../../state/documents';
+import { DEFAULT_UPLOAD_CATEGORY, uploadToast } from '../../data/content';
+import { useQuery } from '../../lib/useQuery';
+import { useSession } from '../../state/session';
 import { useTopPad } from '../../theme/layout';
 import { HAIRLINE, color, space } from '../../theme/tokens';
 import { font, text, tracking } from '../../theme/type';
 
 export type DocumentsViewProps = {
+  /** Whose documents these are. */
+  clientId: number;
   /** Line under the title — the client the documents belong to. */
   subtitle: string;
   /** Client mode only: the upload button and its sheet. */
@@ -29,20 +37,61 @@ export type DocumentsViewProps = {
  * "their files" view. Staff get the same list without the upload affordance
  * or the portal hand-off, both of which are the client's to use.
  */
-export function DocumentsView({ subtitle, canUpload = false, onOpenPortal }: DocumentsViewProps) {
+export function DocumentsView({
+  clientId,
+  subtitle,
+  canUpload = false,
+  onOpenPortal,
+}: DocumentsViewProps) {
   const topPad = useTopPad(64);
-  const { documents, upload } = useDocuments();
   const toast = useToast();
+  const { account } = useSession();
+  const viewerId = account?.id ?? '';
 
-  const [filter, setFilter] = useState<(typeof documentCategories)[number]>('All');
+  const query = useQuery(
+    useCallback(() => portal.loadDocuments(clientId, viewerId), [clientId, viewerId]),
+    [clientId, viewerId],
+  );
+
+  const [filter, setFilter] = useState('All');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  const visible = documents.filter((doc) => filter === 'All' || doc.category === filter);
-
-  const onUpload = (source: string) => {
-    upload(source);
+  const upload = async (pick: () => Promise<PickedFile | null>) => {
     setSheetOpen(false);
-    toast.show(uploadToast);
+    let file: PickedFile | null = null;
+    try {
+      file = await pick();
+    } catch {
+      toast.show('Could not open that.');
+      return;
+    }
+    if (!file) return; // Cancelled.
+
+    setUploading(true);
+    try {
+      await portal.uploadDocument({
+        clientId,
+        uri: file.uri,
+        name: file.name,
+        mimeType: file.mimeType,
+        category: DEFAULT_UPLOAD_CATEGORY,
+      });
+      toast.show(uploadToast);
+      query.reload();
+    } catch (caught) {
+      toast.show(caught instanceof Error ? caught.message : 'Upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const open = async (documentId: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(await portal.documentUrl(documentId));
+    } catch {
+      toast.show('Could not open that document.');
+    }
   };
 
   return (
@@ -55,8 +104,9 @@ export function DocumentsView({ subtitle, canUpload = false, onOpenPortal }: Doc
             {canUpload ? (
               <Button
                 variant="primary"
-                label="Upload"
+                label={uploading ? 'Sending…' : 'Upload'}
                 uppercase
+                disabled={uploading}
                 onPress={() => setSheetOpen(true)}
                 style={styles.uploadButton}
                 labelStyle={styles.uploadLabel}
@@ -76,38 +126,65 @@ export function DocumentsView({ subtitle, canUpload = false, onOpenPortal }: Doc
             />
           ) : null}
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.filters}
-            contentContainerStyle={styles.filterRow}>
-            {documentCategories.map((category) => (
-              <Button
-                key={category}
-                variant={filter === category ? 'primary' : 'secondary'}
-                label={category}
-                onPress={() => setFilter(category)}
-                labelStyle={styles.filterLabel}
-              />
-            ))}
-          </ScrollView>
+          <Async query={query} loadingLabel="Fetching your documents…">
+            {(page) => {
+              const categories = ['All', ...page.categories];
+              const visible = page.documents.filter(
+                (doc) => filter === 'All' || doc.category === filter,
+              );
 
-          <View style={styles.list}>
-            {visible.map((doc) => (
-              <Blueprint key={doc.id} style={styles.docRow}>
-                <View style={styles.kind}>
-                  <Text style={styles.kindLabel}>{doc.kind}</Text>
-                </View>
-                <View style={styles.docText}>
-                  <Text style={styles.docName} numberOfLines={1}>
-                    {doc.name}
-                  </Text>
-                  <Text style={styles.docMeta}>{doc.meta}</Text>
-                </View>
-                <Tag label={doc.status.label} tone={doc.status.tone} />
-              </Blueprint>
-            ))}
-          </View>
+              return (
+                <>
+                  {categories.length > 1 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.filters}
+                      contentContainerStyle={styles.filterRow}>
+                      {categories.map((category) => (
+                        <Button
+                          key={category}
+                          variant={filter === category ? 'primary' : 'secondary'}
+                          label={category === 'All' ? category : titleCase(category)}
+                          onPress={() => setFilter(category)}
+                          labelStyle={styles.filterLabel}
+                        />
+                      ))}
+                    </ScrollView>
+                  ) : null}
+
+                  <View style={styles.list}>
+                    {visible.map((doc) => (
+                      <BlueprintPressable
+                        key={doc.id}
+                        style={styles.docRow}
+                        accessibilityLabel={doc.name}
+                        onPress={() => open(doc.id)}>
+                        <View style={styles.kind}>
+                          <Text style={styles.kindLabel}>{doc.kind}</Text>
+                        </View>
+                        <View style={styles.docText}>
+                          <Text style={styles.docName} numberOfLines={1}>
+                            {doc.name}
+                          </Text>
+                          <Text style={styles.docMeta}>{doc.meta}</Text>
+                        </View>
+                        <Tag label={doc.status.label} tone={doc.status.tone} />
+                      </BlueprintPressable>
+                    ))}
+                  </View>
+
+                  {visible.length === 0 ? (
+                    <Empty>
+                      {page.documents.length === 0
+                        ? 'Nothing here yet. Anything you send lands in this list.'
+                        : `Nothing filed under ${titleCase(filter)}.`}
+                    </Empty>
+                  ) : null}
+                </>
+              );
+            }}
+          </Async>
         </View>
       </Screen>
 
@@ -115,16 +192,20 @@ export function DocumentsView({ subtitle, canUpload = false, onOpenPortal }: Doc
         <Text style={styles.sheetTitle}>Add a document</Text>
         <Text style={styles.sheetSub}>It goes straight to your accountant, encrypted.</Text>
         <View style={styles.sheetOptions}>
-          {uploadOptions.map((option) => (
-            <Button
-              key={option}
-              variant="secondary"
-              label={option}
-              onPress={() => onUpload(option)}
-              style={styles.sheetOption}
-              labelStyle={styles.sheetOptionLabel}
-            />
-          ))}
+          <Button
+            variant="secondary"
+            label="Take a photo of a receipt"
+            onPress={() => upload(takePhoto)}
+            style={styles.sheetOption}
+            labelStyle={styles.sheetOptionLabel}
+          />
+          <Button
+            variant="secondary"
+            label="Choose from Files"
+            onPress={() => upload(chooseFile)}
+            style={styles.sheetOption}
+            labelStyle={styles.sheetOptionLabel}
+          />
         </View>
         <Button
           variant="ghost"
@@ -136,6 +217,39 @@ export function DocumentsView({ subtitle, canUpload = false, onOpenPortal }: Doc
       </Sheet>
     </>
   );
+}
+
+type PickedFile = { uri: string; name: string; mimeType: string };
+
+async function takePhoto(): Promise<PickedFile | null> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) throw new Error('Camera permission denied');
+
+  const shot = await ImagePicker.launchCameraAsync({ quality: 0.7, exif: false });
+  if (shot.canceled || !shot.assets?.length) return null;
+
+  const asset = shot.assets[0];
+  return {
+    uri: asset.uri,
+    name: asset.fileName || `Receipt ${new Date().toISOString().slice(0, 10)}.jpg`,
+    mimeType: asset.mimeType || 'image/jpeg',
+  };
+}
+
+async function chooseFile(): Promise<PickedFile | null> {
+  const picked = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+  if (picked.canceled || !picked.assets?.length) return null;
+
+  const asset = picked.assets[0];
+  return {
+    uri: asset.uri,
+    name: asset.name,
+    mimeType: asset.mimeType || 'application/octet-stream',
+  };
+}
+
+function titleCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 const styles = StyleSheet.create({

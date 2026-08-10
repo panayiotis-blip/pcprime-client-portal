@@ -1,16 +1,20 @@
 import { useRouter } from 'expo-router';
 import { ArrowRight, Calendar, Folder } from 'lucide-react-native';
+import { useCallback } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import * as portal from '../../../api/portal';
+import { Async, NoClientLinked } from '../../../components/Async';
 import { Blueprint, BlueprintPressable } from '../../../components/Blueprint';
 import { Button } from '../../../components/Button';
 import { Screen } from '../../../components/Screen';
 import { SectionHeader } from '../../../components/Section';
 import { StatusBarStyle } from '../../../components/StatusBarStyle';
 import { Tag } from '../../../components/Tag';
-import { alert, closingPanel, deadlines, firm, services } from '../../../data/mock';
+import { closingPanel, firm, services } from '../../../data/content';
 import { formatLongDate } from '../../../lib/dates';
-import { useSession } from '../../../state/session';
+import { useQuery } from '../../../lib/useQuery';
+import { useClientId, useSession } from '../../../state/session';
 import { useTopPad } from '../../../theme/layout';
 import { HAIRLINE, color, space, tint } from '../../../theme/tokens';
 import { font, text, tracking } from '../../../theme/type';
@@ -21,8 +25,24 @@ import { font, text, tracking } from '../../../theme/type';
  */
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useSession();
+  const { account } = useSession();
+  const clientId = useClientId();
   const topPad = useTopPad(64);
+
+  const query = useQuery(
+    useCallback(async () => {
+      if (clientId == null) return { alert: null, deadlines: [] };
+      return {
+        alert: await portal.loadAlert(clientId),
+        deadlines: await portal.loadDeadlines(clientId),
+      };
+    }, [clientId]),
+    [clientId],
+  );
+
+  const firstName = (account?.name || '').split(' ')[0];
+
+  if (clientId == null) return <NoClientLinked />;
 
   return (
     <Screen scroll>
@@ -32,38 +52,37 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View style={styles.greeting}>
             <Text style={styles.date}>{formatLongDate(new Date())}</Text>
-            <Text style={styles.title}>{`Good morning,\n${user.name.split(' ')[0]}`}</Text>
+            <Text style={styles.title}>{`Good morning,\n${firstName}`}</Text>
           </View>
           <Blueprint style={styles.avatar} borderColor={color.accent600} ink={tint.markPaper}>
-            <Text style={styles.avatarLetters}>{user.initials}</Text>
+            <Text style={styles.avatarLetters}>{account?.initials ?? ''}</Text>
           </Blueprint>
         </View>
 
-        <Blueprint
-          style={styles.alert}
-          borderColor={color.accent400}
-          ink={tint.markPaper}>
-          <View style={styles.alertDot} />
-          <View style={styles.alertBody}>
-            <Text style={styles.alertTitle}>{alert.title}</Text>
-            <Text style={styles.alertSub}>{alert.sub}</Text>
-          </View>
-          <Button
-            variant="primary"
-            label="Upload"
-            uppercase
-            onPress={() => router.navigate('/documents')}
-            style={styles.alertAction}
-            labelStyle={styles.alertActionLabel}
-          />
-        </Blueprint>
+        {query.data?.alert ? (
+          <Blueprint style={styles.alert} borderColor={color.accent400} ink={tint.markPaper}>
+            <View style={styles.alertDot} />
+            <View style={styles.alertBody}>
+              <Text style={styles.alertTitle}>{query.data.alert.title}</Text>
+              <Text style={styles.alertSub}>{query.data.alert.sub}</Text>
+            </View>
+            <Button
+              variant="primary"
+              label="Upload"
+              uppercase
+              onPress={() => router.navigate('/documents')}
+              style={styles.alertAction}
+              labelStyle={styles.alertActionLabel}
+            />
+          </Blueprint>
+        ) : null}
       </View>
 
       <View style={styles.quickRow}>
         <QuickAction
           icon={<Folder size={22} strokeWidth={1.5} color={color.accent} />}
           title="Documents"
-          sub="3 need attention"
+          sub="Send and review"
           onPress={() => router.navigate('/documents')}
         />
         <QuickAction
@@ -86,23 +105,33 @@ export default function HomeScreen() {
             />
           }
         />
-        <Blueprint style={styles.list}>
-          {deadlines.map((deadline, index) => (
-            <View
-              key={deadline.id}
-              style={[styles.listRow, index < deadlines.length - 1 && styles.divided]}>
-              <View style={styles.dateBlock}>
-                <Text style={styles.dateDay}>{deadline.day}</Text>
-                <Text style={styles.dateMonth}>{deadline.month}</Text>
-              </View>
-              <View style={styles.rowBody}>
-                <Text style={text.rowTitle}>{deadline.title}</Text>
-                <Text style={styles.rowSub}>{deadline.sub}</Text>
-              </View>
-              <Tag label={deadline.status.label} tone={deadline.status.tone} />
-            </View>
-          ))}
-        </Blueprint>
+        <Async query={query} loadingLabel="Checking your deadlines…">
+          {({ deadlines }) =>
+            deadlines.length ? (
+              <Blueprint style={styles.list}>
+                {deadlines.map((deadline, index) => (
+                  <View
+                    key={deadline.id}
+                    style={[styles.listRow, index < deadlines.length - 1 && styles.divided]}>
+                    <View style={styles.dateBlock}>
+                      <Text style={styles.dateDay}>{deadline.day}</Text>
+                      <Text style={styles.dateMonth}>{deadline.month}</Text>
+                    </View>
+                    <View style={styles.rowBody}>
+                      <Text style={text.rowTitle}>{deadline.title}</Text>
+                      <Text style={styles.rowSub}>{deadline.sub}</Text>
+                    </View>
+                    <Tag label={deadline.status.label} tone={deadline.status.tone} />
+                  </View>
+                ))}
+              </Blueprint>
+            ) : (
+              <Blueprint style={styles.clearCard}>
+                <Text style={styles.clearText}>Nothing due. We will tell you when there is.</Text>
+              </Blueprint>
+            )
+          }
+        </Async>
       </View>
 
       <View style={styles.section}>
@@ -278,6 +307,16 @@ const styles = StyleSheet.create({
   divided: {
     borderBottomWidth: HAIRLINE,
     borderBottomColor: color.divider,
+  },
+  clearCard: {
+    marginTop: 12,
+    padding: 16,
+  },
+  clearText: {
+    fontFamily: font.body,
+    fontSize: 14,
+    lineHeight: 20,
+    color: color.neutral600,
   },
   dateBlock: {
     width: 42,

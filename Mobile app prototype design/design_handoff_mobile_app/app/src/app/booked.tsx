@@ -6,12 +6,17 @@ import { Blueprint } from '../components/Blueprint';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusBarStyle } from '../components/StatusBarStyle';
-import { accountant, firm } from '../data/mock';
+import { firm } from '../data/content';
 import { color, tint } from '../theme/tokens';
 import { font } from '../theme/type';
 
 /**
- * Booking confirmed — full-bleed navy, vertically centred, no tab bar.
+ * Consultation requested — full-bleed navy, vertically centred, no tab bar.
+ *
+ * The design said "YOU'RE BOOKED IN.", written when booking was assumed to be
+ * instant. It is not: a request goes to the firm and a person confirms it, so
+ * the diary is never written to by a client. The screen keeps its shape and
+ * tells the truth about what just happened.
  */
 export default function BookedScreen() {
   const router = useRouter();
@@ -21,7 +26,9 @@ export default function BookedScreen() {
     slot?: string;
   }>();
 
-  const summary = `${topic ?? ''} — ${day ?? ''} at ${slot ?? ''}, with ${accountant.name}.`;
+  const summary = [topic, day && slot ? `${day} at ${slot}` : null]
+    .filter(Boolean)
+    .join(' — ');
 
   /** Leave the confirmation behind rather than stacking on top of it. */
   const leaveTo = (destination: '/' | '/messages') => {
@@ -37,10 +44,13 @@ export default function BookedScreen() {
           <Check size={26} strokeWidth={1.5} color={color.accent300} />
         </Blueprint>
 
-        <Text style={styles.headline}>You&apos;re booked in.</Text>
-        <Text style={styles.summary}>{summary}</Text>
+        <Text style={styles.headline}>Request sent.</Text>
+        <Text style={styles.summary}>
+          {summary ? `${summary}. ` : ''}We will confirm by email, usually the same working day.
+        </Text>
         <Text style={styles.address}>
-          {firm.shortAddress} A calendar invite is on its way to your email.
+          {firm.shortAddress} If the time no longer suits, tell us in a message and we will move
+          it.
         </Text>
 
         <Button

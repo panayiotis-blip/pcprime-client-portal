@@ -1,8 +1,6 @@
 import { ArrowUp } from 'lucide-react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,19 +10,26 @@ import {
   View,
 } from 'react-native';
 
+import * as portal from '../../api/portal';
+import { Async, Empty } from '../../components/Async';
 import { Input } from '../../components/Input';
 import { Screen } from '../../components/Screen';
 import { StatusBarStyle } from '../../components/StatusBarStyle';
-import { useMessages } from '../../state/messages';
+import { Message } from '../../data/types';
+import { useQuery } from '../../lib/useQuery';
 import { useTabBarHeight, useTopPad } from '../../theme/layout';
 import { HAIRLINE, RADIUS, color, space } from '../../theme/tokens';
 import { font } from '../../theme/type';
 
 export type MessagesViewProps = {
+  /** Whose thread this is. */
+  clientId: number;
   /** Who you are talking to — the accountant, or the client. */
   title: string;
   subtitle: string;
   placeholder: string;
+  /** Staff see their own messages on the right; clients see theirs. */
+  viewerIsStaff: boolean;
 };
 
 /**
@@ -32,18 +37,60 @@ export type MessagesViewProps = {
  *
  * Square corners: these are framed objects like everything else, not chat
  * bubbles.
+ *
+ * The portal keeps several named topics per client; this opens the most
+ * recently active one and starts a "General" topic for a client who has never
+ * written in.
  */
-export function MessagesView({ title, subtitle, placeholder }: MessagesViewProps) {
+export function MessagesView({
+  clientId,
+  title,
+  subtitle,
+  placeholder,
+  viewerIsStaff,
+}: MessagesViewProps) {
   const topPad = useTopPad(60);
   const tabBarHeight = useTabBarHeight();
-  const { messages, typing, send } = useMessages();
-  const [draft, setDraft] = useState('');
   const list = useRef<ScrollView>(null);
 
-  const submit = () => {
-    if (!draft.trim()) return;
-    send(draft);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+
+  const query = useQuery(
+    useCallback(async () => {
+      const threadId = await portal.openThread(clientId);
+      const messages = await portal.loadMessages(threadId, viewerIsStaff);
+      return { threadId, messages };
+    }, [clientId, viewerIsStaff]),
+    [clientId, viewerIsStaff],
+  );
+
+  // Opening the thread is reading it.
+  const threadId = query.data?.threadId;
+  useEffect(() => {
+    if (threadId != null) portal.markThreadRead(threadId);
+  }, [threadId]);
+
+  const submit = async () => {
+    const body = draft.trim();
+    if (!body || sending || threadId == null) return;
+
+    setSending(true);
+    setSendError('');
+    // Clear straight away — retyping a sent message is worse than retyping a
+    // failed one, and the failure puts it back.
     setDraft('');
+
+    try {
+      await portal.sendMessage(threadId, body);
+      query.reload();
+    } catch (caught) {
+      setDraft(body);
+      setSendError(caught instanceof Error ? caught.message : 'Message not sent.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -65,16 +112,22 @@ export function MessagesView({ title, subtitle, placeholder }: MessagesViewProps
           onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {messages.map((message) => {
-            const mine = message.from === 'me';
-            return (
-              <View key={message.id} style={[styles.message, mine ? styles.mine : styles.theirs]}>
-                <Text style={[styles.messageText, mine && styles.mineText]}>{message.text}</Text>
-              </View>
-            );
-          })}
-          {typing ? <TypingIndicator /> : null}
+          <Async query={query} loadingLabel="Opening your thread…">
+            {({ messages }) =>
+              messages.length ? (
+                <>
+                  {messages.map((message) => (
+                    <Bubble key={message.id} message={message} />
+                  ))}
+                </>
+              ) : (
+                <Empty>No messages yet. Anything you write goes straight to the firm.</Empty>
+              )
+            }
+          </Async>
         </ScrollView>
+
+        {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
 
         <View style={styles.composer}>
           <Input
@@ -84,13 +137,19 @@ export function MessagesView({ title, subtitle, placeholder }: MessagesViewProps
             onSubmitEditing={submit}
             returnKeyType="send"
             blurOnSubmit={false}
+            editable={threadId != null}
             style={styles.field}
           />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send"
             onPress={submit}
-            style={({ pressed }) => [styles.send, pressed && styles.sendPressed]}>
+            disabled={sending || threadId == null}
+            style={({ pressed }) => [
+              styles.send,
+              pressed && styles.sendPressed,
+              (sending || threadId == null) && styles.sendDisabled,
+            ]}>
             <ArrowUp size={20} strokeWidth={1.5} color={color.bg} />
           </Pressable>
         </View>
@@ -99,23 +158,12 @@ export function MessagesView({ title, subtitle, placeholder }: MessagesViewProps
   );
 }
 
-/** Prototype affordance: 200ms fade in, then the canned reply lands. */
-function TypingIndicator() {
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: 200,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-      useNativeDriver: true,
-    }).start();
-  }, [opacity]);
-
+function Bubble({ message }: { message: Message }) {
+  const mine = message.from === 'me';
   return (
-    <Animated.View style={[styles.message, styles.theirs, { opacity }]}>
-      <Text style={styles.typing}>typing…</Text>
-    </Animated.View>
+    <View style={[styles.message, mine ? styles.mine : styles.theirs]}>
+      <Text style={[styles.messageText, mine && styles.mineText]}>{message.text}</Text>
+    </View>
   );
 }
 
@@ -178,13 +226,15 @@ const styles = StyleSheet.create({
   mineText: {
     color: color.bg,
   },
-  typing: {
-    fontFamily: font.body,
-    fontSize: 14,
-    lineHeight: 20,
-    color: color.neutral600,
-  },
 
+  sendError: {
+    fontFamily: font.body,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: color.accent700,
+    paddingHorizontal: space.screenX,
+    paddingBottom: 6,
+  },
   composer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,5 +266,8 @@ const styles = StyleSheet.create({
   sendPressed: {
     backgroundColor: color.accent700,
     borderColor: color.accent700,
+  },
+  sendDisabled: {
+    opacity: 0.45,
   },
 });

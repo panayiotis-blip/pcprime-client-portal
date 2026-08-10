@@ -1,13 +1,17 @@
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import * as portal from '../../api/portal';
+import { Async, Empty, NoClientLinked } from '../../components/Async';
 import { Button } from '../../components/Button';
 import { GroupLabel } from '../../components/Section';
 import { Screen } from '../../components/Screen';
 import { StatusBarStyle } from '../../components/StatusBarStyle';
-import { bookingSlots, bookingTopics } from '../../data/mock';
-import { nextWeekdays } from '../../lib/dates';
+import { bookingTopics } from '../../data/content';
+import { Slot } from '../../data/types';
+import { useQuery } from '../../lib/useQuery';
+import { useClientId } from '../../state/session';
 import { useTopPad } from '../../theme/layout';
 import { color, space } from '../../theme/tokens';
 import { font, text, tracking } from '../../theme/type';
@@ -15,29 +19,60 @@ import { font, text, tracking } from '../../theme/type';
 /**
  * Book a consultation — the free 30-minute slot the firm offers.
  *
- * The confirm button stays a quiet outline, reading "PICK A DAY AND TIME",
- * until both a day and a time are chosen; only then does it become the solid
- * gold primary. Tapping it before that does nothing.
+ * The days and times come from `consultation_slots`, which subtracts anything
+ * already in the firm's diary, so a client is never offered a time that has
+ * gone. The confirm button stays a quiet outline until both a day and a time
+ * are chosen.
  */
 export default function BookScreen() {
   const router = useRouter();
   const topPad = useTopPad(64);
+  const clientId = useClientId();
 
-  const days = useMemo(() => nextWeekdays(new Date()), []);
+  const query = useQuery(useCallback(() => portal.loadSlots(), []), []);
+
   const [topic, setTopic] = useState<string>(bookingTopics[0]);
-  const [day, setDay] = useState<string | null>(null);
-  const [slot, setSlot] = useState<string | null>(null);
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  const [slotIso, setSlotIso] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
 
-  const ready = day !== null && slot !== null;
+  const slots = query.data ?? [];
 
-  const confirm = () => {
-    if (!ready) return;
-    const chosen = days.find((candidate) => candidate.key === day);
-    router.push({
-      pathname: '/booked',
-      params: { topic, day: chosen?.label ?? '', slot },
-    });
+  // One entry per bookable day, in order, for the day scroller.
+  const days = useMemo(() => {
+    const seen = new Map<string, Slot>();
+    for (const slot of slots) if (!seen.has(slot.dayKey)) seen.set(slot.dayKey, slot);
+    return Array.from(seen.values());
+  }, [slots]);
+
+  const timesForDay = useMemo(
+    () => (dayKey ? slots.filter((slot) => slot.dayKey === dayKey) : []),
+    [slots, dayKey],
+  );
+
+  const chosen = slots.find((slot) => slot.iso === slotIso) ?? null;
+  const noClient = clientId == null;
+  const ready = chosen !== null;
+
+  const confirm = async () => {
+    if (!ready || sending || clientId == null) return;
+    setSending(true);
+    setError('');
+    try {
+      await portal.requestConsultation({ clientId, topic, startsAt: chosen.iso });
+      router.push({
+        pathname: '/booked',
+        params: { topic, day: chosen.dayLabel, slot: chosen.time },
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not send that request.');
+    } finally {
+      setSending(false);
+    }
   };
+
+  if (noClient) return <NoClientLinked />;
 
   return (
     <Screen scroll>
@@ -74,52 +109,77 @@ export default function BookScreen() {
           })}
         </View>
 
-        <GroupLabel style={styles.group}>Day</GroupLabel>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dayScroller}
-          contentContainerStyle={styles.dayRow}>
-          {days.map((candidate) => {
-            const selected = day === candidate.key;
-            return (
-              <Button
-                key={candidate.key}
-                variant={selected ? 'primary' : 'secondary'}
-                onPress={() => setDay(candidate.key)}
-                accessibilityLabel={candidate.label}
-                accessibilityState={{ selected }}
-                style={styles.day}>
-                <Text style={[styles.dayName, { color: selected ? color.bg : color.text }]}>
-                  {candidate.dow}
-                </Text>
-                <Text style={[styles.dayNumber, { color: selected ? color.bg : color.text }]}>
-                  {candidate.num}
-                </Text>
-              </Button>
-            );
-          })}
-        </ScrollView>
+        <Async query={query} loadingLabel="Checking what is free…">
+          {() =>
+            days.length === 0 ? (
+              <Empty>
+                No free consultation times in the next fortnight. Send us a message and we will
+                find one.
+              </Empty>
+            ) : (
+              <>
+                <GroupLabel style={styles.group}>Day</GroupLabel>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.dayScroller}
+                  contentContainerStyle={styles.dayRow}>
+                  {days.map((day) => {
+                    const selected = dayKey === day.dayKey;
+                    return (
+                      <Button
+                        key={day.dayKey}
+                        variant={selected ? 'primary' : 'secondary'}
+                        onPress={() => {
+                          setDayKey(day.dayKey);
+                          // The chosen time belonged to the old day.
+                          setSlotIso(null);
+                        }}
+                        accessibilityLabel={day.dayLabel}
+                        accessibilityState={{ selected }}
+                        style={styles.day}>
+                        <Text style={[styles.dayName, { color: selected ? color.bg : color.text }]}>
+                          {day.dow}
+                        </Text>
+                        <Text
+                          style={[styles.dayNumber, { color: selected ? color.bg : color.text }]}>
+                          {day.dayNumber}
+                        </Text>
+                      </Button>
+                    );
+                  })}
+                </ScrollView>
 
-        <GroupLabel style={styles.group}>Time</GroupLabel>
-        <View style={styles.slots}>
-          {bookingSlots.map((option) => (
-            <Button
-              key={option}
-              variant={slot === option ? 'primary' : 'secondary'}
-              label={option}
-              onPress={() => setSlot(option)}
-              accessibilityState={{ selected: slot === option }}
-              style={styles.slot}
-              labelStyle={styles.slotLabel}
-            />
-          ))}
-        </View>
+                <GroupLabel style={styles.group}>Time</GroupLabel>
+                {dayKey ? (
+                  <View style={styles.slots}>
+                    {timesForDay.map((slot) => (
+                      <Button
+                        key={slot.iso}
+                        variant={slotIso === slot.iso ? 'primary' : 'secondary'}
+                        label={slot.time}
+                        onPress={() => setSlotIso(slot.iso)}
+                        accessibilityState={{ selected: slotIso === slot.iso }}
+                        style={styles.slot}
+                        labelStyle={styles.slotLabel}
+                      />
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.hint}>Pick a day to see the times.</Text>
+                )}
+              </>
+            )
+          }
+        </Async>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Button
           variant={ready ? 'primary' : 'secondary'}
-          label={ready ? 'Confirm booking' : 'Pick a day and time'}
+          label={sending ? 'Sending…' : ready ? 'Request this time' : 'Pick a day and time'}
           uppercase
+          disabled={sending}
           onPress={confirm}
           style={styles.confirm}
           labelStyle={styles.confirmLabel}
@@ -214,7 +274,21 @@ const styles = StyleSheet.create({
   slotLabel: {
     fontSize: 14,
   },
+  hint: {
+    fontFamily: font.body,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: color.neutral600,
+    marginTop: 12,
+  },
 
+  error: {
+    fontFamily: font.body,
+    fontSize: 12.5,
+    lineHeight: 17,
+    color: color.accent700,
+    marginTop: 16,
+  },
   confirm: {
     marginTop: space.section,
     paddingVertical: 16,
