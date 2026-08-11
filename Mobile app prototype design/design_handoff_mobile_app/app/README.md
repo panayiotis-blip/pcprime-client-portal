@@ -26,10 +26,10 @@ and file picking all work in it, but remote push needs a development build.
 localStorage for the session — fine for reviewing the design, never for a real
 account.
 
-## Three migrations and a function to deploy first
+## Four migrations and three functions to deploy first
 
-Booking and push had no backend. `supabase/migrations/` in the portal repo now
-has three files to run in the Supabase SQL editor, in order:
+Booking, push and the portal hand-off had no backend. `supabase/migrations/` in
+the portal repo now has four files to run in the Supabase SQL editor, in order:
 
 - `176_consultation_requests.sql` — a client asks for a consultation; staff
   confirm it into the diary. Appointments stay staff-only, as migration 020
@@ -40,6 +40,8 @@ has three files to run in the Supabase SQL editor, in order:
 - `178_push_outbox.sql` — what to say and when. Triggers on new firm messages
   and firm-filed documents, a nightly deadline sweep, and the per-minute cron
   that drains the queue.
+- `179_portal_sso.sql` — the one-time codes behind the portal hand-off. Service
+  role only: RLS is on with no policies at all.
 
 178 schedules a function that must exist, so deploy it first:
 
@@ -50,8 +52,19 @@ supabase functions deploy send-push --no-verify-jwt
 Then set `CRON_SECRET` on the function and the matching Vault secret — the
 commented block at the bottom of 178 has the exact statement.
 
-Until 176 and 177 are run, Book and push registration fail; everything else
-works.
+The hand-off is two more functions, and the flags are not interchangeable:
+
+```bash
+supabase functions deploy sso-mint                     # verifies the JWT
+supabase functions deploy sso-exchange --no-verify-jwt # no JWT to verify yet
+```
+
+`sso-mint` must keep its JWT check — minting a code *is* the privilege being
+handed out. `sso-exchange` cannot have one: it is called by a browser that is
+not signed in, which is the entire point of the code.
+
+Until 176 and 177 are run, Book and push registration fail; until 179 and both
+functions are live, the portal opens signed out. Everything else works.
 
 ## Signing in
 
@@ -68,6 +81,27 @@ treats a half-verified session as unverified and every screen comes back empty.
 
 Biometric unlock guards re-entry into a session already in the keystore. It is
 not a second credential and cannot create a session from nothing.
+
+### Into the web portal, without signing in twice
+
+The Portal screen opens `portal.primeandcalculate.com` already signed in.
+`sso-mint` gives the app a one-time code; the URL carries it in the fragment
+(`#sso=…`), so it never reaches the host's access logs or a Referer header; the
+portal posts it to `sso-exchange` before React mounts and gets a session back
+in the response body. The code is opaque, single use, and dead after ninety
+seconds.
+
+The session's own tokens never travel in the URL. They last for days, and a URL
+is copied, logged and kept in history — which is why OAuth passes a code and
+not a token, and why this does too.
+
+The exchanged session starts at `aal1`, so anyone with an authenticator is
+challenged again by the portal. That is deliberate: clearing a second factor on
+the phone should not silently clear it on the web.
+
+If the code cannot be minted — offline, or the function is not deployed — the
+portal still opens and asks for a password, which is the behaviour that
+preceded all this.
 
 ## Layout
 
@@ -167,11 +201,10 @@ the system: a line of meta text on the paper ground, no illustration, no card.
 - **"YOU'RE BOOKED IN." is now "REQUEST SENT."** The design assumed booking was
   instant. It is not, and should not be: a request goes to the firm and a
   person confirms it. The screen keeps its shape and tells the truth.
-- **The portal hand-off no longer promises "no second login."** Carrying a
-  session across in a URL would put an access token in browser history and
-  server logs. Real SSO needs a one-time code minted by an Edge Function and
-  exchanged by the portal — a change on the web side too. Until that exists the
-  copy does not over-promise.
+- **The portal hand-off keeps its "no second sign-in," but says what it cannot
+  skip.** The prototype's copy promised a clean pass-through; a code exchange
+  now delivers one, except for the authenticator, which the portal asks for
+  again on purpose. The screen says so rather than surprising anyone.
 - Two staff screens the handoff does not design — **their files** and **staff
   More** — are built from the designed components and say so in a comment.
 
@@ -215,7 +248,8 @@ update cron.job set active = false where jobname = 'send-push';
 
 ## Still to build
 
-- **SSO into the web portal** — the one-time code exchange described above.
+- **The hand-off has not been run against the deployed functions.** Both halves
+  are written and type-check; nothing has minted a real code yet.
 - **Staff notifications.** Push is client-facing, as the handoff specified — an
   accountant is not told when a client replies or uploads. The outbox is
   generic, so it is one trigger away.

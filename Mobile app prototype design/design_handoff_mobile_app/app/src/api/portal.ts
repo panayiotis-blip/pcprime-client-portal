@@ -834,6 +834,36 @@ export async function loadTodaySummary(): Promise<TodaySummary> {
 }
 
 // ---------------------------------------------------------------------------
+// Portal hand-off — migration 179
+// ---------------------------------------------------------------------------
+
+/**
+ * A portal URL that arrives already signed in, or null if the hand-off cannot
+ * be arranged right now.
+ *
+ * `sso-mint` returns a one-time code, good for ninety seconds, carried in the
+ * URL fragment. The session's own tokens never travel: a URL is copied, logged
+ * and kept in history, and these tokens last for days. The portal posts the
+ * code back over HTTPS and gets a session in the response body instead.
+ *
+ * Null rather than a throw, because the fallback is not an error — opening the
+ * portal signed out still gets the person where they were going, one password
+ * later.
+ */
+export async function portalHandoffUrl(): Promise<string | null> {
+  try {
+    // invoke() attaches the current session's access token, which is what
+    // sso-mint verifies before it will hand out a code.
+    const { data, error } = await supabase.functions.invoke('sso-mint', { body: {} });
+    if (error) return null;
+    const url = (data as { url?: unknown } | null)?.url;
+    return typeof url === 'string' && url.length > 0 ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Push — migration 177
 // ---------------------------------------------------------------------------
 

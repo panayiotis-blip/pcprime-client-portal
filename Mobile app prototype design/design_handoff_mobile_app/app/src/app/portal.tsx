@@ -1,12 +1,15 @@
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { Lock } from 'lucide-react-native';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { portalHandoffUrl } from '../api/portal';
 import { Blueprint } from '../components/Blueprint';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusBarStyle } from '../components/StatusBarStyle';
+import { useToast } from '../components/Toast';
 import { firm } from '../data/content';
 import { useSession } from '../state/session';
 import { useTopPad } from '../theme/layout';
@@ -21,24 +24,37 @@ import { font } from '../theme/type';
  * Tabs on Android — rather than an external jump or an iframe, which portals
  * block with X-Frame-Options anyway.
  *
- * TODO — true single sign-on. The session cannot simply ride along in the URL:
- * an access token in a query string ends up in browser history, server logs
- * and the address bar. The right shape is a one-time code minted by an Edge
- * Function and exchanged by the portal for a session, which needs a change on
- * the web side too. Until that exists the copy below does not promise
- * otherwise.
+ * They arrive signed in. `sso-mint` issues a one-time code, the portal trades
+ * it for a session, and the tokens themselves never go near a URL — see
+ * migration 179. If the code cannot be minted the portal still opens, and asks
+ * for a password like any other visit.
  */
 export default function PortalScreen() {
   const router = useRouter();
   const topPad = useTopPad(58);
   const { account } = useSession();
+  const toast = useToast();
+  const [opening, setOpening] = useState(false);
+  // Two buttons open the same portal; a double-tap should not spend two codes.
+  const busy = useRef(false);
 
-  const open = () =>
-    WebBrowser.openBrowserAsync(firm.portalUrl, {
-      toolbarColor: color.accent900,
-      controlsColor: color.accent300,
-      secondaryToolbarColor: color.accent900,
-    });
+  const open = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setOpening(true);
+    try {
+      const handoff = await portalHandoffUrl();
+      if (!handoff) toast.show('Opening the portal — you may need to sign in.');
+      await WebBrowser.openBrowserAsync(handoff ?? firm.portalUrl, {
+        toolbarColor: color.accent900,
+        controlsColor: color.accent300,
+        secondaryToolbarColor: color.accent900,
+      });
+    } finally {
+      busy.current = false;
+      setOpening(false);
+    }
+  }, [toast]);
 
   return (
     <Screen>
@@ -62,6 +78,7 @@ export default function PortalScreen() {
           variant="ghost"
           label="Open ↗"
           onPress={open}
+          disabled={opening}
           style={styles.barButton}
           labelStyle={styles.barLabel}
         />
@@ -73,13 +90,15 @@ export default function PortalScreen() {
           <Text style={styles.title}>Your client portal</Text>
           <Text style={styles.body}>
             Signed in as {account?.name ?? 'your account'}. The portal opens in a secure browser
-            window, where you may be asked to sign in the first time.
+            window and you go straight in — no second sign-in. If you use an authenticator app,
+            the portal still asks for a code.
           </Text>
           <Button
             variant="primary"
-            label="Open portal ↗"
+            label={opening ? 'Opening…' : 'Open portal ↗'}
             uppercase
             onPress={open}
+            disabled={opening}
             style={styles.open}
             labelStyle={styles.openLabel}
           />
