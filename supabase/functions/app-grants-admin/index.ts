@@ -220,7 +220,20 @@ Deno.serve(async (req) => {
     if (targetProf && ['owner', 'supervisor', 'admin', 'staff'].includes((targetProf as any).role)) {
       return json({ ok: false, error: 'That is a firm account — change its password in User Management, not here.' }, 403);
     }
-    const { error } = await admin.auth.admin.updateUserById(userId, { password });
+    // Confirm the address while we are here. An invited account stays
+    // unconfirmed until someone clicks the link in the invite email, and Auth
+    // refuses to sign in an unconfirmed user — so a password set by hand
+    // produced a login that could not be used, reported as "Email not
+    // confirmed" with nothing on this side to show for it.
+    //
+    // Setting the password IS the verification in this path: firm staff, who
+    // know the person, hand them the password out of band. The invite link is
+    // precisely the thing that did not arrive. This does not widen what the
+    // account can reach — it holds one app grant and nothing else.
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      password,
+      email_confirm: true,
+    });
     if (error) return json({ ok: false, error: error.message }, 400);
     return json({ ok: true });
   }
