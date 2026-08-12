@@ -5514,7 +5514,7 @@ export const api = {
 
   // -- New "important" generators -------------------------------
 
-  async generateProvisionalTaxTasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number } = {}) {
+  async generateProvisionalTaxTasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number; dueOnOrBefore?: string } = {}) {
     const asOf      = opts.asOf || new Date();
     const lookback  = opts.lookbackYears  ?? 0;
     const lookahead = opts.lookaheadYears ?? 1;
@@ -5533,6 +5533,7 @@ export const api = {
     const rows: any[] = [];
     for (const c of eligible) {
       for (const p of periods) {
+        if (opts.dueOnOrBefore && p.due > opts.dueOnOrBefore) continue;
         rows.push({
           client_id: c.id,
           kind: 'provisional_tax',
@@ -5553,7 +5554,7 @@ export const api = {
     return { created: data?.length || 0, attempted: rows.length, eligible_clients: eligible.length };
   },
 
-  async generateHE32Tasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number } = {}) {
+  async generateHE32Tasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number; dueOnOrBefore?: string } = {}) {
     const asOf      = opts.asOf || new Date();
     const lookback  = opts.lookbackYears  ?? 0;
     const lookahead = opts.lookaheadYears ?? 1;
@@ -5570,6 +5571,7 @@ export const api = {
       const inc = new Date(c.incorporation_date as string);
       if (isNaN(inc.getTime())) continue;
       for (const p of computeHE32Periods(asOf, inc, lookback, lookahead)) {
+        if (opts.dueOnOrBefore && p.due > opts.dueOnOrBefore) continue;
         rows.push({
           client_id: c.id,
           kind: 'he32_annual',
@@ -5590,7 +5592,7 @@ export const api = {
     return { created: data?.length || 0, attempted: rows.length, eligible_clients: (clients || []).length };
   },
 
-  async generateUboTasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number } = {}) {
+  async generateUboTasks(opts: { asOf?: Date; lookbackYears?: number; lookaheadYears?: number; dueOnOrBefore?: string } = {}) {
     const asOf      = opts.asOf || new Date();
     const lookback  = opts.lookbackYears  ?? 0;
     const lookahead = opts.lookaheadYears ?? 1;
@@ -5612,6 +5614,7 @@ export const api = {
     const rows: any[] = [];
     for (const c of eligible) {
       for (const p of periods) {
+        if (opts.dueOnOrBefore && p.due > opts.dueOnOrBefore) continue;
         rows.push({
           client_id: c.id,
           kind: 'ubo_annual',
@@ -5633,9 +5636,16 @@ export const api = {
   },
 
   // -- Unified orchestrator --------------------------------------
-  // Picks generators tuned for the focus month:
-  //   Routine (VAT / SI / IR7): only periods due ON OR BEFORE end of yyyymm.
-  //   Important (Provisional Tax / HE32): always current + next year.
+  // Generates only what is due ON OR BEFORE the end of yyyymm — every kind,
+  // routine or not.
+  //
+  // Provisional tax, HE32 and UBO used to be exempt, on the reasoning that an
+  // annual filing must never be missed. What it actually produced was next
+  // year's work sitting in today's list for a year: run this in August and the
+  // UBO register for 2027 appeared, due and undoable. Nothing is lost by
+  // waiting, because the run is monthly — each month picks up whatever has come
+  // due since the last one. The lookahead stays for the period arithmetic; the
+  // cutoff decides what gets written.
   async generateForMonth(yyyymm: string) {
     const m = /^(\d{4})-(\d{2})$/.exec(yyyymm);
     if (!m) throw new Error('Expected YYYY-MM, got: ' + yyyymm);
@@ -5648,9 +5658,9 @@ export const api = {
       api.generateVatTasks({ asOf: endOfMonth, lookbackQuarters: 8, lookaheadQuarters: 2, dueOnOrBefore: endOfMonthIso }),
       api.generateSocialInsuranceTasks({ asOf: endOfMonth, lookbackMonths: 24, lookaheadMonths: 2, dueOnOrBefore: endOfMonthIso }),
       api.generateIR7Tasks({ asOf: endOfMonth, lookbackYears: 3, lookaheadYears: 1, dueOnOrBefore: endOfMonthIso }),
-      api.generateProvisionalTaxTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
-      api.generateHE32Tasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
-      api.generateUboTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1 }),
+      api.generateProvisionalTaxTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1, dueOnOrBefore: endOfMonthIso }),
+      api.generateHE32Tasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1, dueOnOrBefore: endOfMonthIso }),
+      api.generateUboTasks({ asOf: endOfMonth, lookbackYears: 0, lookaheadYears: 1, dueOnOrBefore: endOfMonthIso }),
     ]);
 
     const total = vat.created + si.created + ir7.created + ptax.created + he32.created + ubo.created;
