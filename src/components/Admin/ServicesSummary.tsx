@@ -16,6 +16,16 @@ type ServiceDef = { id: number; key: string; label: string; enabled: boolean; or
 
 const key = (clientId: number, serviceId: number) => `${clientId}:${serviceId}`;
 
+const filled = (value: unknown) => String(value ?? '').trim().length > 0;
+
+/** Registered for VAT: a VAT number on file, or a period category assigned.
+ *  Either alone is enough to mean "we file VAT for these people" — the number
+ *  arrives with the registration, the category with the first return. */
+const isVatRegistered = (c: any) => filled(c?.vat_number) || filled(c?.vat_category);
+
+/** Enough registration detail to compute WHEN their returns fall due. */
+const hasVatSchedule = (c: any) => filled(c?.vat_category) && filled(c?.vat_start_month);
+
 export default function ServicesSummary() {
   const { clients } = useApp();
   const { user } = useAuth();
@@ -30,6 +40,7 @@ export default function ServicesSummary() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [withServicesOnly, setWithServicesOnly] = useState(false);
+  const [vatOnly, setVatOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -147,8 +158,17 @@ export default function ServicesSummary() {
       .filter(c => !filterCategory || c.client_category === filterCategory)
       .filter(c => !t || (c.name || '').toLowerCase().includes(t) || (c.client_code || '').toLowerCase().includes(t))
       .filter(c => !withServicesOnly || services.some(s => enabled.has(key(c.id, s.id))))
+      .filter(c => !vatOnly || isVatRegistered(c))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [baseClients, services, enabled, search, withServicesOnly, filterCategory]);
+  }, [baseClients, services, enabled, search, withServicesOnly, filterCategory, vatOnly]);
+
+  // Of the VAT clients on screen, how many could actually be scheduled? The
+  // month sync needs a category AND a start month; a client with a VAT number
+  // and nothing else is silently skipped, so say so before it happens.
+  const vatMissingReg = useMemo(
+    () => rows.filter(c => isVatRegistered(c) && !hasVatSchedule(c)).length,
+    [rows],
+  );
 
   const has = (clientId: number, serviceId: number) => enabled.has(key(clientId, serviceId));
 
@@ -268,7 +288,18 @@ export default function ServicesSummary() {
           <input type="checkbox" checked={withServicesOnly} onChange={e => setWithServicesOnly(e.target.checked)} />
           With services only
         </label>
-        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{rows.length} clients{busy ? ' · saving…' : ''}</span>
+        <label className="tf-check" title="Clients with a VAT number or a VAT period category on file">
+          <input type="checkbox" checked={vatOnly} onChange={e => setVatOnly(e.target.checked)} />
+          VAT registered only
+        </label>
+        <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>
+          {rows.length} clients{busy ? ' · saving…' : ''}
+          {vatOnly && vatMissingReg > 0 && (
+            <span style={{ color: '#b4720d' }}>
+              {' · '}{vatMissingReg} without category/start month
+            </span>
+          )}
+        </span>
         <label style={{ marginLeft: 'auto' }}>
           <span className="tf-control-label">Set manager for all shown</span>
           <span style={{ display: 'flex', gap: 6 }}>
