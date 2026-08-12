@@ -106,6 +106,12 @@ export default function StaffTasks() {
   const [search, setSearch]       = useState<string>('');
   const [fType, setFType]         = useState<string>(''); // '' all · 'manual' · service_key
   const [fOverdue, setFOverdue]   = useState(false);      // supervisor escalation view
+  // How far ahead to look. The scheduler generates a stage's whole cycle the
+  // moment it runs, so an annual service with a long due-month offset drops
+  // next year's work into today's list and never leaves. Those tasks are not
+  // wrong, just not yet — so they are hidden by default rather than deleted,
+  // and the count line says how many are waiting out there.
+  const [fHorizon, setFHorizon]   = useState<string>('90');
   // Migration 102: 'live' hides soft-deleted rows (default), 'deleted'
   // shows ONLY the trash so the user can restore something they killed
   // by mistake.
@@ -204,8 +210,30 @@ export default function StaffTasks() {
     return Array.from(m.entries()).map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [tasks]);
 
+  // Everything due on or before this date, or with no due date at all. Null
+  // means no horizon. An explicit To date wins — someone who typed a range
+  // means it.
+  const horizonDate = useMemo(() => {
+    if (fHorizon === 'all' || fTo) return null;
+    const days = Number(fHorizon);
+    if (!Number.isFinite(days)) return null;
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }, [fHorizon, fTo]);
+
+  /** Within the horizon — and never hides anything overdue or undated. */
+  const withinHorizon = (t: Task) => !horizonDate || !t.due_date || t.due_date <= horizonDate;
+
+  const beyondHorizon = useMemo(
+    () => (horizonDate
+      ? tasks.filter(t => t.category !== 'return_call' && isOpenStatus(t.status) && !withinHorizon(t)).length
+      : 0),
+    [tasks, horizonDate],
+  );
+
   const visibleTasks = useMemo(() => {
-    let out = tasks.filter(t => t.category !== 'return_call');
+    let out = tasks.filter(t => t.category !== 'return_call').filter(withinHorizon);
     if (fOverdue) out = out.filter(t => isOpenStatus(t.status) && !!t.due_date && t.due_date < todayIso());
     if (fStatus === 'open') out = out.filter(t => isOpenStatus(t.status));
     if (fType === 'manual') out = out.filter(t => !t.service_key);
@@ -219,23 +247,26 @@ export default function StaffTasks() {
       );
     }
     return out;
-  }, [tasks, fStatus, fType, fOverdue, search]);
+  }, [tasks, fStatus, fType, fOverdue, search, horizonDate]);
 
   const stats = useMemo(() => {
     const today = todayIso();
     const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     const oneWeekAgoIso = oneWeekAgo.toISOString();
+    // Counted on the same horizon as the list. An "open" figure that includes
+    // next year's work is the number that made the bars look full.
+    const inView = tasks.filter(withinHorizon);
     return {
-      open:    tasks.filter(t => isOpenStatus(t.status)).length,
-      overdue: tasks.filter(t => isOpenStatus(t.status) && t.due_date && t.due_date < today).length,
-      due7:    tasks.filter(t => {
+      open:    inView.filter(t => isOpenStatus(t.status)).length,
+      overdue: inView.filter(t => isOpenStatus(t.status) && t.due_date && t.due_date < today).length,
+      due7:    inView.filter(t => {
         if (!isOpenStatus(t.status) || !t.due_date) return false;
         const d = daysFromToday(t.due_date);
         return d >= 0 && d <= 7;
       }).length,
       doneWeek: tasks.filter(t => t.status === 'done' && t.completed_at && t.completed_at >= oneWeekAgoIso).length,
     };
-  }, [tasks]);
+  }, [tasks, horizonDate]);
 
   // Print the currently-filtered task list as a clean table (new window).
   const printTasks = () => {
@@ -607,6 +638,22 @@ export default function StaffTasks() {
           />
         </div>
         <div className="form-group">
+          <label>Looking ahead</label>
+          <select
+            className="form-input"
+            value={fHorizon}
+            onChange={e => setFHorizon(e.target.value)}
+            disabled={!!fTo}
+            title={fTo ? 'Ignored while a "Due to" date is set' : 'Hide work that is not due yet'}>
+            <option value="30">Next 30 days</option>
+            <option value="60">Next 60 days</option>
+            <option value="90">Next 90 days</option>
+            <option value="180">Next 6 months</option>
+            <option value="365">Next 12 months</option>
+            <option value="all">Everything</option>
+          </select>
+        </div>
+        <div className="form-group">
           <label>Due from</label>
           <input type="date" className="form-input" value={fFrom} onChange={e => setFFrom(e.target.value)} />
         </div>
@@ -647,11 +694,27 @@ export default function StaffTasks() {
         </div>
       </div>
 
+      {/* Nothing is deleted by the horizon, so say where it went. */}
+      {!loading && beyondHorizon > 0 && (
+        <div style={{ fontSize: 12, color: '#64748b', margin: '0 0 8px' }}>
+          {beyondHorizon} open task{beyondHorizon === 1 ? '' : 's'} not due yet {' '}
+          <button
+            className="btn btn-link btn-sm"
+            style={{ padding: 0, fontSize: 12 }}
+            onClick={() => setFHorizon('all')}>
+            show everything
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="loading-screen">Loading...</div>
       ) : visibleTasks.length === 0 ? (
         <div className="empty-state">
-          <p>No tasks match the current filters.</p>
+          <p>
+            No tasks match the current filters.
+            {beyondHorizon > 0 && <> {beyondHorizon} are further ahead than the “Looking ahead” window.</>}
+          </p>
           <p>Click <strong>+ New Task</strong> to create one.</p>
         </div>
       ) : false ? (

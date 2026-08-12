@@ -28,6 +28,17 @@ function todayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Last day of the given month, as an ISO date. */
+function monthEndIso(year: number, month: number): string {
+  const d = new Date(year, month, 0); // day 0 of next month = last of this one
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function RunSchedulesModal({
   onClose, onRan,
 }: {
@@ -36,7 +47,14 @@ export default function RunSchedulesModal({
 }) {
   const { clients } = useApp();
   const [services, setServices] = useState<ServiceDef[]>([]);
-  const [runDate, setRunDate] = useState<string>(todayIso());
+  // One month per run, and the picker says so. It used to take a free date,
+  // which read as "up to here" and hid the fact that a run only ever fires the
+  // stages active in that one month. Whole month: the run date is its last day,
+  // so nothing configured for the 25th is missed by running on the 3rd.
+  const now = new Date();
+  const [runYear, setRunYear] = useState<number>(now.getFullYear());
+  const [runMonth, setRunMonth] = useState<number>(now.getMonth() + 1);
+  const runDate = monthEndIso(runYear, runMonth);
   const [serviceId, setServiceId] = useState<number>(0); // 0 = All
   const [clientFilter, setClientFilter] = useState<'all' | 'pick'>('all');
   const [pickedClientIds, setPickedClientIds] = useState<Set<number>>(new Set());
@@ -120,10 +138,20 @@ export default function RunSchedulesModal({
           <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Run for date</label>
-                <input type="date" value={runDate} onChange={(e) => setRunDate(e.target.value)} className="form-input" style={{ width: '100%' }} />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Generate for month</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <select value={runMonth} onChange={(e) => setRunMonth(Number(e.target.value))} className="form-input" style={{ flex: 1 }}>
+                    {MONTH_NAMES.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
+                  </select>
+                  <select value={runYear} onChange={(e) => setRunYear(Number(e.target.value))} className="form-input" style={{ width: 100 }}>
+                    {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
                 <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
-                  Fires stages whose computed date in this month is ≤ this date.
+                  This month only — the stages that fall in {MONTH_NAMES[runMonth - 1]} {runYear}. Their
+                  due dates can land later, according to each stage's due-month offset.
                 </p>
               </div>
               <div>
