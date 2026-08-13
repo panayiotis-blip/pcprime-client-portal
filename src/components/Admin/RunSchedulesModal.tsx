@@ -47,10 +47,10 @@ export default function RunSchedulesModal({
 }) {
   const { clients } = useApp();
   const [services, setServices] = useState<ServiceDef[]>([]);
-  // One month per run, and the picker says so. It used to take a free date,
-  // which read as "up to here" and hid the fact that a run only ever fires the
-  // stages active in that one month. Whole month: the run date is its last day,
-  // so nothing configured for the 25th is missed by running on the 3rd.
+  // One month per run, and the picker says so. It used to take a free date
+  // labelled "fires stages whose computed date is ≤ this date", which was not
+  // true: run_client_service_schedules reads only the year and month out of
+  // p_run_date and ignores the day. A month end is passed for tidiness.
   const now = new Date();
   const [runYear, setRunYear] = useState<number>(now.getFullYear());
   const [runMonth, setRunMonth] = useState<number>(now.getMonth() + 1);
@@ -150,8 +150,9 @@ export default function RunSchedulesModal({
                   </select>
                 </div>
                 <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0' }}>
-                  This month only — the stages that fall in {MONTH_NAMES[runMonth - 1]} {runYear}. Their
-                  due dates can land later, according to each stage's due-month offset.
+                  Every stage that falls in {MONTH_NAMES[runMonth - 1]} {runYear}, whole month, whatever
+                  today's date is. Due dates can still land later — each stage adds its own due-month
+                  offset.
                 </p>
               </div>
               <div>

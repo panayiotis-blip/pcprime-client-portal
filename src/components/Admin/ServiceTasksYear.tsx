@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, isStaffRole, isSupervisorOrHigher } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PanelSkeleton } from '../ui';
+import RunSchedulesModal from './RunSchedulesModal';
 
 // Yearly service-task completion grid. Shows every period each client's
 // enabled services are EXPECTED to fire in the year (computed by
@@ -44,6 +45,7 @@ export default function ServiceTasksYear() {
   const [plan, setPlan] = useState<PlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
+  const [showRun, setShowRun] = useState(false);
   const [edits, setEdits] = useState<Record<string, { reference?: string; completed_date?: string }>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
@@ -227,9 +229,21 @@ export default function ServiceTasksYear() {
             Print
           </button>
           {canBackfill && (
-            <button className="btn btn-secondary" onClick={backfill} disabled={!!busy}>
-              {busy || `Generate all ${year}`}
-            </button>
+            <>
+              {/* One month at a time, with a preview, is the normal way in.
+                  Generating a whole year at once is what put work nobody can
+                  start into everybody's task list. */}
+              <button className="btn btn-primary" onClick={() => setShowRun(true)} disabled={!!busy}>
+                Generate month…
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={backfill}
+                disabled={!!busy}
+                title={`Creates every missing task for all twelve months of ${year}, with no preview`}>
+                {busy || `Generate all ${year}`}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -327,6 +341,17 @@ export default function ServiceTasksYear() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showRun && (
+        <RunSchedulesModal
+          onClose={() => setShowRun(false)}
+          onRan={(r) => {
+            setShowRun(false);
+            alert(`Done — ${r.created_tasks} task(s) created.`);
+            loadPlan();
+          }}
+        />
       )}
     </div>
   );
