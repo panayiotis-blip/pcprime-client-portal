@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { api } from '../../../services/api';
+import { vatPeriodsForYear } from '../../../services/vatCategories';
 import { downloadTaxisnetXml, validateExport } from '../../../services/taxisnetXml';
 import {
   FILING_TYPES, FILING_STATUSES,
@@ -25,7 +26,15 @@ type Filing = {
   reference_number: string | null;
   amount: number | null;
   notes: string | null;
+  // Migration 181. Null on annual filings — a company return is identified by
+  // its year and needs nothing more.
+  period_label: string | null;
+  period_start: string | null;
+  period_end: string | null;
 };
+
+/** Filing types that recur within a year and therefore need a period. */
+const PERIODIC_FILING_TYPES = new Set(['vat_return']);
 
 type FormType = 'individuals' | 'self_employed';
 
@@ -46,6 +55,9 @@ const blank = (defaultYear: number): Partial<Filing> => ({
   reference_number: '',
   amount: null,
   notes: '',
+  period_label: null,
+  period_start: null,
+  period_end: null,
 });
 
 // Tax Filings — unified tab that lists every filing type (VAT, corporate, etc.)
@@ -56,6 +68,22 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<Partial<Filing>>(blank(new Date().getFullYear()));
+
+  const needsPeriod = PERIODIC_FILING_TYPES.has(String(form.filing_type || ''));
+  const periodOptions = useMemo(
+    () => (needsPeriod
+      ? vatPeriodsForYear(client?.vat_category, client?.vat_start_month, Number(form.tax_year))
+      : []),
+    [needsPeriod, client?.vat_category, client?.vat_start_month, form.tax_year],
+  );
+
+  // Changing the year or the type invalidates a period already picked — a
+  // 'Feb–Apr 2025' left sitting on a 2026 return would be quietly wrong.
+  useEffect(() => {
+    setForm(f => (f.period_label && !periodOptions.some(o => o.label === f.period_label)
+      ? { ...f, period_label: null, period_start: null, period_end: null }
+      : f));
+  }, [periodOptions]);
   const [saving, setSaving] = useState(false);
 
   // Editor mode (for tax-return-type filings)
@@ -226,6 +254,11 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
     if (!form.tax_year || !form.filing_type || !form.status) {
       alert('Tax year, type and status are required'); return;
     }
+    // A VAT return without its period is the ambiguity this whole thing exists
+    // to remove — but only insist when we can actually offer the choice.
+    if (needsPeriod && periodOptions.length > 0 && !form.period_label) {
+      alert('Choose which period this VAT return is for.'); return;
+    }
     setSaving(true);
     try {
       await api.createTaxFiling({
@@ -233,6 +266,9 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
         tax_year:  form.tax_year,
         filing_type: form.filing_type,
         status:    form.status,
+        period_label: form.period_label || null,
+        period_start: form.period_start || null,
+        period_end:   form.period_end || null,
         due_date:  form.due_date || null,
         filed_date: form.filed_date || null,
         reference_number: form.reference_number || null,
@@ -273,6 +309,7 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
     const data = filtered.map(r => ({
       'Tax Year':        r.tax_year,
       'Filing Type':     filingTypeLabel(r.filing_type),
+      'Period':          r.period_label || '',
       'Status':          r.status,
       'Due Date':        r.due_date || '',
       'Filed Date':      r.filed_date || '',
@@ -394,6 +431,7 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                 <tr>
                   <th style={{ width: 60 }}>Year</th>
                   <th>Filing</th>
+                  <th>Period</th>
                   <th>Status</th>
                   <th>Due</th>
                   <th>Filed</th>
@@ -409,6 +447,9 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                   <tr key={r.id}>
                     <td>{r.tax_year}</td>
                     <td>{filingTypeLabel(r.filing_type)}</td>
+                    {/* Blank for annual filings, and for periodic rows entered
+                        before periods existed — neither is worth inventing. */}
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.period_label || '—'}</td>
                     <td>
                       {canEdit ? (
                         <select
@@ -532,6 +573,36 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                   {FILING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
+              {/* VAT is not annual. The options come from this client's own
+                  registration — category A-G and start month — so a 3-monthly
+                  client gets their four periods and a monthly client twelve. */}
+              {needsPeriod && (
+                <div className="form-group">
+                  <label>Period {periodOptions.length > 0 && '*'}</label>
+                  {periodOptions.length === 0 ? (
+                    <p style={{ fontSize: 12, color: '#b4720d', margin: '4px 0 0' }}>
+                      No VAT category or start month on this client — set them on the
+                      Registrations tab and the periods appear here.
+                    </p>
+                  ) : (
+                    <select
+                      className="form-input"
+                      value={form.period_label || ''}
+                      onChange={e => {
+                        const p = periodOptions.find(o => o.label === e.target.value);
+                        setForm(f => ({
+                          ...f,
+                          period_label: p?.label ?? null,
+                          period_start: p?.start ?? null,
+                          period_end: p?.end ?? null,
+                        }));
+                      }}>
+                      <option value="">— choose the period —</option>
+                      {periodOptions.map(o => <option key={o.label} value={o.label}>{o.label}</option>)}
+                    </select>
+                  )}
+                </div>
+              )}
               <div className="form-group">
                 <label>Status *</label>
                 <select className="form-input" value={form.status || ''} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}>
