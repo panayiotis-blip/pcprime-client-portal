@@ -115,6 +115,57 @@ Deno.serve(async (req) => {
   // ---------------------------------------------------------
   // list — grants for a client (optionally one app), + email/name
   // ---------------------------------------------------------
+  // ---------------------------------------------------------
+  // list_all — every app grant in the firm, for the Users page.
+  //
+  // Grants were only ever visible one client at a time, inside that client's
+  // Apps tab. Nobody could answer "who has access to what", which is the
+  // question you ask when someone leaves. Staff only: this crosses every
+  // client, so a portal client must not see it however many clients they hold.
+  // ---------------------------------------------------------
+  if (action === 'list_all') {
+    if (!(await isStaff())) return json({ ok: false, error: 'Firm staff only.' }, 403);
+
+    const { data: grants, error } = await admin
+      .from('client_app_grants')
+      .select('id, user_id, client_id, app_key, role, active, created_at')
+      .order('created_at', { ascending: false });
+    if (error) return json({ ok: false, error: error.message }, 500);
+
+    const userIds = [...new Set((grants || []).map((g: any) => g.user_id))];
+    const clientIds = [...new Set((grants || []).map((g: any) => g.client_id))];
+
+    const nameById: Record<string, string> = {};
+    if (userIds.length) {
+      const { data: profs } = await admin.from('profiles').select('id, full_name').in('id', userIds);
+      for (const p of profs || []) nameById[(p as any).id] = (p as any).full_name || '';
+    }
+    const clientById: Record<number, { name: string; code: string }> = {};
+    if (clientIds.length) {
+      const { data: cs } = await admin.from('clients').select('id, name, client_code').in('id', clientIds);
+      for (const c of cs || []) {
+        clientById[(c as any).id] = { name: (c as any).name || '', code: (c as any).client_code || '' };
+      }
+    }
+    // One auth lookup per person, not per grant — someone holding five apps
+    // was five identical round trips.
+    const emailById: Record<string, string> = {};
+    await Promise.all(userIds.map(async (id) => {
+      const { data } = await admin.auth.admin.getUserById(id as string);
+      emailById[id as string] = data?.user?.email || '';
+    }));
+
+    const out = (grants || []).map((g: any) => ({
+      id: g.id, user_id: g.user_id,
+      email: emailById[g.user_id] || '', name: nameById[g.user_id] || '',
+      client_id: g.client_id,
+      client_name: clientById[g.client_id]?.name || '',
+      client_code: clientById[g.client_id]?.code || '',
+      app_key: g.app_key, role: g.role, active: g.active, created_at: g.created_at,
+    }));
+    return json({ ok: true, grants: out });
+  }
+
   if (action === 'list') {
     const clientId = Number(body.client_id);
     if (!(await canAccess(clientId))) return json({ ok: false, error: 'No access to this client.' }, 403);

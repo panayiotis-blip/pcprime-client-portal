@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { api, roleLabel, hasPermission, isStaffRole } from '../../services/api';
+import { PanelSkeleton } from '../ui';
 import { supabase } from '../../lib/supabase';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -54,8 +56,37 @@ export default function UserManagement() {
   const [myPasswordConfirm, setMyPasswordConfirm] = useState('');
   const [showMyPassword, setShowMyPassword] = useState(false);
 
+  // Three populations, one account list. Staff run the firm, portal clients see
+  // their own records, app users open one embedded app on one client — and the
+  // same person can legitimately be two of those at once, which is why these
+  // are tabs over the same accounts rather than three separate registers.
+  const [tab, setTab] = useState<'staff' | 'portal' | 'apps'>('staff');
+  const [grants, setGrants] = useState<any[] | null>(null);
+  const [grantsError, setGrantsError] = useState('');
+  const [grantSearch, setGrantSearch] = useState('');
+
   const load = async () => { try { setUsers(await api.getUsers()); } catch {} };
   useEffect(() => { load(); }, []);
+
+  // Grants are a separate read and only the app tab needs them; fetch on first
+  // visit rather than on every page load.
+  useEffect(() => {
+    if (tab !== 'apps' || grants !== null) return;
+    api.listAllAppGrants()
+      .then(g => setGrants(g))
+      .catch(e => { setGrants([]); setGrantsError(e?.message || String(e)); });
+  }, [tab, grants]);
+
+  const staffUsersList = users.filter((u: any) => isStaffRole(u));
+  const portalUsersList = users.filter((u: any) => !isStaffRole(u));
+  const visibleUsers = tab === 'portal' ? portalUsersList : staffUsersList;
+
+  const visibleGrants = (grants || []).filter(g => {
+    const q = grantSearch.trim().toLowerCase();
+    if (!q) return true;
+    return [g.email, g.name, g.client_name, g.client_code, g.app_key]
+      .some((v: string) => String(v || '').toLowerCase().includes(q));
+  });
 
   // Pre-fill the Add User form from an existing user. Only carries fields that
   // are safe to copy — not email/username/password/display_name.
@@ -228,11 +259,40 @@ export default function UserManagement() {
         )}
       </div>
 
+      {/* Who you are looking at */}
+      <div className="tf-tabs" style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', margin: '18px 0 0' }}>
+        {([
+          { key: 'staff',  label: 'Staff',         count: staffUsersList.length },
+          { key: 'portal', label: 'Client portal', count: portalUsersList.length },
+          { key: 'apps',   label: 'App access',    count: grants?.length ?? null },
+        ] as const).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className="btn btn-link"
+            style={{
+              padding: '8px 14px', border: 'none', background: 'none', cursor: 'pointer',
+              fontWeight: tab === t.key ? 700 : 500,
+              color: tab === t.key ? '#1a365d' : '#64748b',
+              borderBottom: tab === t.key ? '2px solid #1a365d' : '2px solid transparent',
+            }}>
+            {t.label}{t.count !== null && ` (${t.count})`}
+          </button>
+        ))}
+      </div>
+      <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 12px' }}>
+        {tab === 'staff'  && 'People who work here and sign in to run the portal.'}
+        {tab === 'portal' && 'Clients who sign in to see their own records. Linked clients decide what they see.'}
+        {tab === 'apps'   && 'People granted one embedded app on one client. Granted and revoked on the client’s Apps → Access tab; this is the view across every client.'}
+      </p>
+
       {/* Add user */}
+      {tab !== 'apps' && (
       <div className="list-header">
-        <h3>Users ({users.length})</h3>
+        <h3>{tab === 'portal' ? 'Client portal users' : 'Staff'} ({visibleUsers.length})</h3>
         <button className="btn btn-primary btn-sm" onClick={() => setShowAdd(!showAdd)}>{showAdd ? 'Cancel' : '+ Add User'}</button>
       </div>
+      )}
 
       {showAdd && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -353,14 +413,59 @@ export default function UserManagement() {
         />
       )}
 
+      {/* App access — a read-only register. Granting and revoking stay on the
+          client's Apps tab, where the app and its data are. */}
+      {tab === 'apps' && (
+        <div>
+          <input
+            type="text" className="form-input" style={{ maxWidth: 320, marginBottom: 12 }}
+            placeholder="Search person, client or app…"
+            value={grantSearch} onChange={e => setGrantSearch(e.target.value)}
+          />
+          {grantsError && <div className="empty-state"><p style={{ color: '#b91c1c' }}>{grantsError}</p></div>}
+          {grants === null ? <PanelSkeleton rows={5} /> : visibleGrants.length === 0 ? (
+            <div className="empty-state"><p>{grantSearch ? 'Nobody matches that search.' : 'Nobody has been granted an app yet.'}</p></div>
+          ) : (
+            <div className="export-table-wrapper">
+              <table className="export-table">
+                <thead>
+                  <tr><th>Person</th><th>Email</th><th>Client</th><th>App</th><th>Role</th><th>Status</th><th>Granted</th><th></th></tr>
+                </thead>
+                <tbody>
+                  {visibleGrants.map((g: any) => (
+                    <tr key={g.id} style={{ opacity: g.active ? 1 : 0.5 }}>
+                      <td><strong>{g.name || '—'}</strong></td>
+                      <td>{g.email || '—'}</td>
+                      <td>{g.client_code ? `${g.client_code} — ${g.client_name}` : g.client_name}</td>
+                      <td>{g.app_key}</td>
+                      <td>{g.role}</td>
+                      <td>
+                        <span className={`status-badge ${g.active ? 'status-exported' : 'status-draft'}`}>
+                          {g.active ? 'Active' : 'Suspended'}
+                        </span>
+                      </td>
+                      <td>{g.created_at ? String(g.created_at).slice(0, 10) : ''}</td>
+                      <td>
+                        <Link className="btn btn-secondary btn-sm" to={`/clients/${g.client_id}?tab=apps`}>Manage</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* User list */}
+      {tab !== 'apps' && (
       <div className="export-table-wrapper">
         <table className="export-table">
           <thead>
             <tr><th>Name</th><th>Username</th><th>Role</th><th>Clients</th><th>Hourly Rate</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody>
-            {users.map((u: any) => {
+            {visibleUsers.map((u: any) => {
               const isEditing = editingId === u.id;
               return (
                 <tr key={u.id} style={{ opacity: u.active ? 1 : 0.5 }}>
@@ -476,6 +581,7 @@ export default function UserManagement() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

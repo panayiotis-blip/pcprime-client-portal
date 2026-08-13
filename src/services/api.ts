@@ -1136,6 +1136,15 @@ export const api = {
   },
 
   // ---- App access grants (migration 164) — firm grants apps BY EMAIL via app-grants-admin fn ----
+  // Every app grant in the firm — who can open which app, on whose client.
+  // The per-client list below answers "who is on this app"; this one answers
+  // "what does this person have", which is the question when someone leaves.
+  async listAllAppGrants(): Promise<any[]> {
+    const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'list_all' } });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'Failed to load app access.');
+    return data.grants as any[];
+  },
   async listAppGrants(clientId: number, appKey?: string): Promise<any[]> {
     const { data, error } = await supabase.functions.invoke('app-grants-admin', { body: { action: 'list', client_id: clientId, app_key: appKey } });
     if (error) throw new Error(error.message);

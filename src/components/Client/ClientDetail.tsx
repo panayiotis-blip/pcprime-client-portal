@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useMFAStepUp, MFA_CANCELLED } from '../../context/MFAStepUpContext';
@@ -133,7 +133,15 @@ export default function ClientDetail() {
   };
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadedOnce, setLoadedOnce] = useState(false);
-  const [tab, setTab] = useState<TabKey>('info');
+  // ?tab=apps opens straight on that tab, so a link from elsewhere in the
+  // portal can point at the part of the record it is talking about. Anything
+  // unrecognised falls back to the usual first tab.
+  const location = useLocation();
+  const [tab, setTab] = useState<TabKey>(() => {
+    const wanted = new URLSearchParams(location.search).get('tab') as TabKey | null;
+    const known = [...PRIMARY_TABS, ...FINANCE_TABS].some(t => t.key === wanted);
+    return known && wanted ? wanted : 'info';
+  });
   const [financeOpen, setFinanceOpen] = useState(false);
 
   const [showApplyTemplate, setShowApplyTemplate] = useState(false);
