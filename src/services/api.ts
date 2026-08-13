@@ -835,6 +835,15 @@ export const api = {
     return clientIds.length;
   },
 
+  // The supervisor above the account manager (migration 180).
+  async setSupervisorBulk(clientIds: number[], supervisorId: string | null) {
+    if (!clientIds.length) return 0;
+    const { error } = await supabase.from('clients')
+      .update({ supervisor_id: supervisorId }).in('id', clientIds);
+    if (error) throw new Error(error.message);
+    return clientIds.length;
+  },
+
   // --------- Client apps (migration 161) ---------
   // App keys enabled for a specific client (firm-side Apps tab).
   async getClientAppKeys(clientId: number): Promise<string[]> {

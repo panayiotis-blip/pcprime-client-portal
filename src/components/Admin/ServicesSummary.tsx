@@ -37,6 +37,9 @@ export default function ServicesSummary() {
   // immediately (the clients context isn't refetched on every save).
   const [staffUsers, setStaffUsers] = useState<{ id: string; name: string }[]>([]);
   const [managers, setManagers] = useState<Record<number, string>>({});
+  // The supervisor above the manager (migration 180). Same shape, same
+  // optimistic write, one column over.
+  const [supervisors, setSupervisors] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [withServicesOnly, setWithServicesOnly] = useState(false);
@@ -87,8 +90,13 @@ export default function ServicesSummary() {
   // Seed the account-manager overrides from the clients context once loaded.
   useEffect(() => {
     const seed: Record<number, string> = {};
-    for (const c of clients as any[]) if (c.account_manager) seed[c.id] = c.account_manager;
+    const seedSup: Record<number, string> = {};
+    for (const c of clients as any[]) {
+      if (c.account_manager) seed[c.id] = c.account_manager;
+      if (c.supervisor_id) seedSup[c.id] = c.supervisor_id;
+    }
     setManagers(seed);
+    setSupervisors(seedSup);
   }, [clients]);
 
   const setManager = async (clientId: number, uid: string) => {
@@ -99,6 +107,17 @@ export default function ServicesSummary() {
     } catch (e: any) {
       setManagers(m => ({ ...m, [clientId]: prev }));
       alert('Could not set account manager: ' + (e?.message || e));
+    }
+  };
+
+  const setSupervisor = async (clientId: number, uid: string) => {
+    const prev = supervisors[clientId] || '';
+    setSupervisors(s => ({ ...s, [clientId]: uid }));
+    try {
+      await api.updateClient(clientId, { supervisor_id: uid || null });
+    } catch (e: any) {
+      setSupervisors(s => ({ ...s, [clientId]: prev }));
+      alert('Could not set supervisor: ' + (e?.message || e));
     }
   };
 
@@ -117,6 +136,25 @@ export default function ServicesSummary() {
       await api.setAccountManagerBulk(ids, bulkManager || null);
     } catch (e: any) {
       setManagers(snapshot);
+      alert('Bulk update failed: ' + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const [bulkSupervisor, setBulkSupervisor] = useState('');
+  const setAllSupervisors = async () => {
+    const ids = rows.map(c => c.id);
+    if (!ids.length) return;
+    const who = bulkSupervisor ? (staffUsers.find(u => u.id === bulkSupervisor)?.name || 'that person') : 'Unassigned';
+    if (!confirm(`Set the supervisor to “${who}” for all ${ids.length} shown client${ids.length === 1 ? '' : 's'}?\n\nThis overwrites any supervisor already set on them.`)) return;
+    setBusy(true);
+    const snapshot = { ...supervisors };
+    setSupervisors(s => { const n = { ...s }; for (const id of ids) n[id] = bulkSupervisor; return n; });
+    try {
+      await api.setSupervisorBulk(ids, bulkSupervisor || null);
+    } catch (e: any) {
+      setSupervisors(snapshot);
       alert('Bulk update failed: ' + (e?.message || e));
     } finally {
       setBusy(false);
@@ -301,6 +339,19 @@ export default function ServicesSummary() {
           )}
         </span>
         <label style={{ marginLeft: 'auto' }}>
+          <span className="tf-control-label">Set supervisor for all shown</span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <select className="form-input form-input-sm" value={bulkSupervisor} onChange={e => setBulkSupervisor(e.target.value)} style={{ minWidth: 140 }}>
+              <option value="">— Unassigned —</option>
+              {staffUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <button className="btn btn-secondary btn-sm" onClick={setAllSupervisors} disabled={busy || rows.length === 0}
+              title="Assign this supervisor to every client currently shown">
+              Apply to {rows.length}
+            </button>
+          </span>
+        </label>
+        <label>
           <span className="tf-control-label">Set manager for all shown</span>
           <span style={{ display: 'flex', gap: 6 }}>
             <select className="form-input form-input-sm" value={bulkManager} onChange={e => setBulkManager(e.target.value)} style={{ minWidth: 140 }}>
@@ -327,6 +378,9 @@ export default function ServicesSummary() {
             <thead>
               <tr>
                 <th className="svc-col-client">Client</th>
+                <th style={{ textAlign: 'left', minWidth: 150 }}>
+                  Supervisor<div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>accountable for the work</div>
+                </th>
                 <th style={{ textAlign: 'left', minWidth: 150 }}>
                   Account manager<div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }}>auto-assigned tasks</div>
                 </th>
@@ -362,6 +416,18 @@ export default function ServicesSummary() {
                       {c.client_code ? <span className="client-code-inline">{c.client_code}</span> : null}
                       {c.name || `Client #${c.id}`}
                     </Link>
+                  </td>
+                  <td style={{ textAlign: 'left' }}>
+                    <select
+                      className="form-input form-input-sm"
+                      style={{ minWidth: 140 }}
+                      value={supervisors[c.id] || ''}
+                      onChange={e => setSupervisor(c.id, e.target.value)}
+                      title={`Supervisor for ${c.name || `#${c.id}`} — accountable for the work, and the escalation target above the manager`}
+                    >
+                      <option value="">— unassigned —</option>
+                      {staffUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
                   </td>
                   <td style={{ textAlign: 'left' }}>
                     <select
