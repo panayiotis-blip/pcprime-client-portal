@@ -64,6 +64,10 @@ export default function RunSchedulesModal({
   const [previewing, setPreviewing] = useState(false);
   const [running, setRunning] = useState(false);
   const [preview, setPreview] = useState<PreviewRow[] | null>(null);
+  // Shown in the modal rather than thrown at a native alert(), which blocks
+  // the page until somebody clicks it — including any automation driving this
+  // screen, which then looks like a hang rather than a failure.
+  const [error, setError] = useState('');
 
   useEffect(() => {
     api.getServiceDefinitions().then(rows => setServices(rows as ServiceDef[])).catch(() => {});
@@ -71,6 +75,7 @@ export default function RunSchedulesModal({
 
   const handlePreview = async () => {
     setPreviewing(true);
+    setError('');
     try {
       const rows = await api.previewDueServiceSchedules({
         runDate,
@@ -80,7 +85,7 @@ export default function RunSchedulesModal({
       setPreview(rows);
       setStep(2);
     } catch (err: any) {
-      alert('Preview failed: ' + (err?.message || String(err)));
+      setError('Preview failed: ' + (err?.message || String(err)));
     } finally {
       setPreviewing(false);
     }
@@ -88,6 +93,7 @@ export default function RunSchedulesModal({
 
   const handleRun = async () => {
     setRunning(true);
+    setError('');
     try {
       const r = await api.runDueServiceSchedules({
         runDate,
@@ -97,7 +103,7 @@ export default function RunSchedulesModal({
       onRan(r);
       onClose();
     } catch (err: any) {
-      alert('Run failed: ' + (err?.message || String(err)));
+      setError('Run failed: ' + (err?.message || String(err)));
     } finally {
       setRunning(false);
     }
@@ -133,6 +139,15 @@ export default function RunSchedulesModal({
           Run client-service schedules
           <span style={{ fontSize: 13, color: '#64748b', fontWeight: 400 }}>Step {step} of 2</span>
         </h3>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+            borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12,
+          }}>
+            {error}
+          </div>
+        )}
 
         {step === 1 && (
           <>

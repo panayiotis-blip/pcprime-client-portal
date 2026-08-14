@@ -46,6 +46,10 @@ export default function ServiceTasksYear() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [showRun, setShowRun] = useState(false);
+  // Outcome of a generate run, shown on the page. An alert() would say the
+  // same thing while blocking everything until dismissed — including anything
+  // driving this screen, where it reads as a freeze rather than a result.
+  const [notice, setNotice] = useState('');
   const [edits, setEdits] = useState<Record<string, { reference?: string; completed_date?: string }>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
 
@@ -167,11 +171,11 @@ export default function ServiceTasksYear() {
         created += r.created_tasks;
       }
       setBusy('');
-      alert(`Done — ${created} task(s) created for ${year}.`);
+      setNotice(`${created} task${created === 1 ? '' : 's'} created across all twelve months of ${year}.`);
       await loadPlan();
     } catch (e: any) {
       setBusy('');
-      alert('Generate failed: ' + (e?.message || e));
+      setNotice('Generate failed: ' + (e?.message || e));
     }
   };
 
@@ -247,6 +251,19 @@ export default function ServiceTasksYear() {
           )}
         </div>
       </div>
+      {notice && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: notice.startsWith('Generate failed') ? '#fef2f2' : '#ecfdf5',
+          border: `1px solid ${notice.startsWith('Generate failed') ? '#fecaca' : '#a7f3d0'}`,
+          color: notice.startsWith('Generate failed') ? '#b91c1c' : '#065f46',
+          borderRadius: 8, padding: '8px 12px', fontSize: 13, margin: '10px 0 0',
+        }}>
+          <span style={{ flex: 1 }}>{notice}</span>
+          <button className="btn btn-link btn-sm" style={{ padding: 0 }} onClick={() => setNotice('')}>Dismiss</button>
+        </div>
+      )}
+
       <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 12px' }}>
         Every period each client's services are due to run this year — including ones not generated yet.
         Flag each done with its completion date and reference; a not-yet-generated period is created automatically when you mark it done.
@@ -348,7 +365,13 @@ export default function ServiceTasksYear() {
           onClose={() => setShowRun(false)}
           onRan={(r) => {
             setShowRun(false);
-            alert(`Done — ${r.created_tasks} task(s) created.`);
+            setNotice(
+              r.created_tasks === 0
+                ? 'Nothing to create — every stage for that month had already fired.'
+                : `${r.created_tasks} task${r.created_tasks === 1 ? '' : 's'} created`
+                  + ` from ${r.created_runs} firing${r.created_runs === 1 ? '' : 's'}.`
+                  + ' Any emails those stages carry are queued as pending, not sent.',
+            );
             loadPlan();
           }}
         />
