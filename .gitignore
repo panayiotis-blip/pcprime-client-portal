@@ -85,3 +85,6 @@ greson_*.json
 /full-status-check*.md
 /session-handoff-*.md
 /engagement-letter-*.md
+
+# Local storage backups (scripts/backup-storage.mjs) — client documents, never commit
+backups/
