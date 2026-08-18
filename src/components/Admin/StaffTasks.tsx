@@ -39,6 +39,8 @@ type Task = {
   service_label: string | null;
   completion_data: Record<string, any> | null;
   escalated_at: string | null;
+  /** Migration 182: the client's supervisor at the moment it escalated. */
+  escalated_to: string | null;
 };
 
 const STATUS_OPTIONS: Status[] = ['open', 'in_progress', 'blocked', 'done', 'cancelled'];
@@ -106,6 +108,9 @@ export default function StaffTasks() {
   const [search, setSearch]       = useState<string>('');
   const [fType, setFType]         = useState<string>(''); // '' all · 'manual' · service_key
   const [fOverdue, setFOverdue]   = useState(false);      // supervisor escalation view
+  // Migration 182: only the overdue work on clients I supervise. The firm-wide
+  // count is the owner's view; this is the one a supervisor can act on.
+  const [fMineSupervised, setFMineSupervised] = useState(false);
   // How far ahead to look. The scheduler generates a stage's whole cycle the
   // moment it runs, so an annual service with a long due-month offset drops
   // next year's work into today's list and never leaves. Those tasks are not
@@ -235,6 +240,7 @@ export default function StaffTasks() {
   const visibleTasks = useMemo(() => {
     let out = tasks.filter(t => t.category !== 'return_call').filter(withinHorizon);
     if (fOverdue) out = out.filter(t => isOpenStatus(t.status) && !!t.due_date && t.due_date < todayIso());
+    if (fMineSupervised) out = out.filter(t => t.escalated_to === user?.id);
     if (fStatus === 'open') out = out.filter(t => isOpenStatus(t.status));
     if (fType === 'manual') out = out.filter(t => !t.service_key);
     else if (fType) out = out.filter(t => t.service_key === fType);
@@ -247,7 +253,18 @@ export default function StaffTasks() {
       );
     }
     return out;
-  }, [tasks, fStatus, fType, fOverdue, search, horizonDate]);
+  }, [tasks, fStatus, fType, fOverdue, fMineSupervised, search, horizonDate, user?.id]);
+
+  /** Overdue work escalated to me as the client's supervisor. */
+  const mineSupervised = useMemo(
+    () => tasks.filter(t =>
+      t.category !== 'return_call' &&
+      isOpenStatus(t.status) &&
+      t.escalated_to === user?.id &&
+      !!t.due_date && t.due_date < todayIso(),
+    ).length,
+    [tasks, user?.id],
+  );
 
   const stats = useMemo(() => {
     const today = todayIso();
@@ -571,10 +588,25 @@ export default function StaffTasks() {
           background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b',
           borderRadius: 8, padding: '10px 14px', margin: '12px 0', fontSize: 14,
         }}>
-          <span>⚠ <strong>{stats.overdue}</strong> allocated task{stats.overdue === 1 ? '' : 's'} overdue and needing follow-up.</span>
-          <button className="btn btn-secondary btn-sm" onClick={() => setFOverdue(v => !v)}>
-            {fOverdue ? 'Show all' : 'Review overdue'}
-          </button>
+          {/* Lead with what this person supervises. A firm-wide number is
+              everyone's problem and therefore nobody's; the count on your own
+              clients is the one you can act on. */}
+          <span>
+            ⚠ <strong>{stats.overdue}</strong> allocated task{stats.overdue === 1 ? '' : 's'} overdue and needing follow-up
+            {mineSupervised > 0 && <> — <strong>{mineSupervised}</strong> on client{mineSupervised === 1 ? '' : 's'} you supervise</>}.
+          </span>
+          <span style={{ display: 'flex', gap: 8 }}>
+            {mineSupervised > 0 && (
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => { setFMineSupervised(v => !v); setFOverdue(true); }}>
+                {fMineSupervised ? 'All supervisors' : 'Just mine'}
+              </button>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={() => { setFOverdue(v => !v); setFMineSupervised(false); }}>
+              {fOverdue ? 'Show all' : 'Review overdue'}
+            </button>
+          </span>
         </div>
       )}
 
