@@ -30,8 +30,12 @@ echo. >> "%LOG%"
 echo ============================================================ >> "%LOG%"
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format o"') do echo Started %%i >> "%LOG%"
 
+rem Arguments pass straight through, so the scheduled task can name a
+rem destination:  backup-storage.cmd \\192.168.20.5\data\PCPrime-Backups\storage
+rem The log stays on this machine deliberately — if the destination is
+rem unreachable, the explanation has to land somewhere that still works.
 pushd "%ROOT%"
-"%NODE%" scripts\backup-storage.mjs >> "%LOG%" 2>&1
+"%NODE%" scripts\backup-storage.mjs %* >> "%LOG%" 2>&1
 set "RC=%ERRORLEVEL%"
 popd
 
