@@ -406,12 +406,17 @@ export default function StaffTasks() {
     }
   };
 
-  const doSendReminders = async () => {
-    if (!confirm('Email every staff member a digest of their overdue and due-soon tasks now?\n\nThese go to staff only — no client emails.')) return;
+  const doSendReminders = async (mode: 'assignee' | 'supervisor' = 'assignee') => {
+    const question = mode === 'supervisor'
+      ? 'Email each supervisor everything overdue on the clients they supervise?\n\nStaff only — no client emails. Normally runs Monday mornings.'
+      : 'Email every staff member a digest of their overdue and due-soon tasks now?\n\nThese go to staff only — no client emails.';
+    if (!confirm(question)) return;
     setReminding(true);
     try {
-      const r = await api.runTaskReminders();
-      let msg = `Reminder digests sent to ${r.sent} of ${r.recipients} staff member(s) with due tasks.`;
+      const r = await api.runTaskReminders(undefined, mode);
+      let msg = mode === 'supervisor'
+        ? `Supervisor digests sent to ${r.sent} of ${r.recipients} supervisor(s) with overdue work.`
+        : `Reminder digests sent to ${r.sent} of ${r.recipients} staff member(s) with due tasks.`;
       if (r.failures && r.failures.length) msg += `\n\nSkipped/failed:\n` + r.failures.join('\n');
       alert(msg);
     } catch (e: any) {
@@ -428,7 +433,8 @@ export default function StaffTasks() {
     { key: 'print', label: 'Print task list', icon: <Printer size={15} />, onSelect: printTasks, title: 'Print the current filtered task list' },
     ...(supervisor ? [
       { key: 'generate', label: generating ? 'Generating…' : 'Generate due tasks now', icon: <RefreshCw size={15} />, onSelect: doGenerate, disabled: generating, title: "Generate this month's due tasks now — normally runs automatically every night", separatorBefore: true },
-      { key: 'remind', label: reminding ? 'Sending…' : 'Send reminders now', icon: <Bell size={15} />, onSelect: doSendReminders, disabled: reminding, title: 'Email each staff member their overdue + due-soon tasks now — normally runs automatically every morning' },
+      { key: 'remind', label: reminding ? 'Sending…' : 'Send reminders now', icon: <Bell size={15} />, onSelect: () => doSendReminders('assignee'), disabled: reminding, title: 'Email each staff member their overdue + due-soon tasks now — normally runs automatically every morning' },
+      { key: 'remind-sup', label: reminding ? 'Sending…' : 'Send supervisor digest', icon: <Bell size={15} />, onSelect: () => doSendReminders('supervisor'), disabled: reminding || !supervisor, title: 'Email each supervisor everything overdue on their clients — normally runs Monday mornings' },
     ] as MenuItem[] : []),
     { key: 'pending', label: `Send pending emails${pendingEmailsCount ? ` (${pendingEmailsCount})` : ''}`, icon: <Mail size={15} />, onSelect: () => setShowPendingEmails(true), disabled: pendingEmailsCount === 0, title: 'Send the emails queued by the nightly scheduler', separatorBefore: true },
   ];

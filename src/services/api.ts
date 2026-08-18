@@ -1857,9 +1857,12 @@ export const api = {
 
   // Send the task-reminder digests now (staff-triggered test of the daily
   // cron). Emails each assignee their overdue + due-soon tasks via info@.
-  async runTaskReminders(daysAhead?: number): Promise<{ recipients: number; sent: number; failures?: string[] }> {
+  // mode 'supervisor' sends the weekly digest instead: everything overdue on
+  // the clients each supervisor owns, whoever it is assigned to.
+  async runTaskReminders(daysAhead?: number, mode?: 'assignee' | 'supervisor'): Promise<{ recipients: number; sent: number; failures?: string[] }> {
     const body: any = {};
     if (Number.isFinite(daysAhead as number)) body.days_ahead = daysAhead;
+    if (mode === 'supervisor') body.mode = 'supervisor';
     const { data, error } = await supabase.functions.invoke('task-reminders', { body });
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Reminder run failed.');

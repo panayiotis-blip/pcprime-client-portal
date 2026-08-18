@@ -9,6 +9,18 @@
 //     task. Sent through the firm identity (info@), same SMTP path as
 //     send-via-outlook.
 //
+// TWO MODES, one function, because they differ only in who gets grouped
+// with what — the SMTP path, the sender identity and the failure handling
+// are identical, and a second function would be the same 300 lines with two
+// clauses changed.
+//
+//   { mode: "assignee" }    (default, daily)  — your tasks, overdue + due soon.
+//   { mode: "supervisor" }  (weekly)          — everything overdue on the
+//       clients YOU supervise, whoever it is assigned to, from
+//       staff_tasks.escalated_to (migration 182). A supervisor asking "what
+//       is late on my clients" could otherwise only find out by reading the
+//       whole task list, which is how escalation turns into wallpaper.
+//
 // Auth (either is accepted):
 //   * x-cron-secret header == CRON_SECRET env  → the nightly pg_cron job.
 //   * a staff JWT in Authorization: Bearer …    → the "Send reminders now"
@@ -150,6 +162,9 @@ async function sendRawSmtp(opts: {
 type Task = {
   id: number; title: string; due_date: string; priority: string; status: string;
   assigned_to: string; client: { name: string } | null;
+  escalated_to?: string | null;
+  /** Filled in for the supervisor digest: who the task sits with. */
+  assignee_name?: string;
 };
 
 const esc = (s: string) => String(s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
@@ -195,6 +210,56 @@ function buildDigestHtml(name: string, today: string, overdue: Task[], soon: Tas
   </body></html>`;
 }
 
+/**
+ * The supervisor's weekly view: everything late on their clients, and — the
+ * column that makes it actionable — who it is sitting with. Grouped by client,
+ * because "Kyriakou has four things late" is a conversation and four scattered
+ * rows are not.
+ */
+function buildSupervisorHtml(name: string, today: string, tasks: Task[], firmName: string): string {
+  const byClient = new Map<string, Task[]>();
+  for (const t of tasks) {
+    const key = t.client?.name || 'No client';
+    byClient.set(key, [...(byClient.get(key) || []), t]);
+  }
+  // Worst client first: the longest-overdue item decides the order.
+  const groups = [...byClient.entries()].sort((a, b) => a[1][0].due_date.localeCompare(b[1][0].due_date));
+
+  const row = (t: Task) => {
+    const d = -daysBetween(today, t.due_date);
+    return `<tr>
+      <td style="padding:6px 10px;border-top:1px solid #e2e8f0;">${esc(t.title)}</td>
+      <td style="padding:6px 10px;border-top:1px solid #e2e8f0;white-space:nowrap;">${esc(t.due_date)}</td>
+      <td style="padding:6px 10px;border-top:1px solid #e2e8f0;white-space:nowrap;color:#b91c1c;">${d} day${d === 1 ? '' : 's'}</td>
+      <td style="padding:6px 10px;border-top:1px solid #e2e8f0;">${esc(t.assignee_name || 'unassigned')}</td>
+    </tr>`;
+  };
+
+  const section = ([client, rows]: [string, Task[]]) =>
+    `<h3 style="margin:18px 0 4px;color:#1a365d;font-size:14px;">${esc(client)} <span style="color:#94a3b8;font-weight:400;">(${rows.length})</span></h3>
+     <table style="border-collapse:collapse;width:100%;font-size:13px;">
+       <thead><tr style="text-align:left;color:#94a3b8;">
+         <th style="padding:6px 10px;font-weight:600;">Task</th>
+         <th style="padding:6px 10px;font-weight:600;">Due</th>
+         <th style="padding:6px 10px;font-weight:600;">Late by</th>
+         <th style="padding:6px 10px;font-weight:600;">With</th>
+       </tr></thead>
+       <tbody>${rows.map(row).join('')}</tbody>
+     </table>`;
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+  <body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;color:#1a365d;line-height:1.5;margin:0;padding:20px;background:#ffffff;">
+    <p style="margin:0 0 4px;">Hi ${esc(name)},</p>
+    <p style="margin:0 0 8px;color:#475569;">
+      <strong>${tasks.length}</strong> overdue task${tasks.length === 1 ? '' : 's'} across
+      <strong>${groups.length}</strong> client${groups.length === 1 ? '' : 's'} you supervise, as of ${esc(today)}.
+      These stay with the people they are assigned to — this is for your visibility.
+    </p>
+    ${groups.map(section).join('')}
+    <p style="margin:22px 0 0;color:#94a3b8;font-size:12px;">Tasks → “Just mine” shows the same list in the portal. — ${esc(firmName || 'The office')}</p>
+  </body></html>`;
+}
+
 // -----------------------------------------------------------------
 // Entry point
 // -----------------------------------------------------------------
@@ -225,35 +290,65 @@ Deno.serve(async (req) => {
   }
   if (!authorized) return json({ ok: false, error: 'Unauthorized.' }, 401);
 
-  // Optional { days_ahead } override; default 7.
+  // Optional { days_ahead } override; default 7. Optional { mode }.
   let daysAhead = DEFAULT_DAYS_AHEAD;
+  let mode: 'assignee' | 'supervisor' = 'assignee';
   try {
     const body = await req.json().catch(() => ({}));
     if (body && Number.isFinite(body.days_ahead)) daysAhead = Math.max(0, Math.min(60, Number(body.days_ahead)));
+    if (body && body.mode === 'supervisor') mode = 'supervisor';
   } catch { /* no body */ }
 
   const today = new Date().toISOString().slice(0, 10);
   const horizon = new Date(Date.now() + daysAhead * 86400000).toISOString().slice(0, 10);
 
-  // ----- Load open, assigned tasks due on/before the horizon -----
-  const { data: tasks, error: tErr } = await admin
+  // ----- Load the tasks this run is about -----
+  // Assignee mode: mine, overdue or due within the horizon.
+  // Supervisor mode: overdue on clients I supervise, whoever holds them —
+  // grouped by escalated_to rather than assigned_to.
+  let query = admin
     .from('staff_tasks')
-    .select('id, title, due_date, priority, status, assigned_to, client:clients(name)')
-    .not('assigned_to', 'is', null)
+    .select('id, title, due_date, priority, status, assigned_to, escalated_to, client:clients(name)')
     .not('due_date', 'is', null)
     .is('deleted_at', null)
     .in('status', ['open', 'in_progress', 'blocked'])
-    .lte('due_date', horizon)
     .order('due_date', { ascending: true });
+
+  query = mode === 'supervisor'
+    ? query.not('escalated_to', 'is', null).lt('due_date', today)
+    : query.not('assigned_to', 'is', null).lte('due_date', horizon);
+
+  const { data: tasks, error: tErr } = await query;
   if (tErr) return json({ ok: false, error: 'Query failed: ' + tErr.message }, 500);
 
+  const groupKey = (t: Task) => (mode === 'supervisor' ? (t.escalated_to || '') : t.assigned_to);
   const byUser = new Map<string, Task[]>();
   for (const t of (tasks || []) as Task[]) {
-    const arr = byUser.get(t.assigned_to) || [];
-    arr.push(t);
-    byUser.set(t.assigned_to, arr);
+    const key = groupKey(t);
+    if (!key) continue;
+    byUser.set(key, [...(byUser.get(key) || []), t]);
   }
-  if (byUser.size === 0) return json({ ok: true, recipients: 0, sent: 0, message: 'No tasks due — nothing to send.' });
+  if (byUser.size === 0) {
+    return json({
+      ok: true, mode, recipients: 0, sent: 0,
+      message: mode === 'supervisor'
+        ? 'Nothing overdue on any supervised client — nothing to send.'
+        : 'No tasks due — nothing to send.',
+    });
+  }
+
+  // Supervisor digests name the assignee, so resolve those in one query
+  // rather than per row.
+  if (mode === 'supervisor') {
+    const ids = [...new Set((tasks || []).map((t: Task) => t.assigned_to).filter(Boolean))];
+    if (ids.length) {
+      const { data: profs } = await admin.from('profiles').select('id, full_name, username').in('id', ids);
+      const nameById = new Map((profs || []).map((p: any) => [p.id, p.full_name || p.username || '']));
+      for (const list of byUser.values()) {
+        for (const t of list) t.assignee_name = nameById.get(t.assigned_to) || 'unassigned';
+      }
+    }
+  }
 
   // ----- Firm sender identity -----
   const { data: fs, error: fErr } = await admin
@@ -287,8 +382,14 @@ Deno.serve(async (req) => {
 
     const overdue = list.filter(t => t.due_date < today);
     const soon = list.filter(t => t.due_date >= today);
-    const subject = `Your tasks: ${overdue.length} overdue, ${soon.length} due soon`;
-    const html = buildDigestHtml(name, today, overdue, soon, firmName);
+    const clientCount = new Set(list.map(t => t.client?.name || '—')).size;
+
+    const subject = mode === 'supervisor'
+      ? `Supervising: ${list.length} overdue across ${clientCount} client${clientCount === 1 ? '' : 's'}`
+      : `Your tasks: ${overdue.length} overdue, ${soon.length} due soon`;
+    const html = mode === 'supervisor'
+      ? buildSupervisorHtml(name, today, list, firmName)
+      : buildDigestHtml(name, today, overdue, soon, firmName);
     const mimeMessage = buildMimeMessage({ from: fromAddress, to: email, subject, html });
     try {
       await sendRawSmtp({
@@ -301,5 +402,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ ok: true, recipients: byUser.size, sent, failures });
+  return json({ ok: true, mode, recipients: byUser.size, sent, failures });
 });
