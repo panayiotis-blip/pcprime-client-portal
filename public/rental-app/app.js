@@ -15,6 +15,17 @@ function norm(d){ if(!d.meta)d.meta={}; if(!d.tenants)d.tenants=[]; if(!d.proper
   // the month it is entered; "oneoff" is ad-hoc. Seeded on first run only, so
   // an existing book keeps whatever list it already has (including none).
   if(!d.chargeTypes)d.chargeTypes=[{id:1,name:"Common fees",kind:"monthly"},{id:2,name:"Electricity",kind:"monthly"},{id:3,name:"Water",kind:"monthly"},{id:4,name:"Refuse",kind:"annual"}];
+  // VAT. Commercial tenants who are registered are charged VAT; residential
+  // ones are not. Two switches have to agree before any VAT is added: the
+  // TENANT is marked vatable, and the thing being billed is vatable (rent has
+  // its own flag, each charge type carries one). Every stored figure stays NET
+  // — VAT is derived, never written into an amount — so nothing already
+  // entered changes meaning, and turning the flag off restores the old totals
+  // exactly. Existing books default to no VAT anywhere, which is what they
+  // have been doing all along.
+  if(!d.meta)d.meta={};
+  if(d.meta.vatRate===undefined)d.meta.vatRate=19;   // Cyprus standard rate
+  if(d.meta.vatOnRent===undefined)d.meta.vatOnRent=false;
   d.tenants.forEach(t=>{ if(!t.pay)t.pay={}; if(!t.leases)t.leases=[{start:t.start||"",renewal:t.renewal||"",end:t.end||""}];
     if(!t.contact1)t.contact1={name:t.contact||"",phone:""}; if(!t.contact2)t.contact2={name:"",phone:""}; if(!t.depositMoves)t.depositMoves=[];
     if(!t.agreements)t.agreements=(t.agreement?[t.agreement]:[]); delete t.agreement;
@@ -41,8 +52,31 @@ function monthCharges(t,y,m){
   return standingCharges(t).map(c=>({typeId:c.typeId,amount:num(c.amount)}));
 }
 function chargesTotal(t,y,m){ return monthCharges(t,y,m).reduce((s,c)=>s+num(c.amount),0); }
-// The actual amount owed for the month: rent plus its charges.
-function dueTotal(t,y,m){ return rentOf(t,y,m)+chargesTotal(t,y,m); }
+
+/* ---- VAT ----
+   Two switches must agree before anything is added: the tenant is registered
+   AND the thing billed is vatable (rent has its own flag, each charge type
+   carries one). Stored amounts stay NET; VAT is derived every time, so turning
+   a flag off restores the previous totals exactly.
+   Rounded PER LINE, as an invoice shows it — rounding the month's total
+   instead produces invoices whose lines do not add up to the total. */
+function r2(n){ return Math.round(n*100)/100; }
+function vatRate(){ var v=DATA.meta&&DATA.meta.vatRate; return v===undefined||v===null||v===""?19:num(v); }
+function tenantVatable(t){ return !!(t&&t.vatable); }
+function rentVatable(){ return !!(DATA.meta&&DATA.meta.vatOnRent); }
+function ctVatable(typeId){ var ct=ctById(typeId); return !!(ct&&ct.vatable); }
+function rentVat(t,y,m){ return (tenantVatable(t)&&rentVatable())?r2(rentOf(t,y,m)*vatRate()/100):0; }
+function chargeVat(t,c){ return (tenantVatable(t)&&ctVatable(c.typeId))?r2(num(c.amount)*vatRate()/100):0; }
+function vatTotal(t,y,m){ return r2(rentVat(t,y,m)+monthCharges(t,y,m).reduce(function(s,c){return s+chargeVat(t,c);},0)); }
+// Gross — what the tenant actually owes, and what a receipt settles.
+function rentGross(t,y,m){ return r2(rentOf(t,y,m)+rentVat(t,y,m)); }
+function chargeGross(t,c){ return r2(num(c.amount)+chargeVat(t,c)); }
+// Does anything in this book charge VAT? Used to keep the UI quiet for books
+// that do not — no VAT columns, no VAT lines, nothing to explain.
+function vatInUse(){ return (DATA.tenants||[]).some(tenantVatable) && (rentVatable() || (DATA.chargeTypes||[]).some(function(c){return c.vatable;})); }
+
+// The actual amount owed for the month: rent plus its charges, plus VAT.
+function dueTotal(t,y,m){ return r2(rentOf(t,y,m)+chargesTotal(t,y,m)+vatTotal(t,y,m)); }
 // Received TOWARDS what the month bills: rent, plus the charges actually
 // raised for it. Money allocated to anything else (an "Other" reimbursement, a
 // charge that was never billed) is income but settles nothing, so it must not
@@ -166,13 +200,18 @@ window.openSettings=function(){
     '<div class="frow"><label>Invoice number prefix<input id="st_inv" value="'+esc(s.invoicePrefix||"INV")+'" placeholder="INV"></label><label>Bank / payment details (shown on invoices)<input id="st_bank" value="'+esc(s.bank||"")+'"></label></div>'+
     '<div class="frow"><label>Logo (PNG/JPG, under 1.5&nbsp;MB)<input id="st_logo" type="file" accept="image/*"></label></div>'+
     '<div id="st_logoPrev">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;margin-top:4px">':'')+'</div>'+
+    '<div style="border-top:1px solid #e2e8f0;margin:14px 0 8px;padding-top:12px"><b style="font-size:13px">VAT</b>'+
+      '<p class="hint" style="margin:2px 0 8px">VAT is added to a tenant\'s bill only when that tenant is marked <b>VAT registered</b> on their own file <i>and</i> the line is vatable. Every amount you enter anywhere stays <b>net</b> — VAT is added on top, never taken out of the figure you typed.</p>'+
+      '<div class="frow"><label>Rate (%)<input id="st_vatrate" type="number" step="0.01" min="0" style="width:90px" value="'+esc(String((DATA.meta&&DATA.meta.vatRate!==undefined)?DATA.meta.vatRate:19))+'"></label>'+
+      '<label style="align-self:flex-end">Charge VAT on rent<input id="st_vatrent" type="checkbox"'+(rentVatable()?" checked":"")+'></label></div>'+
+      '<p class="hint" style="margin:2px 0 0">Each charge type has its own VAT box below.</p></div>'+
     '<div style="border-top:1px solid #e2e8f0;margin:14px 0 8px;padding-top:12px"><b style="font-size:13px">Charge types</b>'+
       '<p class="hint" style="margin:2px 0 8px">Billed alongside rent — common fees, utilities, refuse. <b>Monthly</b> ones can be set as a tenant\'s standing charge and appear on every month; <b>annual</b> and <b>one-off</b> ones you add to the month they fall in. Removing a type here leaves past months and receipts untouched.</p>'+
       '<div id="ctBox"></div><div class="frow"><button class="ghost" data-h="addChargeType()">+ Add charge type</button></div></div>'+
     '<div class="frow" style="justify-content:flex-end;margin-top:8px"><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveSettings()">Save</button></div></div></div>';
   var li=document.getElementById("st_logo");
   li.onchange=function(e){ var f=e.target.files[0]; if(!f)return; if(f.size>1500000){alert("Logo must be under 1.5 MB.");return;} var r=new FileReader(); r.onload=function(){ window._logoData=r.result; document.getElementById("st_logoPrev").innerHTML='<img src="'+r.result+'" style="max-height:64px;margin-top:4px">'; }; r.readAsDataURL(f); };
-  window._cts=(DATA.chargeTypes||[]).map(function(c){return {id:c.id,name:c.name,kind:c.kind||"monthly"};});
+  window._cts=(DATA.chargeTypes||[]).map(function(c){return {id:c.id,name:c.name,kind:c.kind||"monthly",vatable:!!c.vatable};});
   renderChargeTypes();
 };
 
@@ -183,11 +222,12 @@ function renderChargeTypes(){
   box.innerHTML = L.length ? L.map(function(c,i){
     return '<div class="frow" style="align-items:flex-end"><label style="flex:1">Name<input class="ctz" data-i="'+i+'" data-k="name" value="'+esc(c.name)+'"></label>'+
       '<label>Billed<select class="ctz" data-i="'+i+'" data-k="kind">'+KINDS.map(function(k){return '<option value="'+k[0]+'"'+(c.kind===k[0]?" selected":"")+'>'+k[1]+'</option>';}).join("")+'</select></label>'+
+      '<label title="Charge VAT on this, for tenants marked VAT registered">VAT<input class="ctz" data-i="'+i+'" data-k="vatable" type="checkbox"'+(c.vatable?" checked":"")+'></label>'+
       '<button class="iconbtn" data-h="rmChargeType('+i+')" title="Remove">🗑</button></div>';
   }).join("") : '<div class="hint">No charge types — rent only.</div>';
 }
-function collectChargeTypes(){ document.querySelectorAll(".ctz").forEach(function(inp){ var i=+inp.dataset.i,k=inp.dataset.k; if(window._cts[i])window._cts[i][k]=inp.value; }); }
-window.addChargeType=function(){ collectChargeTypes(); window._cts.push({id:0,name:"",kind:"monthly"}); renderChargeTypes(); };
+function collectChargeTypes(){ document.querySelectorAll(".ctz").forEach(function(inp){ var i=+inp.dataset.i,k=inp.dataset.k; if(window._cts[i])window._cts[i][k]=(inp.type==="checkbox")?inp.checked:inp.value; }); }
+window.addChargeType=function(){ collectChargeTypes(); window._cts.push({id:0,name:"",kind:"monthly",vatable:false}); renderChargeTypes(); };
 window.rmChargeType=function(i){
   collectChargeTypes();
   var c=window._cts[i];
@@ -200,13 +240,17 @@ window.saveSettings=function(){ if(!canEdit()){alert("Read-only access.");return
   var g=function(id){ return document.getElementById(id).value.trim(); };
   DATA.settings=Object.assign({}, DATA.settings, { companyName:g("st_cn"), regNo:g("st_reg"), vatNo:g("st_vat"), address:g("st_addr"), phone:g("st_ph"), email:g("st_em"), invoicePrefix:g("st_inv")||"INV", bank:g("st_bank") });
   if(window._logoData!==undefined) DATA.settings.logo=window._logoData;
+  if(!DATA.meta)DATA.meta={};
+  var vr=document.getElementById("st_vatrate"), vo=document.getElementById("st_vatrent");
+  if(vr)DATA.meta.vatRate=(String(vr.value).trim()===""?19:num(vr.value));
+  if(vo)DATA.meta.vatOnRent=!!vo.checked;
   if(window._cts){
     collectChargeTypes();
     var next=nextCtId();
     // New rows get an id here; existing ones keep theirs, so tenants' standing
     // charges and every month already entered still point at the same charge.
     DATA.chargeTypes=window._cts.filter(function(c){return String(c.name||"").trim();})
-      .map(function(c){ return {id:c.id||next++, name:String(c.name).trim(), kind:c.kind||"monthly"}; });
+      .map(function(c){ return {id:c.id||next++, name:String(c.name).trim(), kind:c.kind||"monthly", vatable:!!c.vatable}; });
     var live={}; DATA.chargeTypes.forEach(function(c){live[c.id]=1;});
     DATA.tenants.forEach(function(t){ if(t.charges)t.charges=t.charges.filter(function(x){return live[x.typeId];}); });
     window._cts=null;
@@ -405,6 +449,7 @@ function invoiceDocHtml(t, y, m){
   var rent=rentOf(t,y,m);
   var invCharges=monthCharges(t,y,m).filter(function(c){return num(c.amount)!==0;});
   var totalDue=dueTotal(t,y,m), paidAmt=paidAll(t,y,m);
+  var vatAmt=vatTotal(t,y,m);   // 0 unless this tenant and these lines are vatable
   var s=DATA.settings||{}, cn=s.companyName||(DATA.meta&&DATA.meta.client)||"";
   var invNo=(s.invoicePrefix||"INV")+"-"+y+p2(m+1)+"-"+t.id;
   var now=new Date();
@@ -423,11 +468,17 @@ function invoiceDocHtml(t, y, m){
         '<div style="font-weight:700">'+esc(t.name)+'</div>'+
         '<div class="hint">'+esc(p?p.name:"")+' · '+esc(t.unit)+
           ((t.contact1&&t.contact1.name)?'<br>'+esc(t.contact1.name)+" "+esc(t.contact1.phone||""):"")+
-          (t.email?'<br>'+esc(t.email):"")+'</div></div>'+
+          (t.email?'<br>'+esc(t.email):"")+
+          // A VAT invoice has to carry the customer's VAT number.
+          (tenantVatable(t)&&t.vatNo?'<br>VAT '+esc(t.vatNo):"")+'</div></div>'+
       '<div class="tblwrap" style="margin-top:14px"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>'+
-        '<tr><td>Rent — '+MONTHS[invMonth]+' '+invYear+' · '+esc(t.unit)+'</td><td class="num">'+money(rent)+'</td></tr>'+
+        '<tr><td>Rent — '+MONTHS[invMonth]+' '+invYear+' · '+esc(t.unit)+(rentVat(t,y,m)>0?' <span style="color:#94a3b8">+VAT</span>':"")+'</td><td class="num">'+money(rent)+'</td></tr>'+
         // One line per charge, so the tenant sees exactly what makes up the month.
-        invCharges.map(function(c){return '<tr><td>'+esc(ctName(c.typeId))+' — '+MONTHS[invMonth]+' '+invYear+'</td><td class="num">'+money(num(c.amount))+'</td></tr>';}).join("")+
+        invCharges.map(function(c){return '<tr><td>'+esc(ctName(c.typeId))+' — '+MONTHS[invMonth]+' '+invYear+(chargeVat(t,c)>0?' <span style="color:#94a3b8">+VAT</span>':"")+'</td><td class="num">'+money(num(c.amount))+'</td></tr>';}).join("")+
+        // Net subtotal and VAT appear only when there is VAT to show, so a
+        // residential invoice looks exactly as it always has.
+        (vatAmt>0?'<tr><td>Subtotal (net)</td><td class="num">'+money(r2(totalDue-vatAmt))+'</td></tr>'+
+                  '<tr><td>VAT @ '+esc(String(vatRate()))+'%</td><td class="num">'+money(vatAmt)+'</td></tr>':"")+
         '<tr class="total"><td>Total due</td><td class="num">'+money(totalDue)+'</td></tr>'+
         (paidAmt>0?'<tr><td>Received to date</td><td class="num">'+money(paidAmt)+'</td></tr><tr class="total"><td>Balance outstanding</td><td class="num'+((totalDue-paidAmt)>0?" warn":"")+'">'+money(totalDue-paidAmt)+'</td></tr>':'')+
       '</tbody></table></div>'+
@@ -631,6 +682,11 @@ window.editTenant=function(id){ if(!canEdit())return;
    '<div class="frow"><label>Monthly rent (€)<input id="t_rent" type="number" value="'+(t.rent||0)+'"></label><label>Deposit (€)<input id="t_deposit" type="number" value="'+(t.deposit||0)+'"></label>'+
    '<label>Electricity<select id="t_elec"><option value="">—</option><option value="1">Tenant pays</option><option value="0">Included</option></select></label>'+
    '<label>Vacant from (blank = occupied)<input id="t_vacant" type="date" value="'+esc(t.vacantFrom||"")+'"></label></div>'+
+   // Commercial tenants who are registered get VAT on top of the vatable
+   // lines. Residential tenants do not, which is why this is off by default.
+   '<div class="frow"><label style="align-self:flex-end" title="Adds VAT to this tenant\'s vatable lines">VAT registered<input id="t_vatable" type="checkbox"'+(t.vatable?" checked":"")+'></label>'+
+   '<label>VAT no.<input id="t_vatno" value="'+esc(t.vatNo||"")+'" placeholder="CY…"></label>'+
+   '<span class="hint" style="align-self:flex-end;flex:1;margin:0">Rent and charges are entered net; VAT is added on top at '+esc(String(vatRate()))+'%.</span></div>'+
    '<div style="font-size:12px;font-weight:700;color:#1e2a78;margin:6px 0">Standing charges <span style="font-weight:400;color:#94a3b8">— billed with the rent every month</span></div>'+
    '<div class="hint" style="margin:0 0 4px">Tick what this tenant pays on top of rent and set the usual amount. Every month starts from these; adjust a month\'s figure when the actual bill arrives. Annual and one-off charges are added to the month they fall in, not here.</div>'+
    '<div id="tchBox">'+chargePickerHtml(t)+'</div>'+
@@ -678,7 +734,8 @@ function collectLeases(){ const arr=window._leaseDraft.map(x=>({start:x.start,re
   window._leaseDraft=arr; return arr; }
 window.saveTenant=function(id){ const g=k=>document.getElementById(k).value; const leases=collectLeases().filter(L=>L.start||L.end||L.renewal); if(!leases.length)leases.push({start:"",renewal:"",end:""});
   const o={propertyId:num(g("t_prop")),unit:g("t_unit").trim(),name:g("t_name").trim(),rent:num(g("t_rent")),deposit:num(g("t_deposit")),
-    electricity:(g("t_elec")===""?null:g("t_elec")==="1"),vacantFrom:g("t_vacant"),leases:leases,charges:collectTenantCharges(),contact1:{name:g("t_c1n").trim(),phone:g("t_c1p").trim()},contact2:{name:g("t_c2n").trim(),phone:g("t_c2p").trim()},email:g("t_email").trim()};
+    electricity:(g("t_elec")===""?null:g("t_elec")==="1"),vacantFrom:g("t_vacant"),leases:leases,charges:collectTenantCharges(),contact1:{name:g("t_c1n").trim(),phone:g("t_c1p").trim()},contact2:{name:g("t_c2n").trim(),phone:g("t_c2p").trim()},email:g("t_email").trim(),
+    vatable:!!(document.getElementById("t_vatable")||{}).checked, vatNo:g("t_vatno")};
   const clash=DATA.tenants.find(x=>x.id!==id && x.propertyId===o.propertyId && (x.unit||"")===o.unit && o.unit && x.name && x.name!=="NO TENANT");
   if(clash && !confirm("Unit “"+o.unit+"” is already assigned to "+clash.name+". Assign it here anyway?")) return;
   if(id==null){const t={id:nextTid(),agreements:[],pay:{}};Object.assign(t,o);ensureYear(t,"2026");DATA.tenants.push(t);} else Object.assign(DATA.tenants.find(x=>x.id===id),o);
@@ -980,11 +1037,13 @@ function outstandingLines(t){
     for(var m=0;m<=Math.min(cap,11);m++){
       if(!due(t,y,m))continue;
       if(isClosed(y,m))continue; // settled and locked
-      var rentBal=rentOf(t,y,m)-paidCat(t,y,m,"Rent");
+      // Gross, not net: money received settles what was actually billed, so a
+      // vatable line is only clear once the VAT on it has been paid too.
+      var rentBal=rentGross(t,y,m)-paidCat(t,y,m,"Rent");
       if(rentBal>0.005)out.push({y:y,m:m,cat:"Rent",bal:rentBal});
       monthCharges(t,y,m).forEach(function(c){
         var nm=ctName(c.typeId);
-        var bal=num(c.amount)-paidCat(t,y,m,nm);
+        var bal=chargeGross(t,c)-paidCat(t,y,m,nm);
         if(bal>0.005)out.push({y:y,m:m,cat:nm,bal:bal});
       });
     }
