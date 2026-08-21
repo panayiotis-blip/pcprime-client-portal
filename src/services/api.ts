@@ -53,6 +53,16 @@ async function adminFn(pathSuffix: string, method: string, body?: any): Promise<
 // ---------- Types returned to app code ----------
 export type UserRole = 'owner' | 'supervisor' | 'admin' | 'staff' | 'client';
 
+// One row of the timesheet service list (migration 185). `billable` separates
+// client work from internal time — leave, training, office admin — which is
+// recorded the same way but never charged and carries no rate.
+export interface TimesheetService {
+  label: string;
+  billable: boolean;
+  ordinal: number;
+  active: boolean;
+}
+
 export interface ClientAddress {
   id: number;
   client_id: number;
@@ -1701,6 +1711,44 @@ export const api = {
       .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  // ---- Timesheet services (migration 185) ----
+  // The list behind the timesheet picker and Default Service Rates. It used to
+  // be a CHECK constraint re-typed into four React files, so nobody could add a
+  // service without a migration and a deploy. `label` is the primary key and
+  // the foreign key every time entry points at, with ON UPDATE CASCADE — so a
+  // rename rewrites history rather than orphaning it.
+  async listTimesheetServices(opts?: { includeInactive?: boolean }): Promise<TimesheetService[]> {
+    let q = supabase.from('timesheet_services')
+      .select('label, billable, ordinal, active').order('ordinal').order('label');
+    if (!opts?.includeInactive) q = q.eq('active', true);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    return (data || []) as TimesheetService[];
+  },
+  async createTimesheetService(row: { label: string; billable: boolean; ordinal?: number }) {
+    const { error } = await supabase.from('timesheet_services').insert({
+      label: row.label.trim(), billable: row.billable, ordinal: row.ordinal ?? 200, active: true,
+    });
+    if (error) throw new Error(error.message);
+  },
+  async updateTimesheetService(label: string, patch: Partial<TimesheetService>) {
+    const { error } = await supabase.from('timesheet_services')
+      .update({ ...patch, updated_at: new Date().toISOString() }).eq('label', label);
+    if (error) throw new Error(error.message);
+  },
+  // Deleting is refused by the database when the service has been used. That is
+  // the right answer — retire it with active:false instead, which hides it from
+  // the pickers while every historic entry keeps its meaning.
+  async deleteTimesheetService(label: string) {
+    const { error } = await supabase.from('timesheet_services').delete().eq('label', label);
+    if (error) {
+      if (/foreign key|violates/i.test(error.message)) {
+        throw new Error('That service has time recorded against it, so it cannot be deleted. Untick "In use" to retire it instead — past entries keep it.');
+      }
+      throw new Error(error.message);
+    }
+  },
+
   // ---- Services (catalogue) ----
   async createServiceDefinition(data: { key: string; label: string; description?: string | null; ordinal?: number }) {
     const { data: row, error } = await supabase.from('service_definitions').insert({

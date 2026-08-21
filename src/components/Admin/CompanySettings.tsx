@@ -7,19 +7,18 @@ import ClientCategories from './ClientCategories';
 import Cities from './Cities';
 import Maintenance from './Maintenance';
 import PrintLetterhead from '../shared/PrintLetterhead';
-import { Link } from 'react-router-dom';
-import CollapsibleSection from './CollapsibleSection';
+import { Link, useLocation } from 'react-router-dom';
 import PlatformSitesSection from './PlatformSitesSection';
 import DataRetention from './DataRetention';
 import AiSettings from './AiSettings';
+import TimesheetServicesEditor from './TimesheetServicesEditor';
+// Folded in here rather than living on their own routes: firm email, the master
+// chart of accounts and service settings are all "how the firm is set up", and
+// hunting three separate menu entries for that was the confusing part.
+import FirmEmailSettings from './FirmEmailSettings';
+import MasterChartOfAccounts from './MasterChartOfAccounts';
+import ServiceSettings from './ServiceSettings';
 import { DEFAULT_SERVICES, DEFAULT_COPY, type LandingService } from '../Public/landingDefaults';
-
-// Picklist mirrors the timesheet CHECK constraint. Keep in sync with
-// migration 045 / Timesheet.tsx.
-const SERVICES = [
-  'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
-  'Company Admin', 'Meetings', 'Other',
-] as const;
 
 // Brand colours — printed templates only. (UI Refinements Part B)
 const BRAND_COLOURS = [
@@ -96,9 +95,52 @@ const LANDING_COPY_GROUPS: { title: string; fields: { key: string; label: string
   },
 ];
 
+// The page used to be one long scroll with collapsible panels — everything
+// present at once, nothing findable. Same content, grouped the way the client
+// file is, so "where do I set X" has an answer you can point at.
+type SettingsTab = 'firm' | 'landing' | 'print' | 'email' | 'services'
+  | 'coa' | 'engagement' | 'lists' | 'platforms' | 'data';
+
+const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
+  { key: 'firm',       label: 'Firm Details' },
+  { key: 'landing',    label: 'Landing Page' },
+  { key: 'print',      label: 'Branding & Print' },
+  { key: 'email',      label: 'Email' },
+  { key: 'services',   label: 'Services & Rates' },
+  { key: 'coa',        label: 'Chart of Accounts' },
+  { key: 'engagement', label: 'Engagement Letter' },
+  { key: 'lists',      label: 'Lists' },
+  { key: 'platforms',  label: 'Platform Sites' },
+  { key: 'data',       label: 'Data & AI' },
+];
+
 export default function CompanySettings() {
   const { user } = useAuth();
   const canEdit = isSupervisorOrHigher(user);
+
+  // ?tab= keeps a tab linkable and survives a refresh, matching the client file.
+  const location = useLocation();
+  const [tab, setTab] = useState<SettingsTab>(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    return SETTINGS_TABS.some(t => t.key === wanted) ? (wanted as SettingsTab) : 'firm';
+  });
+  // The sidebar links straight to ?tab=email / coa / services. Those are the
+  // same route, so the component is not remounted and the initialiser above
+  // never runs again — without this, the shortcuts would appear to do nothing.
+  useEffect(() => {
+    const wanted = new URLSearchParams(location.search).get('tab');
+    if (wanted && SETTINGS_TABS.some(t => t.key === wanted)) setTab(wanted as SettingsTab);
+  }, [location.search]);
+  const goTab = (k: SettingsTab) => {
+    setTab(k);
+    const u = new URL(window.location.href);
+    u.searchParams.set('tab', k);
+    window.history.replaceState(null, '', u.toString());
+  };
+  // Panels stay mounted and are hidden rather than unmounted, so a half-typed
+  // address is still there when you come back from another tab — and one Save
+  // at the top continues to cover every field on the page.
+  const panel = (k: SettingsTab) => ({ display: tab === k ? undefined : 'none' });
 
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -117,11 +159,12 @@ export default function CompanySettings() {
     try {
       const data = await api.getCompanySettings();
       setForm(data);
+      // Seed from whatever is stored rather than from a fixed list — the
+      // services are rows now (migration 185), and the editor renders an input
+      // per row, falling back to '' for one that has never had a rate.
       const defaults = (data?.default_service_rates || {}) as Record<string, number>;
       const inputs: Record<string, string> = {};
-      for (const s of SERVICES) {
-        inputs[s] = defaults[s] != null ? String(defaults[s]) : '';
-      }
+      for (const [k, v] of Object.entries(defaults)) inputs[k] = v != null ? String(v) : '';
       setRateInputs(inputs);
     } catch (err: any) {
       alert('Failed to load company settings: ' + err.message);
@@ -142,10 +185,9 @@ export default function CompanySettings() {
     try {
       // Build the rates jsonb — only include services with a non-empty value
       const rates: Record<string, number> = {};
-      for (const s of SERVICES) {
-        const v = rateInputs[s];
+      for (const [svc, v] of Object.entries(rateInputs)) {
         if (v !== '' && v != null && !isNaN(Number(v))) {
-          rates[s] = Number(v);
+          rates[svc] = Number(v);
         }
       }
       await api.updateCompanySettings({
@@ -350,9 +392,22 @@ export default function CompanySettings() {
         </div>
       )}
 
+      {/* Same tab bar as the client file, so the two pages behave alike. */}
+      <div className="cd-tabbar">
+        {SETTINGS_TABS.map(t => (
+          <button
+            key={t.key}
+            className={`cd-tab ${tab === t.key ? 'active' : ''}`}
+            onClick={() => goTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <fieldset disabled={!editing} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       {/* Logo */}
-      <div className="form-section">
+      <div className="form-section" style={panel('firm')}>
         <h3>Logo &amp; brand</h3>
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{
@@ -464,7 +519,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Public landing page (migration 139) */}
-      <div className="form-section">
+      <div className="form-section" style={panel('landing')}>
         <h3>Landing page</h3>
         <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 16px' }}>
           Controls the public home page at your site's address (the page visitors see before signing in).
@@ -768,7 +823,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Legal */}
-      <div className="form-section">
+      <div className="form-section" style={panel('firm')}>
         <h3>Legal &amp; tax identifiers</h3>
         <div className="form-grid">
           <div className="form-group">
@@ -791,7 +846,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Address */}
-      <div className="form-section">
+      <div className="form-section" style={panel('firm')}>
         <h3>Address</h3>
         <div className="form-grid">
           <div className="form-group">
@@ -818,7 +873,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Contact */}
-      <div className="form-section">
+      <div className="form-section" style={panel('firm')}>
         <h3>Contact</h3>
         <div className="form-grid">
           <div className="form-group">
@@ -837,7 +892,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Client messaging — after-hours auto-reply */}
-      <div className="form-section">
+      <div className="form-section" style={panel('email')}>
         <h3>Client messaging — after-hours auto-reply</h3>
         <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
           When a client messages outside the hours below, the portal auto-acknowledges (at most once per client every 12 hours).
@@ -887,7 +942,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Banking */}
-      <div className="form-section">
+      <div className="form-section" style={panel('firm')}>
         <h3>Banking</h3>
         <div className="form-grid">
           <div className="form-group">
@@ -902,36 +957,23 @@ export default function CompanySettings() {
       </div>
 
       {/* Default service rates */}
-      <CollapsibleSection title="Default Service Rates (€/hour)">
-        <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
-          These rates apply to every staff member unless overridden on the Users page.
-          Leave blank to skip a service. New time entries snapshot the rate at insert
-          time so historical figures don't change when you adjust these.
-        </p>
-        <div className="form-grid">
-          {SERVICES.map(s => (
-            <div className="form-group" key={s}>
-              <label>{s}</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                className="form-input"
-                value={rateInputs[s] ?? ''}
-                onChange={e => setRateInputs(prev => ({ ...prev, [s]: e.target.value }))}
-                disabled={!canEdit}
-                placeholder="—"
-              />
-            </div>
-          ))}
-        </div>
-      </CollapsibleSection>
+      <div className="form-section" style={panel('services')}>
+        <h3>Default Service Rates (€/hour)</h3>
+        <TimesheetServicesEditor
+          rateInputs={rateInputs}
+          setRateInputs={setRateInputs}
+          canEdit={canEdit}
+          editing={editing}
+        />
+      </div>
 
-      <CollapsibleSection title="Platform Sites (TaxisNet, Ergani, JCC, banks…)">
+      <div className="form-section" style={panel('platforms')}>
+        <h3>Platform Sites</h3>
         <PlatformSitesSection canEdit={canEdit} />
-      </CollapsibleSection>
+      </div>
 
-      <CollapsibleSection title="Email — outbound from the app">
+      <div className="form-section" style={panel('email')}>
+        <h3>Email — outbound from the app</h3>
         <p style={{ fontSize: 13, color: '#5a6478', marginTop: 0 }}>
           The app sends outbound email (engagement letters, payment / filing
           reminders, PDF-by-email from the client list, test sends) through
@@ -958,9 +1000,10 @@ export default function CompanySettings() {
           with "Edge Function not found", redeploy it from
           <code> supabase/functions/send-via-outlook/index.ts</code>.
         </p>
-      </CollapsibleSection>
+      </div>
 
-      <CollapsibleSection title="Engagement Letter defaults">
+      <div className="form-section" style={panel('engagement')}>
+        <h3>Engagement Letter defaults</h3>
         <p style={{ fontSize: 13, color: '#5a6478', marginTop: 0 }}>
           Pre-filled on every new engagement letter so the per-client form only needs the bits
           that actually change. Edit a letter to override any of these for one client.
@@ -1065,10 +1108,10 @@ export default function CompanySettings() {
           onChange={(e) => handleChange('default_terms_text', e.target.value)}
           disabled={!editing || !canEdit}
         />
-      </CollapsibleSection>
+      </div>
 
       {/* Footer text */}
-      <div className="form-section">
+      <div className="form-section" style={panel('print')}>
         <h3>Report / printable footer</h3>
         <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
           Shown at the bottom of printable documents (timesheet, client card).
@@ -1085,7 +1128,7 @@ export default function CompanySettings() {
       </div>
 
       {/* Brand & print colours */}
-      <div className="form-section">
+      <div className="form-section" style={panel('print')}>
         <h3>Brand &amp; Print Colours</h3>
         <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
           These colours apply to <strong>printed templates only</strong> (client card, invoices,
@@ -1143,26 +1186,35 @@ export default function CompanySettings() {
 
       </fieldset>
 
-      {/* Document Categories admin — self-contained, saves independently */}
-      <DocumentCategories />
+      {/* Each of these saves independently of the Save button above, so they
+          sit outside the fieldset — only their tab assignment is new. */}
+      <div style={panel('lists')}>
+        {/* Document Categories admin */}
+        <DocumentCategories />
+        {/* Storage folder names — master list, renames propagate to all clients */}
+        <FolderTemplates />
+        {/* Client Categories admin */}
+        <ClientCategories />
+        {/* Cities admin */}
+        <Cities />
+      </div>
 
-      {/* Storage folder names — master list, renames propagate to all clients */}
-      <FolderTemplates />
+      <div style={panel('data')}>
+        {/* AI & data transfers (GDPR) — leadership-only */}
+        <AiSettings />
+        {/* Data-retention schedule (GDPR) — leadership-only */}
+        <DataRetention />
+        {/* Maintenance tools — leadership-only */}
+        <Maintenance />
+      </div>
 
-      {/* Client Categories admin — self-contained, saves independently */}
-      <ClientCategories />
-
-      {/* Cities admin — self-contained, saves independently */}
-      <Cities />
-
-      {/* AI & data transfers (GDPR) — self-contained, leadership-only */}
-      <AiSettings />
-
-      {/* Data-retention schedule (GDPR) — self-contained, leadership-only */}
-      <DataRetention />
-
-      {/* Maintenance tools — self-contained, leadership-only */}
-      <Maintenance />
+      {/* Folded in from their own routes. Mounted only when their tab is open:
+          each fetches on mount, and loading three of them on every visit to
+          Company Settings would be wasted work. The old routes still exist, so
+          any bookmark keeps working. */}
+      {tab === 'email' && <FirmEmailSettings />}
+      {tab === 'coa' && <MasterChartOfAccounts />}
+      {tab === 'services' && <ServiceSettings />}
     </div>
   );
 }

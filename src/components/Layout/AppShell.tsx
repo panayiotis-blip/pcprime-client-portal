@@ -116,9 +116,13 @@ const STAFF_GROUPS: NavGroup[] = [
       {
         path: '/settings/company', label: 'Company Settings', icon: '⚙',
         children: [
-          { path: '/settings/firm-email', label: 'Firm Email (info@)', icon: '📧', requires: (u) => hasPermission(u, 'users.write') },
-          { path: '/master-accounts',     label: 'Master CoA',         icon: '◉' },
-          { path: '/settings/services',   label: 'Service Settings',   icon: '⚯' },
+          // These are tabs of Company Settings now, not separate pages. The
+          // shortcuts stay — they were how people got here — but they open the
+          // tab rather than a second copy of the same screen. The old routes
+          // still resolve, so existing bookmarks keep working.
+          { path: '/settings/company?tab=email',    label: 'Firm Email (info@)', icon: '📧', requires: (u) => hasPermission(u, 'users.write') },
+          { path: '/settings/company?tab=coa',      label: 'Master CoA',         icon: '◉' },
+          { path: '/settings/company?tab=services', label: 'Services & Rates',   icon: '⚯' },
         ],
       },
     ],

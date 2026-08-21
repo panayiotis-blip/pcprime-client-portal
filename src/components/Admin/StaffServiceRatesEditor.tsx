@@ -1,37 +1,38 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 
-const SERVICES = [
-  'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
-  'Company Admin', 'Meetings', 'Other',
-] as const;
-
 type Props = {
   userId: string;
   userName: string;
   onClose: () => void;
 };
 
-// Per-staff override editor for the 8 service rates. Empty input = no override
+// Per-staff override editor for the billable service rates. Empty input = no override
 // (the firm-wide default applies). Number = override.
 export default function StaffServiceRatesEditor({ userId, userName, onClose }: Props) {
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
   const [defaults, setDefaults]   = useState<Record<string, number>>({});
   const [overrides, setOverrides] = useState<Record<string, string>>({});  // input strings
+  // Billable only: internal time (leave, training, office admin) is never
+  // charged, so a per-staff hourly override would mean nothing.
+  const [services, setServices] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [company, rates] = await Promise.all([
+        const [company, rates, svc] = await Promise.all([
           api.getCompanySettings(),
           api.getStaffServiceRates(userId),
+          api.listTimesheetServices(),
         ]);
         if (cancelled) return;
         setDefaults((company?.default_service_rates || {}) as Record<string, number>);
+        const billable = svc.filter(x => x.billable).map(x => x.label);
+        setServices(billable);
         const map: Record<string, string> = {};
-        for (const s of SERVICES) map[s] = '';
+        for (const s of billable) map[s] = '';
         for (const r of rates) map[r.service] = String(r.rate);
         setOverrides(map);
       } catch (err: any) {
@@ -48,7 +49,7 @@ export default function StaffServiceRatesEditor({ userId, userName, onClose }: P
     try {
       // For each service: if the override is empty, clear; otherwise set.
       // Done sequentially so a single failure leaves a clear partial state.
-      for (const s of SERVICES) {
+      for (const s of services) {
         const raw = overrides[s];
         if (raw === '' || raw == null) {
           await api.setStaffServiceRate(userId, s, null);
@@ -95,7 +96,7 @@ export default function StaffServiceRatesEditor({ userId, userName, onClose }: P
               </tr>
             </thead>
             <tbody>
-              {SERVICES.map(s => {
+              {services.map(s => {
                 const def = defaults[s];
                 const raw = overrides[s];
                 const effective = raw !== '' && raw != null && !isNaN(Number(raw))

@@ -5,11 +5,6 @@ import PrintLetterhead from '../shared/PrintLetterhead';
 import PrintToolbar from '../shared/PrintToolbar';
 import { formatDate } from '../../services/dates';
 
-const SERVICES = [
-  'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
-  'Company Admin', 'Meetings', 'Other',
-] as const;
-
 type TimeEntry = {
   id: number;
   user_id: string;
@@ -89,7 +84,10 @@ export default function TimesheetPrint() {
     const value       = entries
       .filter(e => e.billable && e.rate_snapshot != null)
       .reduce((s, e) => s + (e.minutes / 60) * Number(e.rate_snapshot), 0);
-    const byService = SERVICES.map(svc => {
+    // Taken from the entries themselves rather than a fixed list: only
+    // services with time on them were ever shown, and this way a service added
+    // under Company Settings appears here without a second place to update.
+    const byService = Array.from(new Set(entries.map(e => e.service))).sort().map(svc => {
       const rows = entries.filter(e => e.service === svc);
       const mins = rows.reduce((s, e) => s + e.minutes, 0);
       const val  = rows.filter(e => e.billable && e.rate_snapshot != null)

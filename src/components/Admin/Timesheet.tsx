@@ -1,27 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { api, isSupervisorOrHigher, isOwner, isStaffRole } from '../../services/api';
+import { api, isSupervisorOrHigher, isOwner, isStaffRole, type TimesheetService } from '../../services/api';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/dates';
 import SearchableSelect from '../common/SearchableSelect';
 
-// Billable services (charged to clients).
-const BILLABLE_SERVICES = [
-  'Bookkeeping', 'VAT', 'Payroll', 'Audit', 'Tax Returns',
-  'Company Admin', 'Meetings', 'Other',
-] as const;
-// Internal services (overhead, leave, training — never billed to a client).
-// Picking one of these auto-clears the billable flag (the DB trigger also
-// enforces this server-side).
-const INTERNAL_SERVICES = [
-  'Internal Admin', 'Training', 'Annual Leave',
-  'Sick Leave', 'Public Holiday', 'Other Internal',
-] as const;
-const ALL_SERVICES = [...BILLABLE_SERVICES, ...INTERNAL_SERVICES] as const;
-type Service = typeof ALL_SERVICES[number];
-
-const isBillableService = (s: string) => (BILLABLE_SERVICES as readonly string[]).includes(s);
+// The service list is data now (migration 185, editable under Company Settings
+// → Services & Rates), so it can no longer be a literal union. The database
+// still guarantees validity: service is a foreign key to timesheet_services.
+// Internal services — overhead, leave, training — are never billed to a client;
+// picking one clears the billable flag here, and a DB trigger enforces it too.
+type Service = string;
 
 type ApprovalStatus = 'draft' | 'approved';
 type BillingStatus = 'unbilled' | 'written_off' | 'deferred' | 'invoiced';
@@ -160,6 +150,19 @@ export default function Timesheet() {
   // Filters — default to "me" + this week
   const [fStaff, setFStaff]     = useState<string>(user?.id || '');
   const [fClient, setFClient]   = useState<string>('');
+  // Loaded once; retired services are excluded, so they stop being offered
+  // while historic entries that used them are untouched.
+  const [svcRows, setSvcRows] = useState<TimesheetService[]>([]);
+  const BILLABLE_SERVICES = useMemo(() => svcRows.filter(x => x.billable).map(x => x.label), [svcRows]);
+  const INTERNAL_SERVICES = useMemo(() => svcRows.filter(x => !x.billable).map(x => x.label), [svcRows]);
+  const ALL_SERVICES = useMemo(() => [...BILLABLE_SERVICES, ...INTERNAL_SERVICES], [BILLABLE_SERVICES, INTERNAL_SERVICES]);
+  const isBillableService = (s: string) => BILLABLE_SERVICES.includes(s);
+  useEffect(() => {
+    api.listTimesheetServices()
+      .then(setSvcRows)
+      .catch(e => console.error('Could not load the service list:', e.message));
+  }, []);
+
   const [fService, setFService] = useState<string>('');
   const [fApproval, setFApproval] = useState<string>('');  // '', 'draft', 'approved'
   const [fBilling, setFBilling]   = useState<string>('');  // '', 'unbilled', 'written_off', 'deferred', 'invoiced'
