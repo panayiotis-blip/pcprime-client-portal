@@ -515,6 +515,10 @@ function restoreSchedScroll(){
 }
 function fitFreeze(){
   document.querySelectorAll(".tblwrap.freeze").forEach(function(w){
+    // A grid inside a modal sets its own max-height and sits above a row of
+    // buttons. Sizing it to the bottom of the viewport, as a page grid wants,
+    // would push Save out of sight.
+    if(w.closest(".modal"))return;
     var top=w.getBoundingClientRect().top;
     var avail=Math.max(220, window.innerHeight-top-14);
     w.style.maxHeight=avail+"px";
@@ -1265,7 +1269,7 @@ window.openChargeEditor=function(typeId){
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(1320px,98vw)"><h3>Enter / adjust '+esc(ct.name.toLowerCase())+' — '+y+'</h3>'+
     '<div class="hint">Every month is pre-filled with what the tenant is currently charged. Type the real figure when a bill comes in; clear a cell to drop the charge for that month. '+
     (ct.kind==="monthly"?'The “standing” column is the amount set on the tenant’s file.':'This is an '+esc(ct.kind==="annual"?"annual":"one-off")+' charge — fill in only the month it falls in.')+'</div>'+
-    '<div class="tblwrap" style="max-height:62vh"><table style="width:100%"><thead><tr><th style="position:sticky;left:0">Tenant</th><th class="num">Standing</th>'+MONTHS.map(function(m){return '<th class="num">'+m+'</th>';}).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="tblwrap freeze" style="max-height:62vh"><table style="width:100%"><thead><tr><th>Tenant</th><th class="num">Standing</th>'+MONTHS.map(function(m){return '<th class="num">'+m+'</th>';}).join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="frow" style="align-items:center;margin-top:6px"><span class="hint" style="margin:0">Saved figures apply to this charge only — rent and other charges are untouched.</span><div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveChargeEditor('+typeId+')">Save '+esc(ct.name.toLowerCase())+'</button></div></div></div>';
 };
 window.saveChargeEditor=function(typeId){
@@ -1308,7 +1312,7 @@ window.openRentEditor=function(){ if(!canEdit())return; const y=yr();
     return '<tr><td style="position:sticky;left:0;background:#fff;min-width:150px">'+esc(t.name)+'<div style="font-size:11px;color:#94a3b8">'+esc(t.unit)+'</div></td><td class="num" style="color:#94a3b8">'+money(t.rent)+'</td>'+cells+'</tr>'; }).join("");
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(1320px,98vw)"><h3>Enter / adjust rent — '+y+'</h3>'+
     '<div class="hint">Every month of '+y+' is pre-filled with the agreement rent. Change any month\'s figure to adjust what is charged. Blank a cell to reset it to the agreement rent.</div>'+
-    '<div class="tblwrap" style="max-height:62vh"><table style="width:100%"><thead><tr><th style="position:sticky;left:0">Tenant</th><th class="num">Agreement</th>'+MONTHS.map(m=>'<th class="num">'+m+'</th>').join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<div class="tblwrap freeze" style="max-height:62vh"><table style="width:100%"><thead><tr><th>Tenant</th><th class="num">Agreement</th>'+MONTHS.map(m=>'<th class="num">'+m+'</th>').join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div class="frow" style="align-items:center;margin-top:6px"><span class="hint" style="margin:0">Tip: use the month cells in the schedule to change a single tenant, or this grid to set the whole year.</span><div style="flex:1"></div><button class="ghost" data-h="closeModal()">Cancel</button> <button class="primary" data-h="saveRent()">Save rents</button></div></div></div>';
 };
 window.saveRent=function(){ const y=yr(); DATA.tenants.forEach(t=>ensureYear(t,y));
@@ -1532,7 +1536,7 @@ window.openAudit=function(){ if(!isAdmin())return; const cutoff=Date.now()-90*86
   const body=rows.map(a=>'<tr><td>'+esc(a.ts)+'</td><td>'+esc(a.user)+'</td><td>'+esc(a.action)+'</td></tr>').join("")||'<tr><td colspan="3" style="color:#94a3b8">No changes logged in the last 90 days.</td></tr>';
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(780px,96vw)"><h3>Audit trail — last 90 days ('+rows.length+')</h3>'+
     '<div class="hint">Who changed what, and when. Newest first.</div>'+
-    '<div class="tblwrap" style="max-height:65vh"><table><thead><tr><th>When</th><th>User</th><th>Change</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
+    '<div class="tblwrap freeze" style="max-height:65vh"><table><thead><tr><th>When</th><th>User</th><th>Change</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
     '<div class="frow" style="justify-content:flex-end;margin-top:6px"><button class="ghost" data-h="closeModal()">Close</button></div></div></div>'; };
 
 /* ---- import / csv / snapshot ---- */
