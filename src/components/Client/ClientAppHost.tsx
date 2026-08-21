@@ -120,6 +120,20 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
         // mailto only, never an arbitrary URL.
         const href = String(m.href || '');
         if (href.startsWith('mailto:')) window.location.href = href;
+      } else if (m.type === 'files') {
+        // Uploads for the embedded app. The frame is sandboxed and holds no
+        // credentials, so the operation is made here with the staff JWT and
+        // only the resulting reference goes back.
+        const win = iframeRef.current?.contentWindow;
+        const reply = (payload: any) => win?.postMessage({ type: 'files:reply', reqId: m.reqId, ...payload }, '*');
+        (async () => {
+          try {
+            if (m.op === 'upload') reply({ ok: true, file: (await api.appFiles(clientId, appKey, 'upload', { name: m.name, mime: m.mime, data: m.data })).file });
+            else if (m.op === 'sign') reply({ ok: true, url: (await api.appFiles(clientId, appKey, 'sign', { path: m.path, download: m.download })).url });
+            else if (m.op === 'remove') { await api.appFiles(clientId, appKey, 'remove', { path: m.path }); reply({ ok: true }); }
+            else reply({ ok: false, error: 'Unknown file operation.' });
+          } catch (e: any) { reply({ ok: false, error: e?.message || 'Failed' }); }
+        })();
       } else if (m.type === 'users') {
         const win = iframeRef.current?.contentWindow;
         const reply = (payload: any) => win?.postMessage({ type: 'users:reply', reqId: m.reqId, ...payload }, '*');

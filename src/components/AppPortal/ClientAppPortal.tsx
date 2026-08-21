@@ -131,6 +131,21 @@ export default function ClientAppPortal() {
         // App saved a PDF and wants a message opened for it — mailto only.
         const href = String(m.href || '');
         if (href.startsWith('mailto:')) window.location.href = href;
+      } else if (m.type === 'files') {
+        // Same as the staff host, but authorised by the app session — these
+        // users have no Supabase JWT, so the session is what proves which
+        // client's files they may reach.
+        const win = iframeRef.current?.contentWindow;
+        const reply = (payload: any) => win?.postMessage({ type: 'files:reply', reqId: m.reqId, ...payload }, '*');
+        (async () => {
+          try {
+            const ses = s.session;
+            if (m.op === 'upload') reply({ ok: true, file: (await api.appSessionFiles(ses, 'upload', { name: m.name, mime: m.mime, data: m.data })).file });
+            else if (m.op === 'sign') reply({ ok: true, url: (await api.appSessionFiles(ses, 'sign', { path: m.path, download: m.download })).url });
+            else if (m.op === 'remove') { await api.appSessionFiles(ses, 'remove', { path: m.path }); reply({ ok: true }); }
+            else reply({ ok: false, error: 'Unknown file operation.' });
+          } catch (e: any) { reply({ ok: false, error: e?.message || 'Failed' }); }
+        })();
       } else if (m.type === 'users') {
         const win = iframeRef.current?.contentWindow;
         const reply = (payload: any) => win?.postMessage({ type: 'users:reply', reqId: m.reqId, ...payload }, '*');

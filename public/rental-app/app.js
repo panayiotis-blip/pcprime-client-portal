@@ -222,6 +222,23 @@ function usersRequest(op, extra){ return new Promise(function(resolve){
   window.parent.postMessage(Object.assign({type:"users",op:op,reqId:id}, extra||{}), "*");
   setTimeout(function(){ if(__userReqs[id]){ __userReqs[id]({ok:false,error:"Timed out."}); delete __userReqs[id]; } }, 15000);
 }); }
+
+/* ---- Files (agreements) — same bridge, different door ----
+   Attachments used to be base64 dataUrls kept inside this document. Fifteen
+   contracts took it to 23 MB and the save stopped working altogether: the whole
+   document is re-posted on every change, and the REST layer could not carry it.
+   Files now live in Storage; the document keeps only { name, path, size }.
+   The frame is sandboxed and holds no credentials, so the host brokers it —
+   exactly as it does for users. Longer timeout: this one carries a file. */
+var __fileReqId=0, __fileReqs={};
+window.addEventListener("message", function(e){ var m=e.data||{}; if(m.type==="files:reply" && __fileReqs[m.reqId]){ __fileReqs[m.reqId](m); delete __fileReqs[m.reqId]; } });
+function filesRequest(op, extra){ return new Promise(function(resolve){
+  if(window.parent===window){ resolve({ok:false,error:"File storage is not available in this window."}); return; }
+  var id=++__fileReqId; __fileReqs[id]=resolve;
+  window.parent.postMessage(Object.assign({type:"files",op:op,reqId:id}, extra||{}), "*");
+  setTimeout(function(){ if(__fileReqs[id]){ __fileReqs[id]({ok:false,error:"Timed out."}); delete __fileReqs[id]; } }, 60000);
+}); }
+
 window.openUsers=function(){ if(!isAdmin()){alert("Admins only.");return;}
   document.getElementById("modalHost").innerHTML='<div class="modal"><div class="box" style="width:min(780px,97vw)"><h3>Users &amp; access</h3>'+
     '<p class="hint"><b>admin</b> — full access incl. managing users · <b>editor</b> — add/edit data · <b>viewer</b> — read-only.</p>'+
@@ -673,13 +690,38 @@ window.rebuildUnitOptions=function(){ const pid=num(document.getElementById("t_p
 /* ---- PDF agreement ---- */
 window.attachPdf=function(id){ pdfTargetId=id; document.getElementById("pdfInput").click(); };
 function onPdfPicked(e){ const f=e.target.files[0]; if(!f||pdfTargetId==null)return; const rd=new FileReader();
-  rd.onload=ev=>{ const t=DATA.tenants.find(x=>x.id===pdfTargetId); if(!t.agreements)t.agreements=[]; t.agreements.push({name:f.name,dataUrl:ev.target.result,uploaded:stamp(new Date())}); persist("Attached agreement — "+t.name); render(); flash("Agreement attached: "+f.name); e.target.value=""; };
+  rd.onload=ev=>{ const t=DATA.tenants.find(x=>x.id===pdfTargetId); if(!t)return;
+    flash("Uploading "+f.name+"…");
+    filesRequest("upload",{name:f.name,mime:f.type||"application/pdf",data:ev.target.result}).then(function(r){
+      if(!r||!r.ok){ alert("That agreement was not saved.\n\n"+((r&&r.error)||"Upload failed.")); return; }
+      if(!t.agreements)t.agreements=[];
+      // Only a reference is kept — the file itself is in Storage now.
+      t.agreements.push({name:r.file.name,path:r.file.path,size:r.file.size,mime:r.file.mime,uploaded:stamp(new Date())});
+      persist("Attached agreement — "+t.name); render(); flash("Agreement attached: "+f.name);
+    });
+    e.target.value=""; };
   rd.readAsDataURL(f); }
 window.viewAgreement=function(id,idx){ const t=DATA.tenants.find(x=>x.id===id); const ag=(t.agreements||[])[idx||0]; if(!ag){alert("No agreement attached.");return;}
+  // Stored file: ask the host for a short-lived signed link. A window opened
+  // inside the .then() would be caught by the pop-up blocker (no longer a user
+  // gesture by then), so it is opened now and pointed at the URL when it lands.
+  if(ag.path){ const w=window.open("","_blank");
+    filesRequest("sign",{path:ag.path}).then(function(r){
+      if(r&&r.ok&&r.url){ if(w)w.location.href=r.url; else window.open(r.url,"_blank"); }
+      else { if(w)w.close(); alert("That agreement could not be opened.\n\n"+((r&&r.error)||"Not found.")); }
+    });
+    return; }
+  // Legacy: agreements embedded before the move to Storage.
+  if(!ag.dataUrl){ alert("No file is attached to this agreement."); return; }
   try{ const parts=ag.dataUrl.split(","); const bin=atob(parts[1]); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
     const blob=new Blob([arr],{type:"application/pdf"}); const url=URL.createObjectURL(blob); window.open(url,"_blank"); }
   catch(err){ window.open(ag.dataUrl,"_blank"); } };
-window.removeAgreement=function(id,idx){ if(!isAdmin()){alert("Only admins can remove agreements.");return;} const t=DATA.tenants.find(x=>x.id===id); const ag=(t.agreements||[])[idx]; if(!ag)return; if(!confirm("Remove agreement '"+ag.name+"'?"))return; t.agreements.splice(idx,1); persist("Removed agreement — "+t.name); render(); flash("Agreement removed."); };
+window.removeAgreement=function(id,idx){ if(!isAdmin()){alert("Only admins can remove agreements.");return;} const t=DATA.tenants.find(x=>x.id===id); const ag=(t.agreements||[])[idx]; if(!ag)return; if(!confirm("Remove agreement '"+ag.name+"'?"))return;
+  const path=ag.path; t.agreements.splice(idx,1); persist("Removed agreement — "+t.name); render(); flash("Agreement removed.");
+  // The document is saved first, then the object dropped. The other order risks
+  // a reference pointing at a file that is already gone; this way the worst case
+  // is an unreferenced object, which costs a little space and nothing else.
+  if(path)filesRequest("remove",{path:path}); };
 
 /* ---- Rent Schedule (multi-receipt) ---- */
 var schedSort="tenant";

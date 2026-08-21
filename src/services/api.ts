@@ -1094,6 +1094,19 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // ---- Files for embedded apps (migration 184, app-files fn) ----
+  // Apps used to keep uploads as base64 inside the document above, which took
+  // Greson's rentals document to 23 MB and broke saving outright. Files go to
+  // Storage; the document keeps a reference. Staff reach it with their JWT.
+  async appFiles(clientId: number, appKey: string, op: string, payload: Record<string, unknown>) {
+    const { data, error } = await supabase.functions.invoke('app-files', {
+      body: { action: op, client_id: clientId, app_key: appKey, ...payload },
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'File operation failed.');
+    return data as any;
+  },
+
   // Logos for the apps launcher tiles. Each client's own logo lives on its
   // company profile (migration 078); RLS returns only clients the caller can
   // reach, which for staff is all of them.
@@ -1202,6 +1215,17 @@ export const api = {
     if (error) throw new Error(error.message);
     if (!data?.ok) throw new Error(data?.error || 'Save failed.');
   },
+  // Same file operations for an app-only user, who has no JWT — the opaque
+  // session identifies both the user and the client/app they may touch.
+  async appSessionFiles(session: string, op: string, payload: Record<string, unknown>) {
+    const { data, error } = await supabase.functions.invoke('app-files', {
+      body: { action: op, session, ...payload },
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.ok) throw new Error(data?.error || 'File operation failed.');
+    return data as any;
+  },
+
   // In-app user management by an app-admin (standalone /app) — via the session.
   async appAdminListUsers(session: string): Promise<any[]> {
     const { data, error } = await supabase.functions.invoke('app-session', { body: { action: 'users_list', session } });
