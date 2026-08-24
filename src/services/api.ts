@@ -863,9 +863,39 @@ export const api = {
     return (data || []).map((r: any) => r.app_key);
   },
   // Enable/disable an app for a client.
+  //
+  // Disabling used to upsert enabled:false, which meant that merely toggling an
+  // app on and then off left a permanent row behind. That is how `rentals` came
+  // to list ten allocations when one was intended — six were empty rows nobody
+  // meant to create. Disabling now removes the allocation.
+  //
+  // But not unconditionally: the row also holds this client's customisation
+  // (html_override), their pinned version and their variant token. Throwing
+  // those away because someone toggled a switch off would be a worse bug than
+  // the clutter. So a row that carries anything is kept and merely disabled;
+  // only an empty one is deleted. Their data in client_app_data is untouched
+  // either way — re-enabling brings it straight back.
   async setClientApp(clientId: number, appKey: string, enabled: boolean) {
-    const { error } = await supabase.from('client_apps')
-      .upsert({ client_id: clientId, app_key: appKey, enabled }, { onConflict: 'client_id,app_key' });
+    if (enabled) {
+      const { error } = await supabase.from('client_apps')
+        .upsert({ client_id: clientId, app_key: appKey, enabled: true }, { onConflict: 'client_id,app_key' });
+      if (error) throw new Error(error.message);
+      return;
+    }
+
+    const { data: row } = await supabase.from('client_apps')
+      .select('html_override, pinned_html, pinned_version')
+      .eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
+    const { count } = await supabase.from('client_app_data')
+      .select('client_id', { count: 'exact', head: true })
+      .eq('client_id', clientId).eq('app_key', appKey);
+
+    const worthKeeping = !!(row && (row.html_override || row.pinned_html || row.pinned_version)) || !!count;
+    const { error } = worthKeeping
+      ? await supabase.from('client_apps')
+          .update({ enabled: false }).eq('client_id', clientId).eq('app_key', appKey)
+      : await supabase.from('client_apps')
+          .delete().eq('client_id', clientId).eq('app_key', appKey);
     if (error) throw new Error(error.message);
   },
   // Enabled (client, app) rows the caller can access — RLS narrows a
