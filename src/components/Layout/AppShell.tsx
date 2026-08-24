@@ -113,18 +113,11 @@ const STAFF_GROUPS: NavGroup[] = [
           { path: '/clients/deleted', label: 'Deleted Clients', icon: '🗑' },
         ],
       },
-      {
-        path: '/settings/company', label: 'Company Settings', icon: '⚙',
-        children: [
-          // These are tabs of Company Settings now, not separate pages. The
-          // shortcuts stay — they were how people got here — but they open the
-          // tab rather than a second copy of the same screen. The old routes
-          // still resolve, so existing bookmarks keep working.
-          { path: '/settings/company?tab=email',    label: 'Firm Email (info@)', icon: '📧', requires: (u) => hasPermission(u, 'users.write') },
-          { path: '/settings/company?tab=coa',      label: 'Master CoA',         icon: '◉' },
-          { path: '/settings/company?tab=services', label: 'Services & Rates',   icon: '⚯' },
-        ],
-      },
+      // Firm Email (info@), Master CoA and Services & Rates used to hang off
+      // here as separate pages. They are tabs of Company Settings now, so the
+      // sidebar entries would be a second way to the same screen. Their routes
+      // still resolve for anyone with an old bookmark.
+      { path: '/settings/company', label: 'Company Settings', icon: '⚙' },
     ],
   },
 ];

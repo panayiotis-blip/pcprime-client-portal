@@ -37,7 +37,7 @@ const STAFF_ROUTES: RouteItem[] = [
   { path: '/credentials',      label: 'Credentials', keywords: 'passwords logins', requires: u => hasPermission(u, 'credentials.read') },
   { path: '/users',            label: 'Users', keywords: 'staff', requires: u => hasPermission(u, 'users.read') },
   { path: '/settings/company', label: 'Company Settings' },
-  { path: '/settings/services', label: 'Service Settings' },
+  { path: '/settings/company?tab=services', label: 'Services & Rates' },
 ];
 
 const CLIENT_ROUTES: RouteItem[] = [
