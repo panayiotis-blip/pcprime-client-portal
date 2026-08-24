@@ -67,6 +67,9 @@ export const CLIENT_APPS: ClientAppDef[] = [
 
 // ---- Uploaded templates (loaded at runtime) ----
 let templateApps: ClientAppDef[] = [];
+// Keys an admin has switched off. Held separately because a retired built-in
+// still exists in CLIENT_APPS and has to be removed from the merged list.
+let retired = new Set<string>();
 let loadPromise: Promise<void> | null = null;
 
 // Fetch active app_templates once (cached). Call before relying on getClientApp
@@ -74,21 +77,53 @@ let loadPromise: Promise<void> | null = null;
 export async function loadAppTemplates(force = false): Promise<void> {
   if (loadPromise && !force) return loadPromise;
   loadPromise = (async () => {
+    // Inactive rows are fetched too, not filtered away: a built-in also exists
+    // in CLIENT_APPS, so silently dropping its row would leave the hard-coded
+    // copy on display and make "active" appear to do nothing for exactly the
+    // apps this migration was meant to bring under control.
     const { data, error } = await supabase.from('app_templates')
-      .select('key, name, icon, description, restricted, active').eq('active', true);
-    if (error) { templateApps = []; return; }
-    templateApps = (data || []).map((r: any) => ({
+      .select('key, name, icon, description, restricted, active, builtin_asset');
+    if (error) { templateApps = []; retired = new Set(); return; }
+    const rows = (data || []) as any[];
+    retired = new Set(rows.filter(r => !r.active).map(r => r.key));
+    templateApps = rows.filter(r => r.active).map((r: any) => ({
       key: r.key, label: r.name, icon: r.icon || '📦',
-      description: r.description || undefined, restricted: !!r.restricted, source: 'template' as const,
+      description: r.description || undefined, restricted: !!r.restricted,
+      // A row carrying builtin_asset IS one of the built-ins (migration 186) —
+      // the row owns its name, icon and flags; the files still ship in the build.
+      source: (r.builtin_asset ? 'builtin' : 'template') as 'builtin' | 'template',
+      asset: r.builtin_asset || undefined,
     }));
   })();
   return loadPromise;
 }
 
-// Built-in apps take precedence on a key collision (protects Greson's apps).
+// One list from two sources.
+//
+// Built-in DEFINITIONS stay in CLIENT_APPS above because they must be available
+// synchronously: this is called while rendering, and returning an empty list
+// before the fetch resolves would blank the Apps nav for everyone. What the
+// database row adds is authority over the editable metadata — name, icon,
+// description, restricted — so an admin can change those without a deploy.
+//
+// Anything only the code can know (asset path, component, staffOnly) is kept
+// from the built-in definition and never taken from the row, so a bad row
+// cannot turn a staff-only app into a client-facing one.
 export function allClientApps(): ClientAppDef[] {
+  const rowFor = new Map(templateApps.map(t => [t.key, t]));
+  const builtins = CLIENT_APPS.filter(a => !retired.has(a.key)).map(a => {
+    const row = rowFor.get(a.key);
+    if (!row) return a;
+    return {
+      ...a,
+      label: row.label || a.label,
+      icon: row.icon || a.icon,
+      description: row.description ?? a.description,
+      restricted: row.restricted,
+    };
+  });
   const builtinKeys = new Set(CLIENT_APPS.map(a => a.key));
-  return [...CLIENT_APPS, ...templateApps.filter(t => !builtinKeys.has(t.key))];
+  return [...builtins, ...templateApps.filter(t => !builtinKeys.has(t.key))];
 }
 
 export const getClientApp = (key: string): ClientAppDef | null =>

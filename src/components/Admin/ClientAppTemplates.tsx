@@ -10,7 +10,10 @@ import { PanelSkeleton } from '../ui';
 // client gets the app with its OWN blank data (client_app_data is keyed per
 // client + app), so two clients on the same template never share data.
 
-type Tmpl = { id: number; key: string; name: string; icon: string; description: string | null; restricted: boolean; active: boolean; version?: number; preview_token?: string | null };
+type Tmpl = { id: number; key: string; name: string; icon: string; description: string | null; restricted: boolean; active: boolean; version?: number; preview_token?: string | null;
+  // Set on a built-in (migration 186): its files ship in the build, so there is
+  // no HTML to replace and no template to remove.
+  builtin_asset?: string | null };
 type PreviewApp = { key: string; label: string; asset?: string; previewToken?: string };
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
@@ -36,6 +39,10 @@ export default function ClientAppTemplates() {
 
   const builtinKeys = new Set(CLIENT_APPS.map(a => a.key));
   const uploaded = (templates || []).filter(t => !builtinKeys.has(t.key));
+  // Since migration 186 a built-in also has an app_templates row, carrying its
+  // name, icon, description and whether it is available at all. Absent until
+  // that migration runs, so every use of it is guarded.
+  const builtinRow = (key: string) => (templates || []).find(t => t.key === key) || null;
 
   const setActive = async (t: Tmpl) => { try { await api.updateAppTemplate(t.id, { active: !t.active }); load(); } catch (e: any) { alert(e?.message || 'Failed'); } };
 
@@ -82,6 +89,7 @@ export default function ClientAppTemplates() {
                 <strong style={{ color: '#1a365d' }}>{a.label}</strong>
                 <span style={badge('#e0e7ff', '#3730a3')}>built-in</span>
                 {a.restricted && <span style={badge('#fef3c7', '#92400e')}>restricted</span>}
+                {builtinRow(a.key) && !builtinRow(a.key)!.active && <span style={badge('#f1f5f9', '#64748b')}>inactive</span>}
               </div>
               {a.description && <p style={desc}>{a.description}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
@@ -89,6 +97,18 @@ export default function ClientAppTemplates() {
                 {/* Component apps are portal views, not framed documents — they
                     need a real client's data, so there is nothing to preview. */}
                 {!a.component && <button className="btn btn-secondary btn-sm" onClick={() => setPreview({ key: a.key, label: a.label, asset: a.asset })}>Preview</button>}
+                {/* Migration 186 gave built-ins a row, so their name and their
+                    availability are editable without a deploy. What is NOT
+                    offered here is replacing the HTML or removing the app: the
+                    files ship in the build, and there is nothing to upload over. */}
+                {builtinRow(a.key) && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setActive(builtinRow(a.key)!)}>
+                    {builtinRow(a.key)!.active ? 'Deactivate' : 'Activate'}
+                  </button>
+                )}
+                {builtinRow(a.key) && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setEditing(builtinRow(a.key)!)}>Edit</button>
+                )}
               </div>
             </div>
           ))}
@@ -334,6 +354,15 @@ function EditModal({ tmpl, onClose, onSaved }: { tmpl: Tmpl; onClose: () => void
         <label style={{ ...lbl, display: 'block', marginTop: 10 }}>Description<br />
           <input className="form-input" value={f.description} onChange={e => setF(p => ({ ...p, description: e.target.value }))} style={{ width: '100%' }} /></label>
 
+        {/* A built-in's files ship in the build — there is nothing to upload
+            over, and letting someone try would only produce a confusing
+            failure. Its name, icon and description above are still editable. */}
+        {tmpl.builtin_asset ? (
+          <p style={{ marginTop: 16, borderTop: '1px solid #eef1f5', paddingTop: 14, fontSize: 12, color: '#64748b' }}>
+            This app ships with the portal, so it cannot be replaced by uploading a file.
+            Per-client differences are set as configuration on the client, not by editing the app.
+          </p>
+        ) : (
         <div style={{ marginTop: 16, borderTop: '1px solid #eef1f5', paddingTop: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1a365d', marginBottom: 6 }}>Replace the app (optional)</div>
           <input type="file" accept=".html,text/html" onChange={e => onFile(e.target.files?.[0])} />
@@ -363,6 +392,7 @@ function EditModal({ tmpl, onClose, onSaved }: { tmpl: Tmpl; onClose: () => void
             </div>
           )}
         </div>
+        )}
 
         {note && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginTop: 12 }}>{note}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>

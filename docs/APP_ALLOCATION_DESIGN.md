@@ -56,21 +56,30 @@ named action with a confirmation naming both clients.
 
 ## 3. Proposal
 
-### 3.1 One list, one allocation path
+### 3.1 One list, one allocation path — mostly already true
 
-Register built-ins as `app_templates` rows carrying a `builtin_asset` path
-(`/rental-app/`) instead of `html`. Then:
+**Correction (2026-08-24):** an earlier draft of this section claimed built-ins
+and uploaded templates had separate allocation screens. They do not. Clients →
+App Templates already lists both under one "Library", and both already carry an
+**Allocate to clients** button going through the same `allocateTemplate` path.
+The confusion came from the row-leak bug in §2.1, not from the allocation screen.
 
-- **one** admin screen lists every app, built-in or uploaded, with `active`,
-  `restricted`, allocation count and version
-- **one** allocation path, `allocateTemplate`, which is already explicit and
-  idempotent and always creates an empty instance
-- the client file's Apps tab becomes *activate/deactivate for this client* only —
-  it stops being a way to invent allocations
+What was genuinely missing, and is now done (migration 186): a built-in had no
+row of its own, so its name, icon, description and availability were frozen in
+`clientApps.ts` and could only change with a deploy. Built-ins now have an
+`app_templates` row carrying a `builtin_asset` path instead of `html`, so an
+admin can rename one or switch it off from the portal.
 
-`clientApps.ts` keeps its registry as the *renderer* map (which asset path, is it
-a component app, is it staff-only). It stops being the source of truth for
-*existence*.
+Deliberately still not offered for a built-in: replacing the HTML or "remove
+everywhere". Its files ship in the build — there is nothing to upload over, and
+nothing to delete.
+
+`clientApps.ts` keeps the built-in definitions because `allClientApps()` is
+called during render and must answer synchronously; returning an empty list
+while a fetch resolves would blank the Apps nav. The row supplies the editable
+metadata on top. Anything only the code can know — asset path, `component`,
+`staffOnly` — is never taken from the row, so a bad row cannot turn a staff-only
+app into a client-facing one.
 
 ### 3.2 Customisation: configure, don't fork
 
@@ -113,11 +122,28 @@ and costs update safety.
 Steps 1–3 remove the confusion. Step 4 is the part that delivers "customise per
 customer" without trading away update safety.
 
-## 4. Decisions needed
+## 4. Decisions — settled 2026-08-24
 
-1. **Configuration or forking** as the default meaning of "customise per client"?
-   The recommendation is configuration, with forking as a marked exception.
-2. **Should built-ins be forkable at all?** Recommendation: no, not in pass one.
-3. **`mgmt`** stays restricted to Greson Easy Loo — confirm.
-4. **Does anything need "clone another client's setup"?** If yes it gets its own
-   named action, never a side effect of allocation.
+1. **Configuration**, not forking, is what "customise per client" means here.
+2. **Built-ins are not forkable.** A fork would cut that client off from every
+   future fix.
+3. **`mgmt` stays restricted** to Greson Easy Loo.
+4. **No "clone another client's setup"** is wanted.
+
+## 5. What is done, and what is next
+
+Done:
+
+- §2.1 delete-on-disable (commit `ee70c88`) — a row carrying customisation, a
+  pin or a data document is kept and merely disabled; only an empty one goes
+- The 9 unintended `rentals` allocations and 3 copied datasets removed, backed
+  up in `_backup_rentals_allocations_20260824`
+- Migration 186 — built-ins get a row, so they can be renamed and switched off
+  without a deploy
+
+Next, and the substance of decision 1: **per-client configuration**. A settings
+object per (client, app), edited from the client's Apps tab, driving what that
+client's copy of an app looks like — for the rentals app that means the charge
+types, the VAT flags and rate, and which screens appear. It replaces the
+temptation to fork, and it is the only remaining piece of "customise the
+template under each customer".
