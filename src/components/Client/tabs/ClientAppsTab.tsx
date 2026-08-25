@@ -3,6 +3,7 @@ import { api, isSupervisorOrHigher } from '../../../services/api';
 import { useAuth } from '../../../context/AuthContext';
 import { allClientApps, getClientApp, loadAppTemplates } from '../../../services/clientApps';
 import ClientAppHost from '../ClientAppHost';
+import AppConfigPanel from './AppConfigPanel';
 import { PanelSkeleton } from '../../ui';
 
 // Firm-side Apps tab in the client file. Shows only the apps ASSIGNED to this
@@ -18,7 +19,7 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
   const canManage = isSupervisorOrHigher(user);
   const [keys, setKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<{ mode: 'list' } | { mode: 'open'; key: string } | { mode: 'users'; key: string } | { mode: 'grants'; key: string } | { mode: 'version'; key: string } | { mode: 'data'; key: string }>({ mode: 'list' });
+  const [view, setView] = useState<{ mode: 'list' } | { mode: 'open'; key: string } | { mode: 'users'; key: string } | { mode: 'grants'; key: string } | { mode: 'version'; key: string } | { mode: 'data'; key: string } | { mode: 'config'; key: string }>({ mode: 'list' });
   const [busy, setBusy] = useState('');
 
   const loadKeys = () => {
@@ -54,6 +55,10 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
       </div>
     );
   }
+  if (view.mode === 'config') {
+    return <AppConfigPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
+  }
+
   if (view.mode === 'grants') {
     return <AppGrantsPanel clientId={clientId} appKey={view.key} canManage={canManage} onBack={() => setView({ mode: 'list' })} />;
   }
@@ -95,6 +100,9 @@ export default function ClientAppsTab({ clientId }: { clientId: number }) {
                   <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'grants', key: app.key })}>Access</button>
                   {app.source === 'template' && <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'version', key: app.key })}>Version</button>}
                   <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'data', key: app.key })}>Data</button>
+                  {/* How the app is set up for this client (migration 187) —
+                      the supported alternative to forking it. */}
+                  <button className="btn btn-secondary btn-sm" onClick={() => setView({ mode: 'config', key: app.key })}>Configure</button>
                   <button className="btn btn-secondary btn-sm" style={{ color: '#94a3b8' }} onClick={() => setView({ mode: 'users', key: app.key })}>App users (old)</button>
                 </>}
                 {canManage && <button className="btn btn-secondary btn-sm" style={{ color: '#b91c1c' }} disabled={busy === app.key} onClick={() => removeApp(app.key)}>Remove</button>}

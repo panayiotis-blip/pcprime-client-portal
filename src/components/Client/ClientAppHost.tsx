@@ -25,6 +25,7 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
   const isComponent = !!app?.component;
 
   const [doc, setDoc] = useState<any | null>(null);
+  const [cfg, setCfg] = useState<Record<string, any>>({});
   const [docLoading, setDocLoading] = useState(true);
   const [mode, setMode] = useState<'srcdoc' | 'frame' | null>(null);
   const [srcDoc, setSrcDoc] = useState('');
@@ -34,6 +35,7 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const docRef = useRef<any>(null);
+  const cfgRef = useRef<Record<string, any>>({});
   const saveTimer = useRef<any>(null);
 
   // Grant-based callers (full-screen app users) pass their exact grant role;
@@ -95,7 +97,18 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
       .finally(() => setDocLoading(false));
   }, [clientId, appKey]);
 
+  // The firm's configuration for this (client, app) — migration 187. Fetched
+  // alongside the document and handed over in the same 'init' message, so the
+  // app never renders once unconfigured and then rearranges itself.
+  useEffect(() => {
+    if (isComponent) return;
+    api.getClientAppConfig(clientId, appKey)
+      .then(c => setCfg(c || {}))
+      .catch(() => setCfg({}));   // unconfigured is the normal case, not an error
+  }, [clientId, appKey]);
+
   useEffect(() => { docRef.current = doc; }, [doc]);
+  useEffect(() => { cfgRef.current = cfg; }, [cfg]);
 
   // postMessage bridge with the embedded app.
   useEffect(() => {
@@ -104,7 +117,7 @@ export default function ClientAppHost({ clientId, appKey, fullScreen, roleOverri
       const m: any = e.data || {};
       if (m.type === 'ready') {
         iframeRef.current?.contentWindow?.postMessage(
-          { type: 'init', data: docRef.current || {}, role: appRole, name: appName, username: (user as any)?.username || 'portal' },
+          { type: 'init', data: docRef.current || {}, config: cfgRef.current || {}, role: appRole, name: appName, username: (user as any)?.username || 'portal' },
           '*',
         );
       } else if (m.type === 'save') {

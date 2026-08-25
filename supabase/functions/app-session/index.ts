@@ -111,7 +111,11 @@ Deno.serve(async (req) => {
     const session = await makeSession({ uid: u.id, cid: u.client_id, app: u.app_key, role: u.role, exp: Date.now() + SESSION_TTL_MS }, secret);
     const { data: doc } = await admin.from('client_app_data')
       .select('data').eq('client_id', u.client_id).eq('app_key', u.app_key).maybeSingle();
-    return json({ ok: true, session, role: u.role, name: u.name || username, app_key: u.app_key, data: doc?.data ?? {} });
+    // App users hold no Supabase session, so RLS cannot serve them the firm's
+    // configuration (migration 187) — it comes through here with their data.
+    const { data: cfg } = await admin.from('client_app_config')
+      .select('config').eq('client_id', u.client_id).eq('app_key', u.app_key).maybeSingle();
+    return json({ ok: true, session, role: u.role, name: u.name || username, app_key: u.app_key, data: doc?.data ?? {}, config: cfg?.config ?? {} });
   }
 
   if (action === 'load') {
@@ -119,7 +123,9 @@ Deno.serve(async (req) => {
     if (!s) return json({ ok: false, error: 'Session expired — please sign in again.' }, 401);
     const { data: doc } = await admin.from('client_app_data')
       .select('data').eq('client_id', s.cid).eq('app_key', s.app).maybeSingle();
-    return json({ ok: true, data: doc?.data ?? {} });
+    const { data: cfg } = await admin.from('client_app_config')
+      .select('config').eq('client_id', s.cid).eq('app_key', s.app).maybeSingle();
+    return json({ ok: true, data: doc?.data ?? {}, config: cfg?.config ?? {} });
   }
 
   if (action === 'save') {

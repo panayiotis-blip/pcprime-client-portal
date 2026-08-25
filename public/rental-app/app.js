@@ -1,13 +1,22 @@
 const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const LS="greson_rentals_v2";
 let DATA=load(), user=null, activeTab="overview", schedYear="2026", stmtTenant=null, pdfTargetId=null;
+// Set by the host from client_app_config (migration 187) before anything reads
+// it. Empty = unconfigured = behave exactly as this app always has.
+let CONFIG={};
+// A configured value wins over the app's own setting AND hides the in-app
+// control, so a client cannot contradict their accountant.
+function cfgVat(){ return (CONFIG && CONFIG.vat && typeof CONFIG.vat === "object") ? CONFIG.vat : null; }
+function vatConfigured(){ return !!cfgVat(); }
+function hiddenTabs(){ return (CONFIG && Array.isArray(CONFIG.hiddenTabs)) ? CONFIG.hiddenTabs : []; }
 let chart=null;
 const VIEWED=new Date();
 
 // Statement has no tab of its own — it is a report, opened per tenant from the
 // Rent Schedule's Reports menu or from the invoice list. The view still exists
 // and goTab("statement") still reaches it; it just isn't a top-level place.
-function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["invoice","Invoices"]]; return t; }
+function TABS(){ const t=[["overview","Overview"],["properties","Properties"],["tenants","Tenants & Contracts"],["schedule","Rent Schedule"],["receipts","Receipts"],["arrears","Arrears"],["deposits","Deposits"],["invoice","Invoices"]];
+  const hide=hiddenTabs(); return hide.length ? t.filter(function(x){ return hide.indexOf(x[0])<0; }) : t; }
 function load(){ return norm({meta:{},tenants:[],properties:[],users:[],audit:[]}); }
 function norm(d){ if(!d.meta)d.meta={}; if(!d.tenants)d.tenants=[]; if(!d.properties)d.properties=[]; if(!d.users)d.users=[]; if(!d.audit)d.audit=[];
   // Charges billed alongside rent. The list is the firm's own — edit it in
@@ -61,9 +70,11 @@ function chargesTotal(t,y,m){ return monthCharges(t,y,m).reduce((s,c)=>s+num(c.a
    Rounded PER LINE, as an invoice shows it — rounding the month's total
    instead produces invoices whose lines do not add up to the total. */
 function r2(n){ return Math.round(n*100)/100; }
-function vatRate(){ var v=DATA.meta&&DATA.meta.vatRate; return v===undefined||v===null||v===""?19:num(v); }
-function tenantVatable(t){ return !!(t&&t.vatable); }
-function rentVatable(){ return !!(DATA.meta&&DATA.meta.vatOnRent); }
+function vatRate(){ var c=cfgVat(); if(c&&c.rate!==undefined&&c.rate!==null&&c.rate!=="")return num(c.rate);
+  var v=DATA.meta&&DATA.meta.vatRate; return v===undefined||v===null||v===""?19:num(v); }
+function tenantVatable(t){ var c=cfgVat(); if(c&&c.enabled===false)return false; return !!(t&&t.vatable); }
+function rentVatable(){ var c=cfgVat(); if(c&&c.onRent!==undefined)return !!c.onRent;
+  return !!(DATA.meta&&DATA.meta.vatOnRent); }
 function ctVatable(typeId){ var ct=ctById(typeId); return !!(ct&&ct.vatable); }
 function rentVat(t,y,m){ return (tenantVatable(t)&&rentVatable())?r2(rentOf(t,y,m)*vatRate()/100):0; }
 function chargeVat(t,c){ return (tenantVatable(t)&&ctVatable(c.typeId))?r2(num(c.amount)*vatRate()/100):0; }
@@ -182,7 +193,12 @@ function applyHeaderLogo(){ var hl=document.getElementById("hdrLogo"); if(!hl)re
 // Header title = this client's own company name (set in Settings), else a
 // generic label — so the same app on any client shows THEIR name, not Greson.
 function companyName(){ var s=DATA.settings||{}; return (s.companyName||(DATA.meta&&DATA.meta.client)||"").trim(); }
-function applyHeaderTitle(){ var t=document.getElementById("hdrTitle"); if(!t)return; var cn=companyName(); var txt=cn?(cn+" — Property Rentals"):"Property Rentals"; t.textContent=txt; try{document.title=txt;}catch(e){} }
+function applyHeaderTitle(){ var t=document.getElementById("hdrTitle"); if(!t)return;
+  // A title set by the firm wins outright — it is the whole name, not a suffix,
+  // so a client can be given "Rent Book" rather than "X — Property Rentals".
+  var txt; if(CONFIG&&CONFIG.title){ txt=String(CONFIG.title); }
+  else { var cn=companyName(); txt=cn?(cn+" — Property Rentals"):"Property Rentals"; }
+  t.textContent=txt; try{document.title=txt;}catch(e){} }
 function fileBase(){ var cn=companyName()||"Property Rentals"; return cn.replace(/[^\w]+/g,"_").replace(/^_+|_+$/g,"")||"Property_Rentals"; }
 
 /* ---- user menu: settings / privacy / users ---- */
@@ -202,9 +218,18 @@ window.openSettings=function(){
     '<div id="st_logoPrev">'+(s.logo?'<img src="'+esc(s.logo)+'" style="max-height:64px;margin-top:4px">':'')+'</div>'+
     '<div style="border-top:1px solid #e2e8f0;margin:14px 0 8px;padding-top:12px"><b style="font-size:13px">VAT</b>'+
       '<p class="hint" style="margin:2px 0 8px">VAT is added to a tenant\'s bill only when that tenant is marked <b>VAT registered</b> on their own file <i>and</i> the line is vatable. Every amount you enter anywhere stays <b>net</b> — VAT is added on top, never taken out of the figure you typed.</p>'+
-      '<div class="frow"><label>Rate (%)<input id="st_vatrate" type="number" step="0.01" min="0" style="width:90px" value="'+esc(String((DATA.meta&&DATA.meta.vatRate!==undefined)?DATA.meta.vatRate:19))+'"></label>'+
-      '<label style="align-self:flex-end">Charge VAT on rent<input id="st_vatrent" type="checkbox"'+(rentVatable()?" checked":"")+'></label></div>'+
-      '<p class="hint" style="margin:2px 0 0">Each charge type has its own VAT box below.</p></div>'+
+      // Set by the firm for this client (migration 187): show what applies, but
+      // no inputs. An editable box that silently has no effect is worse than no
+      // box at all.
+      (vatConfigured()
+        ? '<p class="hint" style="margin:2px 0 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 10px">'+
+          (cfgVat().enabled===false
+            ? 'VAT is <b>switched off</b> for this account by your accountant.'
+            : 'Set by your accountant: rate <b>'+esc(String(vatRate()))+'%</b>, rent is <b>'+(rentVatable()?'':'not ')+'vatable</b>.')+
+          ' Contact them to change it.</p></div>'
+        : '<div class="frow"><label>Rate (%)<input id="st_vatrate" type="number" step="0.01" min="0" style="width:90px" value="'+esc(String((DATA.meta&&DATA.meta.vatRate!==undefined)?DATA.meta.vatRate:19))+'"></label>'+
+          '<label style="align-self:flex-end">Charge VAT on rent<input id="st_vatrent" type="checkbox"'+(rentVatable()?" checked":"")+'></label></div>'+
+          '<p class="hint" style="margin:2px 0 0">Each charge type has its own VAT box below.</p></div>')+
     '<div style="border-top:1px solid #e2e8f0;margin:14px 0 8px;padding-top:12px"><b style="font-size:13px">Charge types</b>'+
       '<p class="hint" style="margin:2px 0 8px">Billed alongside rent — common fees, utilities, refuse. <b>Monthly</b> ones can be set as a tenant\'s standing charge and appear on every month; <b>annual</b> and <b>one-off</b> ones you add to the month they fall in. Removing a type here leaves past months and receipts untouched.</p>'+
       '<div id="ctBox"></div><div class="frow"><button class="ghost" data-h="addChargeType()">+ Add charge type</button></div></div>'+
@@ -1647,6 +1672,10 @@ function seedUnits(){ if(DATA.meta.unitsV===1) return;
 
 /* ---- boot ---- */
 window.addEventListener("message", function(ev){ var m=ev.data||{}; if(m.type!=="init")return;
+  // The firm's configuration for this client (migration 187). Set before norm()
+  // so seeding and every later read already see it. An empty object means
+  // "behave exactly as before", which is every unconfigured client.
+  CONFIG = (m.config && typeof m.config === "object") ? m.config : {};
   DATA = norm(m.data && Object.keys(m.data).length ? JSON.parse(JSON.stringify(m.data)) : {meta:{},tenants:[],properties:[],users:[],audit:[]});
   user = { username: m.username||"portal", name: m.name||"", role: m.role||"viewer" };
   __SUPPRESS_SAVE=true; try{ applyLedger(); }catch(e){} try{ seedUnits(); }catch(e){} __SUPPRESS_SAVE=false;

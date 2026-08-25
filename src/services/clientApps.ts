@@ -25,6 +25,15 @@ export type ClientAppDef = {
   // Firm-only: never offered to a client or an app-grant user, whatever the
   // allocation says. For internal views over a client's numbers.
   staffOnly?: boolean;
+  // What can be configured per client (migration 187). Declared here rather
+  // than discovered from the app, because the configuration screen has to be
+  // usable without opening the app first. An app with no entry gets the
+  // generic options (title) and nothing else — which is the honest answer for
+  // an uploaded template whose internals we cannot know.
+  config?: {
+    tabs?: { key: string; label: string }[];   // screens that can be hidden
+    vat?: boolean;                              // offers the VAT block
+  };
 };
 
 export const CLIENT_APPS: ClientAppDef[] = [
@@ -37,6 +46,21 @@ export const CLIENT_APPS: ClientAppDef[] = [
     source: 'builtin',
     // Reusable across clients — each client gets their own blank instance
     // (data is isolated per client_id + app_key). Greson keeps its data.
+    // Keys mirror TABS() in public/rental-app/app.js. Overview is deliberately
+    // absent: it is the landing screen, and hiding it would leave the app with
+    // nowhere to open.
+    config: {
+      tabs: [
+        { key: 'properties', label: 'Properties' },
+        { key: 'tenants',    label: 'Tenants & Contracts' },
+        { key: 'schedule',   label: 'Rent Schedule' },
+        { key: 'receipts',   label: 'Receipts' },
+        { key: 'arrears',    label: 'Arrears' },
+        { key: 'deposits',   label: 'Deposits' },
+        { key: 'invoice',    label: 'Invoices' },
+      ],
+      vat: true,
+    },
   },
   {
     key: 'mgmt',

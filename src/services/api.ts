@@ -1134,6 +1134,25 @@ export const api = {
     if (error) throw new Error(error.message);
   },
 
+  // ---- Per-client app configuration (migration 187) ----
+  // The FIRM's settings for how an app is set up for one client, as opposed to
+  // client_app_data which is the CLIENT's own content. Absent or {} means the
+  // app behaves exactly as it always has.
+  async getClientAppConfig(clientId: number, appKey: string): Promise<Record<string, any>> {
+    const { data, error } = await supabase.from('client_app_config')
+      .select('config').eq('client_id', clientId).eq('app_key', appKey).maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data?.config as Record<string, any>) || {};
+  },
+  async saveClientAppConfig(clientId: number, appKey: string, config: Record<string, any>) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase.from('client_app_config').upsert(
+      { client_id: clientId, app_key: appKey, config, updated_by: user?.id ?? null, updated_at: new Date().toISOString() },
+      { onConflict: 'client_id,app_key' },
+    );
+    if (error) throw new Error(error.message);
+  },
+
   // ---- Files for embedded apps (migration 184, app-files fn) ----
   // Apps used to keep uploads as base64 inside the document above, which took
   // Greson's rentals document to 23 MB and broke saving outright. Files go to

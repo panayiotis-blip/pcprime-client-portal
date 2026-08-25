@@ -116,7 +116,9 @@ export default function ClientAppPortal() {
       if (!s) return;
       if (m.type === 'ready') {
         iframeRef.current?.contentWindow?.postMessage(
-          { type: 'init', data: s.data || {}, role: s.role, name: s.name, username: 'app' }, '*',
+          // config comes from app-session alongside the data — these users have
+          // no Supabase session for RLS to work from (migration 187).
+          { type: 'init', data: s.data || {}, config: (s as any).config || {}, role: s.role, name: s.name, username: 'app' }, '*',
         );
       } else if (m.type === 'save') {
         setSaveState('saving');
