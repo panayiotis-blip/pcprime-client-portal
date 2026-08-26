@@ -141,9 +141,25 @@ Done:
 - Migration 186 — built-ins get a row, so they can be renamed and switched off
   without a deploy
 
-Next, and the substance of decision 1: **per-client configuration**. A settings
-object per (client, app), edited from the client's Apps tab, driving what that
-client's copy of an app looks like — for the rentals app that means the charge
-types, the VAT flags and rate, and which screens appear. It replaces the
-temptation to fork, and it is the only remaining piece of "customise the
-template under each customer".
+- **Per-client configuration — BUILT** (commit `baa531a`, migration 187).
+  `client_app_config(client_id, app_key, config jsonb)`: the firm's settings for
+  one client's copy of an app, deliberately a separate table from
+  `client_app_data` (the client's own content) so a client edit can never
+  overwrite an accountant's decision. Read is `user_can_access_client`; write is
+  `is_supervisor_or_higher`, NOT `user_can_access_client`, which is also true for
+  the client's own users.
+
+  Delivered to the app in the same `init` message as its data, so it never
+  renders unconfigured and then rearranges. App-only users hold no Supabase
+  session, so `app-session` returns the config alongside their data instead.
+
+  Configurable for rentals: the name that client sees, which screens they get
+  (Overview excluded — the app must have somewhere to open), and VAT (off
+  entirely, or rate plus whether rent is vatable). Charge-type VAT flags stay in
+  the app: which charges exist is the client's business, the rate is the firm's.
+
+  Absent configuration means the app behaves exactly as before, so every
+  unconfigured client is bit-for-bit unchanged.
+
+**All four decisions are now implemented.** What remains is verification on real
+screens, not construction.
