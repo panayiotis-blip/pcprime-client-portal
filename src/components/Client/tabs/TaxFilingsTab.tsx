@@ -24,6 +24,12 @@ type Filing = {
   filed_date: string | null;
   filed_by_user_id: string | null;
   reference_number: string | null;
+  // Attached PDFs (migration 188). Undefined when the migration has not run —
+  // the tab falls back to selecting without them.
+  return_document_id?: number | null;
+  assessment_document_id?: number | null;
+  return_document?: { id: number; file_name: string } | null;
+  assessment_document?: { id: number; file_name: string } | null;
   amount: number | null;
   notes: string | null;
   // Migration 181. Null on annual filings — a company return is identified by
@@ -438,6 +444,7 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                   <th>Reference</th>
                   <th>Amount</th>
                   <th>Notes</th>
+                  <th style={{ width: 150 }}>Documents</th>
                   <th style={{ width: 170 }}></th>
                   {canEdit && <th></th>}
                 </tr>
@@ -517,6 +524,10 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
                           onBlur={e => (e.target.value || null) !== r.notes && patchRow(r.id, { notes: e.target.value || null })}
                         />
                       ) : (r.notes || '—')}
+                    </td>
+                    <td>
+                      {/* Filed return + assessment PDFs (migration 188) */}
+                      <FilingDocsCell filing={r} clientId={clientId} canEdit={canEdit} onChanged={load} />
                     </td>
                     <td>
                       {isTaxReturnFiling(r.filing_type) && (
@@ -627,6 +638,85 @@ export default function TaxFilingsTab({ clientId, canEdit, clientName, client }:
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// The filed return and the assessment for one tax year (migration 188).
+//
+// Two named slots rather than a free list: while back-filling everything before
+// 2023, the question is "which years am I still missing paperwork for", and a
+// fixed pair answers that at a glance where a pile of tagged files would not.
+//
+// Each attachment is an ordinary client document — it appears in the Documents
+// tab and is covered by the nightly backup. Removing it here only unlinks it;
+// the document stays, because it is the client's regardless of this row.
+function FilingDocsCell({
+  filing, clientId, canEdit, onChanged,
+}: {
+  filing: { id: number; tax_year: number; return_document?: { id: number; file_name: string } | null; assessment_document?: { id: number; file_name: string } | null };
+  clientId: number;
+  canEdit: boolean;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<'return' | 'assessment' | null>(null);
+
+  const pick = (slot: 'return' | 'assessment') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,application/pdf,image/*';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setBusy(slot);
+      try {
+        await api.attachTaxFilingDocument({ filingId: filing.id, clientId, taxYear: filing.tax_year, slot, file });
+        onChanged();
+      } catch (e: any) {
+        alert(e?.message || 'Upload failed.');
+      } finally { setBusy(null); }
+    };
+    input.click();
+  };
+
+  const view = async (id: number) => {
+    try { window.open(await api.downloadDocumentUrl(id), '_blank'); }
+    catch (e: any) { alert(e?.message || 'Could not open that document.'); }
+  };
+
+  const detach = async (slot: 'return' | 'assessment', name: string) => {
+    if (!confirm(`Remove "${name}" from this year?\n\nThe document itself stays in the client's Documents.`)) return;
+    setBusy(slot);
+    try { await api.detachTaxFilingDocument(filing.id, slot); onChanged(); }
+    catch (e: any) { alert(e?.message || 'Failed.'); }
+    finally { setBusy(null); }
+  };
+
+  const row = (slot: 'return' | 'assessment', label: string, doc?: { id: number; file_name: string } | null) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, whiteSpace: 'nowrap' }}>
+      <span style={{ color: '#94a3b8', width: 62, flexShrink: 0 }}>{label}</span>
+      {doc ? (
+        <>
+          <button className="btn btn-link btn-sm" style={{ padding: 0, fontSize: 11 }}
+            title={doc.file_name} onClick={() => view(doc.id)}>📎 View</button>
+          {canEdit && (
+            <button className="btn btn-link btn-sm" style={{ padding: 0, fontSize: 11, color: '#b91c1c' }}
+              disabled={busy === slot} onClick={() => detach(slot, doc.file_name)}>×</button>
+          )}
+        </>
+      ) : canEdit ? (
+        <button className="btn btn-link btn-sm" style={{ padding: 0, fontSize: 11 }}
+          disabled={busy === slot} onClick={() => pick(slot)}>
+          {busy === slot ? 'Uploading…' : '+ Attach'}
+        </button>
+      ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {row('return', 'Return', filing.return_document)}
+      {row('assessment', 'Assessment', filing.assessment_document)}
     </div>
   );
 }

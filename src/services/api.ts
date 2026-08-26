@@ -4992,14 +4992,74 @@ export const api = {
 
   // --------- Tax filings (clients-v3 Part C) ---------
   async getClientTaxFilings(clientId: number) {
-    const { data, error } = await supabase
-      .from('client_tax_filings')
-      .select('*')
+    // The two attached PDFs come back with the row (migration 188) so the year
+    // list can show what is missing without a request per filing.
+    const withDocs =
+      '*, return_document:documents!client_tax_filings_return_document_id_fkey(id, file_name, created_at),'
+      + ' assessment_document:documents!client_tax_filings_assessment_document_id_fkey(id, file_name, created_at)';
+    const run = (sel: string) => supabase.from('client_tax_filings')
+      .select(sel)
       .eq('client_id', clientId)
       .order('tax_year', { ascending: false })
       .order('filing_type', { ascending: true });
+    let { data, error } = await run(withDocs);
+    if (error) {
+      // Before migration 188 the columns do not exist and the embed 400s. The
+      // year list matters more than the attachments, so fall back rather than
+      // leaving the whole tab empty.
+      ({ data, error } = await run('*'));
+      if (error) throw new Error(error.message);
+    }
+    return (data || []) as any[];
+  },
+
+  // ---- Filed return / assessment PDFs (migration 188) ----
+  // Attaching writes an ordinary client document — bucket `documents`, category
+  // `tax` — and links it to the year. It therefore shows up in the Documents
+  // tab, obeys the same access rules as everything else, and is picked up by
+  // the nightly Storage backup. Nothing here is a second file store.
+  async attachTaxFilingDocument(params: {
+    filingId: number; clientId: number; taxYear: number;
+    slot: 'return' | 'assessment'; file: File;
+  }): Promise<{ documentId: number }> {
+    const check = await detectAllowedFileType(params.file);
+    if (!check.ok) throw new Error(`${params.file.name}: ${check.reason}`);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const path = `${params.clientId}/tax/${Date.now()}_${safeStorageSegment(params.file.name)}`;
+    const up = await supabase.storage.from('documents').upload(path, params.file);
+    if (up.error) throw new Error(up.error.message);
+
+    const docType = params.slot === 'return' ? 'tax_return_filed' : 'tax_assessment';
+    const { data: doc, error: docErr } = await supabase.from('documents').insert({
+      client_id: params.clientId, doc_type: docType, category: 'tax',
+      year: String(params.taxYear), month: '',
+      file_name: params.file.name, mime_type: params.file.type || 'application/pdf',
+      storage_path: path, storage_bucket: 'documents',
+      notes: params.slot === 'return' ? `Filed return ${params.taxYear}` : `Tax assessment ${params.taxYear}`,
+      uploaded_by: session?.user?.id || null,
+    }).select('id').single();
+    // The object is already stored; leaving it unreferenced would be an orphan
+    // nobody can find, so clean it up before reporting the failure.
+    if (docErr) {
+      await supabase.storage.from('documents').remove([path]).catch(() => {});
+      throw new Error(docErr.message);
+    }
+
+    const col = params.slot === 'return' ? 'return_document_id' : 'assessment_document_id';
+    const { error: linkErr } = await supabase.from('client_tax_filings')
+      .update({ [col]: doc.id, updated_at: new Date().toISOString() }).eq('id', params.filingId);
+    if (linkErr) throw new Error(linkErr.message);
+    return { documentId: doc.id };
+  },
+
+  // Unlinks the PDF from the year. The document itself is left alone — it is a
+  // real client document and may be wanted in the Documents tab regardless.
+  async detachTaxFilingDocument(filingId: number, slot: 'return' | 'assessment') {
+    const col = slot === 'return' ? 'return_document_id' : 'assessment_document_id';
+    const { error } = await supabase.from('client_tax_filings')
+      .update({ [col]: null, updated_at: new Date().toISOString() }).eq('id', filingId);
     if (error) throw new Error(error.message);
-    return data || [];
   },
 
   async getAllTaxFilings(filters?: {
