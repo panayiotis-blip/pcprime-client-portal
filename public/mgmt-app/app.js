@@ -3,7 +3,7 @@ const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 const VIEWED=new Date().toISOString().slice(0,16).replace("T"," ");
 const YEAR_COLORS={"2023":"#cbd5e1","2024":"#94a3b8","2025":"#2b3a8c","2026":"#10b981","2027":"#f59e0b","2028":"#8b5cf6"};
 const LS_KEY="greson_mgmt_v2";
-const TABS=[["summary","Summary"],["pl","Profit & Loss"],["divisions","Divisions"],["payroll","Payroll"],["rentals","Rentals"],["ops","Operations"],["insights","Insights"],["esoft","TB (e-soft)"],["data","Data & Import"],["users","Users"]];
+const TABS=[["summary","Summary"],["pl","Profit & Loss"],["divisions","Divisions"],["payroll","Payroll"],["ops","Operations"],["insights","Insights"],["esoft","TB (e-soft)"],["data","Data & Import"],["users","Users"]];
 let user=null;
 function isAdmin(){ return user&&user.role==="admin"; }
 function canEdit(){ return user&&user.role!=="viewer"; }
@@ -42,10 +42,11 @@ const METRICS=[
   {k:"payroll_paid",label:"Payroll — Paid (net)",cur:true,grp:"fin"},
   {k:"expenses",label:"Total Expenses",cur:true,grp:"fin"},
   {k:"net_profit",label:"Net Profit",cur:true,grp:"fin"},
-  {k:"rent_charged",label:"Rent Charged",cur:true,grp:"fin"},
-  {k:"rent_invoiced",label:"Rent Invoiced",cur:true,grp:"fin"},
-  {k:"rent_received",label:"Rent Received",cur:true,grp:"fin"},
-  {k:"waybills_outstanding",label:"Waybills Outstanding",cur:true,grp:"fin"},
+  // Rent Charged / Invoiced / Received / Waybills Outstanding removed from the
+  // entry form 2026-08-26 alongside the Rentals tab. They were the only fields
+  // that tab displayed, never had a figure entered in any year, and leaving
+  // them here would ask the client to fill four boxes that now appear nowhere.
+  // Restore these four lines if the tab comes back — no stored data was touched.
   {k:"cleans",label:"WC Cleans (count)",cur:false,grp:"ops"},
   {k:"jobs",label:"Jobs / Visits",cur:false,grp:"ops"},
   {k:"active_sites",label:"Active Sites",cur:false,grp:"ops"},
@@ -554,6 +555,13 @@ function delEmpComment(idx){ if(!canEdit())return; const cs=DATA.payComments[pay
   if(!confirm("Delete this comment?"))return; cs.splice(idx,1); persist("Deleted a payroll comment"); render(); }
 
 /* ======================= RENTALS ======================= */
+// DORMANT (2026-08-26). Removed from TABS: the billing waterfall it is built
+// around — rent_charged / rent_invoiced / rent_received / waybills_outstanding —
+// has never had a single figure in any year, so the tab showed an empty table
+// plus Sales totals already on the P&L. Kept rather than deleted: re-adding it
+// is one entry in TABS once there is something real to show. Note it reads the
+// 'rentals' metric, which is SALES (loo/prefab hire), not property rent — if
+// this comes back, that needs resolving first.
 function renderRentals(){
   const y=curY();
   let h='<div class="cards" id="rentCards"></div>';
