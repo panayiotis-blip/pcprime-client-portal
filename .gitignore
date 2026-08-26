@@ -88,3 +88,7 @@ greson_*.json
 
 # Local storage backups (scripts/backup-storage.mjs) — client documents, never commit
 backups/
+
+# Client figures dropped here for import (Soft1 TB exports, payroll journals…).
+# Real financial data — never commit.
+imports/
