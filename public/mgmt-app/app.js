@@ -32,7 +32,7 @@ const DIVS=["Loo Rental","Cleaning","Loo Sales","Prefab Houses","Property Rent",
 const DIV_COLORS={"Loo Rental":"#1e2a78","Cleaning":"#2b3a8c","Loo Sales":"#f04e23","Prefab Houses":"#f59e0b","Property Rent":"#10b981","Tools":"#8b5cf6","Other":"#94a3b8"};
 const METRICS=[
   {k:"revenue",label:"Revenue",cur:true,grp:"fin"},
-  {k:"rentals",label:"Rental Income",cur:true,grp:"fin"},
+  {k:"rentals",label:"Sales",cur:true,grp:"fin"},
   {k:"cleans_rev",label:"WC Cleans Income",cur:true,grp:"fin"},
   {k:"other_income",label:"Other Income",cur:true,grp:"fin"},
   {k:"cogs",label:"Cost of Sales",cur:true,grp:"fin"},
@@ -301,7 +301,7 @@ function mkChart(id,type,labels,ds,opts){ const el=document.getElementById(id); 
 /* ======================= SUMMARY ======================= */
 function renderSummary(){
   const y=curY(),m=curM(),py=(+y-1)+"";
-  const cards=[["revenue","Revenue"],["gross_profit","Gross Profit"],["net_profit","Net Profit"],["rentals","Rental Income"],["cleans","WC Cleans"],["payroll_ctc","Payroll (CTC)"]];
+  const cards=[["revenue","Revenue"],["gross_profit","Gross Profit"],["net_profit","Net Profit"],["rentals","Sales"],["cleans","WC Cleans"],["payroll_ctc","Payroll (CTC)"]];
   let h='<div class="cards">';
   cards.forEach(([k,lab])=>{
     const md=metric(k), v=(k==="gross_profit")?dGP(y,m):val(y,k,m);
@@ -392,7 +392,7 @@ function renderPL(){
   document.getElementById("view-pl").innerHTML=h;
   // Build P&L rows
   const rows=[
-    ["Rental Income",(i)=>val(y,"rentals",i),false],
+    ["Sales",(i)=>val(y,"rentals",i),false],
     ["WC Cleans Income",(i)=>val(y,"cleans_rev",i),false],
     ["Goods &amp; Other Sales",(i)=>dGoods(y,i),false],
     ["Total Revenue",(i)=>val(y,"revenue",i),true],
@@ -416,7 +416,7 @@ function renderPL(){
   t+="</tbody>"; document.getElementById("tPL").innerHTML=t;
   // charts
   mkChart("cPLmix","bar",MONTHS,[
-    {label:"Rentals",data:DATA.years[y].rentals,backgroundColor:"#2b3a8c",stack:"s",cur:true},
+    {label:"Sales",data:DATA.years[y].rentals,backgroundColor:"#2b3a8c",stack:"s",cur:true},
     {label:"WC Cleans",data:DATA.years[y].cleans_rev,backgroundColor:"#10b981",stack:"s",cur:true},
     {label:"Goods & Other",data:MONTHS.map((_,i)=>dGoods(y,i)),backgroundColor:"#f59e0b",stack:"s",cur:true}
   ],(()=>{const o=baseOpts(true);o.scales.x={stacked:true};o.scales.y.stacked=true;return o;})());
@@ -435,7 +435,7 @@ function marginRow(after,y){
   return t;
 }
 function priorLineTotal(lab,py){
-  const map={"Rental Income":"rentals","WC Cleans Income":"cleans_rev","Total Revenue":"revenue","Other Income":"other_income","Net Profit":"net_profit"};
+  const map={"Sales":"rentals","WC Cleans Income":"cleans_rev","Total Revenue":"revenue","Other Income":"other_income","Net Profit":"net_profit"};
   if(map[lab]) return sumArr(DATA.years[py][map[lab]]);
   if(lab==="Goods &amp; Other Sales") return sumArr(MONTHS.map((_,i)=>dGoods(py,i)));
   if(lab==="Gross Profit") return sumArr(MONTHS.map((_,i)=>dGP(py,i)));
@@ -558,14 +558,14 @@ function renderRentals(){
   const y=curY();
   let h='<div class="cards" id="rentCards"></div>';
   h+='<div class="panel"><h3>Rental billing waterfall — '+y+'</h3><div class="hint">Charged → Invoiced → Received, plus waybills still outstanding. Enter figures in the Data tab.</div><div class="tblwrap"><table id="tRent"></table></div></div>';
-  h+='<div class="grid2"><div class="panel"><h3>Rental income by month (3-year)</h3><canvas id="cRent"></canvas></div>'+
+  h+='<div class="grid2"><div class="panel"><h3>Sales by month (3-year)</h3><canvas id="cRent"></canvas></div>'+
      '<div class="panel"><h3>Invoiced vs Received</h3><canvas id="cRentCI"></canvas></div></div>';
   document.getElementById("view-rentals").innerHTML=h;
   const rent=DATA.years[y].rentals, rev=DATA.years[y].revenue, ch=DATA.years[y].rent_charged, inv=DATA.years[y].rent_invoiced, rec=DATA.years[y].rent_received, wb=DATA.years[y].waybills_outstanding;
   const rt=sumArr(rent), rvt=sumArr(rev);
   let cds="";
-  cds+=ratioCardRaw("Rental income (YTD)",fmt(rt,true));
-  cds+=ratioCardRaw("Rental % of revenue",has(rt)&&has(rvt)?(rt/rvt*100).toFixed(1)+"%":"—");
+  cds+=ratioCardRaw("Sales (YTD)",fmt(rt,true));
+  cds+=ratioCardRaw("Sales % of revenue",has(rt)&&has(rvt)?(rt/rvt*100).toFixed(1)+"%":"—");
   cds+=ratioCardRaw("Avg / month",has(rt)?fmt(rt/rent.filter(has).length,true):"—");
   const outstanding=(has(sumArr(inv))&&has(sumArr(rec)))?sumArr(inv)-sumArr(rec):null;
   cds+=ratioCardRaw("Invoiced − Received",has(outstanding)?fmt(outstanding,true):"—");
@@ -579,8 +579,8 @@ function renderRentals(){
   const outArr=MONTHS.map((_,i)=>has(inv[i])&&has(rec[i])?inv[i]-rec[i]:null);
   t+=line("Outstanding (invoiced−received)",outArr,"sub");
   t+=line("Waybills outstanding",wb,"sub");
-  t+=line("Rental Income (P&L)",rent,"total");
-  t+="<tr class='total'><td>Rental % of revenue</td>";
+  t+=line("Sales (P&L)",rent,"total");
+  t+="<tr class='total'><td>Sales % of revenue</td>";
   for(let i=0;i<12;i++)t+="<td>"+(has(rent[i])&&has(rev[i])?(rent[i]/rev[i]*100).toFixed(0)+"%":"—")+"</td>";
   t+="<td>"+(has(rt)&&has(rvt)?(rt/rvt*100).toFixed(1)+"%":"—")+"</td></tr></tbody>";
   document.getElementById("tRent").innerHTML=t;
