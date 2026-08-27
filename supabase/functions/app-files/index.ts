@@ -122,12 +122,30 @@ Deno.serve(async (req) => {
 
     clientId = Number(body.client_id); appKey = String(body.app_key || '');
     if (!clientId || !appKey) return json({ ok: false, error: 'client_id and app_key are required.' }, 400);
-    // Reach is decided by the same function the rest of the portal uses, called
-    // as the caller — not as the service role, which can reach everything.
+
+    // Reach is decided by the same functions the rest of the portal uses,
+    // called AS THE CALLER — not as the service role, which reaches everything.
+    //
+    // Two ways in, and both are needed. user_can_access_client covers firm
+    // staff and the client's own portal users, but it is older than
+    // client_app_grants and knows nothing about them: it is
+    // `is_admin() OR a row in user_clients`. An app-grant user has a real
+    // Supabase JWT and no user_clients row, so that test alone said Forbidden
+    // and grant users could never attach a file — while the document itself
+    // saved fine, because client_app_data's policies ARE grant-aware. Attaching
+    // therefore failed only for the people the app was built for.
     const { data: allowed, error: aErr } = await userClient
       .rpc('user_can_access_client', { cid: clientId });
     if (aErr) return json({ ok: false, error: aErr.message }, 500);
-    if (!allowed) return json({ ok: false, error: 'Forbidden.' }, 403);
+
+    if (!allowed) {
+      const { data: grantRole, error: gErr } = await userClient
+        .rpc('user_app_role', { cid: clientId, akey: appKey });
+      if (gErr) return json({ ok: false, error: gErr.message }, 500);
+      if (!grantRole) return json({ ok: false, error: 'Forbidden.' }, 403);
+      // Same rule the data policies apply: viewers read, they do not write.
+      readOnly = grantRole === 'viewer';
+    }
   }
 
   const prefix = `${clientId}/${appKey}/`;
