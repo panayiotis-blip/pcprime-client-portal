@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getClientApp, loadAppTemplates } from '../../services/clientApps';
 import { ConnectingScreen } from '../../components/ui';
 import ClientAppHost from './ClientAppHost';
+import { AppChooserContext } from '../../context/AppChooser';
 
 // Post-login entry for NON-STAFF users (App access Phase 3). Works out where a
 // person can go from their single email login:
@@ -80,7 +81,16 @@ export default function ClientEntry({ portalElement }: { portalElement: ReactNod
 
   if (!effective) return <Chooser destinations={destinations} onPick={d => { writeChoice(d); setChoice(d); }} />;
 
-  if (effective.type === 'portal') return <>{portalElement}</>;
+  if (effective.type === 'portal') {
+    return (
+      <AppChooserContext.Provider value={{
+        backToApps: () => { clearChoice(); setChoice(null); },
+        canChoose: destinations.length > 1,
+      }}>
+        {portalElement}
+      </AppChooserContext.Provider>
+    );
+  }
 
   // Inside an app: offer the chooser when there's more than one app, and a
   // direct way into the Client Portal for anyone entitled to it — a portal

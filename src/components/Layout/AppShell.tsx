@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
+import { useAppChooser } from '../../context/AppChooser';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { PanelSkeleton } from '../ui';
 import { useAuth } from '../../context/AuthContext';
@@ -186,10 +187,20 @@ function SidebarUserMenu({ user, onLogout, onNavigate }: {
   onNavigate: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const chooser = useAppChooser();
   return (
     <div className="sidebar-footer">
       {open && (
         <div className="sidebar-user-menu">
+          {/* Back to the chooser, for a client who also holds apps. Absent for
+              staff (they never route through ClientEntry) and for anyone whose
+              only destination is the portal, where it would be a dead end. */}
+          {chooser?.canChoose && (
+            <button type="button" className="sidebar-user-menu-item"
+              onClick={() => { setOpen(false); onNavigate(); chooser.backToApps(); }}>
+              ← My apps
+            </button>
+          )}
           <Link to="/security" className="sidebar-user-menu-item"
             onClick={() => { setOpen(false); onNavigate(); }}>Security</Link>
           <Link to="/privacy" className="sidebar-user-menu-item"
