@@ -92,3 +92,7 @@ backups/
 # Client figures dropped here for import (Soft1 TB exports, payroll journals…).
 # Real financial data — never commit.
 imports/
+
+# Client management reporting app (Baron Air Ltd's real ledger is embedded in
+# it — the app goes to Supabase as a template, the figures never to git)
+baron-mgmt-reporting.html
