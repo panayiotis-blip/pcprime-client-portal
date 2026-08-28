@@ -40,6 +40,7 @@ const TaskDashboard = lazy(() => import('./components/Admin/TaskDashboard'));
 const MyClientApp = lazy(() => import('./components/Client/MyClientApp'));
 const ClientAppPortal = lazy(() => import('./components/AppPortal/ClientAppPortal'));
 const AppsLauncher = lazy(() => import('./components/AppPortal/AppsLauncher'));
+const ReportingApp = lazy(() => import('./reporting/ReportingApp'));
 const ClientEntry = lazy(() => import('./components/Client/ClientEntry'));
 const AppAccessRequests = lazy(() => import('./components/Admin/AppAccessRequests'));
 const ClientAppTemplates = lazy(() => import('./components/Admin/ClientAppTemplates'));
@@ -152,6 +153,11 @@ function PortalRoutes() {
               screen with no portal chrome, while still sitting behind the MFA /
               Terms gates in AuthedApp. Non-staff are redirected out of it. */}
           <Route path="/apps" element={<AppsLauncher />} />
+          {/* The client reporting platform (docs/reporting/BUILD.md). Outside
+              AppShell like the launcher: it has its own rail and its own
+              session, because the client is fixed at ITS sign-in and is never
+              chosen from a dropdown inside it. */}
+          <Route path="/reporting/*" element={<ReportingApp />} />
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/scan" element={<ScannerPage />} />

@@ -1,0 +1,86 @@
+// The reporting sign-in: pick the client whose books you are working on.
+// Only clients registered for reporting (reporting.client_settings) appear —
+// that table is the list of who this platform is switched on for.
+
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useReportingSession, type ReportingClient } from '../session';
+
+export default function ChooseClient() {
+  const { choose } = useReportingSession();
+  const [clients, setClients] = useState<ReportingClient[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      // client_settings is in the reporting schema; the names come from the
+      // portal's own register, which is the only place client names live.
+      const { data: reg, error: e1 } = await supabase.schema('reporting')
+        .from('client_settings').select('client_id');
+      if (e1) { setError(e1.message); return; }
+      const ids = (reg ?? []).map((r) => (r as { client_id: number }).client_id);
+      if (!ids.length) { setClients([]); return; }
+
+      const { data, error: e2 } = await supabase
+        .from('clients').select('id, name, client_code')
+        .in('id', ids).is('deleted_at', null).order('name');
+      if (e2) { setError(e2.message); return; }
+      setClients((data ?? []).map((c) => {
+        const r = c as { id: number; name: string | null; client_code: string | null };
+        return { id: r.id, name: r.name ?? `Client ${r.id}`, code: r.client_code };
+      }));
+    })();
+  }, []);
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return clients ?? [];
+    return (clients ?? []).filter(
+      (c) => c.name.toLowerCase().includes(needle) || (c.code ?? '').toLowerCase().includes(needle),
+    );
+  }, [clients, q]);
+
+  return (
+    <div style={{ maxWidth: 560, margin: '10vh auto', padding: '0 20px' }}>
+      <h1 style={{ fontSize: 22, margin: '0 0 4px' }}>Client reporting</h1>
+      <p style={{ color: '#64748b', margin: '0 0 20px', fontSize: 13 }}>
+        Choose the client to work on. It is fixed for the whole session — every figure,
+        every import and every report belongs to it until you leave.
+      </p>
+
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
+
+      <input
+        className="form-input" autoFocus placeholder="Search by name or code…"
+        value={q} onChange={(e) => setQ(e.target.value)} style={{ width: '100%', marginBottom: 12 }}
+      />
+
+      {clients === null && <p style={{ color: '#94a3b8', fontSize: 13 }}>Loading…</p>}
+
+      {clients?.length === 0 && (
+        <div className="empty-state">
+          <p>No client is registered for reporting yet.</p>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '46vh', overflowY: 'auto' }}>
+        {shown.map((c) => (
+          <button
+            key={c.id} className="btn btn-secondary"
+            style={{ justifyContent: 'flex-start', textAlign: 'left', gap: 10 }}
+            onClick={() => choose(c)}
+          >
+            {c.code && (
+              <span style={{
+                fontFamily: 'ui-monospace, monospace', fontSize: 11, background: '#0f172a',
+                color: '#fff', padding: '2px 6px', borderRadius: 3,
+              }}>{c.code}</span>
+            )}
+            <span>{c.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
