@@ -96,3 +96,10 @@ imports/
 # Client management reporting app (Baron Air Ltd's real ledger is embedded in
 # it — the app goes to Supabase as a template, the figures never to git)
 baron-mgmt-reporting.html
+
+# The reporting prototype carries two clients' complete ledgers as embedded
+# JSON (A&F and Gerondas). It is the specification, and docs/reporting/BUILD.md
+# describes it, but the figures themselves stay out of git like every other
+# client dataset here. Keep the file locally; it is not reproducible from the repo.
+docs/reporting/prototype.html
+template-app.built_5.html
