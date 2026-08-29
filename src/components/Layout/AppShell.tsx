@@ -757,6 +757,26 @@ export default function AppShell() {
                     {g.items.map(item => {
                       const isPinned = favourites.some(f => f.favourite_type === 'menu_item' && f.target_id === item.path);
                       const kids = (item.children || []).filter(c => !c.requires || c.requires(user));
+                      // A separate system, or a full-screen tool that wants its own
+                      // window: a plain anchor rather than a router Link, which would
+                      // open in this tab and take the portal page with it.
+                      if (item.external || item.newTab) return (
+                        <li key={item.path}>
+                          <a
+                            href={item.path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="sidebar-link sidebar-sub-link"
+                            onClick={() => setSidebarOpen(false)}
+                            title={item.external
+                              ? `${item.label} — opens in a new tab (separate login)`
+                              : `${item.label} — opens in a new tab`}
+                          >
+                            <span className="nav-icon">{item.icon}</span>{item.label}
+                            <span style={{ marginLeft: 6, fontSize: 11, opacity: .6 }}>↗</span>
+                          </a>
+                        </li>
+                      );
                       return (
                         <li key={item.path}>
                           <Link
