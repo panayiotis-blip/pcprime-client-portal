@@ -3,6 +3,7 @@
 // that table is the list of who this platform is switched on for.
 
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useReportingSession, type ReportingClient } from '../session';
 

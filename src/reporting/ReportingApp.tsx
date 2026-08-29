@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { isStaffRole } from '../services/api';
 import { ReportingSession, useReportingSession } from './session';
 import ChooseClient from './pages/ChooseClient';
+import ReportingSetup from './pages/ReportingSetup';
 import DataImport from './pages/DataImport';
 
 export default function ReportingApp() {
@@ -25,7 +26,19 @@ export default function ReportingApp() {
 
 function Inner() {
   const { client, leave } = useReportingSession();
-  if (!client) return <ChooseClient />;
+
+  // Before a client is chosen there are exactly two screens: pick one, or set
+  // up which clients there are to pick. Setup is deliberately reachable ONLY
+  // from here — it is about many clients at once, which is the one thing a
+  // session must never be.
+  if (!client) {
+    return (
+      <Routes>
+        <Route path="/setup" element={<ReportingSetup />} />
+        <Route path="*" element={<ChooseClient />} />
+      </Routes>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc' }}>
@@ -59,9 +72,27 @@ function Inner() {
         <Routes>
           <Route path="/" element={<Navigate to="/reporting/import" replace />} />
           <Route path="/import" element={<DataImport />} />
+          {/* Setup is about every client at once, so it cannot open inside a
+              session. Say that, rather than bouncing to another screen and
+              looking like a broken link. */}
+          <Route path="/setup" element={<SetupIsOutside name={client.code ?? client.name} onLeave={leave} />} />
           <Route path="*" element={<Navigate to="/reporting/import" replace />} />
         </Routes>
       </main>
+    </div>
+  );
+}
+
+function SetupIsOutside({ name, onLeave }: { name: string; onLeave: () => void }) {
+  return (
+    <div style={{ padding: 24, maxWidth: 560 }}>
+      <h1 style={{ fontSize: 20, margin: '0 0 6px' }}>Reporting setup</h1>
+      <p style={{ fontSize: 13, color: '#475569', margin: '0 0 16px' }}>
+        This screen is about every client at once — which ones we report on, and the BTMS company
+        each one's books are kept under. It cannot open while you are working on <b>{name}</b>,
+        because a session is only ever about one client.
+      </p>
+      <button className="btn btn-primary" onClick={onLeave}>Leave {name} and open setup</button>
     </div>
   );
 }
