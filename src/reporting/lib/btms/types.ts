@@ -37,13 +37,6 @@ export type Posting = {
   sourceOrigin: number | null;
 };
 
-export type OpeningBalance = {
-  accountCode: string;
-  debit: number;
-  credit: number;
-  balance: number;
-};
-
 /** Anything the importer should show a person, keyed so the UI can group them. */
 export type Note = {
   kind:
@@ -52,6 +45,7 @@ export type Note = {
     | 'no-account'
     | 'unparsable-row'
     | 'account-total-mismatch'
+    | 'unposted-journals'
     | 'empty';
   message: string;
   /** 1-based sheet row, so it can be found in Excel. */
@@ -62,12 +56,9 @@ export type LedgerParse = {
   ok: boolean;
   postings: Posting[];
   accounts: Account[];
-  openingBalances: OpeningBalance[];
   totals: { debit: number; credit: number };
   /** First day of every month the file covers, ascending. */
   monthsCovered: string[];
-  /** Rows dropped on purpose, for the import record. */
-  skipped: { accountTotals: number; journalTotals: number; openings: number; tagRows: number };
   notes: Note[];
 };
 

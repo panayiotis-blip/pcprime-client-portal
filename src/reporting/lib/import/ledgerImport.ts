@@ -10,6 +10,7 @@
 
 import { supabase } from '../../../lib/supabase';
 import { parseJournalListing } from '../btms/journalListing.ts';
+import { toLedgerParse } from '../btms/toLedgerParse.ts';
 import { fingerprintAccounts, type Fingerprint } from '../btms/fingerprint.ts';
 import type { LedgerParse } from '../btms/types.ts';
 import { readSheetRows, sha256 } from './sheet.ts';
@@ -51,7 +52,7 @@ export async function prepareLedgerImport(
   const rows = await readSheetRows(file);
 
   onProgress('Parsing');
-  const parse = parseJournalListing(rows);
+  const parse = toLedgerParse(parseJournalListing(rows));
 
   onProgress('Checking which client it belongs to');
   // The chart of accounts is the register to match against; before it exists,
@@ -145,7 +146,7 @@ export async function commitLedgerImport(
     row_count: parse.postings.length,
     total_debit: parse.totals.debit,
     total_credit: parse.totals.credit,
-    truncated: false,
+    truncated: parse.notes.some((n) => n.kind === 'truncated'),
     uploaded_by: me.user?.id ?? null,
   }).select('id').single();
   if (impErr || !imp) throw new Error(`The import could not be recorded: ${impErr?.message}`);
@@ -154,8 +155,10 @@ export async function commitLedgerImport(
   try {
     // ---- the chart of accounts the file declares --------------------
     // Upserted before the postings so that the NEXT file for this client has
-    // something to be fingerprinted against. Names and types are refreshed;
-    // nothing is ever deleted here — P2 owns the chart of accounts properly.
+    // something to be fingerprinted against. Code and name only: the journal
+    // listing has no account sections, so it knows neither the alt code nor
+    // the account type, and writing the nulls it would imply would blank what
+    // the chart of accounts import (P2) put there. Nothing is deleted here.
     if (parse.accounts.length) {
       onProgress('Recording the accounts', 0, parse.accounts.length);
       for (let i = 0; i < parse.accounts.length; i += STAGE_CHUNK) {
@@ -163,8 +166,6 @@ export async function commitLedgerImport(
           client_id: clientId,
           code: a.code,
           name: a.name,
-          alt_code: a.altCode,
-          account_type: a.accountType,
         }));
         const { error } = await rep().from('coa_accounts')
           .upsert(chunk, { onConflict: 'client_id,code' });

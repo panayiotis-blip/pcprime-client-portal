@@ -91,7 +91,13 @@ export default function DataImport() {
   };
 
   const p = prepared;
-  const refusedNote = p?.parse.notes.find((n) => n.kind === 'truncated' || n.kind === 'wrong-export' || n.kind === 'empty');
+  // Every kind that means the file must not be committed. A journal that does
+  // not agree to its own control total belongs here: it is the signature of a
+  // part-exported or hand-edited file, and the figures beneath it are wrong.
+  const refusedNote = p?.parse.notes.find((n) =>
+    n.kind === 'truncated' || n.kind === 'wrong-export' ||
+    n.kind === 'empty' || n.kind === 'account-total-mismatch');
+  const unpostedNote = p?.parse.notes.find((n) => n.kind === 'unposted-journals');
   const canCommit = !!p && p.parse.ok && p.fingerprint.accepted && !refusedNote && (!p.wouldLose || allowLoss);
 
   return (
@@ -230,6 +236,14 @@ export default function DataImport() {
                 months with the <b>{p.parse.postings.length.toLocaleString('en-GB')}</b> in this file.
                 {' '}{p.fingerprint.reason}
               </p>
+
+              {/* Not a refusal — the figures are usable, but a person should
+                  know they can still move under them. */}
+              {unpostedNote && (
+                <div className="alert alert-warning" style={{ marginTop: 10 }}>
+                  {unpostedNote.message}
+                </div>
+              )}
 
               {p.duplicateOf && (
                 <div className="alert alert-warning" style={{ marginTop: 10 }}>

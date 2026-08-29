@@ -209,46 +209,71 @@ kept only as the evidence copy (it is the only export carrying the client name).
 
 ### 6.1 Analytical journal listing — the audit trail, the primary feed
 
-This replaced the detail ledger. Same postings, but it also carries the account name
-per line, journal name/number/class/origin, posted status, per-journal totals,
-foreign currency, and **both** T-Analysis dimensions separated (the detail ledger
-merges them).
+**This report is grouped by JOURNAL, not by account.** It has no `Account :-`
+section headers — that is the *Detail Ledger*, a different report that this feed
+replaces. Every posting row carries its own account code and name as columns.
+Getting this wrong is what makes an import fail with "a posting appears before any
+account section" and then, as a consequence, "the file carries no account codes at
+all".
 
-Export settings: Account Types **All** · Based On **Trans.Date** · show all four
-transaction classes · Opening Balance and T-Analysis **ticked** · Show Contra Account
-**ticked** · Sort by Account · Group by None · all three New Page boxes **unticked**.
+**Where it is in BTMS:** Reports → Journal Listing. Report Type **Analytical** ·
+Journal Class **All** · Journal Type **Normal** · Journal Origin **All** · Status
+**All** · Ranges: Period from/to (a full year is fine) · New Page **unticked** ·
+Show: **T-Analysis ticked** (without it there are no project or expense tags and
+project costing cannot be built) and **Reverse Entries ticked**. Export as
+"Microsoft Excel 97-2000 — Data only (XLS)".
 
-**Column offset trap.** The header row names columns that do not line up with the
-data rows. In data rows the real positions are:
+**Row types.** Column 0 identifies each one:
+
+| Row | Column 0 | What the other columns hold |
+|---|---|---|
+| Journal header | `Journal: ` | 1 `SIN  -  Sales Invoices` · 3 journal class · 5 VAT type (`Input`/`Output`/`None`) · 7 origin |
+| Journal instance | `Journal No:  ` | 1 journal number · 3 posted `Yes`/`No` · 5 origin · 7 period · 9 year · 11 total debits · 13 total credits · 15 the user who entered it |
+| **Posting** | a **number** (the batch number) | see below |
+| Journal control total | `Totals For Journal  No : ` | 1 journal number · 2 debits · 3 credits · 4 VAT |
+| Journal-code total | `Totals For Journal  : ` | 1 journal name · 2 debits · 3 credits |
+| Footer | `Page -1 of 1` | — |
+
+**Posting row columns:**
 
 | Index | Contents |
 |---|---|
-| 0 | transaction date (Excel serial) |
-| 1 | reference |
-| 2 | narrative |
-| 4 | debit |
-| 5 | credit |
-| 6 | running balance |
-| 7 | VAT code |
-| 8 | VAT rate |
-| 9 | VAT amount — **already signed** |
-| 10 | journal code (`SIN`, `PIN`, `SRT`, `PRT`, `CAP`, `COS`, `REC`, `JV`, `BPM`, `PINR`, `PIEG`, `BD`) |
-| 11 | journal number |
-| 12 | batch |
-| 13 | origin |
-
-Account sections are delimited by a string in column 0 beginning `Account :-`,
-carrying code, `Name :-` and `Account Type :-`.
+| 0 | batch number |
+| 1 | reference (`SI63027388`, `360883`, …) |
+| 2 | transaction date, Excel serial |
+| 3 | **account code** |
+| 4 | **account name** |
+| 5 | debit |
+| 6 | credit |
+| 7 | narrative |
+| 8 | VAT code — **present on the base line only**, blank on the control and VAT legs |
+| 9 | VAT rate |
+| 10 | VAT amount (0 on rows that carry no VAT) |
 
 **Rows that must be skipped or they corrupt everything:**
 
-- `Total For Account:` rows — including them produced 134 phantom accounts and
+- Both `Totals For Journal` rows. Including them produced 134 phantom accounts and
   €1,4m of fake debits in an early build.
-- `Total For Journal` rows — same problem.
-- `Opening Balance` rows — these are balances, not postings.
-- **T-Analysis tag rows.** A row with **two or fewer filled cells** is a tag row,
-  not a posting. Numeric tags such as `002` otherwise parse as dates and produce
-  phantom 1900-01-01 postings (127 of them, in an early build).
+- **T-Analysis tag rows.** With T-Analysis ticked, a tag appears as a row with
+  **two or fewer filled cells and no account code**. It attaches to the posting
+  above it — first tag is the project, second the expense category. Numeric tags
+  such as `002` otherwise parse as dates and produce phantom 1900-01-01 postings.
+
+**Two checks the file proves on itself, and both must be enforced at import:**
+
+1. Debits equal credits across the whole file. They will not if BTMS truncated the
+   export — it paginates, and a truncated file is the single most dangerous input
+   this application can accept.
+2. Every `Totals For Journal No` row agrees with the postings beneath it. This is
+   BTMS's own control total, per journal, and it catches partial parses that still
+   happen to balance.
+
+**A working parser is in the repo: `src/reporting/lib/btms/journalListing.ts`.** It
+is type-checked and has been run against the real file — do not rewrite it, extend
+it. On A&F 2026 (Jan–Aug) it returns **21.408 postings, 1.206 accounts, debits =
+credits = €6.922.666,98, all 1.297 journal control totals agreeing, and 9 unposted
+journals**. Unposted journals are a *review finding*, not a parse error: they are
+imported and flagged.
 
 ### 6.2 Trial balance
 
@@ -433,8 +458,14 @@ These are real, verified figures. Load the A&F files from the CLIENTS DATA folde
 into a test project and assert against them. **If a build does not reproduce these,
 it is wrong.**
 
-**Ledger** — 84.725 postings, Jan 2024 – Jul 2026, 3.152 accounts including debtor
-and creditor detail. Debits equal credits to **zero** across all 31 months.
+**Ledger, journal listing feed** — A&F 2026 (`a&f journal lisitngs 2026.xls`,
+Jan–Aug 2026): **21.408 postings, 1.206 accounts, debits = credits =
+€6.922.666,98**, all **1.297** per-journal control totals agreeing, 9 unposted
+journals. Six files cover 2021 to 2026.
+
+**Ledger, detail ledger feed (superseded)** — 84.725 postings, Jan 2024 – Jul 2026,
+3.152 accounts. Debits equal credits to zero across all 31 months. Kept as a
+cross-check only; the journal listing is the feed.
 
 **Trial balance, July 2026** — journal movement €1.090.459,41 each side against a
 trial balance of €1.090.456,09. Exactly **one** account differs: `7281 Electricity
@@ -442,11 +473,21 @@ and Heat`, €3,32 on both the debit and the credit side (a contra pair the tria
 balance nets out). Every other account ties. The application must find this and
 describe it correctly.
 
-**VAT, Q2 2026** — computed box 1 €82.324,60, box 2 €9.424,47, box 3 €91.749,07 all
-agree to the return **to the cent**. Box 4 computed €63.847,22 against €64.914,16
-filed — a variance of **€1.066,94**, entirely on standard-rate input tax, on a base
-of €5.615,46 at 19%. Prior-period items of €708,61 net are a separate reconciling
-item. Amount filed and paid: €27.543,52.
+**VAT, Q2 2026** — boxes 1, 2 and 3 agree to the return **to the cent** from either
+feed: **€82.324,60 · €9.424,47 · €91.749,07**. Box 4 does not, and the two BTMS
+exports do not agree with each other either:
+
+| Source | Box 4 |
+|---|---|
+| Rebuilt from the **journal listing** | €64.100,63 |
+| Rebuilt from the **detail ledger** | €63.847,22 |
+| The **return as filed** (period only) | €64.914,16 |
+
+So the journal listing finds €253,41 of input tax the detail ledger misses, and is
+still €813,53 short of the return. Unposted journals are not the cause — none fall
+in Q2. This is a real open item, not a parsing defect, and the application must show
+it rather than reconcile it away. Prior-period items of €708,61 net are a separate
+reconciling column. Amount filed and paid: €27.543,52.
 
 **Payroll, August 2026** — 6 employees, 4 departments. Gross €10.994,28, deductions
 €1.505,20, employer contributions €1.785,27, net €9.489,08, **cost to the company
