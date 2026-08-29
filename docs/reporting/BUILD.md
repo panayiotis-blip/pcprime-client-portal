@@ -149,6 +149,31 @@ Added by `191`:
 `report_notes` · `budgets` · `vat_periods` · `vat_returns` · `payroll_periods` ·
 `payroll_lines` · `stock_valuations` · `feed_status`
 
+### The three names a client has
+
+`193` adds `btms_company_code`, `btms_company_name` and `report_name` to
+`client_settings`, because the portal's register and BTMS do not agree on names and
+never will — the register carries the legal name a client is invoiced under, BTMS
+carries whatever the company was set up as, years ago, by whoever set it up.
+
+| | Holds | Used for |
+|---|---|---|
+| `public.clients.name` | The register. | Who a report is addressed to. |
+| `btms_company_code` | BTMS's own company code. | **The** identifier tying the two systems together. Unique where set. |
+| `btms_company_name` | Exactly as BTMS prints it. | Choosing the right company when exporting; checking a file that *does* carry a name. |
+| `report_name` | What to print on the face of a report. | Null means use the register's name, which is the right default. |
+
+The link between the two systems is a **code, recorded once** — never a name match.
+Name matching across two registers is how the wrong client's ledger ends up on the
+wrong screen. `193` is itself the warning: its first draft matched
+`'ANTONIS & FOULIS ELECTRAGORA%'` and silently matched nothing, because the register
+holds that client in Greek, and a *second* client's name differs from it only after
+the first two words.
+
+Account-code fingerprinting (§7.2) stays the control on import. The BTMS name is a
+second, cheaper check for the files that do name a company, and the answer to "which
+company do I pick in BTMS for this client".
+
 ### Row-level security — non-negotiable
 
 Every table carrying `client_id` has RLS enabled and a single policy:
@@ -359,7 +384,7 @@ condition that must hold.
 |---|---|
 | **Data import** | Every feed: purpose, frequency, last file, **when it was uploaded and how old that is**, period covered, status. Month-by-month checklist. Working-ledger panel. Reconciliation: journal balances on its own **and** agrees to the trial balance, account by account, with the differences listed. |
 | **Account mapping** | Each account against the master report lines, overridable, with a changed-from-default count and a reset. Changes are audit-logged against the user. |
-| **Company setup** | The client's particulars. Identity, addresses, contacts, statutory dates, partner, manager, engagement and fee are **read from the portal's client register** — one source, never keyed twice. Only the accounting-specific fields (VAT period, basis of records, bank accounts, stock count date, preparer, reviewer) are held here. |
+| **Company setup** | The client's particulars, and **which BTMS company the books are kept in** — the code from §5, the only field that ties this client to an export. The client's particulars: Identity, addresses, contacts, statutory dates, partner, manager, engagement and fee are **read from the portal's client register** — one source, never keyed twice. Only the accounting-specific fields (VAT period, basis of records, bank accounts, stock count date, preparer, reviewer) are held here. |
 | **Client setup** | The feature switches and what each section gives this client. |
 
 ### Feature switches
@@ -503,6 +528,10 @@ finished packs, surfaced through the portal.
 - Ask BTMS for an **Excel/CSV export of the payroll calculation listing** — payroll
   currently arrives as printed PDFs for some reports.
 - Confirm the bank statement format in production (**camt.053** assumed).
+- **Get A&F's BTMS company code.** `193` records the BTMS *name* and deliberately
+  leaves the code null: a made-up code would look authoritative, and the unique index
+  would then hand it to the first client whose real code collided with the guess.
+  Until Company setup is built (P2), codes are set by SQL.
 - The master report-line list has been drafted from A&F's chart of accounts
   (`PCP master report lines - draft v1.xlsx`, 87 lines, 206 accounts mapped) and is
   awaiting Pete's mark-up before it is frozen as the shared template.

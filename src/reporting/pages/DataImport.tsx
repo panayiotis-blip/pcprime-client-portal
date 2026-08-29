@@ -19,6 +19,9 @@ const monthLabel = (iso: string) =>
 
 type Feed = { feed: string; last_file: string | null; uploaded_at: string | null; covers_to: string | null };
 
+/** Which BTMS company holds this client's books (migration 193). */
+type Btms = { code: string | null; name: string | null };
+
 export default function DataImport() {
   const { client } = useReportingSession();
   const clientId = client!.id;
@@ -32,6 +35,7 @@ export default function DataImport() {
   const [error, setError] = useState<string | null>(null);
   const [allowLoss, setAllowLoss] = useState(false);
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [btms, setBtms] = useState<Btms | null>(null);
 
   const loadFeeds = useCallback(async () => {
     const { data } = await supabase.schema('reporting')
@@ -40,6 +44,19 @@ export default function DataImport() {
   }, [clientId]);
 
   useEffect(() => { void loadFeeds(); }, [loadFeeds]);
+
+  // Read fresh rather than carried in the session: the session holds the
+  // register's identity, and this is BTMS's, which is a different name for the
+  // same company and must never be a stale copy of one.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.schema('reporting')
+        .from('client_settings').select('btms_company_code, btms_company_name')
+        .eq('client_id', clientId).maybeSingle();
+      const r = data as { btms_company_code: string | null; btms_company_name: string | null } | null;
+      setBtms({ code: r?.btms_company_code ?? null, name: r?.btms_company_name ?? null });
+    })();
+  }, [clientId]);
 
   const onProgress = (step: string, done?: number, total?: number) => {
     setBusy(step);
@@ -80,10 +97,56 @@ export default function DataImport() {
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
       <h1 style={{ fontSize: 20, margin: '0 0 2px' }}>Data import</h1>
-      <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 20px' }}>
+      <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 14px' }}>
         The analytical journal listing, exported from BTMS as <b>Microsoft Excel 97-2000 — Data only (XLS)</b>,
         sorted by account and grouped by none.
       </p>
+
+      {/* Which company to export FROM. The ledger file names no client anywhere
+          inside it, so the moment to get this right is in BTMS, before the export
+          — not here, where only the account codes can tell one client from
+          another. BUILD.md §7.2. */}
+      {btms && (
+        <div style={{
+          border: '1px solid #e2e8f0', borderLeft: '3px solid #0f172a', borderRadius: 6,
+          padding: '10px 14px', marginBottom: 20, fontSize: 13, background: '#fff',
+        }}>
+          {btms.name || btms.code ? (
+            <>
+              <div style={{ color: '#64748b', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                Export from this BTMS company
+              </div>
+              <div style={{ fontWeight: 600, marginTop: 3 }}>
+                {btms.name ?? '—'}
+                {btms.code && (
+                  <span style={{
+                    fontFamily: 'ui-monospace, monospace', fontSize: 11, fontWeight: 400,
+                    background: '#f1f5f9', color: '#334155', padding: '2px 6px',
+                    borderRadius: 3, marginLeft: 8,
+                  }}>{btms.code}</span>
+                )}
+              </div>
+              {btms.name && btms.name.trim().toLowerCase() !== client!.name.trim().toLowerCase() && (
+                <div style={{ color: '#64748b', marginTop: 4 }}>
+                  BTMS spells this company differently from the register, which holds it as{' '}
+                  <b>{client!.name}</b>. Both are this client.
+                </div>
+              )}
+              {!btms.code && (
+                <div style={{ color: '#64748b', marginTop: 4 }}>
+                  No BTMS company code is recorded, so the name above is all there is to go on.
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: '#64748b' }}>
+              Which BTMS company holds <b>{client!.name}</b>'s books has not been recorded. The ledger
+              file carries no client name inside it, so nothing here can confirm you exported the right
+              company — only the account codes in the file will, once this client has some.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ---- the feeds this client has ---- */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 14, marginBottom: 20 }}>

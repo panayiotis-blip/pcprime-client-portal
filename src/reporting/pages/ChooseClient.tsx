@@ -6,9 +6,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useReportingSession, type ReportingClient } from '../session';
 
+/**
+ * What the chooser shows. The BTMS name rides alongside for display only and
+ * is deliberately NOT carried into the session: the session holds the register's
+ * identity, and the BTMS name is read fresh wherever it is needed, so a name
+ * corrected in one place is never contradicted by a stale copy in another.
+ */
+type Choice = ReportingClient & { btmsName: string | null };
+
+/** True when BTMS calls the company something other than the register does. */
+function differs(registerName: string, btmsName: string | null): btmsName is string {
+  if (!btmsName) return false;
+  return btmsName.trim().toLowerCase() !== registerName.trim().toLowerCase();
+}
+
 export default function ChooseClient() {
   const { choose } = useReportingSession();
-  const [clients, setClients] = useState<ReportingClient[] | null>(null);
+  const [clients, setClients] = useState<Choice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
 
@@ -17,9 +31,11 @@ export default function ChooseClient() {
       // client_settings is in the reporting schema; the names come from the
       // portal's own register, which is the only place client names live.
       const { data: reg, error: e1 } = await supabase.schema('reporting')
-        .from('client_settings').select('client_id');
+        .from('client_settings').select('client_id, btms_company_name');
       if (e1) { setError(e1.message); return; }
-      const ids = (reg ?? []).map((r) => (r as { client_id: number }).client_id);
+      const rows = (reg ?? []) as { client_id: number; btms_company_name: string | null }[];
+      const ids = rows.map((r) => r.client_id);
+      const btms = new Map(rows.map((r) => [r.client_id, r.btms_company_name]));
       if (!ids.length) { setClients([]); return; }
 
       const { data, error: e2 } = await supabase
@@ -28,7 +44,12 @@ export default function ChooseClient() {
       if (e2) { setError(e2.message); return; }
       setClients((data ?? []).map((c) => {
         const r = c as { id: number; name: string | null; client_code: string | null };
-        return { id: r.id, name: r.name ?? `Client ${r.id}`, code: r.client_code };
+        return {
+          id: r.id,
+          name: r.name ?? `Client ${r.id}`,
+          code: r.client_code,
+          btmsName: btms.get(r.id) ?? null,
+        };
       }));
     })();
   }, []);
@@ -37,7 +58,10 @@ export default function ChooseClient() {
     const needle = q.trim().toLowerCase();
     if (!needle) return clients ?? [];
     return (clients ?? []).filter(
-      (c) => c.name.toLowerCase().includes(needle) || (c.code ?? '').toLowerCase().includes(needle),
+      (c) =>
+        c.name.toLowerCase().includes(needle) ||
+        (c.code ?? '').toLowerCase().includes(needle) ||
+        (c.btmsName ?? '').toLowerCase().includes(needle),
     );
   }, [clients, q]);
 
@@ -68,16 +92,26 @@ export default function ChooseClient() {
         {shown.map((c) => (
           <button
             key={c.id} className="btn btn-secondary"
-            style={{ justifyContent: 'flex-start', textAlign: 'left', gap: 10 }}
-            onClick={() => choose(c)}
+            style={{ justifyContent: 'flex-start', textAlign: 'left', gap: 10, alignItems: 'flex-start' }}
+            onClick={() => choose({ id: c.id, name: c.name, code: c.code })}
           >
             {c.code && (
               <span style={{
                 fontFamily: 'ui-monospace, monospace', fontSize: 11, background: '#0f172a',
-                color: '#fff', padding: '2px 6px', borderRadius: 3,
+                color: '#fff', padding: '2px 6px', borderRadius: 3, marginTop: 1, flex: 'none',
               }}>{c.code}</span>
             )}
-            <span>{c.name}</span>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+              <span>{c.name}</span>
+              {/* Two clients here differ only after their first two words, and the
+                  register and BTMS spell the same company differently. Showing the
+                  BTMS name when it differs is what makes the right row pickable. */}
+              {differs(c.name, c.btmsName) && (
+                <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400 }}>
+                  BTMS: {c.btmsName}
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>
