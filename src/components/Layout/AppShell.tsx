@@ -24,6 +24,9 @@ type NavItem = {
   // A separate system, not a route in this app: rendered as a plain link that
   // opens in a new tab, and not pinnable (Favourites resolve routes).
   external?: boolean;
+  // A route in THIS app that still wants its own window: same login, same
+  // session, but a full-screen tool people keep open beside the portal.
+  newTab?: boolean;
   // Nested entries shown indented under this one. The parent stays a real
   // link; the sub-list opens automatically when the active route is inside it.
   children?: NavItem[];
@@ -90,6 +93,11 @@ const STAFF_GROUPS: NavGroup[] = [
       { path: '/billing/age-analysis', label: 'Age Analysis',    icon: '◔' },
       { path: '/billing/reports',      label: 'Sales Reports',   icon: '◧' },
       { path: '/billing/service-presets', label: 'Service Presets', icon: '⊕' },
+      // The client reporting platform (docs/reporting/BUILD.md). Its own window
+      // because it fills the screen and holds one client for the whole session:
+      // navigating away in the same tab would mean choosing the client again.
+      // Staff only until P6 ships the client-facing view.
+      { path: '/reporting', label: 'Client Reporting', icon: '📈', newTab: true, requires: (u) => isStaffRole(u) },
     ],
   },
   {
@@ -556,7 +564,7 @@ export default function AppShell() {
                       {g.items.map(item => {
                         const isPinned = favourites.some(f => f.favourite_type === 'menu_item' && f.target_id === item.path);
                         // A separate system: a plain link out, in a new tab.
-                        if (item.external) return (
+                        if (item.external || item.newTab) return (
                           <li key={item.path}>
                             <a
                               href={item.path}
@@ -564,7 +572,9 @@ export default function AppShell() {
                               rel="noopener noreferrer"
                               className="sidebar-link sidebar-sub-link"
                               onClick={() => setSidebarOpen(false)}
-                              title={`${item.label} — opens in a new tab (separate login)`}
+                              title={item.external
+                                ? `${item.label} — opens in a new tab (separate login)`
+                                : `${item.label} — opens in a new tab`}
                             >
                               <span className="nav-icon">{item.icon}</span>{item.label}
                               <span style={{ marginLeft: 6, fontSize: 11, opacity: .6 }}>↗</span>
