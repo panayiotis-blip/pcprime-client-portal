@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useReportingSession } from '../session';
+import MonthChecklist from './MonthChecklist';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -36,6 +37,7 @@ export default function DataImport() {
   const [allowLoss, setAllowLoss] = useState(false);
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [btms, setBtms] = useState<Btms | null>(null);
+  const [ledgerVersion, setLedgerVersion] = useState(0);
 
   const loadFeeds = useCallback(async () => {
     const { data } = await supabase.schema('reporting')
@@ -81,6 +83,7 @@ export default function DataImport() {
     try {
       const res = await commitLedgerImport(clientId, file, prepared, { allowLoss }, onProgress);
       setCommitted(res);
+      setLedgerVersion((v) => v + 1);
       setPrepared(null);
       setFile(null);
       if (fileRef.current) fileRef.current.value = '';
@@ -153,6 +156,8 @@ export default function DataImport() {
           )}
         </div>
       )}
+
+      <MonthChecklist clientId={clientId} reloadKey={ledgerVersion} />
 
       {/* ---- the feeds this client has ---- */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 14, marginBottom: 20 }}>
