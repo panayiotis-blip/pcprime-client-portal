@@ -18,6 +18,32 @@ import { readSheetRows, sha256 } from './sheet.ts';
 const rep = () => supabase.schema('reporting');
 
 const STAGE_CHUNK = 1000;
+const PAGE = 1000;
+
+/**
+ * Every row, not just the first page.
+ *
+ * PostgREST answers a select with one page and says nothing about the rest.
+ * Read as a chart of accounts, that silently drops 206 of A&F's 1.206 accounts
+ * — which is how the client's own 2025 ledger came to be refused at 20 of 78
+ * nominal codes when 59 of them were in the chart the whole time.
+ *
+ * A short register makes the fingerprint read as a mismatch, and that is the
+ * one direction this check must never fail in quietly: it refuses the right
+ * file, and teaches people to click past a refusal that is usually wrong.
+ */
+async function allRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+}
 
 export type Prepared = {
   parse: LedgerParse;
@@ -58,12 +84,13 @@ export async function prepareLedgerImport(
   // The chart of accounts is the register to match against; before it exists,
   // the accounts already carried by this client's postings do the same job.
   const known = new Set<string>();
-  const { data: coa } = await rep().from('coa_accounts').select('code').eq('client_id', clientId);
-  for (const r of coa ?? []) known.add(String((r as { code: string }).code));
+  const coa = await allRows<{ code: string }>((from, to) =>
+    rep().from('coa_accounts').select('code').eq('client_id', clientId).range(from, to));
+  for (const r of coa) known.add(String(r.code));
   if (known.size === 0) {
-    const { data: seen } = await rep()
-      .from('balances_monthly').select('account_code').eq('client_id', clientId).limit(5000);
-    for (const r of seen ?? []) known.add(String((r as { account_code: string }).account_code));
+    const seen = await allRows<{ account_code: string }>((from, to) =>
+      rep().from('balances_monthly').select('account_code').eq('client_id', clientId).range(from, to));
+    for (const r of seen) known.add(String(r.account_code));
   }
   const fingerprint = fingerprintAccounts(parse.accounts.map((a) => a.code), known);
 
@@ -216,17 +243,13 @@ export async function commitLedgerImport(
     const row = (Array.isArray(res) ? res[0] : res) as
       { months_replaced: number; postings_removed: number; postings_added: number } | null;
 
-    // ---- what the Data import screen reads ---------------------------
-    onProgress('Updating the feed');
-    await rep().from('feed_status').upsert({
-      client_id: clientId,
-      feed: 'journal_listing',
-      last_import: importId,
-      last_file: file.name,
-      uploaded_at: new Date().toISOString(),
-      uploaded_by: me.user?.id ?? null,
-      covers_to: parse.monthsCovered.at(-1) ?? null,
-    }, { onConflict: 'client_id,feed' });
+    // feed_status is written by commit_ledger_import itself (migration 194),
+    // in the same transaction as the postings. It used to be written here,
+    // from the file just parsed — which answers "what did this file cover"
+    // rather than "how far does the ledger reach", and the two part company
+    // the moment files arrive out of order. Loading A&F's 2025 ledger after
+    // its 2026 one left the screen reading "covers to Dec 2025" against a
+    // ledger that ran to Aug 2026.
 
     return {
       importId,
