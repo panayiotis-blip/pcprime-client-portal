@@ -20,12 +20,32 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
 type Client = { id: number; name: string; code: string | null };
-type Setting = { client_id: number; btms_company_code: string | null; btms_company_name: string | null };
+type Setting = {
+  client_id: number;
+  btms_company_code: string | null;
+  btms_company_name: string | null;
+  data_source: string | null;
+  other_program: string | null;
+};
+
+/**
+ * Where a client's books are kept. Only the two BTMS kinds are offered by the
+ * reporting application — there is no feed for anything else — but what the
+ * something else IS gets recorded, so nobody has to ask again.
+ */
+const SOURCES: { value: string; label: string }[] = [
+  { value: 'none', label: 'Not reported' },
+  { value: 'btms_local', label: 'BTMS — ours' },
+  { value: 'btms_client', label: "BTMS — client's" },
+  { value: 'other', label: 'Another program' },
+];
 
 type Row = Client & {
   reported: boolean;
   btmsCode: string;
   btmsName: string;
+  source: string;
+  program: string;
   /** A committed import exists for this client — unticking would orphan it. */
   hasData: boolean;
   saving: boolean;
@@ -43,7 +63,7 @@ export default function ReportingSetup() {
   const load = useCallback(async () => {
     const [clients, settings, imports] = await Promise.all([
       supabase.from('clients').select('id, name, client_code').is('deleted_at', null).order('name'),
-      rep().from('client_settings').select('client_id, btms_company_code, btms_company_name'),
+      rep().from('client_settings').select('client_id, btms_company_code, btms_company_name, data_source, other_program'),
       rep().from('imports').select('client_id').eq('status', 'committed'),
     ]);
     if (clients.error) { setError(clients.error.message); return; }
@@ -64,6 +84,8 @@ export default function ReportingSetup() {
         reported: !!s,
         btmsCode: s?.btms_company_code ?? '',
         btmsName: s?.btms_company_name ?? '',
+        source: s?.data_source ?? 'none',
+        program: s?.other_program ?? '',
         hasData: withData.has(c.id),
         saving: false,
         error: null,
@@ -100,7 +122,7 @@ export default function ReportingSetup() {
   /** Saved on blur, not per keystroke: one write per edit rather than per letter. */
   const saveField = async (
     row: Row,
-    field: 'btms_company_code' | 'btms_company_name',
+    field: 'btms_company_code' | 'btms_company_name' | 'data_source' | 'other_program',
     value: string,
   ) => {
     const trimmed = value.trim();
@@ -124,6 +146,8 @@ export default function ReportingSetup() {
       saving: false,
       btmsCode: field === 'btms_company_code' ? trimmed : row.btmsCode,
       btmsName: field === 'btms_company_name' ? trimmed : row.btmsName,
+      source: field === 'data_source' ? trimmed : row.source,
+      program: field === 'other_program' ? trimmed : row.program,
     });
   };
 
@@ -144,11 +168,12 @@ export default function ReportingSetup() {
       total: all.length,
       reported: all.filter((r) => r.reported).length,
       keyed: all.filter((r) => r.reported && r.btmsCode).length,
+      offered: all.filter((r) => r.source === 'btms_local' || r.source === 'btms_client').length,
     };
   }, [rows]);
 
   return (
-    <div style={{ maxWidth: 1040, margin: '0 auto', padding: '32px 20px 60px' }}>
+    <div style={{ maxWidth: 1180, margin: '0 auto', padding: '32px 20px 60px' }}>
       <Link to="/reporting" style={{ fontSize: 12, color: '#64748b' }}>← Back to choosing a client</Link>
       <h1 style={{ fontSize: 22, margin: '10px 0 4px' }}>Reporting setup</h1>
       <p style={{ color: '#64748b', margin: '0 0 6px', fontSize: 13, maxWidth: 760 }}>
@@ -159,6 +184,13 @@ export default function ReportingSetup() {
         The <b>BTMS code</b> is the identifier. A BTMS export names no client anywhere inside it,
         and some clients share a chart of accounts, so the account codes cannot always tell one
         client from another — the code can. No two clients may hold the same one.
+      </p>
+      <p style={{ color: '#64748b', margin: '0 0 20px', fontSize: 13, maxWidth: 760 }}>
+        <b>Where the books are</b> decides what the reporting application offers. Only the two BTMS
+        kinds appear in its client list — there is no feed for anything else — but a client on
+        another program is still recorded, with the program named, so nobody has to ask again.
+        A client left on <i>Not reported</i> stays out of the list until somebody says where its
+        books are.
       </p>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
@@ -181,6 +213,7 @@ export default function ReportingSetup() {
 
       <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 10px' }}>
         {counts.reported} of {counts.total} clients reported · {counts.keyed} with a BTMS code
+        {' · '}<b>{counts.offered}</b> offered in the reporting app
         {counts.reported > counts.keyed && ' · ' + (counts.reported - counts.keyed) + ' still to key'}
       </p>
 
@@ -192,7 +225,8 @@ export default function ReportingSetup() {
             key={r.id}
             style={{
               display: 'grid',
-              gridTemplateColumns: '34px 96px minmax(180px, 1fr) 130px minmax(160px, 240px)',
+              gridTemplateColumns:
+                '30px 78px minmax(150px,1fr) 108px minmax(130px,190px) 122px minmax(120px,180px)',
               gap: 10,
               alignItems: 'center',
               padding: '9px 12px',
@@ -235,9 +269,29 @@ export default function ReportingSetup() {
                     if (e.target.value.trim() !== r.btmsName) void saveField(r, 'btms_company_name', e.target.value);
                   }}
                 />
+                <select
+                  className="form-input" value={r.source} disabled={r.saving} style={{ fontSize: 12 }}
+                  title="Where this client's books are kept"
+                  onChange={(e) => void saveField(r, 'data_source', e.target.value)}
+                >
+                  {SOURCES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {r.source === 'other' ? (
+                  <input
+                    className="form-input" placeholder="Which program?" defaultValue={r.program}
+                    disabled={r.saving} style={{ fontSize: 12 }}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() !== r.program) void saveField(r, 'other_program', e.target.value);
+                    }}
+                  />
+                ) : (
+                  <span style={{ fontSize: 11, color: r.source === 'none' ? '#b45309' : '#94a3b8' }}>
+                    {r.source === 'none' ? 'not offered yet' : 'in the app'}
+                  </span>
+                )}
               </>
             ) : (
-              <span style={{ gridColumn: 'span 2', fontSize: 12, color: '#cbd5e1' }}>not reported</span>
+              <span style={{ gridColumn: 'span 4', fontSize: 12, color: '#cbd5e1' }}>not reported</span>
             )}
           </div>
         ))}

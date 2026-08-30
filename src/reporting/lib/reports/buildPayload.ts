@@ -553,11 +553,15 @@ export async function buildAllClients(
   onProgress: (step: string, done?: number, total?: number) => void = () => {},
 ): Promise<{ json: string; clients: { id: number; name: string; postings: number }[] }> {
   onProgress('Finding the clients with data');
-  const { data, error } = await rep().rpc('clients_with_data');
-  if (error) throw new Error(`clients_with_data: ${error.message}`);
-  const withData = (data ?? []) as { client_id: number; client_name: string; postings: number }[];
-  if (!withData.length) {
-    throw new Error('No client has any postings yet, so there is nothing to report on.');
+  const { data, error } = await rep().rpc('clients_for_reporting');
+  if (error) throw new Error(`clients_for_reporting: ${error.message}`);
+  const offered = (data ?? []) as
+    { client_id: number; client_name: string; data_source: string; postings: number }[];
+  if (!offered.length) {
+    throw new Error(
+      'No client is marked as kept on BTMS. Set that on Reporting setup — a client is offered ' +
+      'here because somebody said its books are on BTMS, not because a file happens to have been imported.',
+    );
   }
 
   const clients: Record<string, ClientBlock> = {};
@@ -565,16 +569,30 @@ export async function buildAllClients(
   const listed: { id: number; name: string; postings: number }[] = [];
   let generated = '';
 
-  for (let i = 0; i < withData.length; i++) {
-    const c = withData[i];
-    onProgress(`Building ${c.client_name}`, i, withData.length);
+  for (let i = 0; i < offered.length; i++) {
+    const c = offered[i];
+    const key = `c${c.client_id}`;
+    order.push(key);
+
+    // A client is offered because somebody said its books are on BTMS, not
+    // because a file has been imported — the list is how you see what is still
+    // to do. One with nothing loaded gets an empty block with every section
+    // off, rather than being left out or breaking the build.
+    if (!c.postings) {
+      clients[key] = emptyClient(c.client_name);
+      listed.push({ id: c.client_id, name: c.client_name, postings: 0 });
+      continue;
+    }
+
+    onProgress(`Building ${c.client_name}`, i, offered.length);
     const built = await buildClientBlock(c.client_id, (step, done, total) =>
       onProgress(`${c.client_name} — ${step}`, done, total));
-    const key = `c${c.client_id}`;
     clients[key] = built.block;
-    order.push(key);
     listed.push({ id: c.client_id, name: c.client_name, postings: built.postings });
     generated = built.generated;
+  }
+  if (!generated) {
+    generated = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
   return {
@@ -590,4 +608,40 @@ export function oneClientPayload(built: BuildResult): string {
     clients: { c: built.block },
     order: ['c'],
   });
+}
+
+/**
+ * A client that is offered but has nothing loaded yet.
+ *
+ * It appears in the template's list because somebody said its books are on
+ * BTMS — that is what the list is for, showing what is still to do — and every
+ * section is switched off, so it opens on a plain statement of that rather than
+ * on a page of zeroes that reads like a report.
+ */
+function emptyClient(name: string): ClientBlock {
+  const off: Record<string, number> = {
+    pl: 0, bs: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
+    stmt: 0, trans: 0, mapping: 0, review: 0, vat: 0, stock: 0, payroll: 0,
+    budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
+    data: 1,
+  };
+  return {
+    client: name,
+    months: [], lines: [], pl: {}, bs: {}, bsOpen: {}, accounts: [],
+    post: { ep: null, acc: [], jrn: [], rd: [], td: [], a: [], d: [], r: [], t: [], v: [], j: [] },
+    exceptions: [], tb: [], vat: {}, vatq: [], stock: [], payroll: {},
+    postings: 0,
+    counts: { postings: 0, accounts: 0 },
+    cfg: {
+      name,
+      short: name.slice(0, 12),
+      yearEnd: 12,
+      currency: 'EUR',
+      features: off,
+      notes: 'Nothing has been imported for this client yet.',
+    },
+    vatFiled: [], deb: [], cre: [],
+    agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
+    budget: {}, audit: {}, untagged: [], projects: [],
+  };
 }
