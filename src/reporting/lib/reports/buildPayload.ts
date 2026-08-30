@@ -34,6 +34,18 @@ const rep = () => supabase.schema('reporting');
 const monthKey = (iso: string) => String(iso).slice(0, 7);
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+/**
+ * Hand the browser back its thread.
+ *
+ * The posting loop runs 174.026 times and used to hold the main thread for the
+ * whole of it, on top of a 7MB stringify and a 3,3MB fetch. The page froze —
+ * no progress, no paint, and twice the tab stopped answering altogether. A
+ * yield every few thousand rows costs a little time and keeps the thing alive
+ * and honest about how far it has got.
+ */
+const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const YIELD_EVERY = 5000;
+
 /** Sections whose natural balance is a credit, so a report shows them positive. */
 const CREDIT_SECTIONS = new Set([
   'Revenue', 'Other income', 'Current liabilities', 'Non-current liabilities', 'Equity',
@@ -147,6 +159,10 @@ export async function buildPayload(
   const controlOfAcc = codeOfAcc.map((c) => controlOf(c));
 
   for (let i = 0; i < post.v.length; i++) {
+    if (i > 0 && i % YIELD_EVERY === 0) {
+      onProgress('Building the statements', i, post.v.length);
+      await breathe();
+    }
     const day = post.d[i];
     let mi = monthOfIndex.get(day);
     if (mi === undefined) {
@@ -183,22 +199,30 @@ export async function buildPayload(
   // leaving a reader to assume.
   onProgress('Reading the trial balances');
   type TB = {
-    period_month: string; account_code: string; account_name: string | null;
+    period_month: string; is_annual: boolean; account_code: string; account_name: string | null;
     account_type: string | null; opening: number; debit: number; credit: number; closing: number;
   };
+  // Every trial balance, annual as well as monthly. Reading only the monthly
+  // ones left A&F's 2024 and 2025 year-ends imported but invisible — the app
+  // said "1 trial balance" while the database held three.
   const tbRows = await allRows<TB>((f, t) => rep().from('trial_balance')
-    .select('period_month, account_code, account_name, account_type, opening, debit, credit, closing')
-    .eq('client_id', clientId).eq('is_annual', false).eq('detailed', false).range(f, t));
+    .select('period_month, is_annual, account_code, account_name, account_type, opening, debit, credit, closing')
+    .eq('client_id', clientId).eq('detailed', false).range(f, t));
+
+  // The opening is derived from a MONTHLY one: a year-end names a month too,
+  // and taking the later of the two kinds could read a December year-end as
+  // though it were that December's month-end.
+  const monthlyTb = tbRows.filter((r) => !r.is_annual);
 
   const bsOpen: Record<string, number> = {};
   let openingFrom: string | null = null;
-  if (tbRows.length) {
-    const tbMonth = tbRows.map((r) => monthKey(r.period_month)).sort().pop()!;
+  if (monthlyTb.length) {
+    const tbMonth = monthlyTb.map((r) => monthKey(r.period_month)).sort().pop()!;
     const at = monthIndex.get(tbMonth);
     if (at !== undefined) {
       openingFrom = tbMonth;
       const closeByLine: Record<string, number> = {};
-      for (const r of tbRows) {
+      for (const r of monthlyTb) {
         if (monthKey(r.period_month) !== tbMonth) continue;
         const lineId = lineFor.get(controlOf(String(r.account_code)));
         if (!lineId) continue;
@@ -260,9 +284,20 @@ export async function buildPayload(
   }>((f, t) => rep().from('stock_valuations')
     .select('valued_at, items, units, value, ledger_value, negative_items, negative_value, file_path')
     .eq('client_id', clientId).order('valued_at').range(f, t));
+  // The name the file was given, not the name it was stored under. Storage
+  // paths are the sha256, so the last segment of one is a checksum, and the
+  // template was showing "0fdea8c827….xls" where a person needs
+  // "a&f stock valuation 31-12-2024.xls".
+  const stockImports = await allRows<{ storage_path: string | null; original_filename: string | null }>(
+    (f, t) => rep().from('imports').select('storage_path, original_filename')
+      .eq('client_id', clientId).eq('feed', 'stock').eq('status', 'committed').range(f, t));
+  const nameOfPath = new Map(
+    stockImports.filter((i) => i.storage_path).map((i) => [String(i.storage_path), i.original_filename ?? '']),
+  );
+
   const stock = stockRows.map((s) => ({
     date: String(s.valued_at),
-    file: (s.file_path ?? '').split('/').pop() ?? '',
+    file: nameOfPath.get(String(s.file_path ?? '')) ?? '',
     items: Number(s.items),
     units: Number(s.units),
     value: Number(s.value),
@@ -378,20 +413,28 @@ export async function buildPayload(
 
   const tbByPeriod = new Map<string, unknown[]>();
   for (const r of tbRows) {
-    const k = monthKey(r.period_month);
+    const k = monthKey(r.period_month) + (r.is_annual ? "|Y" : "");
     if (!tbByPeriod.has(k)) tbByPeriod.set(k, []);
     tbByPeriod.get(k)!.push({
       code: String(r.account_code), name: r.account_name ?? '', type: r.account_type ?? '',
       open: Number(r.opening), deb: Number(r.debit), cre: Number(r.credit), close: Number(r.closing),
     });
   }
-  const tb = [...tbByPeriod.entries()].sort().map(([period, rows]) => ({
-    period,
-    label: new Date(period + '-01T00:00:00Z')
-      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
-    file: '',
-    rows,
-  }));
+  // A year-end and a month-end can name the same month, so they are keyed
+  // apart above and labelled apart here. "December 2025" and "Year ended
+  // December 2025" are not the same statement and must not collapse into one.
+  const tb = [...tbByPeriod.entries()].sort().map(([key, rows]) => {
+    const period = key.slice(0, 7);
+    const annual = key.endsWith('|Y');
+    const when = new Date(period + '-01T00:00:00Z')
+      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return {
+      period,
+      label: annual ? `Year ended ${when}` : when,
+      file: '',
+      rows,
+    };
+  });
 
   // A section with no feed behind it is switched OFF rather than shown empty.
   // BUILD.md §8: a switched-off section is hidden from the rail.
@@ -432,6 +475,12 @@ export async function buildPayload(
     order: ['c'],
   };
 
+  // The stringify is a second or so of held thread on a client this size, so
+  // the progress line is put up first and the browser given a chance to paint
+  // it. Otherwise the page appears to have died at the very last step.
+  onProgress('Writing it out');
+  await breathe();
+
   return {
     json: JSON.stringify(payload),
     months: months.length,
@@ -445,8 +494,15 @@ export async function buildPayload(
 }
 
 /**
- * The template with this client's data in it, as a downloadable file.
+ * The template with this client's data in it, as a file.
  * The template is served from public/ so the browser can read it back.
+ *
+ * A charset is declared even if the template does not carry one, and the blob
+ * is typed with it. template-app.built_5.html begins at <title> with no <head>
+ * and no <meta charset>, which is harmless when a server sends the charset in
+ * a header and wrong the moment the file is opened from disk: the browser
+ * guesses, guesses Latin-1, and ΑΝΤΩΝΗΣ & ΦΟΥΛΗΣ ΗΛΕΚΤΡΑΓΟΡΑ ΛΤΔ becomes
+ * mojibake. Every Greek client name in the register would have done the same.
  */
 export async function buildTemplateHtml(json: string): Promise<Blob> {
   const res = await fetch('/reporting-template.html');
@@ -460,5 +516,12 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
   if (open < 0) throw new Error('That template has no afdata block.');
   const start = html.indexOf('>', open) + 1;
   const end = html.indexOf('</script>', start);
-  return new Blob([html.slice(0, start), json, html.slice(end)], { type: 'text/html' });
+
+  const declaresCharset = /<meta[^>]+charset/i.test(html.slice(0, 4000));
+  const head = declaresCharset ? '' : '<meta charset="utf-8">\n';
+
+  return new Blob(
+    [head, html.slice(0, start), json, html.slice(end)],
+    { type: 'text/html;charset=utf-8' },
+  );
 }
