@@ -13,13 +13,9 @@
 import { supabase } from '../../../lib/supabase';
 import { parseStockValuation, type StockParse } from '../btms/stockValuation.ts';
 import { readSheetRows, sha256 } from './sheet.ts';
-import { allRows } from './pages.ts';
 import type { Progress } from './ledgerImport.ts';
 
 const rep = () => supabase.schema('reporting');
-
-/** The report line stock is carried on. */
-const STOCK_LINE = 'B-110';
 
 export type StockPrepared = {
   parse: StockParse;
@@ -64,34 +60,38 @@ export async function prepareStockImport(
   };
 }
 
-/** What the ledger says stock is worth at that date, for the comparison §6.6 asks for. */
-export async function stockPerLedger(clientId: number, valuedAt: string): Promise<number> {
-  const defaults = await allRows<{ account_code: string; line_id: string | null }>(
-    (f, t) => rep().from('mapping_defaults').select('account_code, line_id')
-      .eq('client_id', clientId).eq('line_id', STOCK_LINE).range(f, t));
-  const overrides = await allRows<{ account_code: string; line_id: string }>(
-    (f, t) => rep().from('mappings').select('account_code, line_id')
-      .eq('client_id', clientId).range(f, t));
+export type StockLedger = {
+  /** The position at the date: opening plus movement. */
+  value: number;
+  /** False when no trial balance exists, so `value` is movement, not position. */
+  hasOpening: boolean;
+  opening: number;
+  movement: number;
+};
 
-  const codes = new Set(defaults.map((d) => String(d.account_code)));
-  // An override can move an account onto the stock line or off it, and both
-  // directions matter — reading only the defaults would value stock at what it
-  // used to be mapped to.
-  for (const o of overrides) {
-    if (o.line_id === STOCK_LINE) codes.add(String(o.account_code));
-    else codes.delete(String(o.account_code));
-  }
-  if (!codes.size) return 0;
-
-  const month = valuedAt.slice(0, 7) + '-01';
-  const rows = await allRows<{ account_code: string; debit: number; credit: number }>(
-    (f, t) => rep().from('balances_monthly')
-      .select('account_code, debit, credit')
-      .eq('client_id', clientId).lte('period_month', month)
-      .in('account_code', [...codes]).range(f, t));
-
-  const net = rows.reduce((a, r) => a + Number(r.debit) - Number(r.credit), 0);
-  return Math.round(net * 100) / 100;
+/**
+ * What the ledger says stock is worth at that date, for the comparison §6.6
+ * asks for. Migration 202 owns the arithmetic.
+ *
+ * This used to sum the postings here, which gave MOVEMENT SINCE 2021 rather
+ * than a position, because the ledger holds no opening balances — and made
+ * A&F's 31 January 2026 stock look 320.146,01 out when the real difference is
+ * 19.628,19. The balance sheet already derived the opening from the trial
+ * balance; this did not. Now there is one derivation and both use it.
+ */
+export async function stockPerLedger(clientId: number, valuedAt: string): Promise<StockLedger> {
+  const { data, error } = await rep().rpc('stock_per_ledger', {
+    p_client: clientId, p_at: valuedAt,
+  });
+  if (error) throw new Error(`stock_per_ledger: ${error.message}`);
+  const row = (Array.isArray(data) ? data[0] : data) as
+    { value: number; has_opening: boolean; opening: number; movement: number } | null;
+  return {
+    value: Number(row?.value ?? 0),
+    hasOpening: !!row?.has_opening,
+    opening: Number(row?.opening ?? 0),
+    movement: Number(row?.movement ?? 0),
+  };
 }
 
 export async function commitStockImport(
@@ -112,7 +112,8 @@ export async function commitStockImport(
   if (up.error) throw new Error(`The file could not be stored: ${up.error.message}`);
 
   onProgress('Comparing with the ledger');
-  const ledgerValue = await stockPerLedger(clientId, valuedAt);
+  const ledger = await stockPerLedger(clientId, valuedAt);
+  const ledgerValue = ledger.value;
 
   onProgress('Recording the import');
   const { data: me } = await supabase.auth.getUser();

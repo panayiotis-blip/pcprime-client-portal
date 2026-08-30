@@ -29,7 +29,7 @@ export default function StockPanel({ clientId, onImported }: {
   const [committed, setCommitted] = useState<StockCommitted | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [valuedAt, setValuedAt] = useState('');
-  const [ledger, setLedger] = useState<number | null>(null);
+  const [ledger, setLedger] = useState<{ value: number; hasOpening: boolean } | null>(null);
 
   // The ledger figure follows the date, not the file.
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function StockPanel({ clientId, onImported }: {
     (async () => {
       try {
         const v = await stockPerLedger(clientId, valuedAt);
-        if (!cancelled) setLedger(v);
+        if (!cancelled) setLedger({ value: v.value, hasOpening: v.hasOpening });
       } catch { if (!cancelled) setLedger(null); }
     })();
     return () => { cancelled = true; };
@@ -76,7 +76,7 @@ export default function StockPanel({ clientId, onImported }: {
   const refused = p?.parse.notes.find((n) => n.kind === 'truncated' || n.kind === 'empty');
   const dated = /^\d{4}-\d{2}-\d{2}$/.test(valuedAt);
   const canCommit = !!p && p.parse.ok && !refused && dated;
-  const diff = p && ledger !== null ? Math.round((p.parse.totals.value - ledger) * 100) / 100 : null;
+  const diff = p && ledger ? Math.round((p.parse.totals.value - ledger.value) * 100) / 100 : null;
 
   return (
     <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 14, marginBottom: 20 }}>
@@ -133,9 +133,9 @@ export default function StockPanel({ clientId, onImported }: {
                 </div>
                 <input type="date" className="form-input" value={valuedAt} style={{ marginTop: 8, fontSize: 12.5 }}
                   onChange={(e) => setValuedAt(e.target.value)} />
-                {dated && ledger !== null && (
+                {dated && ledger && (
                   <p style={{ fontSize: 12.5, margin: '10px 0 0', color: '#334155' }}>
-                    The ledger carries <b>{eur(ledger)}</b> on the stock line at that date, against{' '}
+                    The ledger carries <b>{eur(ledger.value)}</b> on the stock line at that date, against{' '}
                     <b>{eur(p.parse.totals.value)}</b> counted —{' '}
                     <b style={{ color: Math.abs(diff ?? 0) < 0.005 ? '#166534' : '#b91c1c' }}>
                       {eur(diff ?? 0)}

@@ -107,3 +107,4 @@ template-app.built_5.html
 # The reporting template, served for the payload builder. Same file as
 # template-app.built_5.html above, which is already ignored.
 public/reporting-template.html
+public/built-*.html
