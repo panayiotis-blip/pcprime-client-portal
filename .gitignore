@@ -103,3 +103,7 @@ baron-mgmt-reporting.html
 # client dataset here. Keep the file locally; it is not reproducible from the repo.
 docs/reporting/prototype.html
 template-app.built_5.html
+
+# The reporting template, served for the payload builder. Same file as
+# template-app.built_5.html above, which is already ignored.
+public/reporting-template.html
