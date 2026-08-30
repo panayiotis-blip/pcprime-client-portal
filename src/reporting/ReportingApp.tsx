@@ -13,6 +13,7 @@ import { ReportingSession, useReportingSession } from './session';
 import ChooseClient from './pages/ChooseClient';
 import ReportingSetup from './pages/ReportingSetup';
 import DataImport from './pages/DataImport';
+import AccountMapping from './pages/AccountMapping';
 
 export default function ReportingApp() {
   const { user } = useAuth();
@@ -55,6 +56,7 @@ function Inner() {
 
         <Group title="Configure">
           <Item to="/reporting/import">Data import</Item>
+          <Item to="/reporting/mapping">Account mapping</Item>
         </Group>
 
         <div style={{ padding: '14px 16px 0', marginTop: 'auto' }}>
@@ -72,6 +74,7 @@ function Inner() {
         <Routes>
           <Route path="/" element={<Navigate to="/reporting/import" replace />} />
           <Route path="/import" element={<DataImport />} />
+          <Route path="/mapping" element={<AccountMapping />} />
           {/* Setup is about every client at once, so it cannot open inside a
               session. Say that, rather than bouncing to another screen and
               looking like a broken link. */}
