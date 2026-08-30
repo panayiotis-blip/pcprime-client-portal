@@ -218,18 +218,24 @@ export async function listBtmsFolder(
   }[];
   if (!rows.length) return [];
 
+  type CheckRow = {
+    document_id: number;
+    kind: DocKind;
+    period: string | null;
+    verdict: Verdict;
+    problems: string[] | null;
+    warnings: string[] | null;
+    facts: Record<string, string> | null;
+  };
   const checks = await supabase.schema('reporting').from('btms_file_checks')
     .select('document_id, kind, period, verdict, problems, warnings, facts')
     .in('document_id', rows.map((r) => r.id));
-  const byDoc = new Map<number, {
-    kind: DocKind; period: string | null; verdict: Verdict;
-    problems: string[] | null; warnings: string[] | null;
-    facts: Record<string, string> | null;
-  }>();
-  for (const k of (checks.data ?? []) as never[]) {
-    const r = k as unknown as { document_id: number } & Record<string, never>;
-    byDoc.set(Number(r.document_id), r as never);
-  }
+  // A failure here costs speed, not correctness: every file falls back to being
+  // opened, which is what this used to do for all of them.
+  if (checks.error) console.warn('Recorded checks unavailable:', checks.error.message);
+
+  const byDoc = new Map<number, CheckRow>();
+  for (const k of (checks.data ?? []) as CheckRow[]) byDoc.set(Number(k.document_id), k);
 
   const out: PortalFile[] = [];
   let done = 0;
@@ -317,17 +323,24 @@ export async function folderReview(clientId: number): Promise<ReviewRow[]> {
   const { data, error } = await supabase.schema('reporting')
     .rpc('btms_folder_review', { p_client: clientId });
   if (error) throw new Error(`Reading the folder review: ${error.message}`);
-  return ((data ?? []) as Record<string, never>[]).map((r) => ({
+
+  type Raw = {
+    document_id: number; file_name: string; kind: string | null; period: string | null;
+    verdict: string | null; problems: string[] | null; warnings: string[] | null;
+    facts: Record<string, string> | null; uploaded_at: string; uploaded_by: string | null;
+    superseded: boolean;
+  };
+  return ((data ?? []) as Raw[]).map((r) => ({
     documentId: Number(r.document_id),
-    fileName: String(r.file_name),
+    fileName: r.file_name,
     kind: (r.kind ?? 'unknown') as DocKind,
-    period: (r.period as string | null) ?? null,
+    period: r.period,
     verdict: (r.verdict ?? 'warning') as Verdict,
-    problems: (r.problems as unknown as string[]) ?? [],
-    warnings: (r.warnings as unknown as string[]) ?? [],
-    facts: (r.facts as unknown as Record<string, string>) ?? {},
-    uploadedAt: String(r.uploaded_at),
-    uploadedBy: (r.uploaded_by as string | null) ?? null,
+    problems: r.problems ?? [],
+    warnings: r.warnings ?? [],
+    facts: r.facts ?? {},
+    uploadedAt: r.uploaded_at,
+    uploadedBy: r.uploaded_by,
     superseded: Boolean(r.superseded),
   }));
 }
