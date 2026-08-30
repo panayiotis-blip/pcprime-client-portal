@@ -233,6 +233,120 @@ export async function buildPayload(
     .filter((a) => a.m.some((v) => Math.abs(v) >= 0.005))
     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
+  // ---- VAT ------------------------------------------------------------
+  // No feed of its own: every posting carries its code, rate and amount, and
+  // §6.3 says the ledger is what a return is compared against. Migration 201
+  // applies the box rules — the journal decides the side, the base decides the
+  // sign, and reverse charge raises a notional output equal to its input.
+  onProgress('Working out the VAT');
+  const { data: vatData, error: vatErr } = await rep().rpc('vat_figures', { p_client: clientId });
+  if (vatErr) throw new Error(`vat_figures: ${vatErr.message}`);
+  const vatOut = (vatData ?? {}) as {
+    monthly?: Record<string, Record<string, number>>;
+    quarters?: { q: string; codes: Record<string, unknown>; box1: number; box2: number; box3: number; box4: number; box5: number }[];
+  };
+  const vat = vatOut.monthly ?? {};
+  const vatq = vatOut.quarters ?? [];
+
+  // ---- stock ----------------------------------------------------------
+  // Stored with the ledger figure beside it, so the difference §6.6 insists on
+  // is a fact recorded at import rather than something recomputed later
+  // against a mapping that may since have changed.
+  onProgress('Reading the stock valuations');
+  const stockRows = await allRows<{
+    valued_at: string; items: number; units: number; value: number;
+    ledger_value: number | null; negative_items: number | null; negative_value: number | null;
+    file_path: string | null;
+  }>((f, t) => rep().from('stock_valuations')
+    .select('valued_at, items, units, value, ledger_value, negative_items, negative_value, file_path')
+    .eq('client_id', clientId).order('valued_at').range(f, t));
+  const stock = stockRows.map((s) => ({
+    date: String(s.valued_at),
+    file: (s.file_path ?? '').split('/').pop() ?? '',
+    items: Number(s.items),
+    units: Number(s.units),
+    value: Number(s.value),
+    footer: [Number(s.items), Number(s.units), Number(s.value)],
+    ledger: Number(s.ledger_value ?? 0),
+    diff: round2(Number(s.value) - Number(s.ledger_value ?? 0)),
+    neg: Number(s.negative_items ?? 0),
+    negval: Number(s.negative_value ?? 0),
+    zero: 0,
+  }));
+
+  // ---- payroll ---------------------------------------------------------
+  // The template shows one month: the latest held, with its departments, its
+  // employees and the grand totals.
+  onProgress('Reading the payroll');
+  const payPeriods = await allRows<{
+    period: string; employees: number | null;
+    gross: number | null; deductions: number | null; contributions: number | null;
+    net: number | null; cost: number | null; gross_ytd: number | null; cost_ytd: number | null;
+  }>((f, t) => rep().from('payroll_periods')
+    .select('period, employees, gross, deductions, contributions, net, cost, gross_ytd, cost_ytd')
+    .eq('client_id', clientId).order('period').range(f, t));
+
+  let payroll: Record<string, unknown> = {};
+  if (payPeriods.length) {
+    const latest = payPeriods[payPeriods.length - 1];
+    const payLines = await allRows<{
+      scope: string; ref: string; name: string | null; headcount: number | null;
+      rate: number | null; hours: number | null;
+      gross: number | null; deductions: number | null; contributions: number | null;
+      net: number | null; cost: number | null; gross_ytd: number | null; cost_ytd: number | null;
+      detail: Record<string, unknown> | null;
+    }>((f, t) => rep().from('payroll_lines')
+      .select('scope, ref, name, headcount, rate, hours, gross, deductions, contributions, net, cost, gross_ytd, cost_ytd, detail')
+      .eq('client_id', clientId).eq('period', latest.period).range(f, t));
+
+    const pair = (now: number | null, ytd: number | null): [number, number] =>
+      [Number(now ?? 0), Number(ytd ?? 0)];
+
+    const deps = payLines.filter((l) => l.scope === 'department').map((l) => ({
+      dep: l.ref,
+      earn: (l.detail?.earn ?? {}) as Record<string, [number, number]>,
+      ded: (l.detail?.ded ?? {}) as Record<string, [number, number]>,
+      con: (l.detail?.con ?? {}) as Record<string, [number, number]>,
+      tr: (l.detail?.tr ?? {}) as Record<string, [number, number]>,
+      gross: pair(l.gross, l.gross_ytd),
+      cost: pair(l.cost, l.cost_ytd),
+      emps: Number(l.headcount ?? 0),
+    }));
+
+    const emps = payLines.filter((l) => l.scope === 'employee').map((l) => ({
+      code: l.ref,
+      name: l.name ?? '',
+      rate: Number(l.rate ?? 0),
+      hours: Number(l.hours ?? 0),
+      basic: Number((l.detail?.basic as number) ?? 0),
+      earn: (l.detail?.earn ?? {}) as Record<string, number>,
+      ded: (l.detail?.ded ?? {}) as Record<string, number>,
+      con: (l.detail?.con ?? {}) as Record<string, number>,
+      tr: (l.detail?.tr ?? {}) as Record<string, number>,
+      gross: Number(l.gross ?? 0),
+      dedT: Number(l.deductions ?? 0),
+      conT: Number(l.contributions ?? 0),
+      cost: Number(l.cost ?? 0),
+      net: Number(l.net ?? 0),
+    }));
+
+    payroll = {
+      period: String(latest.period).slice(5, 7) + '/' + String(latest.period).slice(0, 4),
+      deps,
+      emps,
+      tot: { dep: 'TOTALS' },
+      grand: {
+        gross: Number(latest.gross ?? 0),
+        dedT: Number(latest.deductions ?? 0),
+        conT: Number(latest.contributions ?? 0),
+        cost: Number(latest.cost ?? 0),
+        net: Number(latest.net ?? 0),
+        grossY: Number(latest.gross_ytd ?? 0),
+        costY: Number(latest.cost_ytd ?? 0),
+      },
+    };
+  }
+
   onProgress('Reading the review findings');
   type Ex = {
     sev: string; check_name: string; description: string; amount: number | null;
@@ -284,7 +398,11 @@ export async function buildPayload(
   const features: Record<string, number> = {
     pl: 1, bs: 1, summary: 1, expenses: 1, sales: 1,
     ledgers: 1, accounts: 1, stmt: 1, trans: 1, mapping: 1, data: 1, review: 1,
-    budget: 0, cash: 0, cashmove: 0, stock: 0, vat: 0, payroll: 0, projects: 0, audit: 0,
+    vat: 1,
+    // On only when there is something behind them.
+    stock: stock.length ? 1 : 0,
+    payroll: Object.keys(payroll).length ? 1 : 0,
+    budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
   };
 
   const name = settings?.report_name || c.name;
@@ -293,7 +411,7 @@ export async function buildPayload(
     clients: {
       c: {
         client: name,
-        months, lines, pl, bs, bsOpen, accounts, post, exceptions, tb,
+        months, lines, pl, bs, bsOpen, accounts, post, exceptions, tb, vat, vatq, stock, payroll,
         postings: post.v.length,
         counts: { postings: post.v.length, accounts: accounts.length },
         cfg: {
@@ -306,7 +424,7 @@ export async function buildPayload(
             ? `Opening balances derived from the ${openingFrom} trial balance.`
             : 'No trial balance imported: the balance sheet is movement since the first month held, not a position.',
         },
-        vat: {}, vatq: [], vatFiled: [], payroll: {}, stock: [], deb: [], cre: [],
+        vatFiled: [], deb: [], cre: [],
         agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
         budget: {}, audit: {}, untagged: [], projects: [],
       },

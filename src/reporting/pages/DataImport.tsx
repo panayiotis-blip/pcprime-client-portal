@@ -10,6 +10,8 @@ import { useReportingSession } from '../session';
 import MonthChecklist from './MonthChecklist';
 import ChartImportPanel from './ChartImportPanel';
 import TrialBalancePanel from './TrialBalancePanel';
+import StockPanel from './StockPanel';
+import PayrollPanel from './PayrollPanel';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -172,6 +174,10 @@ export default function DataImport() {
         clientName={client!.name}
         onImported={() => { void loadFeeds(); }}
       />
+
+      <StockPanel clientId={clientId} onImported={() => { void loadFeeds(); }} />
+
+      <PayrollPanel clientId={clientId} onImported={() => { void loadFeeds(); }} />
 
       {/* ---- the feeds this client has ---- */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 14, marginBottom: 20 }}>
