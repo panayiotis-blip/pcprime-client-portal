@@ -13,6 +13,7 @@ import TrialBalancePanel from './TrialBalancePanel';
 import StockPanel from './StockPanel';
 import PayrollPanel from './PayrollPanel';
 import FolderPanel from './FolderPanel';
+import PortalFolderPanel from './PortalFolderPanel';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -161,6 +162,11 @@ export default function DataImport() {
           )}
         </div>
       )}
+
+      <PortalFolderPanel
+        clientId={clientId}
+        onImported={() => { void loadFeeds(); setLedgerVersion((v) => v + 1); }}
+      />
 
       <FolderPanel
         clientId={clientId}

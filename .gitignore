@@ -104,7 +104,11 @@ baron-mgmt-reporting.html
 docs/reporting/prototype.html
 template-app.built_5.html
 
-# The reporting template, served for the payload builder. Same file as
-# template-app.built_5.html above, which is already ignored.
-public/reporting-template.html
+# public/reporting-template.html is deliberately NOT ignored. It is the
+# template the reporting build reads and writes a client's data into, so it
+# has to ship with the application — ignored, the deployed app has nothing to
+# build against. It is a copy of template-app.built_5.html above, which stays
+# ignored as the working original.
+#
+# Built reports are per client and per moment, and belong nowhere near git.
 public/built-*.html
