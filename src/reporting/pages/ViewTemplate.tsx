@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReportingSession } from '../session';
-import { buildPayload, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
+import { buildClientBlock, buildTemplateHtml, oneClientPayload } from '../lib/reports/buildPayload.ts';
 
 /**
  * One built report per client, for as long as the tab lives. Blob URLs are
@@ -35,12 +35,12 @@ export default function ViewTemplate() {
   const build = useCallback(async () => {
     setBusy('Starting'); setError(null); setCount(null);
     try {
-      const payload = await buildPayload(clientId, (step, done, total) => {
+      const payload = await buildClientBlock(clientId, (step: string, done?: number, total?: number) => {
         setBusy(step);
         setCount(done !== undefined && total !== undefined ? { done, total } : null);
       });
       setBusy('Opening the report');
-      const blob = await buildTemplateHtml(payload.json);
+      const blob = await buildTemplateHtml(oneClientPayload(payload));
       const next = URL.createObjectURL(blob);
       const previous = built.get(clientId);
       if (previous) URL.revokeObjectURL(previous.url);

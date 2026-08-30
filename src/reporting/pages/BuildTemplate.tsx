@@ -15,7 +15,7 @@
 
 import { useState } from 'react';
 import { useReportingSession } from '../session';
-import { buildPayload, buildTemplateHtml, type BuildResult } from '../lib/reports/buildPayload.ts';
+import { buildClientBlock, buildTemplateHtml, oneClientPayload, type BuildResult } from '../lib/reports/buildPayload.ts';
 
 export default function BuildTemplate() {
   const { client } = useReportingSession();
@@ -33,12 +33,12 @@ export default function BuildTemplate() {
     if (result) URL.revokeObjectURL(result.url);
     setResult(null);
     try {
-      const built = await buildPayload(clientId, (step, done, total) => {
+      const built = await buildClientBlock(clientId, (step: string, done?: number, total?: number) => {
         setBusy(step);
         setCount(done !== undefined && total !== undefined ? { done, total } : null);
       });
       setBusy('Writing the file');
-      const blob = await buildTemplateHtml(built.json);
+      const blob = await buildTemplateHtml(oneClientPayload(built));
       const url = URL.createObjectURL(blob);
       setResult({ ...built, size: blob.size, url });
 

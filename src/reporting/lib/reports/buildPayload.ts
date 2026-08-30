@@ -53,8 +53,11 @@ const CREDIT_SECTIONS = new Set([
 
 export type BuildProgress = (step: string, done?: number, total?: number) => void;
 
+export type ClientBlock = Record<string, unknown>;
+
 export type BuildResult = {
-  json: string;
+  block: ClientBlock;
+  generated: string;
   months: number;
   postings: number;
   accounts: number;
@@ -64,7 +67,7 @@ export type BuildResult = {
   sectionsOff: string[];
 };
 
-export async function buildPayload(
+export async function buildClientBlock(
   clientId: number,
   onProgress: BuildProgress = () => {},
 ): Promise<BuildResult> {
@@ -482,7 +485,8 @@ export async function buildPayload(
   await breathe();
 
   return {
-    json: JSON.stringify(payload),
+    block: payload.clients.c,
+    generated: payload.generated,
     months: months.length,
     postings: post.v.length,
     accounts: accounts.length,
@@ -524,4 +528,66 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
     [head, html.slice(0, start), json, html.slice(end)],
     { type: 'text/html;charset=utf-8' },
   );
+}
+
+/**
+ * Every client that has data, in one payload — so the TEMPLATE does the
+ * choosing.
+ *
+ * The template opens on its own sign-in with a client dropdown, and that is the
+ * design: §4 says its layout and wording are the specification, and a chooser
+ * of mine in front of it is a second front door to the same building. This
+ * builds the whole thing so the template's own screen has something to choose
+ * from.
+ *
+ * Only clients with postings are included. A client with nothing loaded would
+ * be a name in a dropdown leading to an empty report, which is worse than not
+ * being offered.
+ *
+ * The cost is honest and worth stating: each client carries its own postings,
+ * and A&F alone is 7MB. This is right while a handful of clients are loaded and
+ * will not be right for sixty — at which point the template should ask for one
+ * client's data when it is chosen rather than carry all of it at once.
+ */
+export async function buildAllClients(
+  onProgress: (step: string, done?: number, total?: number) => void = () => {},
+): Promise<{ json: string; clients: { id: number; name: string; postings: number }[] }> {
+  onProgress('Finding the clients with data');
+  const { data, error } = await rep().rpc('clients_with_data');
+  if (error) throw new Error(`clients_with_data: ${error.message}`);
+  const withData = (data ?? []) as { client_id: number; client_name: string; postings: number }[];
+  if (!withData.length) {
+    throw new Error('No client has any postings yet, so there is nothing to report on.');
+  }
+
+  const clients: Record<string, ClientBlock> = {};
+  const order: string[] = [];
+  const listed: { id: number; name: string; postings: number }[] = [];
+  let generated = '';
+
+  for (let i = 0; i < withData.length; i++) {
+    const c = withData[i];
+    onProgress(`Building ${c.client_name}`, i, withData.length);
+    const built = await buildClientBlock(c.client_id, (step, done, total) =>
+      onProgress(`${c.client_name} — ${step}`, done, total));
+    const key = `c${c.client_id}`;
+    clients[key] = built.block;
+    order.push(key);
+    listed.push({ id: c.client_id, name: c.client_name, postings: built.postings });
+    generated = built.generated;
+  }
+
+  return {
+    json: JSON.stringify({ generated, clients, order }),
+    clients: listed,
+  };
+}
+
+/** One client's block, wrapped as a payload the template can read. */
+export function oneClientPayload(built: BuildResult): string {
+  return JSON.stringify({
+    generated: built.generated,
+    clients: { c: built.block },
+    order: ['c'],
+  });
 }

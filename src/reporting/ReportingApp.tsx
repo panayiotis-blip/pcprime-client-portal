@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { isStaffRole } from '../services/api';
 import { ReportingSession, useReportingSession } from './session';
 import ChooseClient from './pages/ChooseClient';
+import ReportHome from './pages/ReportHome';
 import ReportingSetup from './pages/ReportingSetup';
 import DataImport from './pages/DataImport';
 import AccountMapping from './pages/AccountMapping';
@@ -40,7 +41,10 @@ function Inner() {
     return (
       <Routes>
         <Route path="/setup" element={<ReportingSetup />} />
-        <Route path="*" element={<ChooseClient />} />
+        <Route path="/manage" element={<ChooseClient />} />
+        {/* The template is what Client Reporting opens on: its own sign-in,
+            its own client list. The loading bay lives behind /manage. */}
+        <Route path="*" element={<ReportHome />} />
       </Routes>
     );
   }
