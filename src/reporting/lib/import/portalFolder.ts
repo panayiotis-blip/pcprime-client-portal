@@ -139,11 +139,15 @@ async function supersede(
   const rows = prior.data as { document_id: number; period: string | null }[];
   const ids = rows.filter((r) => covers(period, r.period)).map((r) => r.document_id);
   if (!ids.length) return 0;
-  const { error } = await supabase.from('documents')
+  // Count what was actually replaced, not what was considered. A file already
+  // superseded by an earlier save is skipped by the filter, and reporting it
+  // again would tell the operator something untrue about their own folder.
+  const { data, error } = await supabase.from('documents')
     .update({ deleted_at: new Date().toISOString() })
-    .in('id', ids).is('deleted_at', null);
+    .in('id', ids).is('deleted_at', null)
+    .select('id');
   if (error) { console.warn('The previous copy was not superseded:', error.message); return 0; }
-  return ids.length;
+  return (data ?? []).length;
 }
 
 /**
