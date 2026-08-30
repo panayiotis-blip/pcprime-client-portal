@@ -510,6 +510,32 @@ export default function AppShell() {
                           const navItem = findNavItem(f.target_id);
                           const label = f.label || navItem?.label || f.target_id;
                           const icon  = navItem?.icon || '⊕';
+                          // A pinned item keeps the behaviour it has in its own
+                          // group. Rendered as a plain Link, a full-screen tool
+                          // like Client Reporting opened in this tab and took
+                          // the portal with it.
+                          if (navItem?.external || navItem?.newTab) return (
+                            <li key={f.id}>
+                              <a
+                                href={f.target_id}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="sidebar-link sidebar-sub-link"
+                                onClick={() => setSidebarOpen(false)}
+                                title={`${label} — opens in a new tab`}
+                              >
+                                <span className="nav-icon">{icon}</span>
+                                <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                                <span style={{ marginLeft: 6, fontSize: 11, opacity: .6 }}>↗</span>
+                                <button
+                                  type="button"
+                                  className="sidebar-pin pinned"
+                                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); unpinFavourite(f.id); }}
+                                  title="Unpin"
+                                >×</button>
+                              </a>
+                            </li>
+                          );
                           return (
                             <li key={f.id}>
                               <Link
@@ -693,6 +719,31 @@ export default function AppShell() {
                         const to = isMenu ? f.target_id : `/clients/${f.target_id}`;
                         const label = f.label || navItem?.label || f.target_id;
                         const icon  = isMenu ? (navItem?.icon || '⊕') : '👤';
+                        // A pinned item keeps the behaviour it has in its own
+                        // group: a full-screen tool opens in its own tab rather
+                        // than taking the portal page with it.
+                        if (navItem?.external || navItem?.newTab) return (
+                          <li key={f.id}>
+                            <a
+                              href={to}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="sidebar-link sidebar-sub-link"
+                              onClick={() => setSidebarOpen(false)}
+                              title={`${label} — opens in a new tab`}
+                            >
+                              <span className="nav-icon">{icon}</span>
+                              <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                              <span style={{ marginLeft: 6, fontSize: 11, opacity: .6 }}>↗</span>
+                              <button
+                                type="button"
+                                className="sidebar-pin pinned"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); unpinFavourite(f.id); }}
+                                title="Unpin"
+                              >×</button>
+                            </a>
+                          </li>
+                        );
                         return (
                           <li key={f.id}>
                             <Link
