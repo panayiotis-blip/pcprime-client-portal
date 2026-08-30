@@ -14,6 +14,7 @@ import StockPanel from './StockPanel';
 import PayrollPanel from './PayrollPanel';
 import FolderPanel from './FolderPanel';
 import PortalFolderPanel from './PortalFolderPanel';
+import FolderReviewPanel from './FolderReviewPanel';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -167,6 +168,8 @@ export default function DataImport() {
         clientId={clientId}
         onImported={() => { void loadFeeds(); setLedgerVersion((v) => v + 1); }}
       />
+
+      <FolderReviewPanel clientId={clientId} />
 
       <FolderPanel
         clientId={clientId}
