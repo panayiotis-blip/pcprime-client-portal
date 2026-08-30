@@ -23,6 +23,8 @@
 -- about the most recent file, and that is what the screen says they are.
 -- =====================================================================
 
+set search_path to reporting, public;
+
 create or replace function commit_ledger_import(p_import bigint, p_allow_loss boolean default false)
 returns table (months_replaced int, postings_removed int, postings_added int)
 language plpgsql security definer set search_path = reporting, public as $$
