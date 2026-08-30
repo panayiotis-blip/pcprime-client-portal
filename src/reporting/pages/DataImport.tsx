@@ -12,6 +12,7 @@ import ChartImportPanel from './ChartImportPanel';
 import TrialBalancePanel from './TrialBalancePanel';
 import StockPanel from './StockPanel';
 import PayrollPanel from './PayrollPanel';
+import FolderPanel from './FolderPanel';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -160,6 +161,11 @@ export default function DataImport() {
           )}
         </div>
       )}
+
+      <FolderPanel
+        clientId={clientId}
+        onImported={() => { void loadFeeds(); setLedgerVersion((v) => v + 1); }}
+      />
 
       <MonthChecklist clientId={clientId} reloadKey={ledgerVersion} />
 
