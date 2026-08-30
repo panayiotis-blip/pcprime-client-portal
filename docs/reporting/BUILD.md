@@ -328,7 +328,49 @@ Cohesion 2,0% (uncapped) · Redundancy 1,2% · Industrial Training 0,5% · GHS (
 cap and is worth showing, not flagging as an error. The **holiday fund does belong**
 in the IR.7 declared gross.
 
-### 6.5 Stock valuation, chart of accounts, bank statements
+### 6.5 Chart of accounts
+
+**Where it is in BTMS:** the account list, exported as XLS. On A&F it is 8.467
+accounts and 2,1 MB.
+
+**The header row is offset by two.** Row 0 reads `Phone · Type · Active · Header ·
+Report Category · Credit Limit · Disc. %` — seven labels for nine columns, because
+the code and the name are not labelled at all. `Phone` names column **2**, not
+column 0. Read the columns by position:
+
+| Index | Contents |
+|---|---|
+| 0 | **account code** |
+| 1 | **account name** |
+| 2 | phone, on debtor and creditor accounts (`Tel:99850870`) |
+| 3 | **type** — `Asset` · `Liability` · `Equity` · `Income` · `Expenditure` · `Debtor` · `Creditor` |
+| 4 | active |
+| 5 | **header** — 1 means a section heading, not a postable account |
+| 6 | **report category** — seeds the suggested mapping |
+| 7 | credit limit |
+| 8 | discount % |
+
+The last row is `Number Of  Records:` with the count in column 1. It is a footer,
+not an account, and it is also a control total: check the parse against it.
+
+**What A&F's chart is made of.** 8.467 accounts, of which 8.113 debtors and 150
+creditors — **97,6% is sub-ledger**, one account per customer or supplier. Only
+**204** accounts are neither, and those are the chart that identifies the client
+(§7.2). Ten are header accounts. Eighteen report categories, and 2.353 accounts
+carry none.
+
+**Verified against the ledger.** Every one of the 4.863 accounts posted to across
+A&F's six years appears in the chart, with no name disagreeing. 3.604 chart
+accounts have never been posted to.
+
+**A file name proves nothing.** Two exports sat side by side named
+`a&f chart of accounts.xls` and `antonis foulis - chart of accounts.xls`, which
+read like two clients and are one: the second is a strict subset of the first,
+8.462 of 8.467 codes, no name differing, the five extra being customers opened
+between the two exports. The register also holds a *different* client whose name
+begins the same way (§5).
+
+### 6.6 Stock valuation and bank statements
 
 Stock valuation is compared against the stock account in the ledger at the same
 date; the two rarely agree and the gap changes sign, which must be resolved before a
