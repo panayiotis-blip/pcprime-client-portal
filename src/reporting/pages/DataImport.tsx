@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useReportingSession } from '../session';
 import MonthChecklist from './MonthChecklist';
+import ChartImportPanel from './ChartImportPanel';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -158,6 +159,12 @@ export default function DataImport() {
       )}
 
       <MonthChecklist clientId={clientId} reloadKey={ledgerVersion} />
+
+      <ChartImportPanel
+        clientId={clientId}
+        clientName={client!.name}
+        onImported={() => { void loadFeeds(); }}
+      />
 
       {/* ---- the feeds this client has ---- */}
       <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 14, marginBottom: 20 }}>

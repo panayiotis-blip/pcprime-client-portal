@@ -172,3 +172,95 @@ export function fingerprintAccounts(
         `(${Math.round(overlap * 100)}%). This file looks like it belongs to someone else.${detail}`,
   };
 }
+
+/**
+ * Does this CHART belong to this client?
+ *
+ * The ledger's question and the chart's question are not the same question,
+ * and asking the ledger's one of a chart refused A&F's own chart at 53%.
+ *
+ * A ledger file is judged by whether the accounts it POSTS TO are ones the
+ * client has. A chart of accounts is the register itself: it contains every
+ * account the client could ever post to, including the ones they never have.
+ * A&F's chart carries 204 nominal accounts and its six years of ledgers have
+ * touched 109 of them, so judging the chart by how much of it the client
+ * already knows penalises it for being complete — which is the one thing a
+ * chart is meant to be.
+ *
+ * So the direction is reversed: of the nominal accounts this client HAS
+ * posted to, how many does this chart contain? A chart that is genuinely
+ * theirs must contain all of them, because every posting was made to an
+ * account in it. Another company's chart contains almost none.
+ *
+ * On A&F this is 109 of 109. The sub-ledger is set aside on both sides for
+ * the same reason as everywhere else: it is customer churn, not identity.
+ */
+export function fingerprintChart(
+  fileCodes: Iterable<string>,
+  known: Set<string>,
+  threshold = 0.6,
+): Fingerprint {
+  const file = new Set<string>();
+  for (const c of fileCodes) {
+    const s = String(c ?? '').trim();
+    if (s) file.add(s);
+  }
+
+  const controls = subLedgerControls(file, known);
+  const empty = {
+    overlap: 0, matched: 0, total: 0, subLedger: 0, newSubLedger: 0,
+    unknownSample: [] as string[],
+  };
+
+  let subLedger = 0, newSubLedger = 0;
+  for (const c of file) {
+    if (!isSubLedger(c, controls)) continue;
+    subLedger++;
+    if (!known.has(c)) newSubLedger++;
+  }
+
+  if (file.size === 0) {
+    return { ...empty, subLedger, newSubLedger, accepted: false,
+      reason: 'The file carries no account codes at all.' };
+  }
+
+  // Nothing held yet: this is the client's first chart and there is nothing
+  // to check it against, exactly as with a first ledger.
+  const heldNominal = [...known].filter((c) => !isSubLedger(c, controls));
+  if (heldNominal.length === 0) {
+    return { ...empty, subLedger, newSubLedger, overlap: 1, accepted: true,
+      reason: known.size === 0
+        ? 'First chart for this client — there is nothing to check it against yet.'
+        : 'This client holds no nominal accounts yet, so there is nothing to check this chart against.' };
+  }
+
+  let matched = 0;
+  const missing: string[] = [];
+  for (const c of heldNominal) {
+    if (file.has(c)) matched++;
+    else if (missing.length < 12) missing.push(c);
+  }
+  const total = heldNominal.length;
+  const overlap = matched / total;
+  const accepted = overlap >= threshold;
+
+  const detail = subLedger
+    ? ` ${subLedger.toLocaleString('en-GB')} debtor and creditor accounts were not counted` +
+      (newSubLedger ? `, of which ${newSubLedger.toLocaleString('en-GB')} are new and will be added.` : '.')
+    : '';
+
+  return {
+    overlap,
+    matched,
+    total,
+    subLedger,
+    newSubLedger,
+    unknownSample: missing,
+    accepted,
+    reason: accepted
+      ? `Contains ${matched} of the ${total} nominal accounts this client has posted to.${detail}`
+      : `This chart is missing ${total - matched} of the ${total} nominal accounts this client has ` +
+        `posted to (it contains ${Math.round(overlap * 100)}%). Every posting was made to an account ` +
+        `in this client's own chart, so a chart missing them belongs to another company.${detail}`,
+  };
+}
