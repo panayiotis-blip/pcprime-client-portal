@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useReportingSession } from '../session';
 import MonthChecklist from './MonthChecklist';
 import ChartImportPanel from './ChartImportPanel';
+import TrialBalancePanel from './TrialBalancePanel';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -161,6 +162,12 @@ export default function DataImport() {
       <MonthChecklist clientId={clientId} reloadKey={ledgerVersion} />
 
       <ChartImportPanel
+        clientId={clientId}
+        clientName={client!.name}
+        onImported={() => { void loadFeeds(); }}
+      />
+
+      <TrialBalancePanel
         clientId={clientId}
         clientName={client!.name}
         onImported={() => { void loadFeeds(); }}
