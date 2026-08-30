@@ -13,6 +13,7 @@
 import { supabase } from '../../../lib/supabase';
 import { readSheetRows } from './sheet.ts';
 import { identify, suggestedDate, type FeedKind } from './folder.ts';
+import { FEEDS, type DocKind, type FileCheck, type Verdict } from './checkFile.ts';
 
 const BUCKET = 'documents';
 
@@ -23,10 +24,16 @@ export type PortalFile = {
   year: string;
   month: string;
   uploadedAt: string;
-  kind: FeedKind;
+  kind: DocKind;
   summary: string;
   /** From year/month if given at upload, else read from the name. */
   suggested: string | null;
+  /** The verdict recorded when the file was saved, if it was gated. */
+  verdict: Verdict | null;
+  problems: string[];
+  warnings: string[];
+  /** The file's own control figures, as they were at the time of saving. */
+  facts: Record<string, string>;
 };
 
 /** The folder, made the first time it is wanted. */
@@ -39,11 +46,27 @@ export async function btmsFolderId(clientId: number): Promise<number> {
 /** A safe storage segment, matching what the portal does elsewhere. */
 const safe = (name: string) => name.replace(/[^\w.\-]+/g, '_').slice(0, 120);
 
+/**
+ * Store a file in the client's BTMS folder — but only if it passed the gate.
+ *
+ * The check is not repeated here. It was run on the file the operator was
+ * looking at, and its verdict is what they acted on; re-running it silently
+ * could store something different from what they approved. What IS enforced
+ * here is that a blocked file never reaches storage, whatever the caller
+ * intended, because this function is the only way in.
+ */
 export async function uploadToBtmsFolder(
   clientId: number,
   file: File,
   when: { year: string; month: string },
-): Promise<void> {
+  check: FileCheck,
+): Promise<{ documentId: number; superseded: number }> {
+  if (check.verdict === 'blocked') {
+    throw new Error(
+      'This file was not stored. ' + (check.problems[0] ?? 'It did not pass its checks.'),
+    );
+  }
+
   const folderId = await btmsFolderId(clientId);
   // The client id leads the path, as everywhere else, so a file cannot be
   // written into another client's space.
@@ -51,8 +74,12 @@ export async function uploadToBtmsFolder(
   const up = await supabase.storage.from(BUCKET).upload(path, file);
   if (up.error) throw new Error(`Upload failed: ${up.error.message}`);
 
+  // The period the file states about itself beats the one typed beside it: a
+  // paysheet knows its own month, and a person retyping it can be wrong.
+  const period = check.period ?? periodFrom(when);
+
   const { data: me } = await supabase.auth.getUser();
-  const { error } = await supabase.from('documents').insert({
+  const ins = await supabase.from('documents').insert({
     client_id: clientId,
     folder_id: folderId,
     doc_type: 'btms_export',
@@ -64,8 +91,86 @@ export async function uploadToBtmsFolder(
     storage_path: path,
     storage_bucket: BUCKET,
     uploaded_by: me.user?.id ?? null,
+  }).select('id').single();
+  if (ins.error) throw new Error(`The file was stored but not recorded: ${ins.error.message}`);
+  const documentId = Number((ins.data as { id: number }).id);
+
+  // What the gate found, kept against the document. If this fails the file is
+  // still there and still usable — the review loses a row, which is worth
+  // saying but not worth throwing the upload away over.
+  const rec = await supabase.schema('reporting').from('btms_file_checks').insert({
+    document_id: documentId,
+    client_id: clientId,
+    kind: check.kind,
+    period,
+    verdict: check.verdict,
+    problems: check.problems,
+    warnings: check.warnings,
+    facts: Object.fromEntries(check.facts.map((f) => [f.label, f.value])),
+    digest: check.digest,
   });
-  if (error) throw new Error(`The file was stored but not recorded: ${error.message}`);
+  if (rec.error) console.warn('The check was not recorded:', rec.error.message);
+
+  const superseded = await supersede(clientId, documentId, check.kind, period);
+  return { documentId, superseded };
+}
+
+const periodFrom = (w: { year: string; month: string }) =>
+  w.year && w.month ? `${w.year}-${String(w.month).padStart(2, '0')}` : w.year || null;
+
+/**
+ * A feed replaces the previous file of the same kind and period rather than
+ * sitting beside it. The journal listing is re-saved at the end of every
+ * posting session, and a folder that kept every copy would be mostly copies.
+ *
+ * Evidence is never superseded. Two bank statements for the same month are two
+ * statements, and deciding otherwise would quietly throw one away.
+ */
+async function supersede(
+  clientId: number, keepId: number, kind: DocKind, period: string | null,
+): Promise<number> {
+  if (!FEEDS.includes(kind)) return 0;
+
+  const prior = await supabase.schema('reporting').from('btms_file_checks')
+    .select('document_id, period')
+    .eq('client_id', clientId).eq('kind', kind).neq('document_id', keepId);
+  if (prior.error || !prior.data?.length) return 0;
+
+  const rows = prior.data as { document_id: number; period: string | null }[];
+  const ids = rows.filter((r) => covers(period, r.period)).map((r) => r.document_id);
+  if (!ids.length) return 0;
+  const { error } = await supabase.from('documents')
+    .update({ deleted_at: new Date().toISOString() })
+    .in('id', ids).is('deleted_at', null);
+  if (error) { console.warn('The previous copy was not superseded:', error.message); return 0; }
+  return ids.length;
+}
+
+/**
+ * Does the period just saved cover the one already there?
+ *
+ * The journal listing is why this is not a string comparison. It is re-saved at
+ * the end of every posting session and its span grows as the year does: a
+ * listing covering January to August replaces the one covering January to July,
+ * because it contains it. It must NOT touch last year's, which it does not.
+ *
+ * Everything else states a single period — a trial balance at a date, a
+ * paysheet for a month, a chart with no period at all — and matches exactly.
+ */
+function covers(saved: string | null, existing: string | null): boolean {
+  if (saved === existing) return true;
+  const a = span(saved), b = span(existing);
+  if (!a || !b) return false;
+  return a.from <= b.from && a.to >= b.to;
+}
+
+/** 'YYYY-MM', 'YYYY-MM-DD' or 'YYYY-MM to YYYY-MM' as a pair of months. */
+function span(period: string | null): { from: string; to: string } | null {
+  if (!period) return null;
+  const parts = period.split(/\s+to\s+/).map((p) => p.trim().slice(0, 7));
+  const ok = parts.every((p) => /^\d{4}-\d{2}$/.test(p));
+  if (!ok || !parts.length) return null;
+  return { from: parts[0], to: parts[parts.length - 1] };
 }
 
 /** Fetch one back, as a File the importers can take. */
@@ -76,11 +181,19 @@ export async function fileFromPortal(f: PortalFile): Promise<File> {
 }
 
 /**
- * What is in the folder, and what each file is.
+ * What is in the folder.
  *
- * The kind is decided by reading the file, never by its name — the same rule as
- * everywhere else. That costs a download per file, which is why it is done once
- * on opening and not on every render.
+ * The kind and the verdict come from what the gate recorded when the file was
+ * saved, not from opening it again. That is deliberate on two counts: it is one
+ * query rather than a download per file, and a review should show what was
+ * found AT THE TIME, not what today's code makes of the same bytes.
+ *
+ * Files saved before the gate existed have no record, so those — and only
+ * those — are opened and identified the old way.
+ *
+ * Superseded files are left out. They are still in the folder and still in the
+ * review; they are simply not offered for import, because a replaced journal
+ * listing is not a thing anybody wants to import by accident.
  */
 export async function listBtmsFolder(
   clientId: number,
@@ -91,6 +204,7 @@ export async function listBtmsFolder(
     .from('documents')
     .select('id, file_name, storage_path, year, month, created_at')
     .eq('client_id', clientId).eq('folder_id', folderId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw new Error(`Reading the folder: ${error.message}`);
 
@@ -98,11 +212,26 @@ export async function listBtmsFolder(
     id: number; file_name: string; storage_path: string;
     year: string | null; month: string | null; created_at: string;
   }[];
+  if (!rows.length) return [];
+
+  const checks = await supabase.schema('reporting').from('btms_file_checks')
+    .select('document_id, kind, period, verdict, problems, warnings, facts')
+    .in('document_id', rows.map((r) => r.id));
+  const byDoc = new Map<number, {
+    kind: DocKind; period: string | null; verdict: Verdict;
+    problems: string[] | null; warnings: string[] | null;
+    facts: Record<string, string> | null;
+  }>();
+  for (const k of (checks.data ?? []) as never[]) {
+    const r = k as unknown as { document_id: number } & Record<string, never>;
+    byDoc.set(Number(r.document_id), r as never);
+  }
 
   const out: PortalFile[] = [];
   let done = 0;
   for (const r of rows) {
-    onProgress(r.file_name, ++done, rows.length);
+    const stated = r.year && r.month ? `${r.year}-${String(r.month).padStart(2, '0')}`
+      : r.year ? String(r.year) : null;
     const base: PortalFile = {
       id: r.id,
       fileName: r.file_name,
@@ -112,23 +241,89 @@ export async function listBtmsFolder(
       uploadedAt: r.created_at,
       kind: 'unknown',
       summary: '',
-      suggested: null,
+      suggested: stated ?? suggestedDate(r.file_name),
+      verdict: null,
+      problems: [],
+      warnings: [],
+      facts: {},
     };
+
+    const k = byDoc.get(r.id);
+    if (k) {
+      onProgress(r.file_name, ++done, rows.length);
+      out.push({
+        ...base,
+        kind: k.kind,
+        summary: KIND_SUMMARY[k.kind] ?? '',
+        suggested: k.period ?? base.suggested,
+        verdict: k.verdict,
+        problems: k.problems ?? [],
+        warnings: k.warnings ?? [],
+        facts: k.facts ?? {},
+      });
+      continue;
+    }
+
+    // Saved before the gate. Open it, as we used to.
+    onProgress(r.file_name, ++done, rows.length);
     try {
       const blob = await supabase.storage.from(BUCKET).download(r.storage_path);
       if (blob.error || !blob.data) throw new Error(blob.error?.message ?? 'not readable');
-      const rows2 = await readSheetRows(blob.data);
-      const { kind, summary } = identify(rows2 as unknown[][]);
-      // What was said at upload wins; the file name is only a fallback.
-      const stated = r.year && r.month ? `${r.year}-${String(r.month).padStart(2, '0')}`
-        : r.year ? String(r.year) : null;
-      out.push({ ...base, kind, summary, suggested: stated ?? suggestedDate(r.file_name) });
+      const sheet = await readSheetRows(blob.data);
+      const { kind, summary } = identify(sheet as unknown[][]);
+      out.push({ ...base, kind, summary });
     } catch (e) {
-      out.push({
-        ...base,
-        summary: e instanceof Error ? e.message : 'could not be read',
-      });
+      out.push({ ...base, summary: e instanceof Error ? e.message : 'could not be read' });
     }
   }
   return out;
+}
+
+/** One line per kind, so a listed file reads the same as a checked one. */
+const KIND_SUMMARY: Record<string, string> = {
+  ledger: 'Analytical journal listing — postings by journal',
+  chart: 'Chart of accounts — the account list',
+  trial_balance: 'Trial balance — a position at a date',
+  stock: 'Stock valuation — items, quantities and values',
+  payroll_cost: 'Payroll cost analysis — by department',
+  payroll_sheet: 'Paysheet listing — by employee',
+  vat_summary: 'VAT figures summary — a filed period',
+  detailed_ledger: 'Detailed ledger — kept for the review',
+  bank_statement: 'Bank statement — kept for the review',
+  other: 'Kept with the client for the review',
+  unknown: 'Not recognised as a BTMS export',
+};
+
+/** The folder as a reviewer reads it: every file, superseded ones included. */
+export type ReviewRow = {
+  documentId: number;
+  fileName: string;
+  kind: DocKind;
+  period: string | null;
+  verdict: Verdict;
+  problems: string[];
+  warnings: string[];
+  facts: Record<string, string>;
+  uploadedAt: string;
+  uploadedBy: string | null;
+  superseded: boolean;
+};
+
+export async function folderReview(clientId: number): Promise<ReviewRow[]> {
+  const { data, error } = await supabase.schema('reporting')
+    .rpc('btms_folder_review', { p_client: clientId });
+  if (error) throw new Error(`Reading the folder review: ${error.message}`);
+  return ((data ?? []) as Record<string, never>[]).map((r) => ({
+    documentId: Number(r.document_id),
+    fileName: String(r.file_name),
+    kind: (r.kind ?? 'unknown') as DocKind,
+    period: (r.period as string | null) ?? null,
+    verdict: (r.verdict ?? 'warning') as Verdict,
+    problems: (r.problems as unknown as string[]) ?? [],
+    warnings: (r.warnings as unknown as string[]) ?? [],
+    facts: (r.facts as unknown as Record<string, string>) ?? {},
+    uploadedAt: String(r.uploaded_at),
+    uploadedBy: (r.uploaded_by as string | null) ?? null,
+    superseded: Boolean(r.superseded),
+  }));
 }

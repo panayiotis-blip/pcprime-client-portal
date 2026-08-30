@@ -284,6 +284,19 @@ prior-year retained earnings, unposted because the audit has not closed and the 
 has not been rolled over — **this is expected, not an error**, and the application
 must say so rather than flag it.
 
+A **third** layout exists and must be refused by name: `Trial Balance(S)`, which
+splits opening, movement and closing each into a debit and a credit column and
+carries a blank leading column. It reads as a trial balance to a person and as
+nothing at all to the parser, which is the dangerous combination — so the gate
+names it and says which export to run instead.
+
+That layout has one property no other BTMS export has: **it prints the company
+name**, on its own line near the top. Where a name is there to be read, it is
+read and compared against `client_settings.btms_company_name`, and a file
+belonging to another client is stopped at the door. Everything in §5 about the
+folder being the identity still holds — this is a second lock on one door, not a
+replacement for it.
+
 ### 6.3 VAT figures summary
 
 Blocks: an optional `Previous Periods` block, then `Vat Period : mm/yyyy (…)`, each
@@ -381,6 +394,46 @@ against the trial balance.
 
 ---
 
+### 6.7 The gate — checking a file before it is stored
+
+Staff save their exports into the client’s portal folder at the end of a posting
+session, and the application reads them later, unattended. A file exported the
+wrong way does not announce itself: it imports quietly and the figures come out
+wrong, and by then the person who exported it has moved on.
+
+So **nothing is stored until it has been parsed and has agreed with the control
+totals BTMS prints inside it.** `src/reporting/lib/import/checkFile.ts` is the
+only way in; `uploadToBtmsFolder` refuses a blocked verdict whatever the caller
+intended.
+
+Every check is a failure that has already happened in this build:
+
+| Feed | What is compared | The failure it prevents |
+| --- | --- | --- |
+| Journal listing | every journal against its own `Totals For Journal No` row; debits = credits | a filtered or truncated export; an export taken **by account** instead of analytically, which parses to zero postings and reports no error |
+| Chart of accounts | row count against the file’s `Number Of Records:` footer | the export that stopped at 1.000 of 1.206 rows and then refused its own client’s ledger as a stranger’s |
+| Trial balance | closing balances sum to nil; row count and debits against `Report Total :` | a partial export; the wrong layout (see 6.2) |
+| Stock valuation | items and value against the `Number of Records / GrandTotals` line | a file cut short, which without that line is indistinguishable from a complete one |
+| Paysheet | employees summed against the sheet’s own closing totals row | the grand-totals row absorbed into the last employee, which doubled one person’s pay |
+| Cost analysis | departments summed against the totals block | the same trap, from the other side |
+
+Two tiers. A **feed** is something the application reads, and it must pass. 
+**Evidence** — bank statements, detailed ledgers, anything else kept for the
+review — is stored but not parsed, because there is nothing to parse it against.
+It is kept with a period and whoever saved it, so it can be found again.
+
+The verdict is recorded in `reporting.btms_file_checks` with the file’s own
+figures (migration 207), and `btms_folder_review(client)` reads it back. That is
+what makes staff work reviewable: *“every file for July passed”* is a fact
+somebody can act on; re-opening eleven spreadsheets to find out is not.
+
+**Superseding.** A feed replaces the previous file of the same kind and period
+rather than sitting beside it — the journal listing is re-saved every session and
+the folder must not grow a copy each time. The listing is the one whose span
+grows through the year, so it supersedes any earlier listing whose period it
+*contains*: January–August replaces January–July, and does not touch last year.
+Evidence is never superseded — two bank statements for the same month are two
+statements.
 ## 7. Import pipeline
 
 ```

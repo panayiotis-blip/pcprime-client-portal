@@ -26,7 +26,7 @@ const DB = 'pcp-reporting';
 const STORE = 'client-folders';
 
 export type FeedKind =
-  | 'ledger' | 'chart' | 'trial_balance' | 'stock'
+  | 'ledger' | 'chart' | 'trial_balance' | 'trial_balance_wide' | 'stock'
   | 'payroll_cost' | 'payroll_sheet' | 'vat_summary' | 'unknown';
 
 export type FoundFile = {
@@ -121,6 +121,19 @@ export function identify(rows: unknown[][]): { kind: FeedKind; summary: string }
   }
   if (head.some((r) => first(r) === 'Code' && cell(r?.[1]) === 'Name' && cell(r?.[2]) === 'Type')) {
     return { kind: 'trial_balance', summary: 'Trial balance — a position at a date' };
+  }
+  // BTMS prints a second trial balance, "Trial Balance(S)", in a wider layout:
+  // opening, movement and closing each split into a debit and a credit column,
+  // with a blank leading column. It reads as a trial balance to a person and as
+  // nothing at all to the parser above, which is the dangerous combination —
+  // hence naming it rather than letting it fall through to "not recognised".
+  if (head.some((r) => r.some((c) => cell(c) === 'Opening Balance'))
+      && head.some((r) => r.some((c) => cell(c) === 'Closing Balance'))
+      && head.some((r) => r.some((c) => cell(c) === 'Movement'))) {
+    return {
+      kind: 'trial_balance_wide',
+      summary: 'Trial balance, wide layout — opening, movement and closing',
+    };
   }
   if (head.some((r) => first(r) === 'DEPARTMENT')) {
     return { kind: 'payroll_cost', summary: 'Payroll cost analysis — by department' };

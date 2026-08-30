@@ -25,6 +25,7 @@ const LABEL: Record<FeedKind, string> = {
   ledger: 'Journal listing',
   chart: 'Chart of accounts',
   trial_balance: 'Trial balance',
+  trial_balance_wide: 'Trial balance (wide layout)',
   stock: 'Stock valuation',
   payroll_cost: 'Payroll — cost analysis',
   payroll_sheet: 'Payroll — paysheet',
