@@ -57,6 +57,8 @@ export type ChartCommitted = {
   written: number;
   added: number;
   changed: number;
+  /** Defaults copied from the practice master, migration 203. */
+  mapping: { seeded: number; alreadyHad: number; unmapped: number };
 };
 
 /** Reads, parses and checks a chart of accounts. Writes nothing. */
@@ -187,6 +189,21 @@ export async function commitChartImport(
       .eq('id', importId);
     if (cErr) throw new Error(`The import could not be committed: ${cErr.message}`);
 
+    // Now the client has a chart, give it the practice master's mapping for
+    // every code it recognises. Without this a new client arrives with two
+    // hundred accounts mapped to nothing and no profit and loss at all, which
+    // is what stood between one client and the rest of them.
+    //
+    // It never overwrites: an account already decided for this client, drafted
+    // or chosen by a person, is left alone. What it cannot recognise stays
+    // unmapped and is raised by review check 7 rather than guessed at.
+    onProgress('Seeding the mapping');
+    const { data: seedData, error: seedErr } = await rep()
+      .rpc('seed_mapping_defaults', { p_client: clientId });
+    if (seedErr) throw new Error(`The mapping could not be seeded: ${seedErr.message}`);
+    const seed = (Array.isArray(seedData) ? seedData[0] : seedData) as
+      { seeded: number; already_had: number; unmapped: number } | null;
+
     // covers_to stays null: a chart of accounts is a statement of what exists,
     // not of a period. The ledger's coverage is derived in the database
     // (migration 194) and has nothing to do with this feed.
@@ -204,6 +221,11 @@ export async function commitChartImport(
       written: parse.accounts.length,
       added: prepared.added,
       changed: prepared.changed,
+      mapping: {
+        seeded: Number(seed?.seeded ?? 0),
+        alreadyHad: Number(seed?.already_had ?? 0),
+        unmapped: Number(seed?.unmapped ?? 0),
+      },
     };
   } catch (e) {
     await rep().from('imports')

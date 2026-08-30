@@ -178,6 +178,15 @@ export default function ChartImportPanel({
           <b>Chart imported.</b> {committed.written.toLocaleString('en-GB')} accounts written —{' '}
           {committed.added.toLocaleString('en-GB')} new, {committed.changed.toLocaleString('en-GB')} updated.
           Import #{committed.importId}.
+          <div style={{ fontSize: 12.5, marginTop: 6 }}>
+            <b>Mapping:</b> {committed.mapping.seeded.toLocaleString('en-GB')} accounts took a line
+            from the practice master
+            {committed.mapping.alreadyHad > 0 &&
+              `, ${committed.mapping.alreadyHad.toLocaleString('en-GB')} were already decided`}
+            {committed.mapping.unmapped > 0
+              ? `, and ${committed.mapping.unmapped.toLocaleString('en-GB')} are on no line yet — they are listed on Account mapping and raised by the review.`
+              : ', and none are left unmapped.'}
+          </div>
         </div>
       )}
     </div>

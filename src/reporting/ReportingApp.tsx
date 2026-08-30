@@ -17,6 +17,7 @@ import AccountMapping from './pages/AccountMapping';
 import Reports from './pages/Reports';
 import Review from './pages/Review';
 import BuildTemplate from './pages/BuildTemplate';
+import ViewTemplate from './pages/ViewTemplate';
 
 export default function ReportingApp() {
   const { user } = useAuth();
@@ -61,6 +62,10 @@ function Inner() {
           <Item to="/reporting/reports">Profit and loss · Balance sheet</Item>
         </Group>
 
+        <Group title="The report">
+          <Item to="/reporting/report">Open the report</Item>
+        </Group>
+
         <Group title="Template">
           <Item to="/reporting/template">Build the template</Item>
         </Group>
@@ -87,11 +92,12 @@ function Inner() {
 
       <main style={{ flex: 1, minWidth: 0 }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/reporting/import" replace />} />
+          <Route path="/" element={<Navigate to="/reporting/report" replace />} />
           <Route path="/import" element={<DataImport />} />
           <Route path="/mapping" element={<AccountMapping />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/review" element={<Review />} />
+          <Route path="/report" element={<ViewTemplate />} />
           <Route path="/template" element={<BuildTemplate />} />
           {/* Setup is about every client at once, so it cannot open inside a
               session. Say that, rather than bouncing to another screen and
