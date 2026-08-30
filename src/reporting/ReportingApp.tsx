@@ -15,6 +15,7 @@ import ReportingSetup from './pages/ReportingSetup';
 import DataImport from './pages/DataImport';
 import AccountMapping from './pages/AccountMapping';
 import Reports from './pages/Reports';
+import Review from './pages/Review';
 
 export default function ReportingApp() {
   const { user } = useAuth();
@@ -59,6 +60,10 @@ function Inner() {
           <Item to="/reporting/reports">Profit and loss · Balance sheet</Item>
         </Group>
 
+        <Group title="Review">
+          <Item to="/reporting/review">Exceptions</Item>
+        </Group>
+
         <Group title="Configure">
           <Item to="/reporting/import">Data import</Item>
           <Item to="/reporting/mapping">Account mapping</Item>
@@ -81,6 +86,7 @@ function Inner() {
           <Route path="/import" element={<DataImport />} />
           <Route path="/mapping" element={<AccountMapping />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/review" element={<Review />} />
           {/* Setup is about every client at once, so it cannot open inside a
               session. Say that, rather than bouncing to another screen and
               looking like a broken link. */}
