@@ -86,9 +86,14 @@ export default function ReportHome() {
       void (async () => {
         setReading(who?.name ?? key);
         try {
-          const built = await buildClientBlock(id, (step, done, total) =>
-            setReading(`${who?.name ?? key} — ${step}` +
-              (done !== undefined && total ? ` (${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')})` : '')));
+          const built = await buildClientBlock(id, (step, done, total) => {
+            const far = done !== undefined && total
+              ? ` ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`
+              : '';
+            setReading(`${who?.name ?? key} — ${step}${far}`);
+            // Say the same thing inside the frame, where the person is looking.
+            frame?.postMessage({ type: 'pcp-progress', key, text: `${step}${far}…` }, '*');
+          });
           blocks.set(key, built.block);
           reply({ block: built.block });
         } catch (err) {

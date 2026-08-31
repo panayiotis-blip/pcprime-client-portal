@@ -103,6 +103,15 @@ script += `
       }, 600000);
       function on(e){
         var d = e.data;
+        // Progress from the portal, shown where the person is actually looking.
+        // The portal has always known how far it had got; it was reporting it
+        // into its own footer strip, four hundred pixels below the button that
+        // had just gone grey. A client with 174.026 postings takes a minute or
+        // two, and a message that never changes reads as a hang.
+        if(d && d.type === 'pcp-progress' && d.key === key){
+          if(note) note.textContent = d.text;
+          return;
+        }
         if(!d || d.type !== 'pcp-client-data' || d.key !== key) return;
         clearTimeout(timer);
         window.removeEventListener('message', on);
