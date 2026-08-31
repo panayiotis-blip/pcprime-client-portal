@@ -748,11 +748,27 @@ function emptyClient(name: string): ClientBlock {
     pl: 0, bs: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
     stmt: 0, trans: 0, mapping: 0, review: 0, vat: 0, stock: 0, payroll: 0,
     budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
-    data: 1,
+    // Data import is off as well, and that one is not a nicety. The template's
+    // FEEDS table is a hardcoded list of A&F's own file names — prototype
+    // scaffolding — so leaving the section on would show one client's ledger
+    // and chart of accounts, marked LOADED, under sixty-two other clients'
+    // names. The overriding rule is that this application must never mix up
+    // client data or client information, and a filename is client information.
+    // Company setup always renders, so an empty client still opens on
+    // something: its own name and the note below.
+    data: 0,
   };
+  // One month, not none. The template boots against ALL.order[0] before it
+  // fills its own client dropdown, and boot reads M[0] and M[NM-1] to print the
+  // period on screen. With months: [] that is lbl(undefined), the script dies
+  // at that line, and the dropdown is never filled — which is exactly what an
+  // empty first client did: a sign-in page with nothing to choose. A client
+  // with no data still has a month it has no data FOR.
+  const month = new Date().toISOString().slice(0, 7);
+
   return {
     client: name,
-    months: [], lines: [], pl: {}, bs: {}, bsOpen: {}, accounts: [],
+    months: [month], lines: [], pl: {}, bs: {}, bsOpen: {}, accounts: [],
     post: { ep: null, acc: [], jrn: [], rd: [], td: [], a: [], d: [], r: [], t: [], v: [], j: [] },
     exceptions: [], tb: [], vat: {}, vatq: [], stock: [], payroll: {},
     postings: 0,
