@@ -3,7 +3,7 @@
 // that table is the list of who this platform is switched on for.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useReportingSession, type ReportingClient } from '../session';
 
@@ -23,6 +23,7 @@ function differs(registerName: string, btmsName: string | null): btmsName is str
 
 export default function ChooseClient() {
   const { choose } = useReportingSession();
+  const navigate = useNavigate();
   const [clients, setClients] = useState<Choice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
@@ -54,6 +55,22 @@ export default function ChooseClient() {
       }));
     })();
   }, []);
+
+  // ?client=<id> — the reporting app's Upload button sends people here rather
+  // than setting the session and routing in one tick, which raced and bounced
+  // them back to the sign-in screen. A fresh page load cannot race: the list is
+  // read, the client is chosen, and the importer opens.
+  const [autoTried, setAutoTried] = useState(false);
+  useEffect(() => {
+    if (autoTried || !clients) return;
+    const want = Number(new URLSearchParams(window.location.search).get('client'));
+    if (!Number.isFinite(want) || want <= 0) return;
+    setAutoTried(true);
+    const c = clients.find((x) => x.id === want);
+    if (!c) { setError('That client is not one this platform reports on.'); return; }
+    choose({ id: c.id, name: c.name, code: c.code });
+    navigate('/reporting/import', { replace: true });
+  }, [clients, autoTried, choose, navigate]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();

@@ -17,8 +17,7 @@
 // the data", where it belongs.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useReportingSession } from '../session';
+import { Link } from 'react-router-dom';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 import { readCachedBlock, writeCachedBlock } from '../lib/reports/blockCache.ts';
 import { supabase } from '../../lib/supabase';
@@ -37,8 +36,6 @@ export default function ReportHome() {
   const [reading, setReading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
-  const navigate = useNavigate();
-  const { choose } = useReportingSession();
 
   const build = useCallback(async () => {
     setBusy('Reading the client list'); setError(null);
@@ -79,10 +76,16 @@ export default function ReportHome() {
       if (d.type === 'pcp-open-import' && d.key) {
         const want = Number(String(d.key).replace(/^c/, ''));
         const c = listed.find((x) => x.id === want);
-        if (c) {
-          choose({ id: c.id, name: c.name, code: null });
-          navigate('/reporting/import');
-        }
+        if (!c) return;
+        // Opened as a fresh page rather than by setting the session and routing
+        // in the same tick. Doing both at once raced: the router matched the
+        // no-client tree before the session landed, fell through to this
+        // screen, and rebuilt the template — so pressing Upload put you back on
+        // the sign-in page, round and round.
+        //
+        // A new tab also keeps the report you have just waited for. The
+        // importer opens beside it, not on top of it.
+        window.open(`/reporting/manage?client=${c.id}`, '_blank', 'noopener');
         return;
       }
 
@@ -146,7 +149,7 @@ export default function ReportHome() {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [listed, choose, navigate]);
+  }, [listed]);
 
   if (error) {
     return (
