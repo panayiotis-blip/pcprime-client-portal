@@ -466,6 +466,38 @@ Three things this must keep doing:
 `buildAllClients()` stays for a self-contained file that must carry its own data
 (a download, an emailed pack). It is the wrong thing to put in front of a
 sign-in screen and right for a file that has no portal behind it.
+### 6.9 The Data import table
+
+The template ships a hardcoded `FEEDS` list — A&F’s own file names, baked into
+the prototype — so it showed one client’s ledger and chart of accounts, marked
+LOADED, to whoever was signed in. **A filename is client information**, and the
+overriding rule covers client information, not just figures.
+
+`buildFeedTable()` builds the eleven rows from `reporting.feed_status`. The
+first three columns — the feed’s name, what it is for, how often — stay as the
+template words them: §4 says the wording is the specification, and what a feed
+is FOR does not vary by client. Only the file, when it arrived, what it covers
+and whether it is there come from the database.
+
+`withRealFeeds()` makes the template read them, changing two things in the
+served copy and leaving the file on disk untouched:
+
+- `FEEDS.forEach` → `(D.feeds && D.feeds.length ? D.feeds : FEEDS).forEach`
+- `const TODAY="2026-08-28"` → today
+
+TODAY matters more than it looks: the template measures “how old” and flags a
+monthly feed overdue past 45 days, both against the day the prototype was
+written. Left alone, every file looks newer as the real date moves on and
+nothing ever goes overdue.
+
+The fallback to `FEEDS` is narrow on purpose — it fires only for a payload built
+before this existed. A client with nothing loaded still gets eleven rows, all
+reading outstanding, which is the most useful screen it can open on: the list of
+what still has to come out of BTMS.
+
+Note that the prototype’s table claimed the VAT figures summary was loaded. It
+never is: `vat_periods` and `vat_returns` are empty and the VAT figures are
+rebuilt from the postings. The real table says outstanding, and is right.
 ## 7. Import pipeline
 
 ```

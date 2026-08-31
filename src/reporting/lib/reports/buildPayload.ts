@@ -451,6 +451,9 @@ export async function buildClientBlock(
     budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
   };
 
+  onProgress('Reading what has been loaded');
+  const feeds = await buildFeedTable(clientId);
+
   const name = settings?.report_name || c.name;
   const payload = {
     generated: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -458,6 +461,7 @@ export async function buildClientBlock(
       c: {
         client: name,
         months, lines, pl, bs, bsOpen, accounts, post, exceptions, tb, vat, vatq, stock, payroll,
+        feeds,
         postings: post.v.length,
         counts: { postings: post.v.length, accounts: accounts.length },
         cfg: {
@@ -524,13 +528,54 @@ export async function buildTemplateHtml(json: string, opts: { lazy?: boolean } =
   const declaresCharset = /<meta[^>]+charset/i.test(html.slice(0, 4000));
   const head = declaresCharset ? '' : '<meta charset="utf-8">\n';
 
-  const tail = html.slice(end);
+  const tail = withRealFeeds(html.slice(end));
   const rest = opts.lazy ? withLazyLoader(tail) : tail;
 
   return new Blob(
     [head, html.slice(0, start), json, rest],
     { type: 'text/html;charset=utf-8' },
   );
+}
+
+/**
+ * Make the Data import table read this client's feeds instead of the prototype's.
+ *
+ * Two words are changed in the served copy and the template file on disk is not
+ * touched — it stays exactly as Pete built it, and this is applied on the way
+ * out, like the sign-in loader.
+ *
+ *   FEEDS.forEach   ->  (D.feeds && D.feeds.length ? D.feeds : FEEDS).forEach
+ *   TODAY           ->  today, rather than the day the prototype was written
+ *
+ * The fallback to FEEDS is deliberate and narrow: it only fires for a payload
+ * built before this existed. A client with no feeds loaded still gets eleven
+ * rows from buildFeedTable, all reading outstanding, so the fallback cannot be
+ * reached by a client that simply has nothing.
+ *
+ * TODAY matters more than it looks. The template measures "how old" and flags a
+ * monthly feed overdue past 45 days, both against a hardcoded 2026-08-28. Left
+ * alone, every file would look newer the further the real date moved on, and
+ * nothing would ever go overdue.
+ */
+function withRealFeeds(tail: string): string {
+  let out = tail;
+
+  const call = 'FEEDS.forEach(([n,why,fr,file,when,covers,got])=>{';
+  if (out.includes(call)) {
+    out = out.replace(call,
+      '(D.feeds&&D.feeds.length?D.feeds:FEEDS).forEach(([n,why,fr,file,when,covers,got])=>{');
+  } else {
+    console.warn('The feed table could not be pointed at this client — the template has changed shape.');
+  }
+
+  const today = out.match(/const TODAY="\d{4}-\d{2}-\d{2}";/);
+  if (today) {
+    out = out.replace(today[0], 'const TODAY=new Date().toISOString().slice(0,10);');
+  } else {
+    console.warn('The template no longer declares TODAY; ages will be measured from a fixed date.');
+  }
+
+  return out;
 }
 
 /**
@@ -689,6 +734,77 @@ export async function buildAllClients(
 }
 
 /**
+ * The Data import table, from what this client has actually loaded.
+ *
+ * The template ships a hardcoded FEEDS list — A&F's own file names, baked into
+ * the prototype — so before this it showed one client's ledger and chart of
+ * accounts, marked LOADED, to whoever was signed in. A filename is client
+ * information, and the overriding rule is that this application must never mix
+ * up client data or client information.
+ *
+ * The first three columns stay as the template words them: §4 says the wording
+ * IS the specification, and what a feed is for does not change per client. Only
+ * the file, when it arrived, what it covers and whether it is there come from
+ * the database — which is exactly the prototype-ism §4 names.
+ *
+ * The order is the template's order, and every feed appears whether or not it
+ * has been loaded: a feed that is missing is the row that matters most.
+ */
+const FEED_ROWS: { feed: string; name: string; why: string; freq: string }[] = [
+  { feed: 'journal_listing', name: 'Analytical journal listing', freq: 'Monthly',
+    why: 'The audit trail. Every posting for the month with its journal, batch, VAT code and analysis tags — this drives every report.' },
+  { feed: 'trial_balance_monthly', name: 'Trial balance, monthly', freq: 'Monthly',
+    why: 'The independent proof. Reconciled against the journal to show the month is complete.' },
+  { feed: 'trial_balance_annual', name: 'Trial balance, annual', freq: 'Yearly',
+    why: 'Year-end check against the closed BTMS year. Not required once every closed month has a monthly one.' },
+  { feed: 'chart_of_accounts', name: 'Chart of accounts', freq: 'On change',
+    why: "The client's own account codes and names. Drives the mapping onto the master report lines, and fingerprints every file that arrives." },
+  { feed: 'vat_summary', name: 'VAT figures summary', freq: 'Quarterly',
+    why: 'The return as BTMS computes it, set against the figures rebuilt from the journal.' },
+  { feed: 'vat_return_filed', name: 'VAT return as filed', freq: 'Quarterly',
+    why: 'The return actually submitted, with its payment slip — what the computed figures are tested against.' },
+  { feed: 'payroll_cost_analysis', name: 'Payroll cost analysis', freq: 'Monthly',
+    why: 'Staff cost by department, period and year to date.' },
+  { feed: 'payroll_paysheet', name: 'Payroll paysheet listing', freq: 'Monthly',
+    why: 'The same month by employee — a check on the cost analysis.' },
+  { feed: 'stock_valuation', name: 'Stock valuation', freq: 'Monthly',
+    why: 'Valuation at the date it was run, against the stock account in the ledger.' },
+  { feed: 'sales_invoice_listing', name: 'Sales invoice listing', freq: 'Monthly',
+    why: 'Invoice detail behind the sales figure.' },
+  { feed: 'bank_statement', name: 'Bank statement (XML)', freq: 'Monthly',
+    why: 'camt.053 statement for the bank reconciliation.' },
+];
+
+/** [name, what it is for, frequency, last file, uploaded, covers to, present]. */
+export type FeedRow = [string, string, string, string, string, string, number];
+
+async function buildFeedTable(clientId: number): Promise<FeedRow[]> {
+  const { data, error } = await rep().from('feed_status')
+    .select('feed, last_file, uploaded_at, covers_to').eq('client_id', clientId);
+  // A feed table that cannot be read must not fall back to the template's
+  // hardcoded one — that is the very leak this exists to close. Every row
+  // reads as outstanding instead, which is wrong in the safe direction.
+  if (error) console.warn('feed_status:', error.message);
+
+  const held = new Map<string, { last_file: string | null; uploaded_at: string | null; covers_to: string | null }>();
+  for (const r of (data ?? []) as {
+    feed: string; last_file: string | null; uploaded_at: string | null; covers_to: string | null;
+  }[]) held.set(r.feed, r);
+
+  return FEED_ROWS.map((f): FeedRow => {
+    const got = held.get(f.feed);
+    // The template prints "uploaded" as text and measures its age from it, so
+    // it wants a plain local timestamp, not an ISO string with a zone.
+    const when = got?.uploaded_at
+      ? new Date(got.uploaded_at).toISOString().slice(0, 16).replace('T', ' ')
+      : '';
+    // lbl() reads YYYY-MM out of this; a date gets cut back to its month.
+    const covers = got?.covers_to ? String(got.covers_to).slice(0, 7) : '';
+    return [f.name, f.why, f.freq, got?.last_file ?? '', when, covers, got ? 1 : 0];
+  });
+}
+
+/**
  * Every offered client, by NAME only — which is all a sign-in screen needs.
  *
  * This is one query. buildAllClients is sixty-three, one of which reads 174.026
@@ -748,15 +864,14 @@ function emptyClient(name: string): ClientBlock {
     pl: 0, bs: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
     stmt: 0, trans: 0, mapping: 0, review: 0, vat: 0, stock: 0, payroll: 0,
     budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
-    // Data import is off as well, and that one is not a nicety. The template's
-    // FEEDS table is a hardcoded list of A&F's own file names — prototype
-    // scaffolding — so leaving the section on would show one client's ledger
-    // and chart of accounts, marked LOADED, under sixty-two other clients'
-    // names. The overriding rule is that this application must never mix up
-    // client data or client information, and a filename is client information.
-    // Company setup always renders, so an empty client still opens on
-    // something: its own name and the note below.
-    data: 0,
+    // Data import is ON, and shows the truth: eleven feeds, none of them
+    // loaded. That is the most useful screen a client with nothing can open on
+    // — it is the list of what still has to come out of BTMS. It was off for a
+    // while because the template's FEEDS is hardcoded to A&F's own file names,
+    // so the section showed one client's ledger and chart of accounts, marked
+    // LOADED, under sixty-two other clients' names. The rows are this client's
+    // own now, so there is nothing left to hide from.
+    data: 1,
   };
   // One month, not none. The template boots against ALL.order[0] before it
   // fills its own client dropdown, and boot reads M[0] and M[NM-1] to print the
@@ -771,6 +886,8 @@ function emptyClient(name: string): ClientBlock {
     months: [month], lines: [], pl: {}, bs: {}, bsOpen: {}, accounts: [],
     post: { ep: null, acc: [], jrn: [], rd: [], td: [], a: [], d: [], r: [], t: [], v: [], j: [] },
     exceptions: [], tb: [], vat: {}, vatq: [], stock: [], payroll: {},
+    // Every feed, none of them present — the same shape buildFeedTable returns.
+    feeds: FEED_ROWS.map((f): FeedRow => [f.name, f.why, f.freq, '', '', '', 0]),
     postings: 0,
     counts: { postings: 0, accounts: 0 },
     cfg: {
