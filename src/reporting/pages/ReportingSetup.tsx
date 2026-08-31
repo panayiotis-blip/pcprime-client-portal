@@ -174,7 +174,7 @@ export default function ReportingSetup() {
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '32px 20px 60px' }}>
-      <Link to="/reporting" style={{ fontSize: 12, color: '#64748b' }}>← Back to choosing a client</Link>
+      <Link to="/reporting" style={{ fontSize: 12, color: '#64748b' }}>← Back to the report</Link>
       <h1 style={{ fontSize: 22, margin: '10px 0 4px' }}>Reporting setup</h1>
       <p style={{ color: '#64748b', margin: '0 0 6px', fontSize: 13, maxWidth: 760 }}>
         Which clients this platform reports on, and the BTMS company each one's books are kept

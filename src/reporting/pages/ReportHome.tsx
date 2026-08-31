@@ -13,11 +13,13 @@
 // template opens straight away, and when a client is chosen the template asks
 // for that client and waits a few seconds instead of a few minutes.
 //
-// The loading bay — imports, mapping, the review list — lives behind "Manage
-// the data", where it belongs.
+// There is no loading bay beside it any more. Imports, mapping and the review
+// list are screens the template already has, written to the specification; the
+// copies that lived behind "Manage the data" were a second application a person
+// could get stuck in. Uploading happens on the template's own Data import
+// screen, and this file answers it.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 import { readCachedBlock, writeCachedBlock, forgetCachedBlock } from '../lib/reports/blockCache.ts';
 import { supabase } from '../../lib/supabase';
@@ -79,27 +81,6 @@ export default function ReportHome() {
     const onMessage = (e: MessageEvent) => {
       const d = e.data as { type?: string; key?: string; feed?: string } | null;
       if (!d) return;
-
-      // The template's Upload buttons used to raise an alert saying the wiring
-      // was still to come. It is not: the importer is a screen away. The button
-      // now opens it, on the client the frame is signed into, so the one screen
-      // a person goes to when they want to upload something is no longer a dead
-      // end.
-      if (d.type === 'pcp-open-import' && d.key) {
-        const want = Number(String(d.key).replace(/^c/, ''));
-        const c = listed.find((x) => x.id === want);
-        if (!c) return;
-        // Opened as a fresh page rather than by setting the session and routing
-        // in the same tick. Doing both at once raced: the router matched the
-        // no-client tree before the session landed, fell through to this
-        // screen, and rebuilt the template — so pressing Upload put you back on
-        // the sign-in page, round and round.
-        //
-        // A new tab also keeps the report you have just waited for. The
-        // importer opens beside it, not on top of it.
-        window.open(`/reporting/manage?client=${c.id}`, '_blank', 'noopener');
-        return;
-      }
 
       if (d.type !== 'pcp-need-client' || !d.key) return;
       const key = String(d.key);
@@ -167,9 +148,8 @@ export default function ReportHome() {
     return (
       <div style={{ padding: 32, maxWidth: 640 }}>
         <div className="alert alert-error"><b>The report could not be built.</b><br />{error}</div>
-        <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+        <div style={{ marginTop: 12 }}>
           <button className="btn btn-primary btn-sm" onClick={() => void build()}>Try again</button>
-          <Link className="btn btn-secondary btn-sm" to="/reporting/manage">Manage the data</Link>
         </div>
       </div>
     );
@@ -198,7 +178,6 @@ export default function ReportHome() {
       }}>
         <span>{listed.length} clients · built at {at}</span>
         {reading && <span style={{ color: '#334155' }}>{reading}…</span>}
-        <Link to="/reporting/manage">Manage the data</Link>
         <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', padding: '1px 8px' }}
           disabled={!!busy} onClick={() => void build(true)}>
           {busy ? 'Rebuilding…' : 'Rebuild'}
