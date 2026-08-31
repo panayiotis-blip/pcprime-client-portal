@@ -120,6 +120,37 @@ export async function commitTrialBalanceImport(
     throw new Error('The parse does not agree with the file\'s own Report Total; it will not be committed.');
   }
 
+  // A committed import already holding this checksum will make the status flip
+  // below fail on imports_checksum_idx, which is unique on
+  // (client_id, feed, checksum) where status = 'committed'. That is worth
+  // settling BEFORE anything is written, because the old order — delete the
+  // period, write, flip, and delete the new rows if the flip failed — lost
+  // both copies. A&F's January 2026 trial balance went that way: import 11
+  // stands committed with eighty rows that no longer exist.
+  onProgress('Checking this file has not been loaded before');
+  const { data: sameFile } = await rep().from('imports')
+    .select('id, original_filename, period_to')
+    .eq('client_id', clientId).eq('feed', 'trial_balance')
+    .eq('checksum', checksum).eq('status', 'committed');
+
+  for (const prior of (sameFile ?? []) as { id: number; original_filename: string; period_to: string }[]) {
+    const { count } = await rep().from('trial_balance')
+      .select('id', { count: 'exact', head: true }).eq('import_id', prior.id);
+    if ((count ?? 0) > 0) {
+      throw new Error(
+        `This exact file is already loaded, as ${String(prior.period_to).slice(0, 7)} ` +
+        `(${prior.original_filename}). Nothing has been changed.`,
+      );
+    }
+    // Committed, but its rows are gone — a ghost from the fault above. It is
+    // withdrawn rather than rejected: it was a good import once, and what
+    // happened to it is not the same as being refused.
+    await rep().from('imports').update({
+      status: 'withdrawn',
+      notes: 'Withdrawn on re-import: recorded as committed but its balances were no longer held.',
+    }).eq('id', prior.id);
+  }
+
   const ext = file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'xls';
   const path = `${clientId}/trial-balance/${checksum}.${ext}`;
   onProgress('Storing the file');
@@ -151,19 +182,19 @@ export async function commitTrialBalanceImport(
   try {
     // A trial balance is a position at a date. Committing one replaces that
     // same period, in the same shape, and touches no other period.
-    onProgress('Replacing this period');
+    //
+    // The replacement is written BEFORE the old one is removed, and the old one
+    // is removed only after this import has been accepted. Every step that can
+    // fail now happens while the previous balances are still there, so a
+    // failure costs an incomplete import and never the data that was already
+    // held. The old order deleted first and destroyed both copies when the
+    // commit was refused.
     const { count: had } = await rep().from('trial_balance')
       .select('id', { count: 'exact', head: true })
       .eq('client_id', clientId)
       .eq('period_month', period.periodMonth)
       .eq('is_annual', period.isAnnual)
       .eq('detailed', parse.detailed);
-    const { error: delErr } = await rep().from('trial_balance').delete()
-      .eq('client_id', clientId)
-      .eq('period_month', period.periodMonth)
-      .eq('is_annual', period.isAnnual)
-      .eq('detailed', parse.detailed);
-    if (delErr) throw new Error(`The previous trial balance could not be replaced: ${delErr.message}`);
 
     onProgress('Writing the balances', 0, parse.rows.length);
     for (let i = 0; i < parse.rows.length; i += CHUNK) {
@@ -191,15 +222,21 @@ export async function commitTrialBalanceImport(
       .eq('id', importId);
     if (cErr) throw new Error(`The import could not be committed: ${cErr.message}`);
 
-    await rep().from('feed_status').upsert({
-      client_id: clientId,
-      feed: period.isAnnual ? 'trial_balance_annual' : 'trial_balance_monthly',
-      last_import: importId,
-      last_file: file.name,
-      uploaded_at: new Date().toISOString(),
-      uploaded_by: me.user?.id ?? null,
-      covers_to: period.periodMonth,
-    }, { onConflict: 'client_id,feed' });
+    // Accepted. Only now does the previous copy of this period go, and only
+    // the previous copy — this import's own rows are left alone.
+    onProgress('Removing the previous copy of this period');
+    const { error: delErr } = await rep().from('trial_balance').delete()
+      .eq('client_id', clientId)
+      .eq('period_month', period.periodMonth)
+      .eq('is_annual', period.isAnnual)
+      .eq('detailed', parse.detailed)
+      .neq('import_id', importId);
+    // Not fatal, and deliberately not thrown: the new balances are committed
+    // and correct. Two copies of one period is a mess to clear up, which is a
+    // far better place to be than none.
+    if (delErr) console.warn('The previous trial balance was not removed:', delErr.message);
+
+    await writeTrialBalanceFeedStatus(clientId, period.isAnnual);
 
     return {
       importId,
@@ -216,4 +253,48 @@ export async function commitTrialBalanceImport(
       .eq('id', importId);
     throw e;
   }
+}
+
+/**
+ * The trial balance feed row, from what is actually held.
+ *
+ * Written from the file it had just parsed, this row said whatever the last
+ * upload happened to be — so loading January after July left the screen
+ * claiming the trial balance covered January, while a July one sat behind it.
+ * That is migration 194's fault in a third place, and 208's in a second: a
+ * wrong statement about coverage on the screen used to decide what to load
+ * next, which nobody checks because it reads like a fact.
+ *
+ * So it is derived: the latest period held of this kind, and the file that
+ * supplied it. It cannot drift from what is there, whatever order the months
+ * arrive in.
+ */
+async function writeTrialBalanceFeedStatus(clientId: number, isAnnual: boolean): Promise<void> {
+  const feed = isAnnual ? 'trial_balance_annual' : 'trial_balance_monthly';
+
+  const { data: latest } = await rep().from('trial_balance')
+    .select('period_month, import_id')
+    .eq('client_id', clientId).eq('is_annual', isAnnual)
+    .order('period_month', { ascending: false }).limit(1);
+  const top = (latest ?? [])[0] as { period_month: string; import_id: number } | undefined;
+  if (!top) return;
+
+  const { data: src } = await rep().from('imports')
+    .select('id, original_filename, committed_at, uploaded_at, uploaded_by')
+    .eq('id', top.import_id).maybeSingle();
+  const behind = src as {
+    id: number; original_filename: string;
+    committed_at: string | null; uploaded_at: string | null; uploaded_by: string | null;
+  } | null;
+  if (!behind) return;
+
+  await rep().from('feed_status').upsert({
+    client_id: clientId,
+    feed,
+    last_import: behind.id,
+    last_file: behind.original_filename,
+    uploaded_at: behind.committed_at ?? behind.uploaded_at ?? new Date().toISOString(),
+    uploaded_by: behind.uploaded_by,
+    covers_to: top.period_month,
+  }, { onConflict: 'client_id,feed' });
 }
