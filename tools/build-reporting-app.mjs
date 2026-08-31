@@ -125,6 +125,51 @@ if (today) {
     script.slice(b + shut.length);
 }
 
+// ---- patch 4: a ledger with no ageing says so -------------------------
+//
+// renderLedgers opens with A.deb.map(...) on D.agetot, and agetot is {} for
+// every client — the debtor and creditor ageing is not something the builder
+// produces yet. So Debtors & creditors threw
+//
+//   TypeError: Cannot read properties of undefined (reading 'map')
+//
+// on every client, A&F included, and the screen died instead of saying that
+// nothing is loaded. The Overview already reads this honestly: its two tiles
+// print an em dash against "no ageing loaded". This makes the ledgers screen
+// agree with them rather than break.
+//
+// The table below is left to drawLedger, which is already safe on empty arrays
+// and prints the ledger with its headings and no rows; drawLdHist already says
+// "No history rebuilt for this ledger". Only the tiles, the two bar charts and
+// the note needed guarding.
+
+{
+  const head = 'function renderLedgers(){\n  const A=D.agetot;\n';
+  if (!script.includes(head)) throw new Error('renderLedgers is not where it was.');
+
+  const tiles = '<div class="tile" style="grid-column:1/-1">'
+    + '<div class="k">Debtors and creditors</div><div class="v">—</div>'
+    + '<div class="d">No ageing has been loaded for this client, so there is nothing to age.</div>'
+    + '</div>';
+  const note = '<b>What this says</b>Nothing yet. The debtor and creditor ageing is not among '
+    + 'the files loaded for this client, so this screen has nothing to show. That is not an error.';
+
+  const guard = [
+    '  if(!A||!Array.isArray(A.deb)||!Array.isArray(A.cre)){',
+    "    var ldT=document.getElementById('ldTiles');",
+    '    if(ldT)ldT.innerHTML=' + JSON.stringify(tiles) + ';',
+    "    ['chDeb','chCre'].forEach(function(id){var e=document.getElementById(id);if(e)e.innerHTML='';});",
+    "    var ldN=document.getElementById('ldNote');",
+    '    if(ldN)ldN.innerHTML=' + JSON.stringify(note) + ';',
+    '    drawLedger();',
+    '    return;',
+    '  }',
+    '',
+  ].join('\n');
+
+  script = script.replace(head, head + guard);
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

@@ -546,77 +546,6 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
 }
 
 /**
- * Every client that has data, in one payload — so the TEMPLATE does the
- * choosing.
- *
- * The template opens on its own sign-in with a client dropdown, and that is the
- * design: §4 says its layout and wording are the specification, and a chooser
- * of mine in front of it is a second front door to the same building. This
- * builds the whole thing so the template's own screen has something to choose
- * from.
- *
- * Only clients with postings are included. A client with nothing loaded would
- * be a name in a dropdown leading to an empty report, which is worse than not
- * being offered.
- *
- * The cost is honest and worth stating: each client carries its own postings,
- * and A&F alone is 7MB. This is right while a handful of clients are loaded and
- * will not be right for sixty — at which point the template should ask for one
- * client's data when it is chosen rather than carry all of it at once.
- */
-export async function buildAllClients(
-  onProgress: (step: string, done?: number, total?: number) => void = () => {},
-): Promise<{ json: string; clients: { id: number; name: string; postings: number }[] }> {
-  onProgress('Finding the clients with data');
-  const { data, error } = await rep().rpc('clients_for_reporting');
-  if (error) throw new Error(`clients_for_reporting: ${error.message}`);
-  const offered = (data ?? []) as
-    { client_id: number; client_name: string; data_source: string; postings: number }[];
-  if (!offered.length) {
-    throw new Error(
-      'No client is marked as kept on BTMS. Set that on Reporting setup — a client is offered ' +
-      'here because somebody said its books are on BTMS, not because a file happens to have been imported.',
-    );
-  }
-
-  const clients: Record<string, ClientBlock> = {};
-  const order: string[] = [];
-  const listed: { id: number; name: string; postings: number }[] = [];
-  let generated = '';
-
-  for (let i = 0; i < offered.length; i++) {
-    const c = offered[i];
-    const key = `c${c.client_id}`;
-    order.push(key);
-
-    // A client is offered because somebody said its books are on BTMS, not
-    // because a file has been imported — the list is how you see what is still
-    // to do. One with nothing loaded gets an empty block with every section
-    // off, rather than being left out or breaking the build.
-    if (!c.postings) {
-      clients[key] = emptyClient(c.client_name);
-      listed.push({ id: c.client_id, name: c.client_name, postings: 0 });
-      continue;
-    }
-
-    onProgress(`Building ${c.client_name}`, i, offered.length);
-    const built = await buildClientBlock(c.client_id, (step, done, total) =>
-      onProgress(`${c.client_name} — ${step}`, done, total));
-    clients[key] = built.block;
-    listed.push({ id: c.client_id, name: c.client_name, postings: built.postings });
-    generated = built.generated;
-  }
-  if (!generated) {
-    generated = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
-  return {
-    json: JSON.stringify({ generated, clients, order }),
-    clients: listed,
-  };
-}
-
-/**
  * The Data import table, from what this client has actually loaded.
  *
  * The template ships a hardcoded FEEDS list — A&F's own file names, baked into
@@ -690,10 +619,15 @@ async function buildFeedTable(clientId: number): Promise<FeedRow[]> {
 /**
  * Every offered client, by NAME only — which is all a sign-in screen needs.
  *
- * This is one query. buildAllClients is sixty-three, one of which reads 174.026
+ * This is one query, and it is the only one the sign-in screen waits for.
+ * Building every client instead was sixty-three, one of which reads 174.026
  * postings, and putting that in front of the sign-in made the app look broken:
  * a load screen, a long think, and no dropdown. The figures are fetched when a
- * client is actually chosen — see withLazyLoader.
+ * client is actually chosen — ReportHome answers the template’s pcp-need-client
+ * with buildClientBlock, and the empty shells here are what it fills in.
+ *
+ * So a payload of empty clients is the DESIGN, not a fault. It was read as one:
+ * STATUS.md blamed buildAllClients, which by then had no callers at all.
  */
 export async function buildClientList(): Promise<{
   json: string;

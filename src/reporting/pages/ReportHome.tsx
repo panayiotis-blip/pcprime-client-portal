@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
-import { readCachedBlock, writeCachedBlock } from '../lib/reports/blockCache.ts';
+import { readCachedBlock, writeCachedBlock, forgetCachedBlock } from '../lib/reports/blockCache.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -37,9 +37,21 @@ export default function ReportHome() {
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
 
-  const build = useCallback(async () => {
+  /**
+   * Rebuild means rebuild. The in-memory map dies with the tab anyway; what
+   * outlives it is the block kept in IndexedDB against the data stamp, and
+   * clearing that was the one thing this button did not do — so a person who
+   * pressed Rebuild because the report looked wrong got the same stored copy
+   * back, and nothing they could press would say otherwise.
+   *
+   * Only on the button. The opening build must NOT forget: that is every page
+   * load, and throwing the cache away there is the ninety seconds this was
+   * built to stop paying.
+   */
+  const build = useCallback(async (forget = false) => {
     setBusy('Reading the client list'); setError(null);
     try {
+      if (forget) await forgetCachedBlock();
       const list = await buildClientList();
       setBusy('Opening');
       const blob = await buildTemplateHtml(list.json);
@@ -188,7 +200,7 @@ export default function ReportHome() {
         {reading && <span style={{ color: '#334155' }}>{reading}…</span>}
         <Link to="/reporting/manage">Manage the data</Link>
         <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', padding: '1px 8px' }}
-          disabled={!!busy} onClick={() => void build()}>
+          disabled={!!busy} onClick={() => void build(true)}>
           {busy ? 'Rebuilding…' : 'Rebuild'}
         </button>
       </div>
