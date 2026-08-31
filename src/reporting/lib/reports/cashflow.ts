@@ -78,8 +78,15 @@ export type CashInput = {
   yearEndMonth: number;
 };
 
-/** The financial years to show, latest last. At most three, none of them empty. */
-function periods(months: string[], yearEndMonth: number): { from: number; to: number; label: string }[] {
+export type FinYear = { year: number; from: number; to: number; label: string; complete: boolean; months: number };
+
+/**
+ * The financial years a client holds, latest last. At most three, none empty.
+ *
+ * Exported because the cash flow and the audit both walk by financial year, and
+ * two of them working it out separately is two of them able to disagree.
+ */
+export function financialYears(months: string[], yearEndMonth: number, take = 3): FinYear[] {
   if (!months.length) return [];
   const endOf = (m: string) => {
     // The financial year a month falls in, named by the calendar year it ends.
@@ -91,7 +98,7 @@ function periods(months: string[], yearEndMonth: number): { from: number; to: nu
     const y = endOf(m);
     if (!years.includes(y)) years.push(y);
   }
-  const wanted = years.slice(-3);
+  const wanted = years.slice(-take);
   return wanted.map((y) => {
     let from = -1, to = -1;
     for (let i = 0; i < months.length; i++) {
@@ -103,7 +110,7 @@ function periods(months: string[], yearEndMonth: number): { from: number; to: nu
     const lastMonth = Number(months[to].slice(5, 7));
     const complete = lastMonth === yearEndMonth;
     const label = complete ? String(y) : `${y} to ${MONTH_SHORT[lastMonth - 1]}`;
-    return { from, to, label };
+    return { year: y, from, to, label, complete, months: to - from + 1 };
   });
 }
 
@@ -139,7 +146,7 @@ export function buildCashflow(input: CashInput): CashPeriod[] {
     (INCOME_SECTIONS.has(s.sec) ? pbtIds.income : pbtIds.cost).push(l.id);
   }
 
-  return periods(months, yearEndMonth).map(({ from, to, label }) => {
+  return financialYears(months, yearEndMonth).map(({ from, to, label }) => {
     const pbt = plSum(pbtIds.income, from, to) - plSum(pbtIds.cost, from, to);
     const dep = plSum(DEPRECIATION, from, to);
 

@@ -231,6 +231,148 @@ if (today) {
   ].join('\n'));
 }
 
+// ---- patch 7: the monthly audit reads this client's years -------------
+//
+// This is the one screen the prototype wrote against A&F's own calendar:
+//
+//   const R=AU.res, ys=["2024","2025","2026"];
+//   const ann=R["2026"][k]/7*12;
+//   ... eur(AU.res["2025"].rev) ... eur(AU.ga25)
+//
+// Three years named as literals, an annualisation over exactly seven months,
+// and a materiality note computed on FY2025. A client whose books start in 2023
+// would have found the screen reading a year it does not have — R["2024"] is
+// undefined and the screen dies — or, worse, quietly labelling its columns with
+// somebody else's years.
+//
+// So the years come from the data: AU.years, AU.partial (months held in the
+// last of them) and AU.basis (the year the materiality is computed on, which is
+// the last COMPLETE one — a threshold set on part of a year's trading is too
+// low, and every posting looks material).
+
+{
+  const swaps = [
+    // The three columns, and the label on the part year.
+    [
+      'const R=AU.res, ys=["2024","2025","2026"];',
+      'const R=AU.res, ys=AU.years;',
+    ],
+    [
+      '${y}${y==="2026"?" (7m)":""}',
+      '${y}${(y===ys[ys.length-1]&&AU.partial<12)?" ("+AU.partial+"m)":""}',
+    ],
+    [
+      '<th class="num">2025 on 2024</th><th class="num">2026 annualised</th>',
+      '<th class="num">${ys[1]} on ${ys[0]}</th><th class="num">${ys[ys.length-1]} annualised</th>',
+    ],
+    // Declared alongside v, so there is no `const` in front of it.
+    [
+      'ann=R["2026"][k]/7*12;',
+      'ann=R[ys[ys.length-1]][k]/(AU.partial||12)*12;',
+    ],
+    // The gross margin movement, on the same two years as the column above it.
+    [
+      '${(R["2025"].gpp-R["2024"].gpp>0?"+":"")+(R["2025"].gpp-R["2024"].gpp).toFixed(1)} pts',
+      '${(R[ys[1]].gpp-R[ys[0]].gpp>0?"+":"")+(R[ys[1]].gpp-R[ys[0]].gpp).toFixed(1)} pts',
+    ],
+    // The ratio tile, on the latest year against the one before it.
+    [
+      '["Margin movement",(R["2026"].gpp-R["2025"].gpp>0?"+":"")+(R["2026"].gpp-R["2025"].gpp).toFixed(1)+" pts","2026 to date against FY2025"]',
+      '["Margin movement",(R[ys[ys.length-1]].gpp-R[ys[ys.length-2]].gpp>0?"+":"")+(R[ys[ys.length-1]].gpp-R[ys[ys.length-2]].gpp).toFixed(1)+" pts",ys[ys.length-1]+" against FY"+ys[ys.length-2]]',
+    ],
+    // The materiality note, on the year it was actually computed on.
+    [
+      '"Computed on FY2025: revenue "+eur(AU.res["2025"].rev)+", profit before tax "+eur(AU.res["2025"].pbt)+", gross assets "+eur(AU.ga25)+". Change the benchmark to see the effect on the sample."',
+      '"Computed on FY"+AU.basis+": revenue "+eur(AU.res[AU.basis].rev)+", profit before tax "+eur(AU.res[AU.basis].pbt)+", gross assets "+eur(AU.ga)+". Change the benchmark to see the effect on the sample."',
+    ],
+  ];
+  for (const [from, to] of swaps) {
+    if (!script.includes(from)) {
+      throw new Error(`the audit screen has changed shape: ${from.slice(0, 48)}…`);
+    }
+    script = script.split(from).join(to);
+  }
+
+  // The journals note ends on a claim about A&F's own books — that the manual
+  // journals are "substantially all quarterly VAT transfers". True of that
+  // client and asserted about every other. The counted facts before it stay;
+  // the claim goes.
+  const claim = 'Read by value they are';
+  const rest = 'The largest are listed below';
+  const a = script.indexOf(claim);
+  const b = script.indexOf(rest, a);
+  if (a < 0 || b < 0) throw new Error('the journals note is not where it was.');
+  script = script.slice(0, a) + script.slice(b);
+}
+
+// ---- patch 8: a sign-off is not browser storage -----------------------
+//
+// Two things are signed in this template: an exception on Needs attention, and
+// a step on the monthly audit's working-paper programme. Both were kept in
+// localStorage, and the working papers under one key for every client —
+//
+//   const WPKEY="pcp-wp-af";
+//
+// the same fault the budget had. Sign a step off against one client and it read
+// signed against every other.
+//
+// A sign-off is somebody putting their name to work having been done. It cannot
+// live in one person's browser: the reviewer is not the preparer, and neither of
+// them is on the machine the other used. Both now seed from the payload and post
+// every change to the host, which writes reporting.exception_signoff. Local
+// storage stays as the immediate write so the screen still responds at once.
+
+{
+  const key = 'const WPKEY="pcp-wp-af";';
+  if (!script.includes(key)) throw new Error('the working-paper key is not where it was.');
+  script = script.replace(key, 'const WPKEY=()=>"pcp-wp-"+CID;');
+
+  const load = 'function wpLoad(){try{return JSON.parse(localStorage.getItem(WPKEY)||"{}")}catch(e){return{}}}';
+  if (!script.includes(load)) throw new Error('wpLoad is not where it was.');
+  script = script.replace(load, [
+    'function wpLoad(){',
+    '  try{var raw=localStorage.getItem(WPKEY());if(raw)return JSON.parse(raw);}catch(e){}',
+    '  /* Nothing on this machine: what the database holds is what was signed. */',
+    '  var seed=(D.wp&&Object.keys(D.wp).length)?JSON.parse(JSON.stringify(D.wp)):{};',
+    '  try{localStorage.setItem(WPKEY(),JSON.stringify(seed))}catch(e){}',
+    '  return seed;',
+    '}',
+  ].join('\n'));
+
+  const save = 'function wpSave(o){try{localStorage.setItem(WPKEY,JSON.stringify(o))}catch(e){}}';
+  if (!script.includes(save)) throw new Error('wpSave is not where it was.');
+  script = script.replace(save, [
+    'function wpSave(o){',
+    '  try{localStorage.setItem(WPKEY(),JSON.stringify(o))}catch(e){}',
+    '  if(parent!==window){',
+    '    try{parent.postMessage({type:"pcp-wp-save",key:CID,wp:o},"*")}catch(e){}',
+    '  }',
+    '}',
+  ].join('\n'));
+
+  const rload = 'function rload(){try{return JSON.parse(localStorage.getItem(RKEY())||"{}")}catch(e){return{}}}';
+  if (!script.includes(rload)) throw new Error('rload is not where it was.');
+  script = script.replace(rload, [
+    'function rload(){',
+    '  try{var raw=localStorage.getItem(RKEY());if(raw)return JSON.parse(raw);}catch(e){}',
+    '  var seed=(D.review&&Object.keys(D.review).length)?JSON.parse(JSON.stringify(D.review)):{};',
+    '  try{localStorage.setItem(RKEY(),JSON.stringify(seed))}catch(e){}',
+    '  return seed;',
+    '}',
+  ].join('\n'));
+
+  const rsave = 'function rsave(o){try{localStorage.setItem(RKEY(),JSON.stringify(o))}catch(e){}}';
+  if (!script.includes(rsave)) throw new Error('rsave is not where it was.');
+  script = script.replace(rsave, [
+    'function rsave(o){',
+    '  try{localStorage.setItem(RKEY(),JSON.stringify(o))}catch(e){}',
+    '  if(parent!==window){',
+    '    try{parent.postMessage({type:"pcp-review-save",key:CID,review:o},"*")}catch(e){}',
+    '  }',
+    '}',
+  ].join('\n'));
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

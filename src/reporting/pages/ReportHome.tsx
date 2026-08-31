@@ -23,6 +23,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 import { readCachedBlock, writeCachedBlock, forgetCachedBlock } from '../lib/reports/blockCache.ts';
 import { saveBudget, type BudgetMessage } from '../lib/reports/budgetStore.ts';
+import {
+  saveReviewSignoffs, saveWorkingPapers,
+  type ReviewMap, type WorkingPapers,
+} from '../lib/reports/signoffStore.ts';
 import UploadDialog from '../upload/UploadDialog.tsx';
 import { feedByName, type Feed } from '../upload/feeds.ts';
 import { supabase } from '../../lib/supabase';
@@ -87,7 +91,8 @@ export default function ReportHome() {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const d = e.data as
-        ({ type?: string; key?: string; feed?: string } & Partial<BudgetMessage>) | null;
+        ({ type?: string; key?: string; feed?: string; wp?: WorkingPapers; review?: ReviewMap }
+          & Partial<BudgetMessage>) | null;
       if (!d) return;
 
       // The budget is keyed by hand and never generated, so every figure in it
@@ -104,6 +109,25 @@ export default function ReportHome() {
 
       // “I want to be able to upload data” — on the screen that already says
       // what is loaded, without leaving the report.
+      // A sign-off is somebody putting their name to work having been done:
+      // an exception cleared with a reason, or a working paper prepared and
+      // reviewed. The reviewer is not the preparer and is not on the same
+      // machine, so neither can stay in one browser.
+      if (d.type === 'pcp-review-save' && d.key) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        void saveReviewSignoffs(cid, d.review ?? {})
+          .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        return;
+      }
+      if (d.type === 'pcp-wp-save' && d.key) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        void saveWorkingPapers(cid, d.wp ?? {})
+          .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        return;
+      }
+
       if (d.type === 'pcp-upload' && d.key && d.feed) {
         const f = feedByName(String(d.feed));
         const cid = Number(String(d.key).replace(/^c/, ''));

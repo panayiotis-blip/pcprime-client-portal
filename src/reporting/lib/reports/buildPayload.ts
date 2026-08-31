@@ -30,6 +30,8 @@ import { supabase } from '../../../lib/supabase';
 import { allRows } from '../import/pages.ts';
 import { buildAgeing } from './ageing.ts';
 import { buildCashflow } from './cashflow.ts';
+import { buildAudit } from './audit.ts';
+import { loadSignoffs } from './signoffStore.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -461,6 +463,33 @@ export async function buildClientBlock(
     note: e.detail ?? '',
   }));
 
+
+  // ---- the monthly audit ------------------------------------------------
+  // Materiality, the analytical review, what to vouch, and the month’s checks.
+  //
+  // The key matters here. The template makes its own key for an exception --
+  // check|month|account|reference|amount -- and that is what a sign-off is
+  // stored under, so the same key has to be built HERE for the audit to know
+  // which points are already cleared. Using reporting.exceptions.ex_key would
+  // be the database’s key for the same row and would match nothing the
+  // template ever wrote.
+  onProgress('Reading the sign-offs');
+  const signoffs = await loadSignoffs(clientId);
+  const auditExceptions = exceptions.map((e) => ({
+    check_name: e.check,
+    sev: e.sev,
+    amount: e.amt,
+    ex_key: [e.check, e.month, e.acct, e.ref, e.amt].join('|'),
+  }));
+
+  onProgress('Building the audit');
+  const audit = buildAudit({
+    months, pl, bs, bsOpen, lines,
+    yearEndMonth: settings?.year_end_month ?? 12,
+    post, lineFor,
+    exceptions: auditExceptions,
+    signedKeys: new Set(Object.keys(signoffs.review)),
+  });
   const tbByPeriod = new Map<string, unknown[]>();
   for (const r of tbRows) {
     const k = monthKey(r.period_month) + (r.is_annual ? "|Y" : "");
@@ -498,7 +527,8 @@ export async function buildClientBlock(
     payroll: Object.keys(payroll).length ? 1 : 0,
     cash: cashflow.length ? 1 : 0,
     budget: 1,
-    cashmove: 0, projects: 0, audit: 0,
+    audit: audit && audit.years.length >= 2 ? 1 : 0,
+    cashmove: 0, projects: 0,
   };
 
   onProgress('Reading what has been loaded');
@@ -528,7 +558,11 @@ export async function buildClientBlock(
         deb: ageing.deb, cre: ageing.cre,
         agetot: ageing.agetot, ageHist: ageing.ageHist, ageFlags: ageing.ageFlags,
         cashflow, cashmove: {}, cashjrn: {},
-        budget, audit: {}, untagged: [], projects: [],
+        budget,
+        audit: audit ?? {},
+        // What has been signed, in the two shapes the template reads.
+        wp: signoffs.wp, review: signoffs.review,
+        untagged: [], projects: [],
       },
     },
     order: ['c'],
@@ -769,6 +803,6 @@ function emptyClient(name: string): ClientBlock {
     },
     vatFiled: [], deb: [], cre: [],
     agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
-    budget: {}, audit: {}, untagged: [], projects: [],
+    budget: {}, audit: {}, wp: {}, review: {}, untagged: [], projects: [],
   };
 }
