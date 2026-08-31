@@ -20,6 +20,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useReportingSession } from '../session';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
+import { readCachedBlock, writeCachedBlock } from '../lib/reports/blockCache.ts';
+import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
 let cached: { url: string; at: string; clients: { id: number; name: string; postings: number }[] } | null = null;
@@ -106,6 +108,24 @@ export default function ReportHome() {
       void (async () => {
         setReading(who?.name ?? key);
         try {
+          // Is what we kept last time still current? 13ms to find out, against
+          // roughly ninety seconds to rebuild. The stamp moves when anything is
+          // imported or the mapping is changed, and not otherwise — so a second
+          // sign-in on unchanged data reads nothing and rebuilds nothing.
+          let version: string | null = null;
+          const { data: v, error: vErr } = await supabase.schema('reporting')
+            .rpc('client_data_version', { p_client: id });
+          if (!vErr && typeof v === 'string') {
+            version = v;
+            const kept = await readCachedBlock(id, version);
+            if (kept) {
+              blocks.set(key, kept);
+              reply({ block: kept });
+              setReading(null);
+              return;
+            }
+          }
+
           const built = await buildClientBlock(id, (step, done, total) => {
             const far = done !== undefined && total
               ? ` ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`
@@ -116,6 +136,9 @@ export default function ReportHome() {
           });
           blocks.set(key, built.block);
           reply({ block: built.block });
+          // Kept against the stamp it was built from, so the next tab — and the
+          // next reload — costs the stamp and nothing else.
+          if (version) void writeCachedBlock(id, version, built.block);
         } catch (err) {
           reply({ error: err instanceof Error ? err.message : String(err) });
         } finally { setReading(null); }

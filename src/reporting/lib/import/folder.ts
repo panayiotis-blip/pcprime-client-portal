@@ -46,9 +46,16 @@ export function folderPickingSupported(): boolean {
 
 // ---- remembering the folder ------------------------------------------
 
+/**
+ * Version 2, and it must stay in step with reports/blockCache.ts, which shares
+ * this database. Opening an IndexedDB at a LOWER version than it already has
+ * throws VersionError — so if the block cache had gone to 2 while this stayed
+ * at 1, linking a folder would have started failing the moment somebody signed
+ * into a report. Both open at 2 and each creates only the store it owns.
+ */
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
+    const req = indexedDB.open(DB, 2);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
     };
