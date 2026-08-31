@@ -289,6 +289,24 @@ export async function buildClientBlock(
     yearEndMonth: settings?.year_end_month ?? 12,
   });
 
+  // ---- the budget -------------------------------------------------------
+  // Keyed by hand after a discussion with the client and never generated, so
+  // this only ever reads what somebody typed. The template keeps it as
+  // BUD[lineId][monthIndex]; the table keeps it as a year and a month, which
+  // is what survives a client gaining or losing months.
+  onProgress('Reading the budget');
+  const budgetRows = await allRows<{ fin_year: number; line_id: string; month: number; amount: number }>(
+    (f, t) => rep().from('budgets').select('fin_year, line_id, month, amount')
+      .eq('client_id', clientId).range(f, t));
+  const budget: Record<string, Record<number, number>> = {};
+  for (const b of budgetRows) {
+    const key = `${b.fin_year}-${String(b.month).padStart(2, '0')}`;
+    const mi = monthIndex.get(key);
+    if (mi === undefined) continue;          // a month this client does not hold
+    if (!budget[b.line_id]) budget[b.line_id] = {};
+    budget[b.line_id][mi] = Number(b.amount);
+  }
+
   // ---- VAT ------------------------------------------------------------
   // No feed of its own: every posting carries its code, rate and amount, and
   // §6.3 says the ledger is what a return is compared against. Migration 201
@@ -479,7 +497,8 @@ export async function buildClientBlock(
     stock: stock.length ? 1 : 0,
     payroll: Object.keys(payroll).length ? 1 : 0,
     cash: cashflow.length ? 1 : 0,
-    budget: 0, cashmove: 0, projects: 0, audit: 0,
+    budget: 1,
+    cashmove: 0, projects: 0, audit: 0,
   };
 
   onProgress('Reading what has been loaded');
@@ -509,7 +528,7 @@ export async function buildClientBlock(
         deb: ageing.deb, cre: ageing.cre,
         agetot: ageing.agetot, ageHist: ageing.ageHist, ageFlags: ageing.ageFlags,
         cashflow, cashmove: {}, cashjrn: {},
-        budget: {}, audit: {}, untagged: [], projects: [],
+        budget, audit: {}, untagged: [], projects: [],
       },
     },
     order: ['c'],

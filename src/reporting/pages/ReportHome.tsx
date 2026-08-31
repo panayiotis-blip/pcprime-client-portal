@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 import { readCachedBlock, writeCachedBlock, forgetCachedBlock } from '../lib/reports/blockCache.ts';
+import { saveBudget, type BudgetMessage } from '../lib/reports/budgetStore.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -79,8 +80,21 @@ export default function ReportHome() {
   // the data never leaves the page either way.
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; key?: string; feed?: string } | null;
+      const d = e.data as
+        ({ type?: string; key?: string; feed?: string } & Partial<BudgetMessage>) | null;
       if (!d) return;
+
+      // The budget is keyed by hand and never generated, so every figure in it
+      // is somebody’s decision. The template writes local storage as it is
+      // typed and tells us; this is what makes it the practice’s record
+      // rather than one machine’s.
+      if (d.type === 'pcp-budget-save' && d.key) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        void saveBudget(cid, { months: d.months ?? [], budget: d.budget ?? {} })
+          .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        return;
+      }
 
       if (d.type !== 'pcp-need-client' || !d.key) return;
       const key = String(d.key);

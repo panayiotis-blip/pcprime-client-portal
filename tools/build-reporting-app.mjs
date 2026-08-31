@@ -184,6 +184,56 @@ if (today) {
   script = script.split(third).join('C[C.length-1].ops');
 }
 
+// ---- patch 6: the budget belongs to the client, and to the database ----
+//
+// BUILD.md §4 names the template a prototype in exactly two respects: its data
+// is embedded JSON, and its per-user state is in browser storage. The budget is
+// the second of those, and it is worse than it looks:
+//
+//   const BKEY="pcp-budget-af";
+//
+// One key, "af", for every client. Key a budget against one client on this
+// machine and it is the budget every other client shows — one client's figures
+// under another client's name, which is the one thing this application must
+// never do. It is also invisible to anyone else in the practice, and gone with
+// the browser profile.
+//
+// So: the key carries the client, the figures are seeded from the payload, and
+// saving posts them to the host, which writes reporting.budgets. Local storage
+// stays as the immediate write, so typing still feels instant and a save that
+// fails does not lose what was typed.
+
+{
+  const key = 'const BKEY="pcp-budget-af";';
+  if (!script.includes(key)) throw new Error('the budget storage key is not where it was.');
+  script = script.replace(key, 'const BKEY="pcp-budget-"+CID;');
+
+  const seed = 'let BUD=(()=>{try{return JSON.parse(localStorage.getItem(BKEY)||"{}")}catch(e){return{}}})();';
+  if (!script.includes(seed)) throw new Error('the budget initialiser is not where it was.');
+  script = script.replace(seed, [
+    '/* What the database holds is the budget; local storage is only the copy in',
+    '   front of it, and is trusted only when the database has nothing yet. */',
+    'let BUD=(()=>{',
+    '  var held=(D.budget&&Object.keys(D.budget).length)?D.budget:null;',
+    '  if(held)return JSON.parse(JSON.stringify(held));',
+    '  try{return JSON.parse(localStorage.getItem(BKEY)||"{}")}catch(e){return{}}',
+    '})();',
+  ].join('\n'));
+
+  const save = 'function bsave(){try{localStorage.setItem(BKEY,JSON.stringify(BUD))}catch(e){}}';
+  if (!script.includes(save)) throw new Error('the budget save is not where it was.');
+  script = script.replace(save, [
+    'function bsave(){',
+    '  try{localStorage.setItem(BKEY,JSON.stringify(BUD))}catch(e){}',
+    '  /* Opened on its own there is nobody to tell, and the local copy is all',
+    '     there is. Inside the portal the database is the record. */',
+    '  if(parent!==window){',
+    '    try{parent.postMessage({type:"pcp-budget-save",key:CID,months:M,budget:BUD},"*")}catch(e){}',
+    '  }',
+    '}',
+  ].join('\n'));
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings
