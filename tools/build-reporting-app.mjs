@@ -88,7 +88,7 @@ if (today) {
 
 script += `
 
-/* ---------- appended by scripts/build-reporting-app.mjs ---------- */
+/* ---------- appended by tools/build-reporting-app.mjs ---------- */
 (function(){
   // Opened on its own, with no portal behind it, there is nobody to ask.
   if (parent === window) return;

@@ -517,7 +517,7 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
   if (!res.ok) {
     throw new Error(
       'The reporting shell is not being served. It is generated from the template by ' +
-      'scripts/build-reporting-app.mjs, which runs as npm prebuild.',
+      'tools/build-reporting-app.mjs, which runs as npm prebuild.',
     );
   }
   const shell = await res.text();
@@ -534,7 +534,7 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
   // same-origin script is allowed, so the policy stays exactly as strict.
   //
   // The feed-table patch and the sign-in loader that used to be applied here
-  // are applied once at build time now, in scripts/build-reporting-app.mjs.
+  // are applied once at build time now, in tools/build-reporting-app.mjs.
   //
   // The URL has to be absolute: a relative one would resolve against blob:.
   return new Blob(
