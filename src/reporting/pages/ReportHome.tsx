@@ -40,7 +40,7 @@ export default function ReportHome() {
     try {
       const list = await buildClientList();
       setBusy('Opening');
-      const blob = await buildTemplateHtml(list.json, { lazy: true });
+      const blob = await buildTemplateHtml(list.json);
       const next = URL.createObjectURL(blob);
       if (cached) URL.revokeObjectURL(cached.url);
       const when = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });

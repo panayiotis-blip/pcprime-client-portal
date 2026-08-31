@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:fonts": "node scripts/generate-pdf-fonts.mjs"
+    "build:fonts": "node scripts/generate-pdf-fonts.mjs",
+    "prebuild": "node scripts/build-reporting-app.mjs",
+    "predev": "node scripts/build-reporting-app.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

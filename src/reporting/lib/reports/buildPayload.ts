@@ -512,154 +512,37 @@ export async function buildClientBlock(
  * guesses, guesses Latin-1, and ΑΝΤΩΝΗΣ & ΦΟΥΛΗΣ ΗΛΕΚΤΡΑΓΟΡΑ ΛΤΔ becomes
  * mojibake. Every Greek client name in the register would have done the same.
  */
-export async function buildTemplateHtml(json: string, opts: { lazy?: boolean } = {}): Promise<Blob> {
-  const res = await fetch('/reporting-template.html');
+export async function buildTemplateHtml(json: string): Promise<Blob> {
+  const res = await fetch('/reporting-shell.html');
   if (!res.ok) {
     throw new Error(
-      'The template is not being served. Copy template-app.built_5.html to public/reporting-template.html.',
+      'The reporting shell is not being served. It is generated from the template by ' +
+      'scripts/build-reporting-app.mjs, which runs as npm prebuild.',
     );
   }
-  const html = await res.text();
-  const open = html.indexOf('<script id="afdata" type="application/json">');
-  if (open < 0) throw new Error('That template has no afdata block.');
-  const start = html.indexOf('>', open) + 1;
-  const end = html.indexOf('</script>', start);
+  const shell = await res.text();
+  if (!shell.includes('__PAYLOAD__') || !shell.includes('__APP_JS__')) {
+    throw new Error('The reporting shell is missing its placeholders; regenerate it.');
+  }
 
-  const declaresCharset = /<meta[^>]+charset/i.test(html.slice(0, 4000));
-  const head = declaresCharset ? '' : '<meta charset="utf-8">\n';
-
-  const tail = withRealFeeds(html.slice(end));
-  const rest = opts.lazy ? withLazyLoader(tail) : tail;
-
+  // The script is loaded from the portal's own origin rather than written into
+  // the page. The portal is served under script-src 'self' with no
+  // 'unsafe-inline', and a blob: frame inherits that policy — so an inline
+  // script is silently refused. That is what left the client dropdown empty on
+  // the live site while everything else looked right: the markup and the CSS
+  // rendered, and the code that fills the dropdown never ran. An external
+  // same-origin script is allowed, so the policy stays exactly as strict.
+  //
+  // The feed-table patch and the sign-in loader that used to be applied here
+  // are applied once at build time now, in scripts/build-reporting-app.mjs.
+  //
+  // The URL has to be absolute: a relative one would resolve against blob:.
   return new Blob(
-    [head, html.slice(0, start), json, rest],
+    [shell
+      .replace('__PAYLOAD__', json)
+      .replace('__APP_JS__', `${location.origin}/reporting-app.js`)],
     { type: 'text/html;charset=utf-8' },
   );
-}
-
-/**
- * Make the Data import table read this client's feeds instead of the prototype's.
- *
- * Two words are changed in the served copy and the template file on disk is not
- * touched — it stays exactly as Pete built it, and this is applied on the way
- * out, like the sign-in loader.
- *
- *   FEEDS.forEach   ->  (D.feeds && D.feeds.length ? D.feeds : FEEDS).forEach
- *   TODAY           ->  today, rather than the day the prototype was written
- *
- * The fallback to FEEDS is deliberate and narrow: it only fires for a payload
- * built before this existed. A client with no feeds loaded still gets eleven
- * rows from buildFeedTable, all reading outstanding, so the fallback cannot be
- * reached by a client that simply has nothing.
- *
- * TODAY matters more than it looks. The template measures "how old" and flags a
- * monthly feed overdue past 45 days, both against a hardcoded 2026-08-28. Left
- * alone, every file would look newer the further the real date moved on, and
- * nothing would ever go overdue.
- */
-function withRealFeeds(tail: string): string {
-  let out = tail;
-
-  const call = 'FEEDS.forEach(([n,why,fr,file,when,covers,got])=>{';
-  if (out.includes(call)) {
-    out = out.replace(call,
-      '(D.feeds&&D.feeds.length?D.feeds:FEEDS).forEach(([n,why,fr,file,when,covers,got])=>{');
-  } else {
-    console.warn('The feed table could not be pointed at this client — the template has changed shape.');
-  }
-
-  const today = out.match(/const TODAY="\d{4}-\d{2}-\d{2}";/);
-  if (today) {
-    out = out.replace(today[0], 'const TODAY=new Date().toISOString().slice(0,10);');
-  } else {
-    console.warn('The template no longer declares TODAY; ages will be measured from a fixed date.');
-  }
-
-  return out;
-}
-
-/**
- * Ask the portal for a client's figures at sign-in, instead of carrying every
- * client's figures into the page.
- *
- * §4 says the template's layout and wording are the specification, and this
- * does not touch either. It changes the one thing §4 names as prototype: the
- * data is embedded rather than queried. Sixty-three clients and 174.026
- * postings cannot all be read before a sign-in screen that needs sixty-three
- * NAMES, and the app appeared to hang because it tried.
- *
- * Nothing in the template is rewritten. A capture-phase listener on its own
- * Sign in button runs first, fetches the chosen client, drops it into ALL, and
- * then lets the click through — so the template's own signIn() does the work it
- * always did, against data that is there by the time it looks.
- */
-function withLazyLoader(tail: string): string {
-  const shim = `
-<script>
-(function(){
-  // Opened on its own, with no portal behind it, there is nobody to ask. Better
-  // to sign in against the empty block and say so than to hang on a question
-  // that will never be answered.
-  if (parent === window) return;
-
-  var loaded = {};
-
-  function ask(key){
-    return new Promise(function(resolve, reject){
-      var timer = setTimeout(function(){
-        window.removeEventListener('message', on);
-        reject(new Error('the portal did not answer'));
-      }, 600000);
-      function on(e){
-        var d = e.data;
-        if(!d || d.type !== 'pcp-client-data' || d.key !== key) return;
-        clearTimeout(timer);
-        window.removeEventListener('message', on);
-        if(d.error) reject(new Error(d.error)); else resolve(d.block);
-      }
-      window.addEventListener('message', on);
-      parent.postMessage({ type:'pcp-need-client', key:key }, '*');
-    });
-  }
-
-  var note = document.getElementById('loginNote');
-  var said = note ? note.textContent : '';
-  var go = document.getElementById('loginGo');
-  var sel = document.getElementById('loginClient');
-
-  function guard(e){
-    var key = sel.value;
-    if(loaded[key]) return;              // already here: let the real handler run
-    e.stopImmediatePropagation();
-    e.preventDefault();
-    var who = (ALL.clients[key] && ALL.clients[key].cfg) ? ALL.clients[key].cfg.name : key;
-    if(note) note.textContent = 'Reading ' + who + '\\u2026';
-    go.disabled = true;
-    ask(key).then(function(block){
-      if(block) ALL.clients[key] = block;
-      loaded[key] = true;
-      go.disabled = false;
-      if(note) note.textContent = said;
-      go.click();                        // second pass falls through to signIn()
-    }).catch(function(err){
-      go.disabled = false;
-      if(note) note.textContent = 'Could not read ' + who + ': ' + err.message;
-    });
-  }
-
-  go.addEventListener('click', guard, true);
-  document.getElementById('loginPass').addEventListener('keydown', function(e){
-    if(e.key !== 'Enter') return;
-    if(loaded[sel.value]) return;
-    e.stopImmediatePropagation();
-    e.preventDefault();
-    go.click();
-  }, true);
-})();
-</script>
-`;
-  const close = tail.lastIndexOf('</body>');
-  return close < 0 ? tail + shim : tail.slice(0, close) + shim + tail.slice(close);
 }
 
 /**

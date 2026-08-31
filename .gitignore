@@ -112,3 +112,7 @@ template-app.built_5.html
 #
 # Built reports are per client and per moment, and belong nowhere near git.
 public/built-*.html
+
+# Generated from public/reporting-template.html by scripts/build-reporting-app.mjs
+public/reporting-shell.html
+public/reporting-app.js
