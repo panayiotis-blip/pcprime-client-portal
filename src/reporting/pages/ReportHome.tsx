@@ -23,6 +23,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 import { readCachedBlock, writeCachedBlock, forgetCachedBlock } from '../lib/reports/blockCache.ts';
 import { saveBudget, type BudgetMessage } from '../lib/reports/budgetStore.ts';
+import UploadDialog from '../upload/UploadDialog.tsx';
+import { feedByName, type Feed } from '../upload/feeds.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -38,6 +40,10 @@ export default function ReportHome() {
   const [busy, setBusy] = useState<string | null>(null);
   const [reading, setReading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The Upload button on the template's own Data import table opens this. It is
+  // a dialog over the report, never a screen: every way out returns here.
+  const [upload, setUpload] = useState<{ feed: Feed; clientId: number; clientName: string } | null>(null);
+  const [stale, setStale] = useState<string | null>(null);
   const started = useRef(false);
 
   /**
@@ -93,6 +99,17 @@ export default function ReportHome() {
         if (!Number.isFinite(cid) || cid <= 0) return;
         void saveBudget(cid, { months: d.months ?? [], budget: d.budget ?? {} })
           .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        return;
+      }
+
+      // “I want to be able to upload data” — on the screen that already says
+      // what is loaded, without leaving the report.
+      if (d.type === 'pcp-upload' && d.key && d.feed) {
+        const f = feedByName(String(d.feed));
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!f || !Number.isFinite(cid) || cid <= 0) return;
+        const who = listed.find((c) => c.id === cid);
+        setUpload({ feed: f, clientId: cid, clientName: who?.name ?? `Client ${cid}` });
         return;
       }
 
@@ -180,6 +197,25 @@ export default function ReportHome() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      {upload && (
+        <UploadDialog
+          clientId={upload.clientId}
+          clientName={upload.clientName}
+          feed={upload.feed}
+          onClose={() => setUpload(null)}
+          onLoaded={() => {
+            // What was built is now out of date by exactly the file that was
+            // just loaded. Both copies go — the tab’s and the stored one — so
+            // the next sign-in reads the client again rather than serving a
+            // report that predates the import.
+            const key = 'c' + upload.clientId;
+            blocks.delete(key);
+            void forgetCachedBlock(upload.clientId);
+            setStale(upload.clientName);
+          }}
+        />
+      )}
+
       <iframe
         title="PC Prime client reporting"
         src={url}
@@ -191,6 +227,11 @@ export default function ReportHome() {
         borderTop: '1px solid #e2e8f0', background: '#fff', fontSize: 11.5, color: '#94a3b8',
       }}>
         <span>{listed.length} clients · built at {at}</span>
+        {stale && (
+          <span style={{ color: '#b45309' }}>
+            {stale} has new data — sign in again, or Rebuild, to see it.
+          </span>
+        )}
         {reading && <span style={{ color: '#334155' }}>{reading}…</span>}
         <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', padding: '1px 8px' }}
           disabled={!!busy} onClick={() => void build(true)}>

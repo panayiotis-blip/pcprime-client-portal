@@ -60,6 +60,16 @@ export async function uploadToBtmsFolder(
   file: File,
   when: { year: string; month: string },
   check: FileCheck,
+  /**
+   * Keep the earlier file of the same feed and period standing beside this one.
+   *
+   * The default is to supersede, because a journal listing is re-saved at the
+   * end of every posting session and a folder that kept every copy would be
+   * mostly copies. But a person told plainly that July is already loaded may
+   * answer “Keep both” — two exports of the same month are sometimes two
+   * different things, and that is their call to make, not this function’s.
+   */
+  keepPrior = false,
 ): Promise<{ documentId: number; storagePath: string; superseded: number }> {
   if (check.verdict === 'blocked') {
     throw new Error(
@@ -111,7 +121,7 @@ export async function uploadToBtmsFolder(
   });
   if (rec.error) console.warn('The check was not recorded:', rec.error.message);
 
-  const superseded = await supersede(clientId, documentId, check.kind, period);
+  const superseded = keepPrior ? 0 : await supersede(clientId, documentId, check.kind, period);
   return { documentId, storagePath: path, superseded };
 }
 
@@ -143,9 +153,10 @@ export async function storeInBtmsFolder(
   file: File,
   when: { year: string; month: string },
   declared?: DocKind,
+  keepPrior = false,
 ): Promise<ImportSource & { superseded: number; check: FileCheck }> {
   const check = await checkBtmsFile(file, declared);
-  const r = await uploadToBtmsFolder(clientId, file, when, check);
+  const r = await uploadToBtmsFolder(clientId, file, when, check, keepPrior);
   return {
     storagePath: r.storagePath,
     documentId: r.documentId,

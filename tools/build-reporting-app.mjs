@@ -78,40 +78,36 @@ if (today) {
   throw new Error('const TODAY not found — the template has changed shape.');
 }
 
-// ---- patch 3: the feed table states, it does not import ---------------
+// ---- patch 3: the Upload button does what it says ---------------------
 //
-// There were two screens called Data import: this one, which could not import,
-// and the portal's, which can. Pete named the overlap and chose to end it here
-// — this becomes a statement of what is loaded, and all loading happens in one
-// place.
+// The template's Data import table already tells a person what is loaded: the
+// feed, what it is for, how often it is wanted, the last file, when it arrived,
+// how old that is, what it covers and whether it is there. The Action column
+// beside it held an Upload button per feed, and the button was a stub — it
+// raised an alert saying the wiring was "build phase P1".
 //
-// The Upload buttons were prototype stubs that raised an alert saying the
-// wiring was "build phase P1". Wiring them to jump to the real importer only
-// made it worse: it raced the router and put people back on the sign-in
-// screen. A button that cannot do the thing it names is worse than no button,
-// so the column goes and one link takes its place.
+// That column was cut out for a while, on the reasoning that a button which
+// cannot do the thing it names is worse than no button. True as far as it goes,
+// and the wrong conclusion: the partner asked for one application he can upload
+// in. So the button comes back and is wired, rather than removed.
+//
+// It carries the feed's own name — the first column of the row it sits in —
+// because that name is what the host turns back into a feed, a period control
+// and an importer (src/reporting/upload/feeds.ts). Sending the row index
+// instead would break the day a feed is added in the middle.
 
 {
-  // Anchored on Status, because another table has an Action column too and
-  // an unanchored replace took that one instead.
+  // Both are left exactly as the template writes them; what changes is what
+  // the button does. Checked here so a template that moved them fails the
+  // build rather than shipping a column of buttons that post nothing.
   const th = '<th>Status</th><th class="num">Action</th>';
   if (!script.includes(th)) throw new Error('the feed table Action column is not where it was.');
-  script = script.replace(th, '<th>Status</th>');
 
   const td = '`<td class="num"><button class="sgn" data-up="${n}">Upload</button></td></tr>`;});';
   if (!script.includes(td)) throw new Error('the Upload cell is not where it was.');
-  script = script.replace(td, '`</tr>`;});');
 
-  // One link, after the table, to the place that does the loading.
-  const close = 'h+="</tbody></table>";';
-  if (!script.includes(close)) throw new Error('the feed table close is not where it was.');
-  const link = 'h+=' + JSON.stringify(
-    '<p style="margin:10px 0 0;font-size:.82rem">'
-    + '<a href="#" id="pcpLoadFiles">Load files in the portal \u2192</a></p>',
-  ) + ';';
-  script = script.replace(close, close + link);
-
-  // The old per-button handler becomes one handler for that link.
+  // The stub handler becomes a message to the host, which owns the file
+  // chooser, the period, the checks and the folder.
   const open = "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{";
   const shut = 'build phase P1.");}));';
   const a = script.indexOf(open);
@@ -119,12 +115,13 @@ if (today) {
   if (a < 0 || b < 0) throw new Error('the Upload handler is not where it was.');
   script =
     script.slice(0, a) +
-    "{const L=document.getElementById('pcpLoadFiles');" +
-    "if(L)L.addEventListener('click',function(e){e.preventDefault();" +
-    "parent.postMessage({type:'pcp-open-import',key:CID},'*');});}" +
+    "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',function(){" +
+    // Opened on its own, with no portal behind it, there is nobody to ask.
+    "if(parent===window){alert('Uploading works inside the portal.');return;}" +
+    "parent.postMessage({type:'pcp-upload',feed:this.dataset.up,key:CID},'*');" +
+    '}));' +
     script.slice(b + shut.length);
 }
-
 // ---- patch 4: a ledger with no ageing says so -------------------------
 //
 // renderLedgers opens with A.deb.map(...) on D.agetot, and agetot is {} for
