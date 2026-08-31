@@ -129,26 +129,53 @@ async function listAll(prefix = '') {
   return out;
 }
 
+/** Where each kind of report lives, as migration 215 arranges it. */
+const SUBFOLDER = {
+  ledger: ['btms_ledger', 'Journal listings'],
+  detailed_ledger: ['btms_detail', 'Ledgers'],
+  trial_balance: ['btms_tb', 'Trial balances'],
+  chart: ['btms_coa', 'Chart of accounts'],
+  vat_summary: ['btms_vat', 'VAT'],
+  payroll_cost: ['btms_payroll', 'Payroll'],
+  payroll_sheet: ['btms_payroll', 'Payroll'],
+  stock: ['btms_stock', 'Stock'],
+  bank_statement: ['btms_bank', 'Bank'],
+  other: ['btms_other', 'Other'],
+};
+
 /** The client's BTMS data folder, made if it is not there yet. */
 const folderCache = new Map();
-async function btmsFolder(clientId) {
-  if (folderCache.has(clientId)) return folderCache.get(clientId);
+async function findOrMake(clientId, key, name, parentId) {
+  const cacheKey = `${clientId}:${key}`;
+  if (folderCache.has(cacheKey)) return folderCache.get(cacheKey);
   const found = await db.from('folders')
-    .select('id').eq('client_id', clientId).eq('category_key', 'btms')
+    .select('id').eq('client_id', clientId).eq('category_key', key)
     .order('id').limit(1);
   if (found.error) throw new Error(`folders: ${found.error.message}`);
   let id = found.data?.[0]?.id ?? null;
   if (!id) {
     if (DRY) return -1;
     const made = await db.from('folders').insert({
-      client_id: clientId, parent_id: null, name: 'BTMS data',
-      category_key: 'btms', is_system: true,
+      client_id: clientId, parent_id: parentId, name, category_key: key, is_system: true,
     }).select('id').single();
     if (made.error) throw new Error(`folders insert: ${made.error.message}`);
     id = made.data.id;
   }
-  folderCache.set(clientId, id);
+  folderCache.set(cacheKey, id);
   return id;
+}
+
+/**
+ * The subfolder this report belongs in, with its parent made first.
+ *
+ * A file that landed in the parent would be in the right client and the wrong
+ * place, which is the confusion the subfolders exist to end.
+ */
+async function btmsFolder(clientId, kind) {
+  const parent = await findOrMake(clientId, 'btms', 'BTMS data', null);
+  const sub = SUBFOLDER[kind];
+  if (!sub || parent === -1) return parent;
+  return findOrMake(clientId, sub[0], sub[1], parent);
 }
 
 const yearMonth = (period) => ({
@@ -239,7 +266,7 @@ async function main() {
       });
       if (up.error) throw new Error(`upload: ${up.error.message}`);
 
-      const folderId = await btmsFolder(clientId);
+      const folderId = await btmsFolder(clientId, kind);
       const doc = await db.from('documents').insert({
         client_id: clientId,
         folder_id: folderId,

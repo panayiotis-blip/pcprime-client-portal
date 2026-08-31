@@ -3,6 +3,11 @@ import { api, isStaffRole } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../services/dates';
 import { PanelSkeleton } from '../ui';
+// The BTMS folders are the one place in the portal where the document types are
+// not the general list. They are the feeds the reporting application can read,
+// and they are defined once, beside the application that reads them.
+import { FEEDS as BTMS_FEEDS, periodValue, filedUnderPeriod } from '../../reporting/upload/feeds';
+import { storeInBtmsFolder } from '../../reporting/lib/import/portalFolder';
 
 const DOC_TYPES = [
   { value: 'invoice', label: 'Invoice (Received)' },
@@ -58,6 +63,9 @@ export default function ClientDocuments({ clientId }: Props) {
   const [uploadNotes, setUploadNotes] = useState('');
   const [uploadInvoiceNo, setUploadInvoiceNo] = useState('');
   const [uploadEmailedDate, setUploadEmailedDate] = useState('');
+  // Inside a BTMS folder: which feed this file is, and the period it covers.
+  const [btmsFeed, setBtmsFeed] = useState(BTMS_FEEDS[0].key);
+  const [btmsPeriod, setBtmsPeriod] = useState('');
   const [activeYear, setActiveYear] = useState<string>('');
   const [activeMonth, setActiveMonth] = useState<string>('');
   // Covers the whole opening sequence — folders, then that folder's documents.
@@ -208,15 +216,30 @@ export default function ClientDocuments({ clientId }: Props) {
         if (uploadNotes) parts.push(uploadNotes);
         notes = parts.join(' • ');
       }
-      await api.uploadDocumentsToFolder({
-        clientId,
-        folderId: activeFolder.is_system ? null : activeFolder.id,
-        docType: uploadType,
-        category: activeFolder.is_system ? activeFolder.category_key : 'custom',
-        month: uploadMonth,
-        files: Array.from(files),
-        notes,
-      });
+      if (isBtmsFolder) {
+        // One store, two ways in. A BTMS export filed here goes through the same
+        // code the report's own Upload button uses: it is checked against the
+        // control totals BTMS prints inside it before it is kept, it lands in
+        // the subfolder for its kind, and it is named from the type and the
+        // period rather than from whatever the export happened to be called.
+        const period = periodValue(feed.period, btmsPeriod);
+        if (feed.period !== 'none' && !period) {
+          throw new Error('Choose the period this file covers before loading it.');
+        }
+        for (const f of Array.from(files)) {
+          await storeInBtmsFolder(clientId, f, filedUnderPeriod(period), feed.kind as never);
+        }
+      } else {
+        await api.uploadDocumentsToFolder({
+          clientId,
+          folderId: activeFolder.is_system ? null : activeFolder.id,
+          docType: uploadType,
+          category: activeFolder.is_system ? activeFolder.category_key : 'custom',
+          month: uploadMonth,
+          files: Array.from(files),
+          notes,
+        });
+      }
       if (fileRef.current) fileRef.current.value = '';
       setUploadNotes('');
       setUploadInvoiceNo('');
@@ -232,6 +255,10 @@ export default function ClientDocuments({ clientId }: Props) {
   };
 
   const isIssuedFolder = activeFolder?.category_key === 'issued_invoices';
+  // BTMS data and every subfolder under it. Keyed off the category, as migration
+  // 215 arranges it, so a folder somebody renamed still behaves correctly.
+  const isBtmsFolder = !!activeFolder?.category_key?.startsWith('btms');
+  const feed = BTMS_FEEDS.find((f) => f.key === btmsFeed) ?? BTMS_FEEDS[0];
 
   // Auto-set doc type when folder changes
   useEffect(() => {
@@ -390,14 +417,56 @@ export default function ClientDocuments({ clientId }: Props) {
                   <div className="form-grid">
                     <div className="form-group">
                       <label>Document Type</label>
-                      <select value={uploadType} onChange={(e) => setUploadType(e.target.value)} className="form-input">
-                        {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                      </select>
+                      {isBtmsFolder ? (
+                        <select
+                          value={btmsFeed}
+                          onChange={(e) => { setBtmsFeed(e.target.value); setBtmsPeriod(''); }}
+                          className="form-input"
+                        >
+                          {BTMS_FEEDS.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}
+                        </select>
+                      ) : (
+                        <select value={uploadType} onChange={(e) => setUploadType(e.target.value)} className="form-input">
+                          {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      )}
                     </div>
-                    <div className="form-group">
-                      <label>Period (Month)</label>
-                      <input type="month" value={uploadMonth} onChange={(e) => setUploadMonth(e.target.value)} className="form-input" />
-                    </div>
+                    {isBtmsFolder ? (
+                      feed.period === 'none' ? (
+                        <div className="form-group">
+                          <label>Period</label>
+                          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '8px 0 0' }}>
+                            A chart of accounts is not a period — there is nothing to give.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="form-group">
+                          <label>{feed.ask}</label>
+                          {feed.period === 'date' ? (
+                            <input type="date" value={btmsPeriod} onChange={(e) => setBtmsPeriod(e.target.value)} className="form-input" />
+                          ) : feed.period === 'year' ? (
+                            <select value={btmsPeriod} onChange={(e) => setBtmsPeriod(e.target.value)} className="form-input">
+                              <option value="">Choose a year…</option>
+                              {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                <option key={y} value={String(y)}>{y}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input type="month" value={btmsPeriod} onChange={(e) => setBtmsPeriod(e.target.value)} className="form-input" />
+                          )}
+                          {feed.period === 'date' && (
+                            <p style={{ fontSize: 11, color: '#b45309', margin: '4px 0 0' }}>
+                              The count date is nowhere in the file and cannot be worked out later.
+                            </p>
+                          )}
+                        </div>
+                      )
+                    ) : (
+                      <div className="form-group">
+                        <label>Period (Month)</label>
+                        <input type="month" value={uploadMonth} onChange={(e) => setUploadMonth(e.target.value)} className="form-input" />
+                      </div>
+                    )}
                     {isIssuedFolder && (
                       <>
                         <div className="form-group">

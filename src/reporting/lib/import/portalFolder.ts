@@ -13,7 +13,9 @@
 import { supabase } from '../../../lib/supabase';
 import { readSheetRows } from './sheet.ts';
 import { identify, suggestedDate, type FeedKind } from './folder.ts';
-import { checkBtmsFile, FEEDS, type DocKind, type FileCheck, type Verdict } from './checkFile.ts';
+import {
+  checkBtmsFile, FEEDS, KIND_LABEL, type DocKind, type FileCheck, type Verdict,
+} from './checkFile.ts';
 
 const BUCKET = 'documents';
 
@@ -36,11 +38,42 @@ export type PortalFile = {
   facts: Record<string, string>;
 };
 
-/** The folder, made the first time it is wanted. */
+/** The folder, made the first time it is wanted — subfolders and all. */
 export async function btmsFolderId(clientId: number): Promise<number> {
   const { data, error } = await supabase.rpc('btms_data_folder', { p_client: clientId });
   if (error) throw new Error(`BTMS folder: ${error.message}`);
   return Number(data);
+}
+
+/**
+ * The subfolder this kind of report belongs in.
+ *
+ * The mapping lives in the database (migration 215) rather than here, because
+ * both ways in have to agree: a file filed from the portal’s Documents tab and
+ * one uploaded on the report must land in the same place, and two copies of
+ * the same rule is how they stop agreeing.
+ */
+async function folderForKind(clientId: number, kind: DocKind): Promise<number> {
+  const { data, error } = await supabase.rpc('btms_folder_for', { p_client: clientId, p_kind: kind });
+  if (error) throw new Error(`BTMS folder: ${error.message}`);
+  return Number(data);
+}
+
+/**
+ * What the file is called once it is filed.
+ *
+ * The partner asked for this in as many words: “It would be easier to ID the
+ * reports if I selected the type of report and the period I was saving.” So the
+ * name is the type and the period, derived from what he chose — never keyed,
+ * and never the checksum the old bucket named its objects by. The name BTMS
+ * gave it is kept on the row as a note, because that is what a person will
+ * search for when they go looking for the export itself.
+ */
+export function derivedName(kind: DocKind, period: string | null, original: string): string {
+  const dot = original.lastIndexOf('.');
+  const ext = dot > 0 ? original.slice(dot) : '';
+  const label = KIND_LABEL[kind] ?? 'Document';
+  return period ? `${label} — ${period}${ext}` : `${label}${ext}`;
 }
 
 /** A safe storage segment, matching what the portal does elsewhere. */
@@ -77,16 +110,18 @@ export async function uploadToBtmsFolder(
     );
   }
 
-  const folderId = await btmsFolderId(clientId);
-  // The client id leads the path, as everywhere else, so a file cannot be
-  // written into another client's space.
-  const path = `${clientId}/btms/${Date.now()}_${safe(file.name)}`;
-  const up = await supabase.storage.from(BUCKET).upload(path, file);
-  if (up.error) throw new Error(`Upload failed: ${up.error.message}`);
-
   // The period the file states about itself beats the one typed beside it: a
   // paysheet knows its own month, and a person retyping it can be wrong.
   const period = check.period ?? periodFrom(when);
+
+  const folderId = await folderForKind(clientId, check.kind);
+  const named = derivedName(check.kind, period, file.name);
+  // The client id leads the path, as everywhere else, so a file cannot be
+  // written into another client's space. The kind follows it, so the store
+  // reads the way the folder does.
+  const path = `${clientId}/btms/${check.kind}/${Date.now()}_${safe(named)}`;
+  const up = await supabase.storage.from(BUCKET).upload(path, file);
+  if (up.error) throw new Error(`Upload failed: ${up.error.message}`);
 
   const { data: me } = await supabase.auth.getUser();
   const ins = await supabase.from('documents').insert({
@@ -96,7 +131,12 @@ export async function uploadToBtmsFolder(
     category: 'btms',
     year: when.year,
     month: when.month,
-    file_name: file.name,
+    // A count date is neither a year nor a month, and it is the one date no
+    // BTMS export contains (migration 215).
+    period_end: check.kind === 'stock' && period && /^d{4}-d{2}-d{2}$/.test(period)
+      ? period : null,
+    file_name: named,
+    notes: `As exported: ${file.name}`,
     mime_type: file.type || 'application/vnd.ms-excel',
     storage_path: path,
     storage_bucket: BUCKET,
@@ -264,11 +304,16 @@ export async function listBtmsFolder(
   clientId: number,
   onProgress: (name: string, done: number, total: number) => void = () => {},
 ): Promise<PortalFile[]> {
-  const folderId = await btmsFolderId(clientId);
+  // Everything the client holds as BTMS data, wherever under the folder it
+  // sits. Asking by folder_id found only what was in the parent, and since
+  // migration 215 a journal listing is in Journal listings and a trial balance
+  // in Trial balances — so that question now answers "nothing is loaded" about
+  // a folder full of files. category is what the subfolders have in common.
+  await btmsFolderId(clientId);          // makes the folder and its subfolders
   const { data, error } = await supabase
     .from('documents')
     .select('id, file_name, storage_path, year, month, created_at')
-    .eq('client_id', clientId).eq('folder_id', folderId)
+    .eq('client_id', clientId).eq('category', 'btms')
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw new Error(`Reading the folder: ${error.message}`);
