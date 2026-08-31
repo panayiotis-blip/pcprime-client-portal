@@ -151,26 +151,6 @@ export default function ReportingSetup() {
     });
   };
 
-  /**
-   * Where the books are is a statement of fact about a client, and 62 of them
-   * have had no such statement made. Rather than guess one each — a list of
-   * claims nobody made — this sets them all at once, deliberately, by somebody
-   * who knows. It only touches clients that have been ticked as reported and
-   * have not already been told where their books are.
-   */
-  const markAll = async (value: string) => {
-    const targets = (rows ?? []).filter((r) => r.reported && r.source === 'none');
-    if (!targets.length) return;
-    setError(null);
-    const { error: e } = await rep().from('client_settings')
-      .update({ data_source: value })
-      .in('client_id', targets.map((r) => r.id))
-      .eq('data_source', 'none');
-    if (e) { setError(e.message); return; }
-    setRows((rs) => (rs ?? []).map((r) =>
-      r.reported && r.source === 'none' ? { ...r, source: value } : r));
-  };
-
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (rows ?? [])
@@ -233,21 +213,15 @@ export default function ReportingSetup() {
 
       {counts.reported > counts.offered && (
         <div style={{
-          display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
           padding: '8px 10px', marginBottom: 12, borderRadius: 5,
           border: '1px solid #fde68a', background: '#fffbeb',
         }}>
           <span style={{ fontSize: 12, color: '#92400e' }}>
             {counts.reported - counts.offered} reported {counts.reported - counts.offered === 1 ? 'client has' : 'clients have'}
-            {' '}not been told where their books are, so the reporting app does not offer them.
+            {' '}not been told where their books are, so the reporting app does not offer them. Say where
+            they are one client at a time — here, or on the client’s own record in the portal, under
+            <b> Client info → Books kept in BTMS</b>.
           </span>
-          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }}
-            onClick={() => void markAll('btms_local')}>
-            All on our BTMS
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={() => void markAll('btms_client')}>
-            All on the client's BTMS
-          </button>
         </div>
       )}
 

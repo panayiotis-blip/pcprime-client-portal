@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Field, useFieldCtx } from '../fieldContext';
 import { api } from '../../../services/api';
 import EngagementLettersList from '../EngagementLettersList';
+import BooksInBtms from '../BooksInBtms';
 
 const BUSINESS_TYPES = [
   'Limited Company', 'Sole Trader', 'Partnership', 'Self-Employed',
@@ -187,6 +188,8 @@ export default function ClientInfoTab() {
           <VendorToggle />
         </div>
       </div>
+
+      <BooksInBtms />
 
       <EngagementSection />
 

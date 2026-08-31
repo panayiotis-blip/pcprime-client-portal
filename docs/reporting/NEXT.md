@@ -12,6 +12,10 @@ app reads from it and never keeps its own copy.
 
 ## 1. Choose the reporting clients from the client record, not from a separate screen
 
+**Built.** `BooksInBtms.tsx` on Client info, writing through
+`src/services/reportingSettings.ts`; the two bulk buttons are gone from
+`ReportingSetup.tsx`.
+
 **What is wanted:** a tick on the client's own page in the portal that says whether
 this client's books are on BTMS, and whose BTMS. Only clients marked one of those
 appear in the reporting app's client picker.
