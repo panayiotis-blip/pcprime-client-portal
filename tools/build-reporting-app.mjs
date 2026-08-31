@@ -78,28 +78,51 @@ if (today) {
   throw new Error('const TODAY not found — the template has changed shape.');
 }
 
-// ---- patch 3: the Upload buttons go to the importer ------------------
+// ---- patch 3: the feed table states, it does not import ---------------
 //
-// The template's Upload buttons raise an alert saying the wiring is "build
-// phase P1". That was true of the prototype and is not true any more: the
-// importer exists, in the portal, at /reporting/import. Left alone the button
-// is a dead end on the one screen a person goes to when they want to upload
-// something — which is exactly where Pete got stuck.
+// There were two screens called Data import: this one, which could not import,
+// and the portal's, which can. Pete named the overlap and chose to end it here
+// — this becomes a statement of what is loaded, and all loading happens in one
+// place.
 //
-// It also raised an alert(), which blocks the frame until it is dismissed.
+// The Upload buttons were prototype stubs that raised an alert saying the
+// wiring was "build phase P1". Wiring them to jump to the real importer only
+// made it worse: it raced the router and put people back on the sign-in
+// screen. A button that cannot do the thing it names is worse than no button,
+// so the column goes and one link takes its place.
 
 {
+  // Anchored on Status, because another table has an Action column too and
+  // an unanchored replace took that one instead.
+  const th = '<th>Status</th><th class="num">Action</th>';
+  if (!script.includes(th)) throw new Error('the feed table Action column is not where it was.');
+  script = script.replace(th, '<th>Status</th>');
+
+  const td = '`<td class="num"><button class="sgn" data-up="${n}">Upload</button></td></tr>`;});';
+  if (!script.includes(td)) throw new Error('the Upload cell is not where it was.');
+  script = script.replace(td, '`</tr>`;});');
+
+  // One link, after the table, to the place that does the loading.
+  const close = 'h+="</tbody></table>";';
+  if (!script.includes(close)) throw new Error('the feed table close is not where it was.');
+  const link = 'h+=' + JSON.stringify(
+    '<p style="margin:10px 0 0;font-size:.82rem">'
+    + '<a href="#" id="pcpLoadFiles">Load files in the portal \u2192</a></p>',
+  ) + ';';
+  script = script.replace(close, close + link);
+
+  // The old per-button handler becomes one handler for that link.
   const open = "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{";
-  const close = 'build phase P1.");}));';
-  const from = script.indexOf(open);
-  const to = script.indexOf(close, from);
-  if (from < 0 || to < 0) throw new Error('the Upload handler is not where it was — the template has changed shape.');
+  const shut = 'build phase P1.");}));';
+  const a = script.indexOf(open);
+  const b = script.indexOf(shut, a);
+  if (a < 0 || b < 0) throw new Error('the Upload handler is not where it was.');
   script =
-    script.slice(0, from) +
-    "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{" +
-    "parent.postMessage({type:'pcp-open-import',feed:b.dataset.up,key:CID},'*');" +
-    "}));" +
-    script.slice(to + close.length);
+    script.slice(0, a) +
+    "{const L=document.getElementById('pcpLoadFiles');" +
+    "if(L)L.addEventListener('click',function(e){e.preventDefault();" +
+    "parent.postMessage({type:'pcp-open-import',key:CID},'*');});}" +
+    script.slice(b + shut.length);
 }
 
 // ---- patch 2: ask the portal for a client at sign-in -----------------
