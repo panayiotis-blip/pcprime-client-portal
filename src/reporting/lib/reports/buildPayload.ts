@@ -508,7 +508,7 @@ export async function buildClientBlock(
  * guesses, guesses Latin-1, and ΑΝΤΩΝΗΣ & ΦΟΥΛΗΣ ΗΛΕΚΤΡΑΓΟΡΑ ΛΤΔ becomes
  * mojibake. Every Greek client name in the register would have done the same.
  */
-export async function buildTemplateHtml(json: string): Promise<Blob> {
+export async function buildTemplateHtml(json: string, opts: { lazy?: boolean } = {}): Promise<Blob> {
   const res = await fetch('/reporting-template.html');
   if (!res.ok) {
     throw new Error(
@@ -524,10 +524,97 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
   const declaresCharset = /<meta[^>]+charset/i.test(html.slice(0, 4000));
   const head = declaresCharset ? '' : '<meta charset="utf-8">\n';
 
+  const tail = html.slice(end);
+  const rest = opts.lazy ? withLazyLoader(tail) : tail;
+
   return new Blob(
-    [head, html.slice(0, start), json, html.slice(end)],
+    [head, html.slice(0, start), json, rest],
     { type: 'text/html;charset=utf-8' },
   );
+}
+
+/**
+ * Ask the portal for a client's figures at sign-in, instead of carrying every
+ * client's figures into the page.
+ *
+ * §4 says the template's layout and wording are the specification, and this
+ * does not touch either. It changes the one thing §4 names as prototype: the
+ * data is embedded rather than queried. Sixty-three clients and 174.026
+ * postings cannot all be read before a sign-in screen that needs sixty-three
+ * NAMES, and the app appeared to hang because it tried.
+ *
+ * Nothing in the template is rewritten. A capture-phase listener on its own
+ * Sign in button runs first, fetches the chosen client, drops it into ALL, and
+ * then lets the click through — so the template's own signIn() does the work it
+ * always did, against data that is there by the time it looks.
+ */
+function withLazyLoader(tail: string): string {
+  const shim = `
+<script>
+(function(){
+  // Opened on its own, with no portal behind it, there is nobody to ask. Better
+  // to sign in against the empty block and say so than to hang on a question
+  // that will never be answered.
+  if (parent === window) return;
+
+  var loaded = {};
+
+  function ask(key){
+    return new Promise(function(resolve, reject){
+      var timer = setTimeout(function(){
+        window.removeEventListener('message', on);
+        reject(new Error('the portal did not answer'));
+      }, 600000);
+      function on(e){
+        var d = e.data;
+        if(!d || d.type !== 'pcp-client-data' || d.key !== key) return;
+        clearTimeout(timer);
+        window.removeEventListener('message', on);
+        if(d.error) reject(new Error(d.error)); else resolve(d.block);
+      }
+      window.addEventListener('message', on);
+      parent.postMessage({ type:'pcp-need-client', key:key }, '*');
+    });
+  }
+
+  var note = document.getElementById('loginNote');
+  var said = note ? note.textContent : '';
+  var go = document.getElementById('loginGo');
+  var sel = document.getElementById('loginClient');
+
+  function guard(e){
+    var key = sel.value;
+    if(loaded[key]) return;              // already here: let the real handler run
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    var who = (ALL.clients[key] && ALL.clients[key].cfg) ? ALL.clients[key].cfg.name : key;
+    if(note) note.textContent = 'Reading ' + who + '\\u2026';
+    go.disabled = true;
+    ask(key).then(function(block){
+      if(block) ALL.clients[key] = block;
+      loaded[key] = true;
+      go.disabled = false;
+      if(note) note.textContent = said;
+      go.click();                        // second pass falls through to signIn()
+    }).catch(function(err){
+      go.disabled = false;
+      if(note) note.textContent = 'Could not read ' + who + ': ' + err.message;
+    });
+  }
+
+  go.addEventListener('click', guard, true);
+  document.getElementById('loginPass').addEventListener('keydown', function(e){
+    if(e.key !== 'Enter') return;
+    if(loaded[sel.value]) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    go.click();
+  }, true);
+})();
+</script>
+`;
+  const close = tail.lastIndexOf('</body>');
+  return close < 0 ? tail + shim : tail.slice(0, close) + shim + tail.slice(close);
 }
 
 /**
@@ -599,6 +686,44 @@ export async function buildAllClients(
     json: JSON.stringify({ generated, clients, order }),
     clients: listed,
   };
+}
+
+/**
+ * Every offered client, by NAME only — which is all a sign-in screen needs.
+ *
+ * This is one query. buildAllClients is sixty-three, one of which reads 174.026
+ * postings, and putting that in front of the sign-in made the app look broken:
+ * a load screen, a long think, and no dropdown. The figures are fetched when a
+ * client is actually chosen — see withLazyLoader.
+ */
+export async function buildClientList(): Promise<{
+  json: string;
+  clients: { id: number; name: string; postings: number }[];
+}> {
+  const { data, error } = await rep().rpc('clients_for_reporting');
+  if (error) throw new Error(`clients_for_reporting: ${error.message}`);
+  const offered = (data ?? []) as
+    { client_id: number; client_name: string; data_source: string; postings: number }[];
+  if (!offered.length) {
+    throw new Error(
+      'No client is marked as kept on BTMS. Set that on Reporting setup — a client is offered ' +
+      'here because somebody said its books are on BTMS, not because a file happens to have been imported.',
+    );
+  }
+
+  const clients: Record<string, ClientBlock> = {};
+  const order: string[] = [];
+  const listed: { id: number; name: string; postings: number }[] = [];
+  for (const c of offered) {
+    const key = `c${c.client_id}`;
+    order.push(key);
+    clients[key] = emptyClient(c.client_name);
+    listed.push({ id: c.client_id, name: c.client_name, postings: Number(c.postings) || 0 });
+  }
+
+  const generated = new Date().toLocaleDateString('en-GB',
+    { day: 'numeric', month: 'short', year: 'numeric' });
+  return { json: JSON.stringify({ generated, clients, order }), clients: listed };
 }
 
 /** One client's block, wrapped as a payload the template can read. */

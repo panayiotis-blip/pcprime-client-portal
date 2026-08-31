@@ -434,6 +434,38 @@ grows through the year, so it supersedes any earlier listing whose period it
 *contains*: January–August replaces January–July, and does not touch last year.
 Evidence is never superseded — two bank statements for the same month are two
 statements.
+### 6.8 Loading a client at sign-in, not before it
+
+The template opens on its own sign-in with a client dropdown. That dropdown
+needs sixty-three **names**. It was being given sixty-three clients’ figures
+first — 174.026 postings, one client’s ledger read in full — and the app looked
+broken: a load screen, a long think, no dropdown. §4 names exactly this as the
+one prototype-ism to fix: *the data is embedded as JSON rather than queried.*
+
+So `buildClientList()` builds the list alone (one RPC, no postings) and the
+template opens straight away with every offered client present as a name and an
+empty block. When a client is chosen, the template asks the portal for it.
+
+`withLazyLoader` injects the asking. **It rewrites nothing.** A capture-phase
+listener on the template’s own Sign in button runs first, `postMessage`s the
+parent, drops the answer into `ALL.clients[key]`, and re-clicks — the second
+pass falls through to the template’s own `signIn()`, which does exactly what it
+always did against data that is there by the time it looks. The Enter key on
+the password field is intercepted the same way.
+
+Three things this must keep doing:
+
+- **No parent, no guard.** Opened standalone the frame has nobody to ask, so the
+  shim installs nothing and sign-in proceeds against the empty block rather than
+  hanging on a question that will never be answered.
+- **A client with no postings is answered without a round trip.** It already has
+  its empty block; fetching zero postings would be a trip to learn nothing.
+- **Blocks are kept for the tab.** Signing out and back into the same client is
+  instant.
+
+`buildAllClients()` stays for a self-contained file that must carry its own data
+(a download, an emailed pack). It is the wrong thing to put in front of a
+sign-in screen and right for a file that has no portal behind it.
 ## 7. Import pipeline
 
 ```

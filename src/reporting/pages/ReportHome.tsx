@@ -6,42 +6,50 @@
 // a person clicking Client Reporting expects the app they designed, not a
 // waiting room I built.
 //
-// So the payload carries every client that has data, and the template does the
-// choosing exactly as it was drawn. The loading bay — imports, mapping, the
-// review list — lives behind "Manage the data", where it belongs.
+// The sign-in screen needs sixty-three NAMES. It used to be given sixty-three
+// clients' figures — 174.026 postings, one client's ledger read in full — before
+// it would show at all, which is why it looked like it hung: a load screen, a
+// long think, and no dropdown. So the list is built on its own (one query), the
+// template opens straight away, and when a client is chosen the template asks
+// for that client and waits a few seconds instead of a few minutes.
+//
+// The loading bay — imports, mapping, the review list — lives behind "Manage
+// the data", where it belongs.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { buildAllClients, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
+import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 
-/** Built once per tab: a minute's wait on every visit would feel broken. */
+/** Built once per tab: rebuilding the frame on every visit would feel broken. */
 let cached: { url: string; at: string; clients: { id: number; name: string; postings: number }[] } | null = null;
+
+/** A client's figures, kept for the tab — signing back in should be instant. */
+const blocks = new Map<string, unknown>();
 
 export default function ReportHome() {
   const [url, setUrl] = useState<string | null>(cached?.url ?? null);
   const [at, setAt] = useState<string | null>(cached?.at ?? null);
+  const [listed, setListed] = useState(cached?.clients ?? []);
   const [busy, setBusy] = useState<string | null>(null);
-  const [count, setCount] = useState<{ done: number; total: number } | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
 
   const build = useCallback(async () => {
-    setBusy('Starting'); setError(null); setCount(null);
+    setBusy('Reading the client list'); setError(null);
     try {
-      const all = await buildAllClients((step, done, total) => {
-        setBusy(step);
-        setCount(done !== undefined && total !== undefined ? { done, total } : null);
-      });
+      const list = await buildClientList();
       setBusy('Opening');
-      const blob = await buildTemplateHtml(all.json);
+      const blob = await buildTemplateHtml(list.json, { lazy: true });
       const next = URL.createObjectURL(blob);
       if (cached) URL.revokeObjectURL(cached.url);
       const when = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      cached = { url: next, at: when, clients: all.clients };
-      setUrl(next); setAt(when);
+      cached = { url: next, at: when, clients: list.clients };
+      blocks.clear();
+      setUrl(next); setAt(when); setListed(list.clients);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally { setBusy(null); setCount(null); }
+    } finally { setBusy(null); }
   }, []);
 
   useEffect(() => {
@@ -49,6 +57,48 @@ export default function ReportHome() {
     started.current = true;
     void build();
   }, [build]);
+
+  // The template asks for a client at sign-in; this answers it. The frame is a
+  // blob, so its origin is opaque and '*' is the only target that reaches it —
+  // the data never leaves the page either way.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { type?: string; key?: string } | null;
+      if (!d || d.type !== 'pcp-need-client' || !d.key) return;
+      const key = String(d.key);
+      const frame = e.source as Window | null;
+      const reply = (body: Record<string, unknown>) =>
+        frame?.postMessage({ type: 'pcp-client-data', key, ...body }, '*');
+
+      const held = blocks.get(key);
+      if (held) { reply({ block: held }); return; }
+
+      const id = Number(key.replace(/^c/, ''));
+      const who = listed.find((c) => c.id === id);
+      if (!Number.isFinite(id) || id <= 0) {
+        reply({ error: 'that client id is not one I recognise' });
+        return;
+      }
+      // A client with nothing loaded keeps the empty block it already has:
+      // reading zero postings would be a round trip to learn nothing.
+      if (who && who.postings === 0) { reply({}); return; }
+
+      void (async () => {
+        setReading(who?.name ?? key);
+        try {
+          const built = await buildClientBlock(id, (step, done, total) =>
+            setReading(`${who?.name ?? key} — ${step}` +
+              (done !== undefined && total ? ` (${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')})` : '')));
+          blocks.set(key, built.block);
+          reply({ block: built.block });
+        } catch (err) {
+          reply({ error: err instanceof Error ? err.message : String(err) });
+        } finally { setReading(null); }
+      })();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [listed]);
 
   if (error) {
     return (
@@ -66,21 +116,7 @@ export default function ReportHome() {
     return (
       <div style={{ padding: 32, maxWidth: 560 }}>
         <h1 style={{ fontSize: 18, margin: '0 0 6px' }}>Opening client reporting</h1>
-        <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 14px' }}>
-          {busy ?? 'Starting'}
-          {count ? ` — ${count.done.toLocaleString('en-GB')} of ${count.total.toLocaleString('en-GB')}` : '…'}
-        </p>
-        {count && (
-          <div style={{ height: 4, background: '#e2e8f0', borderRadius: 2, maxWidth: 360 }}>
-            <div style={{
-              height: 4, borderRadius: 2, background: '#0f172a',
-              width: `${Math.round((count.done / Math.max(count.total, 1)) * 100)}%`,
-            }} />
-          </div>
-        )}
-        <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>
-          Read once and kept for this tab.
-        </p>
+        <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{busy ?? 'Starting'}…</p>
       </div>
     );
   }
@@ -97,9 +133,9 @@ export default function ReportHome() {
         display: 'flex', alignItems: 'center', gap: 14, padding: '4px 12px',
         borderTop: '1px solid #e2e8f0', background: '#fff', fontSize: 11.5, color: '#94a3b8',
       }}>
-        <span>Built at {at}</span>
+        <span>{listed.length} clients · built at {at}</span>
+        {reading && <span style={{ color: '#334155' }}>{reading}…</span>}
         <Link to="/reporting/manage">Manage the data</Link>
-        <a href={url} target="_blank" rel="noopener noreferrer">Open in its own tab</a>
         <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', padding: '1px 8px' }}
           disabled={!!busy} onClick={() => void build()}>
           {busy ? 'Rebuilding…' : 'Rebuild'}
