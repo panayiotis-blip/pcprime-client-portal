@@ -14,6 +14,7 @@ import { supabase } from '../../../lib/supabase';
 import { parseStockValuation, type StockParse } from '../btms/stockValuation.ts';
 import { readSheetRows, sha256 } from './sheet.ts';
 import type { Progress } from './ledgerImport.ts';
+import type { ImportSource } from './portalFolder.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -98,18 +99,22 @@ export async function commitStockImport(
   clientId: number,
   file: File,
   prepared: StockPrepared,
+  source: ImportSource,
   valuedAt: string,
   onProgress: Progress = () => {},
 ): Promise<StockCommitted> {
   const { parse, checksum } = prepared;
   if (!parse.ok) throw new Error('This file was refused at the parsing stage; there is nothing to commit.');
 
-  const ext = file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'xls';
-  const path = `${clientId}/stock/${checksum}.${ext}`;
-  onProgress('Storing the file');
-  const up = await supabase.storage.from('reporting-imports')
-    .upload(path, file, { upsert: true, contentType: file.type || 'application/vnd.ms-excel' });
-  if (up.error) throw new Error(`The file could not be stored: ${up.error.message}`);
+  // ---- the evidence copy -------------------------------------------
+  // There is one copy of a BTMS export and it is in the client's BTMS folder.
+  // portalFolder.ts put it there and is the only thing that stores one; what
+  // is recorded here is where it is, so an import that is ever questioned is
+  // answerable from the file that produced it. The importers used to upload a
+  // second copy into a bucket of their own, which is how seventeen files came
+  // to exist for the reporting application that nobody could find from the
+  // client.
+  const path = source.storagePath;
 
   onProgress('Comparing with the ledger');
   const ledger = await stockPerLedger(clientId, valuedAt);

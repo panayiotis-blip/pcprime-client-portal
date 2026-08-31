@@ -20,6 +20,7 @@ import { fingerprintChart, type Fingerprint } from '../btms/fingerprint.ts';
 import { readSheetRows, sha256 } from './sheet.ts';
 import { allRows } from './pages.ts';
 import type { Progress } from './ledgerImport.ts';
+import type { ImportSource } from './portalFolder.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -133,6 +134,7 @@ export async function commitChartImport(
   clientId: number,
   file: File,
   prepared: ChartPrepared,
+  source: ImportSource,
   onProgress: Progress = () => {},
 ): Promise<ChartCommitted> {
   const { parse, checksum } = prepared;
@@ -140,14 +142,15 @@ export async function commitChartImport(
   if (!parse.ok) throw new Error('This file was refused at the parsing stage; there is nothing to commit.');
   if (!prepared.fingerprint.accepted) throw new Error(prepared.fingerprint.reason);
 
-  // The client id leads the path because the storage policy reads it from
-  // there, so a file cannot be written into another client's folder.
-  const ext = file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'xls';
-  const path = `${clientId}/chart/${checksum}.${ext}`;
-  onProgress('Storing the file');
-  const up = await supabase.storage.from('reporting-imports')
-    .upload(path, file, { upsert: true, contentType: file.type || 'application/vnd.ms-excel' });
-  if (up.error) throw new Error(`The file could not be stored: ${up.error.message}`);
+  // ---- the evidence copy -------------------------------------------
+  // There is one copy of a BTMS export and it is in the client's BTMS folder.
+  // portalFolder.ts put it there and is the only thing that stores one; what
+  // is recorded here is where it is, so an import that is ever questioned is
+  // answerable from the file that produced it. The importers used to upload a
+  // second copy into a bucket of their own, which is how seventeen files came
+  // to exist for the reporting application that nobody could find from the
+  // client.
+  const path = source.storagePath;
 
   onProgress('Recording the import');
   const { data: me } = await supabase.auth.getUser();

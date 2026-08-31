@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReportingSession } from '../session';
 import { supabase } from '../../lib/supabase';
 import {
-  listBtmsFolder, uploadToBtmsFolder, fileFromPortal, type PortalFile,
+  listBtmsFolder, uploadToBtmsFolder, fileFromPortal, sourceOf, type PortalFile,
 } from '../lib/import/portalFolder.ts';
 import {
   checkBtmsFile, KIND_LABEL, FEEDS, type DocKind, type FileCheck,
@@ -187,7 +187,7 @@ export default function PortalFolderPanel({ clientId, onImported }: {
         const p = await prepareChartImport(clientId, file, step);
         if (!p.parse.ok) throw new Error(p.parse.notes[0]?.message ?? 'refused at the parsing stage');
         if (!p.fingerprint.accepted) throw new Error(p.fingerprint.reason);
-        const r = await commitChartImport(clientId, file, p, step);
+        const r = await commitChartImport(clientId, file, p, sourceOf(f), step);
         setRow(f.id, {
           busy: null,
           done: `${r.written.toLocaleString('en-GB')} accounts · ${r.mapping.seeded} mapped from the master` +
@@ -197,7 +197,7 @@ export default function PortalFolderPanel({ clientId, onImported }: {
         const p = await prepareLedgerImport(clientId, file, step);
         if (!p.parse.ok) throw new Error(p.parse.notes[0]?.message ?? 'refused at the parsing stage');
         if (!p.fingerprint.accepted) throw new Error(p.fingerprint.reason);
-        const r = await commitLedgerImport(clientId, file, p, {}, step);
+        const r = await commitLedgerImport(clientId, file, p, sourceOf(f), {}, step);
         setRow(f.id, {
           busy: null,
           done: `${r.postingsAdded.toLocaleString('en-GB')} postings across ${r.monthsReplaced} months`,
@@ -209,7 +209,7 @@ export default function PortalFolderPanel({ clientId, onImported }: {
         const periodMonth = annual ? `${m[1]}-12-01` : `${m[1]}-${m[2]}-01`;
         const p = await prepareTrialBalanceImport(clientId, file, step);
         if (!p.parse.ok) throw new Error(p.parse.notes[0]?.message ?? 'refused at the parsing stage');
-        const r = await commitTrialBalanceImport(clientId, file, p, { periodMonth, isAnnual: annual }, step);
+        const r = await commitTrialBalanceImport(clientId, file, p, sourceOf(f), { periodMonth, isAnnual: annual }, step);
         setRow(f.id, {
           busy: null,
           done: `${r.rows} accounts for ${annual ? 'year ended ' : ''}${r.periodMonth.slice(0, 7)}`,
@@ -218,7 +218,7 @@ export default function PortalFolderPanel({ clientId, onImported }: {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(when)) throw new Error('Set the count date as YYYY-MM-DD.');
         const p = await prepareStockImport(clientId, file, step);
         if (!p.parse.ok) throw new Error(p.parse.notes[0]?.message ?? 'refused at the parsing stage');
-        const r = await commitStockImport(clientId, file, p, when, step);
+        const r = await commitStockImport(clientId, file, p, sourceOf(f), when, step);
         setRow(f.id, {
           busy: null,
           done: `${r.items.toLocaleString('en-GB')} items, ${r.value.toFixed(2)} against ${r.ledgerValue.toFixed(2)} in the ledger`,
@@ -230,8 +230,12 @@ export default function PortalFolderPanel({ clientId, onImported }: {
         const partnerFile = await fileFromPortal(partner);
         const costFile = f.kind === 'payroll_cost' ? file : partnerFile;
         const sheetFile = f.kind === 'payroll_cost' ? partnerFile : file;
+        const costDoc = f.kind === 'payroll_cost' ? f : partner;
+        const sheetDoc = f.kind === 'payroll_cost' ? partner : f;
         const p = await preparePayrollImport(clientId, costFile, sheetFile, step);
-        const r = await commitPayrollImport(clientId, costFile, sheetFile, p, step);
+        const r = await commitPayrollImport(
+          clientId, costFile, sheetFile, p,
+          { cost: sourceOf(costDoc), sheet: sourceOf(sheetDoc) }, step);
         const note = `${r.periodMonth.slice(0, 7)} · ${r.employees} employees · cost ${r.cost.toFixed(2)}`;
         setRow(f.id, { busy: null, done: note });
         setRow(partner.id, { busy: null, done: note });

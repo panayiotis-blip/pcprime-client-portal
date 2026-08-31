@@ -52,6 +52,23 @@ action.
 
 ## 2. One place for a client's BTMS files: the client's own folder in the portal
 
+**Step 1 built.** `portalFolder.ts` is the only thing that stores a BTMS file:
+`storeInBtmsFolder()` checks it and puts it in the client’s folder, and the five
+importers take an `ImportSource` and record where the folder put it instead of
+uploading a second copy. Nothing in `src/` writes to `reporting-imports` any more.
+
+**Step 2 blocked.** `scripts/migrate-btms-imports.mjs` is written and dry-runnable.
+All 17 objects belong to client 1754 and their names are bare checksums, so the
+move needs `reporting.imports.original_filename` to give them their names back --
+and nothing that can run the script can read that schema. `.env.scripts` has
+`SUPABASE_ADMIN_EMAIL` / `SUPABASE_ADMIN_PASSWORD` present but empty, and migration
+190 granted the reporting schema to `authenticated` only, so the service role gets
+"permission denied for schema reporting". Either fill in the admin credentials, or
+grant the reporting schema to `service_role` and let the script use that.
+
+**Steps 3 to 5 not started.** The new / changed / already-in comparison by sha256
+on opening a client is the piece that makes the folder the way in.
+
 **What is wanted:** every client's BTMS exports live in that client's **BTMS data**
 folder in the portal. The reporting app reads from there — it looks in the folder for
 anything new or changed when the client is opened, and offers to import it. Nothing

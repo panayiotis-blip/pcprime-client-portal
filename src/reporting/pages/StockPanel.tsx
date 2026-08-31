@@ -10,6 +10,7 @@
 // a date is chosen and shown beside the file's, before anything is committed.
 
 import { useEffect, useRef, useState } from 'react';
+import { storeInBtmsFolder, filedUnder } from '../lib/import/portalFolder.ts';
 import {
   prepareStockImport, commitStockImport, stockPerLedger,
   type StockPrepared, type StockCommitted,
@@ -64,7 +65,9 @@ export default function StockPanel({ clientId, onImported }: {
     if (!file || !prepared) return;
     setError(null);
     try {
-      setCommitted(await commitStockImport(clientId, file, prepared, valuedAt, (s) => setBusy(s)));
+      setBusy('Storing the file in the client’s BTMS folder');
+      const src = await storeInBtmsFolder(clientId, file, filedUnder(valuedAt), 'stock');
+      setCommitted(await commitStockImport(clientId, file, prepared, src, valuedAt, (s) => setBusy(s)));
       reset();
       onImported();
     } catch (e) {

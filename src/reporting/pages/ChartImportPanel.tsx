@@ -7,6 +7,7 @@
 // a removed account would leave six years of them pointing at nothing.
 
 import { useCallback, useRef, useState } from 'react';
+import { storeInBtmsFolder, filedUnder } from '../lib/import/portalFolder.ts';
 import {
   prepareChartImport, commitChartImport,
   type ChartPrepared, type ChartCommitted,
@@ -52,7 +53,11 @@ export default function ChartImportPanel({
     if (!file || !prepared) return;
     setError(null);
     try {
-      setCommitted(await commitChartImport(clientId, file, prepared, onProgress));
+      // Stored in the client's BTMS folder first: one copy, in the place a
+      // person can find it from the client, and the import points at it.
+      onProgress('Storing the file in the client’s BTMS folder');
+      const src = await storeInBtmsFolder(clientId, file, filedUnder(null), 'chart');
+      setCommitted(await commitChartImport(clientId, file, prepared, src, onProgress));
       reset();
       onImported();
     } catch (e) {

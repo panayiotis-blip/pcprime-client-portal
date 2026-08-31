@@ -13,7 +13,7 @@
 import { supabase } from '../../../lib/supabase';
 import { readSheetRows } from './sheet.ts';
 import { identify, suggestedDate, type FeedKind } from './folder.ts';
-import { FEEDS, type DocKind, type FileCheck, type Verdict } from './checkFile.ts';
+import { checkBtmsFile, FEEDS, type DocKind, type FileCheck, type Verdict } from './checkFile.ts';
 
 const BUCKET = 'documents';
 
@@ -60,7 +60,7 @@ export async function uploadToBtmsFolder(
   file: File,
   when: { year: string; month: string },
   check: FileCheck,
-): Promise<{ documentId: number; superseded: number }> {
+): Promise<{ documentId: number; storagePath: string; superseded: number }> {
   if (check.verdict === 'blocked') {
     throw new Error(
       'This file was not stored. ' + (check.problems[0] ?? 'It did not pass its checks.'),
@@ -112,8 +112,58 @@ export async function uploadToBtmsFolder(
   if (rec.error) console.warn('The check was not recorded:', rec.error.message);
 
   const superseded = await supersede(clientId, documentId, check.kind, period);
-  return { documentId, superseded };
+  return { documentId, storagePath: path, superseded };
 }
+
+/**
+ * Where a file already in the client's folder is.
+ *
+ * An importer records this rather than storing anything itself: there is one
+ * copy of a BTMS export, in the client's folder, and an import points at it.
+ * The second copy the importers used to make -- in a bucket of their own -- is
+ * what let a file exist for the reporting application that nobody could find
+ * from the client.
+ */
+export type ImportSource = { storagePath: string; documentId: number | null };
+
+export const sourceOf = (f: { id: number; storagePath: string }): ImportSource =>
+  ({ storagePath: f.storagePath, documentId: f.id });
+
+/**
+ * Check a file and put it in the client's folder: the only way a BTMS file is
+ * stored anywhere.
+ *
+ * Every route that used to upload for itself comes through here, so a file
+ * loaded from any screen lands in the same place, under the same gate, with the
+ * same record of what the gate found. A blocked file does not reach storage --
+ * uploadToBtmsFolder refuses it -- and the caller gets the reason.
+ */
+export async function storeInBtmsFolder(
+  clientId: number,
+  file: File,
+  when: { year: string; month: string },
+  declared?: DocKind,
+): Promise<ImportSource & { superseded: number; check: FileCheck }> {
+  const check = await checkBtmsFile(file, declared);
+  const r = await uploadToBtmsFolder(clientId, file, when, check);
+  return {
+    storagePath: r.storagePath,
+    documentId: r.documentId,
+    superseded: r.superseded,
+    check,
+  };
+}
+
+/**
+ * The year and month a document is filed under, from whatever period the caller
+ * knows: 'YYYY', 'YYYY-MM' or 'YYYY-MM-DD'. documents.year and documents.month
+ * are how a person finds the file again in the portal, so a file with a period
+ * gets filed under it rather than under nothing.
+ */
+export const filedUnder = (period: string | null | undefined) => ({
+  year: period ? period.slice(0, 4) : '',
+  month: period && period.length >= 7 ? period.slice(5, 7) : '',
+});
 
 const periodFrom = (w: { year: string; month: string }) =>
   w.year && w.month ? `${w.year}-${String(w.month).padStart(2, '0')}` : w.year || null;

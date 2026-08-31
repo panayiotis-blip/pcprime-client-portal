@@ -8,6 +8,7 @@
 // expensive to get wrong and invisible afterwards.
 
 import { useRef, useState } from 'react';
+import { storeInBtmsFolder, filedUnder } from '../lib/import/portalFolder.ts';
 import {
   prepareTrialBalanceImport, commitTrialBalanceImport,
   type TbPrepared, type TbCommitted,
@@ -67,8 +68,10 @@ export default function TrialBalancePanel({
     if (!file || !prepared) return;
     setError(null);
     try {
+      onProgress('Storing the file in the client’s BTMS folder');
+      const src = await storeInBtmsFolder(clientId, file, filedUnder(periodMonth), 'trial_balance');
       setCommitted(await commitTrialBalanceImport(
-        clientId, file, prepared, { periodMonth, isAnnual }, onProgress));
+        clientId, file, prepared, src, { periodMonth, isAnnual }, onProgress));
       reset();
       onImported();
     } catch (e) {

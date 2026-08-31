@@ -10,6 +10,7 @@
 // same one.
 
 import { useRef, useState } from 'react';
+import { storeInBtmsFolder, filedUnder } from '../lib/import/portalFolder.ts';
 import {
   preparePayrollImport, commitPayrollImport,
   type PayrollPrepared, type PayrollCommitted,
@@ -51,7 +52,12 @@ export default function PayrollPanel({ clientId, onImported }: {
     if (!costFile || !sheetFile || !prepared) return;
     setError(null);
     try {
-      setCommitted(await commitPayrollImport(clientId, costFile, sheetFile, prepared, (s) => setBusy(s)));
+      setBusy('Storing both reports in the client’s BTMS folder');
+      const filed = filedUnder(prepared.periodMonth);
+      const cost = await storeInBtmsFolder(clientId, costFile, filed, 'payroll_cost');
+      const sheet = await storeInBtmsFolder(clientId, sheetFile, filed, 'payroll_sheet');
+      setCommitted(await commitPayrollImport(
+        clientId, costFile, sheetFile, prepared, { cost, sheet }, (s) => setBusy(s)));
       reset();
       onImported();
     } catch (e) {

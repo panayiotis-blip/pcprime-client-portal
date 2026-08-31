@@ -21,6 +21,7 @@ import {
 } from '../btms/payroll.ts';
 import { readSheetRows, sha256 } from './sheet.ts';
 import type { Progress } from './ledgerImport.ts';
+import type { ImportSource } from './portalFolder.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -85,6 +86,7 @@ export async function commitPayrollImport(
   costFile: File,
   sheetFile: File,
   p: PayrollPrepared,
+  sources: { cost: ImportSource; sheet: ImportSource },
   onProgress: Progress = () => {},
 ): Promise<PayrollCommitted> {
   if (!p.cost.ok || !p.sheet.ok) {
@@ -102,18 +104,13 @@ export async function commitPayrollImport(
     throw new Error(`The two reports disagree — ${bad}. One of them is wrong; neither is imported.`);
   }
 
-  const store = async (file: File, checksum: string, kind: string) => {
-    const ext = file.name.toLowerCase().endsWith('.xlsx') ? 'xlsx' : 'xls';
-    const path = `${clientId}/payroll/${kind}-${checksum}.${ext}`;
-    const up = await supabase.storage.from('reporting-imports')
-      .upload(path, file, { upsert: true, contentType: file.type || 'application/vnd.ms-excel' });
-    if (up.error) throw new Error(`The file could not be stored: ${up.error.message}`);
-    return path;
-  };
-
-  onProgress('Storing the files');
-  const costPath = await store(costFile, p.costFile.checksum, 'cost-analysis');
-  await store(sheetFile, p.sheetFile.checksum, 'paysheet');
+  // ---- the evidence copies -----------------------------------------
+  // Both reports are already in the client's BTMS folder; portalFolder.ts put
+  // them there and is the only thing that stores a BTMS file. The import
+  // record names the cost analysis, as it always has, because that is the file
+  // its checksum is taken from -- the paysheet is recorded beside it in the
+  // folder rather than in a second bucket of the importer's own.
+  const costPath = sources.cost.storagePath;
 
   onProgress('Recording the import');
   const { data: me } = await supabase.auth.getUser();

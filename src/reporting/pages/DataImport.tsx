@@ -15,6 +15,7 @@ import PayrollPanel from './PayrollPanel';
 import FolderPanel from './FolderPanel';
 import PortalFolderPanel from './PortalFolderPanel';
 import FolderReviewPanel from './FolderReviewPanel';
+import { storeInBtmsFolder, filedUnder } from '../lib/import/portalFolder.ts';
 import {
   prepareLedgerImport, commitLedgerImport,
   type Prepared, type Committed,
@@ -88,7 +89,12 @@ export default function DataImport() {
     if (!file || !prepared) return;
     setError(null);
     try {
-      const res = await commitLedgerImport(clientId, file, prepared, { allowLoss }, onProgress);
+      // Stored in the client's BTMS folder first. There is one copy of a
+      // BTMS export and it lives with the client; the import points at it.
+      onProgress('Storing the file in the client’s BTMS folder');
+      const src = await storeInBtmsFolder(
+        clientId, file, filedUnder(prepared.parse.monthsCovered.at(-1)), 'ledger');
+      const res = await commitLedgerImport(clientId, file, prepared, src, { allowLoss }, onProgress);
       setCommitted(res);
       setLedgerVersion((v) => v + 1);
       setPrepared(null);
