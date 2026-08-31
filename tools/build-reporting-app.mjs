@@ -78,6 +78,30 @@ if (today) {
   throw new Error('const TODAY not found — the template has changed shape.');
 }
 
+// ---- patch 3: the Upload buttons go to the importer ------------------
+//
+// The template's Upload buttons raise an alert saying the wiring is "build
+// phase P1". That was true of the prototype and is not true any more: the
+// importer exists, in the portal, at /reporting/import. Left alone the button
+// is a dead end on the one screen a person goes to when they want to upload
+// something — which is exactly where Pete got stuck.
+//
+// It also raised an alert(), which blocks the frame until it is dismissed.
+
+{
+  const open = "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{";
+  const close = 'build phase P1.");}));';
+  const from = script.indexOf(open);
+  const to = script.indexOf(close, from);
+  if (from < 0 || to < 0) throw new Error('the Upload handler is not where it was — the template has changed shape.');
+  script =
+    script.slice(0, from) +
+    "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',()=>{" +
+    "parent.postMessage({type:'pcp-open-import',feed:b.dataset.up,key:CID},'*');" +
+    "}));" +
+    script.slice(to + close.length);
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

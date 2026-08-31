@@ -17,7 +17,8 @@
 // the data", where it belongs.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useReportingSession } from '../session';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -34,6 +35,8 @@ export default function ReportHome() {
   const [reading, setReading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
+  const navigate = useNavigate();
+  const { choose } = useReportingSession();
 
   const build = useCallback(async () => {
     setBusy('Reading the client list'); setError(null);
@@ -63,8 +66,25 @@ export default function ReportHome() {
   // the data never leaves the page either way.
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; key?: string } | null;
-      if (!d || d.type !== 'pcp-need-client' || !d.key) return;
+      const d = e.data as { type?: string; key?: string; feed?: string } | null;
+      if (!d) return;
+
+      // The template's Upload buttons used to raise an alert saying the wiring
+      // was still to come. It is not: the importer is a screen away. The button
+      // now opens it, on the client the frame is signed into, so the one screen
+      // a person goes to when they want to upload something is no longer a dead
+      // end.
+      if (d.type === 'pcp-open-import' && d.key) {
+        const want = Number(String(d.key).replace(/^c/, ''));
+        const c = listed.find((x) => x.id === want);
+        if (c) {
+          choose({ id: c.id, name: c.name, code: null });
+          navigate('/reporting/import');
+        }
+        return;
+      }
+
+      if (d.type !== 'pcp-need-client' || !d.key) return;
       const key = String(d.key);
       const frame = e.source as Window | null;
       const reply = (body: Record<string, unknown>) =>
@@ -103,7 +123,7 @@ export default function ReportHome() {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [listed]);
+  }, [listed, choose, navigate]);
 
   if (error) {
     return (
