@@ -170,6 +170,20 @@ if (today) {
   script = script.replace(head, head + guard);
 }
 
+// ---- patch 5: the cash flow note reads the period that is there --------
+//
+// renderCash ends on a sentence about "the 2026 operating inflow of ${C[2].ops}"
+// — the third column, because the prototype had exactly three. A client with
+// two financial years on the books has no C[2], and the screen would die on the
+// last line of the function it had just drawn correctly. It reads the latest
+// period instead, which is what the sentence is about in any case.
+
+{
+  const third = 'C[2].ops';
+  if (!script.includes(third)) throw new Error('the cash flow note is not where it was.');
+  script = script.split(third).join('C[C.length-1].ops');
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

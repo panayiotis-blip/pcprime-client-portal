@@ -28,6 +28,8 @@
 
 import { supabase } from '../../../lib/supabase';
 import { allRows } from '../import/pages.ts';
+import { buildAgeing } from './ageing.ts';
+import { buildCashflow } from './cashflow.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -111,8 +113,10 @@ export async function buildClientBlock(
   const lineSection = new Map(rl.map((l) => [l.line_id, l]));
 
   onProgress('Reading the chart of accounts');
-  const coa = await allRows<{ code: string; name: string; control_code: string | null }>(
-    (f, t) => rep().from('coa_accounts').select('code, name, control_code')
+  const coa = await allRows<{
+    code: string; name: string; control_code: string | null; account_type: string | null;
+  }>(
+    (f, t) => rep().from('coa_accounts').select('code, name, control_code, account_type')
       .eq('client_id', clientId).range(f, t));
   const byCode = new Map(coa.map((a) => [String(a.code), a]));
   const controlOf = (code: string) => {
@@ -259,6 +263,31 @@ export async function buildClientBlock(
     }))
     .filter((a) => a.m.some((v) => Math.abs(v) >= 0.005))
     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+
+  // ---- debtors and creditors ------------------------------------------
+  // Aged from the postings already in hand. BTMS names the accounts as
+  // Debtor or Creditor in the chart, and ageing.ts explains the one
+  // assumption it has to make: a ledger that does not allocate receipts to
+  // invoices is aged oldest first.
+  const ageing = await buildAgeing(
+    {
+      months,
+      epoch: post.ep,
+      a: post.a, d: post.d, v: post.v,
+      codeOfAcc,
+      info: new Map(coa.map((x) => [String(x.code), { name: x.name, type: x.account_type }])),
+    },
+    breathe,
+    onProgress,
+  );
+
+  // ---- cash flow --------------------------------------------------------
+  // Arithmetic on the two statements just built. Nothing is read for it.
+  onProgress('Building the cash flow');
+  const cashflow = buildCashflow({
+    months, pl, bs, bsOpen, lines,
+    yearEndMonth: settings?.year_end_month ?? 12,
+  });
 
   // ---- VAT ------------------------------------------------------------
   // No feed of its own: every posting carries its code, rate and amount, and
@@ -443,12 +472,14 @@ export async function buildClientBlock(
   // BUILD.md §8: a switched-off section is hidden from the rail.
   const features: Record<string, number> = {
     pl: 1, bs: 1, summary: 1, expenses: 1, sales: 1,
-    ledgers: 1, accounts: 1, stmt: 1, trans: 1, mapping: 1, data: 1, review: 1,
+    accounts: 1, stmt: 1, trans: 1, mapping: 1, data: 1, review: 1,
     vat: 1,
     // On only when there is something behind them.
+    ledgers: ageing.deb.length || ageing.cre.length ? 1 : 0,
     stock: stock.length ? 1 : 0,
     payroll: Object.keys(payroll).length ? 1 : 0,
-    budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
+    cash: cashflow.length ? 1 : 0,
+    budget: 0, cashmove: 0, projects: 0, audit: 0,
   };
 
   onProgress('Reading what has been loaded');
@@ -474,8 +505,10 @@ export async function buildClientBlock(
             ? `Opening balances derived from the ${openingFrom} trial balance.`
             : 'No trial balance imported: the balance sheet is movement since the first month held, not a position.',
         },
-        vatFiled: [], deb: [], cre: [],
-        agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
+        vatFiled: [],
+        deb: ageing.deb, cre: ageing.cre,
+        agetot: ageing.agetot, ageHist: ageing.ageHist, ageFlags: ageing.ageFlags,
+        cashflow, cashmove: {}, cashjrn: {},
         budget: {}, audit: {}, untagged: [], projects: [],
       },
     },
