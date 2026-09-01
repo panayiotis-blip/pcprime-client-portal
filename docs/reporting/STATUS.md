@@ -33,7 +33,7 @@ Writing one in React is building the second application again.
 
 Do not rebuild any of this.
 
-- **Schema**: migrations 190–215 applied. 215 went on on 31 August and is in the
+- **Schema**: migrations 190–216 applied. 215 went on on 31 August and is in the
   migration ledger — but note the ledger holds only 207 and 211–215, so it has never
   been the record of what is applied. `supabase/migrations/` is.
 - **Import**: the journal listing, trial balance, chart of accounts, stock and
@@ -162,27 +162,40 @@ the database disagree with the application.
 
 ---
 
-## What is not done
+## What is done since, and what is left
 
-**The seventeen objects.** Every file loaded so far went to the `reporting-imports`
-bucket; the client folders are empty. `scripts/migrate-btms-imports.mjs` will move
-them — into the right subfolders, with a `public.documents` row and a check row each,
-repointing `imports.storage_path` and `stock_valuations.file_path`, deleting nothing,
-and safe to run twice. It cannot run: the names in the bucket are bare checksums, so
-the move needs `reporting.imports.original_filename` to give them their names back,
-and neither credential can read that schema. `.env.scripts` has
-`SUPABASE_ADMIN_EMAIL` and `SUPABASE_ADMIN_PASSWORD` present but **empty**, and
-migration 190 granted the reporting schema to `authenticated` only, so the service
-role gets "permission denied for schema reporting". Fill in the admin credentials, or
-grant the schema to `service_role`.
+**The seventeen objects have moved.** They are in the client’s BTMS data folder,
+in their subfolders, with their real names back: six journal listings, four trial
+balances, four stock valuations, the chart of accounts, and the payroll pair. Both
+buckets read 17 objects and 41,3 MB — nothing was deleted, and `reporting-imports`
+is intact until somebody looks and agrees it is redundant. All 20 import rows are
+repointed, including the rejected and withdrawn ones, and the four stock valuations
+point at the new path.
 
-**The folder comparison.** `NEXT.md` §2 step 3: on opening a client, list the folder
-and compare against `reporting.btms_file_checks` by sha256 — what is new, what has
-changed since it was last imported, what is already in — then import the new and the
-changed in one action. Not started.
+Migration 216 grants the reporting schema to `service_role`, which is what let the
+mover read `reporting.imports` for the files’ real names. Worth knowing: the grant
+was **already in place** when it was applied, so 216 changed nothing — it records in
+the repo what the database already did. `service_role` bypasses RLS, so anything
+holding that key now reads every client’s reporting data unfiltered; not new in kind,
+but the reporting data joining the set.
+
+**The folder comparison is built.** On opening a client the folder is compared with
+what has been read, by sha256, and the result sits at the top of the Data import
+screen with one button that reads the new and changed files. Its first real test,
+run against A&F straight after the move:
+
+```
+16 loaded  ·  1 not read  —  a&f tb 01 2026.xls
+```
+
+That one is right. Its import was withdrawn (the ghost `trialBalanceImport.ts`
+documents), so the file is in the folder and not in the ledger, and the screen now
+says so instead of nobody knowing.
+
+**Nothing from the three work orders is outstanding.** `FIX.md` §1–§5 and all three
+of `NEXT.md` are built and shipped.
 
 ---
-
 ## What is unverified
 
 **None of this has been seen in a signed-in session.** Everything above was checked by

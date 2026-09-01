@@ -1,6 +1,6 @@
 # Three changes the partner asked for — what was built
 
-All three are done bar one step. This file is now the record of what was wanted and
+All three are done. This file is now the record of what was wanted and
 what it became; `STATUS.md` says where the whole build stands, and `FIX.md` is the
 order the work was done in.
 
@@ -11,7 +11,7 @@ app.* One folder per client, in the portal, holding what was received.
 | | | |
 |---|---|---|
 | **1** | The BTMS tick on the client record | **Built** |
-| **2** | The client's folder as the single store | **Built, except the sha256 comparison — and the seventeen existing files have not been moved** |
+| **2** | The client's folder as the single store | **Built**, comparison included, and the seventeen existing files are in the folder |
 | **3** | BTMS feeds as the document types in that folder | **Built** (§3 as written here was superseded by `FIX.md` §4, which is what was built) |
 
 ---
@@ -69,22 +69,21 @@ uploaded by whoever is reviewing, without leaving the report.
   both" is offered because two exports of one month are sometimes two different
   things, and that is the person's call rather than the code's.
 
-**Not built — the sha256 comparison.** On opening a client, list the folder and
-compare against `reporting.btms_file_checks` by digest: show what is **new**, what has
-**changed** since it was last imported, and what is already in, then import the new
-and the changed in one action. This is the "looks in that folder for changes or
-updates" the partner asked for, and it is the piece that makes the folder the way in
-rather than merely the place things end up. Everything it needs already exists —
-`listBtmsFolder()` reads the folder and `btms_file_checks.digest` holds the hash.
+**Built — the sha256 comparison.** On opening a client the folder is compared with
+what has been read, by digest: what is **new**, what has **changed** since it was
+last imported, what is already in. It sits at the top of the template’s own Data
+import screen with one button that reads the new and changed files, chart of
+accounts first. Nothing is imported without being asked for.
 
-**Blocked — the seventeen existing objects.** They are still in `reporting-imports`
-and the client folders are empty. `scripts/migrate-btms-imports.mjs` is written,
-dry-runnable and safe to run twice; it files them into the right subfolders with a
-document row and a check row each, repoints `imports.storage_path` and
-`stock_valuations.file_path`, and deletes nothing. It cannot run until somebody
-supplies a credential — see **What is not done** in `STATUS.md` for exactly why and
-the two ways out.
+**Done — the seventeen existing objects.** Moved into the client’s subfolders with
+their real names back, every import row repointed, nothing deleted:
+`reporting-imports` still holds its 17 objects and 41,3 MB until somebody agrees it
+is redundant. Run first as a dry run, which is what found the three faults in the
+plan — see the commits.
 
+Its first real test, straight after the move: **16 loaded, 1 not read** —
+`a&f tb 01 2026.xls`, whose import was withdrawn. In the folder, not in the ledger,
+and now said out loud.
 ---
 
 ## 3. In the BTMS data folder, the document type is the BTMS feed
