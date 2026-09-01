@@ -45,6 +45,15 @@ export default function ReportHome() {
   const [busy, setBusy] = useState<string | null>(null);
   const [reading, setReading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * What an action inside the frame had to say for itself.
+   *
+   * Kept apart from `error` because the two have to behave differently. An
+   * error means the report could not be built and there is nothing to show;
+   * this means something happened while the report was open, and the report
+   * must still be there afterwards.
+   */
+  const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   // The Upload button on the template's own Data import table opens this. It is
   // a dialog over the report, never a screen: every way out returns here.
   const [upload, setUpload] = useState<{ feed: Feed; clientId: number; clientName: string } | null>(null);
@@ -104,7 +113,10 @@ export default function ReportHome() {
         const cid = Number(String(d.key).replace(/^c/, ''));
         if (!Number.isFinite(cid) || cid <= 0) return;
         void saveBudget(cid, { months: d.months ?? [], budget: d.budget ?? {} })
-          .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+          .catch((err) => setNotice({
+            text: 'The budget was not saved: ' + (err instanceof Error ? err.message : String(err)),
+            bad: true,
+          }));
         return;
       }
 
@@ -118,14 +130,20 @@ export default function ReportHome() {
         const cid = Number(String(d.key).replace(/^c/, ''));
         if (!Number.isFinite(cid) || cid <= 0) return;
         void saveReviewSignoffs(cid, d.review ?? {})
-          .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+          .catch((err) => setNotice({
+            text: 'The sign-off was not saved: ' + (err instanceof Error ? err.message : String(err)),
+            bad: true,
+          }));
         return;
       }
       if (d.type === 'pcp-wp-save' && d.key) {
         const cid = Number(String(d.key).replace(/^c/, ''));
         if (!Number.isFinite(cid) || cid <= 0) return;
         void saveWorkingPapers(cid, d.wp ?? {})
-          .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+          .catch((err) => setNotice({
+            text: 'The working paper was not saved: ' + (err instanceof Error ? err.message : String(err)),
+            bad: true,
+          }));
         return;
       }
 
@@ -150,16 +168,23 @@ export default function ReportHome() {
             const bad = r.failed.length
               ? ` ${r.failed.length} could not be read: ` + r.failed.map((x) => `${x.fileName} (${x.why})`).join('; ')
               : '';
-            frame?.postMessage({ type: 'pcp-progress', key, text: said + bad }, '*');
             // What was built no longer includes what has just been read.
             blocks.delete(key);
             void forgetCachedBlock(cid);
             setStale(who?.name ?? String(cid));
-            if (r.failed.length) setError(said + bad);
+            // A file that would not import is news, not a catastrophe: the
+            // others went in, and the person is still reading the report. It
+            // used to call setError, which unmounted the frame under them.
+            setNotice({ text: said + bad, bad: r.failed.length > 0 });
+            frame?.postMessage(
+              { type: 'pcp-folder-done', key, text: said + bad, ok: r.failed.length === 0 }, '*',
+            );
           } catch (err) {
             const why = err instanceof Error ? err.message : String(err);
-            frame?.postMessage({ type: 'pcp-progress', key, text: 'Could not read the folder: ' + why }, '*');
-            setError(why);
+            setNotice({ text: 'Could not read the folder: ' + why, bad: true });
+            frame?.postMessage(
+              { type: 'pcp-folder-done', key, text: 'Could not read the folder: ' + why, ok: false }, '*',
+            );
           } finally { setReading(null); }
         })();
         return;
@@ -236,7 +261,14 @@ export default function ReportHome() {
     return () => window.removeEventListener('message', onMessage);
   }, [listed]);
 
-  if (error) {
+  // Only where there is no report to show. This used to catch every error,
+  // including one raised by an action taken INSIDE the report — which unmounted
+  // the frame, threw the blob away, and put the person back at the template's
+  // own sign-in. It read as being signed out, because it was.
+  //
+  // Anything that happens while the report is open goes to the notice in the
+  // footer instead, and the report stays where it is.
+  if (error && !url) {
     return (
       <div style={{ padding: 32, maxWidth: 640 }}>
         <div className="alert alert-error"><b>The report could not be built.</b><br />{error}</div>
@@ -288,6 +320,16 @@ export default function ReportHome() {
         borderTop: '1px solid #e2e8f0', background: '#fff', fontSize: 11.5, color: '#94a3b8',
       }}>
         <span>{listed.length} clients · built at {at}</span>
+        {notice && (
+          <span style={{ color: notice.bad ? '#b91c1c' : '#166534' }}>
+            {notice.text}
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ marginLeft: 8, padding: '0 6px' }}
+              onClick={() => setNotice(null)}
+            >dismiss</button>
+          </span>
+        )}
         {stale && (
           <span style={{ color: '#b45309' }}>
             {stale} has new data — sign in again, or Rebuild, to see it.

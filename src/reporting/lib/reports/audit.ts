@@ -280,9 +280,12 @@ export function buildAudit(input: AuditInput): Audit | null {
     }
     byCheck.set(e.check_name, g);
   }
-  const eur = (n: number) => '€' + n.toLocaleString('en-GB', {
+  // de-DE, not en-GB with its commas replaced. That older way converted the
+  // thousands separator and never the decimal point, so 516.283,99 came out as
+  // 516.283.99 — right on whole numbers, which is why it went unnoticed.
+  const eur = (n: number) => '€' + n.toLocaleString('de-DE', {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).replace(/,/g, '.');
+  });
   const tests: [string, string, string, string][] = [...byCheck.entries()]
     .sort((x, y) => y[1].open - x[1].open)
     .map(([name, g]) => {

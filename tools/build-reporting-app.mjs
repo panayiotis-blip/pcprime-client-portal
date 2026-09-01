@@ -411,7 +411,8 @@ if (today) {
     '        "<td>"+(x.period||"\\u2014")+"</td>"+',
     '        \'<td><span class="chip \'+(x.state==="new"?"s-med":"s-high")+\'">\'+x.state+"</span></td></tr>";});',
     '   g+="</tbody></table>";',
-    '   g+=\'<p style="margin:10px 0 0"><button class="sgn" id="pcpReadFolder">Read the new and changed files</button></p>\';',
+    '   g+=\'<p style="margin:10px 0 0"><button class="sgn" id="pcpReadFolder">Read the new and changed files</button>\';',
+    '   g+=\' <span id="pcpFolderMsg" style="margin-left:8px"></span></p>\';',
     '   g+="</div>";',
     ' } else if(FD.loaded){',
     '   g+=\'<div class="note"><b>The folder is fully read</b>All \'+FD.loaded+" file"+(FD.loaded===1?"":"s")+',
@@ -443,6 +444,81 @@ if (today) {
   const at = script.indexOf(after);
   if (at < 0) throw new Error('the Upload handler is not where it was.');
   script = script.slice(0, at) + handler.trimStart() + '\n' + script.slice(at);
+}
+
+// ---- patch 10: the folder read says what it did -----------------------
+//
+// The template's only listener for progress from the host lives inside ask(),
+// which runs at sign-in and removes it again the moment the client arrives. So
+// everything the host said during a folder read after sign-in was posted into a
+// window that had stopped listening: the button sat on "Reading…" for ever and
+// the outcome never appeared.
+//
+// This listener is added once, at load, and stays. It belongs to the folder
+// panel and touches nothing else.
+
+script += `
+
+/* ---------- appended by tools/build-reporting-app.mjs ---------- */
+(function(){
+  if (parent === window) return;
+  window.addEventListener('message', function(e){
+    var d = e.data;
+    if (!d || d.key !== CID) return;
+    var btn = document.getElementById('pcpReadFolder');
+    var msg = document.getElementById('pcpFolderMsg');
+    if (d.type === 'pcp-progress') {
+      if (msg) msg.textContent = d.text || '';
+      return;
+    }
+    if (d.type !== 'pcp-folder-done') return;
+    if (btn) { btn.disabled = false; btn.textContent = 'Read the new and changed files'; }
+    if (msg) {
+      msg.textContent = d.text || '';
+      msg.style.color = d.ok ? 'var(--good)' : 'var(--crit)';
+    }
+    // What was read is in the ledger now, so the panel above is out of date.
+    // Saying so is honest; redrawing it from a payload built before the read
+    // would show the same files still waiting.
+    if (d.ok && msg) msg.textContent = (d.text || '') + ' Sign in again to see them in the report.';
+  });
+})();
+`;
+
+// ---- patch 11: numbers with decimals print two full stops -------------
+//
+// The template formats money as
+//
+//   toLocaleString("en-GB", {minimumFractionDigits:dp}).replace(/,/g,".")
+//
+// en-GB gives 516,283.99 and the replace turns every comma into a full stop —
+// so the thousands separator is converted and the decimal point never is, and
+// the figure reads 516.283.99. Whole numbers happen to come out right, which is
+// why it survived: 1,820 becomes 1.820, which is what the practice writes.
+//
+// The bug is in the method, not in one call. Rather than patch a separator,
+// format in a locale that writes numbers the way the practice does. de-DE gives
+// 516.283,99 and 1.820 directly, and there is nothing left to replace.
+//
+// DATES ARE NOT TOUCHED. new Date().toLocaleString("en-GB") is a timestamp and
+// toLocaleDateString("en-GB") is a date; both stay as they are, and neither
+// carries the .replace that identifies a number here.
+
+{
+  const money = 'toLocaleString("en-GB",{minimumFractionDigits:dp,maximumFractionDigits:dp}).replace(/,/g,".")';
+  if (!script.includes(money)) throw new Error('eur() is not where it was.');
+  script = script.split(money).join('toLocaleString("de-DE",{minimumFractionDigits:dp,maximumFractionDigits:dp})');
+
+  // The counts. Integers, so the old way happened to be right — but leaving two
+  // number formats in one application is how the next decimal bug gets written.
+  const count = 'toLocaleString("en-GB").replace(/,/g,".")';
+  const before = script.split(count).length - 1;
+  if (before < 10) throw new Error(`expected the counts to be formatted the old way, found ${before}.`);
+  script = script.split(count).join('toLocaleString("de-DE")');
+
+  if (script.includes('replace(/,/g,".")')) {
+    throw new Error('a number is still being formatted by replacing its commas.');
+  }
 }
 
 // ---- patch 2: ask the portal for a client at sign-in -----------------

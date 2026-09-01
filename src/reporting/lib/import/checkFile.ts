@@ -93,9 +93,11 @@ export const FEEDS: DocKind[] = [
  */
 const NEEDS_PERIOD: DocKind[] = ['trial_balance', 'stock'];
 
+// The figures the gate quotes back are read beside the report's own, so they are
+// written the same way: 516.283,99 and 1.820, not 516,283.99 and 1,820.
 const eur = (n: number) =>
-  n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const int = (n: number) => n.toLocaleString('en-GB');
+  n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int = (n: number) => n.toLocaleString('de-DE');
 /** Money compared in whole cents; a float difference is not a difference. */
 const c = (n: number) => Math.round(n * 100);
 const differs = (a: number, b: number) => c(a) !== c(b);
