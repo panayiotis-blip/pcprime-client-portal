@@ -32,6 +32,7 @@ import { buildAgeing } from './ageing.ts';
 import { buildCashflow } from './cashflow.ts';
 import { buildAudit } from './audit.ts';
 import { loadSignoffs } from './signoffStore.ts';
+import { buildFolderDiff } from './folderDiff.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -534,6 +535,12 @@ export async function buildClientBlock(
   onProgress('Reading what has been loaded');
   const feeds = await buildFeedTable(clientId);
 
+  // What is in the folder that the report has not read. The client is being
+  // opened right now, which is exactly when the partner asked for it: the app
+  // "looks in that folder for changes or updates".
+  onProgress('Comparing the folder with what has been read');
+  const folder = await buildFolderDiff(clientId);
+
   const name = settings?.report_name || c.name;
   const payload = {
     generated: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -542,6 +549,7 @@ export async function buildClientBlock(
         client: name,
         months, lines, pl, bs, bsOpen, accounts, post, exceptions, tb, vat, vatq, stock, payroll,
         feeds,
+        folder,
         postings: post.v.length,
         counts: { postings: post.v.length, accounts: accounts.length },
         cfg: {
@@ -791,6 +799,7 @@ function emptyClient(name: string): ClientBlock {
     exceptions: [], tb: [], vat: {}, vatq: [], stock: [], payroll: {},
     // Every feed, none of them present — the same shape buildFeedTable returns.
     feeds: FEED_ROWS.map((f): FeedRow => [f.name, f.why, f.freq, '', '', '', 0]),
+    folder: { items: [], fresh: 0, changed: 0, loaded: 0, evidence: 0 },
     postings: 0,
     counts: { postings: 0, accounts: 0 },
     cfg: {

@@ -373,6 +373,78 @@ if (today) {
   ].join('\n'));
 }
 
+// ---- patch 9: the folder, against what has been read ------------------
+//
+// The partner's words: the app "looks in that folder for changes or updates".
+// The folder is the record of what was received and the ledger is what has been
+// read; this puts the difference between the two at the top of the Data import
+// screen, where the person is already looking to see what is loaded.
+//
+// The comparison is by sha256 and is done when the client is opened
+// (folderDiff.ts). Only the counts and the list come across; the button hands
+// the work back to the host, which owns the importers.
+//
+// Nothing is imported without being asked for. A file appearing in the folder
+// is not consent to read it — somebody filed it, and somebody decides it goes
+// into the ledger.
+
+{
+  // Anchored on DATAAGE, which only the feed table sets. `h+="</tbody></table>";`
+  // on its own closes six other tables, and the first of them is the profit and
+  // loss — this block landed on it once already.
+  const anchor = 'h+="</tbody></table>";\n  DATAAGE=';
+  if (!script.includes(anchor)) throw new Error('the feed table close is not where it was.');
+
+  const block = [
+    'h+="</tbody></table>";',
+    '{var FD=D.folder||{items:[],fresh:0,changed:0,loaded:0,evidence:0};',
+    ' var pend=(FD.items||[]).filter(function(x){return x.state!=="loaded"});',
+    ' var g="";',
+    ' if(pend.length){',
+    '   g+=\'<div class="note" style="border-color:var(--warn)">\';',
+    '   g+="<b>The folder has "+FD.fresh+" new and "+FD.changed+" changed "+(pend.length===1?"file":"files")+"</b>";',
+    '   g+="Compared with what has been read, by content rather than by name. ";',
+    '   g+="A file re-exported after a correction reads as changed even where nothing about its name or period has.";',
+    '   g+=\'<table style="margin-top:8px"><thead><tr><th>File</th><th>What it is</th><th>Period</th><th>State</th></tr></thead><tbody>\';',
+    '   pend.forEach(function(x){',
+    '     g+="<tr><td>"+x.fileName+"</td><td>"+(KINDNAME[x.kind]||x.kind)+"</td>"+',
+    '        "<td>"+(x.period||"\\u2014")+"</td>"+',
+    '        \'<td><span class="chip \'+(x.state==="new"?"s-med":"s-high")+\'">\'+x.state+"</span></td></tr>";});',
+    '   g+="</tbody></table>";',
+    '   g+=\'<p style="margin:10px 0 0"><button class="sgn" id="pcpReadFolder">Read the new and changed files</button></p>\';',
+    '   g+="</div>";',
+    ' } else if(FD.loaded){',
+    '   g+=\'<div class="note"><b>The folder is fully read</b>All \'+FD.loaded+" file"+(FD.loaded===1?"":"s")+',
+    '      " in this client\'s BTMS folder "+(FD.loaded===1?"has":"have")+" been imported"+',
+    '      (FD.evidence?", and "+FD.evidence+" more "+(FD.evidence===1?"is":"are")+" kept for the review.":".")+"</div>";',
+    ' }',
+    ' h=g+h;}',
+    '  DATAAGE=',
+  ].join('\n');
+  script = script.replace(anchor, block);
+
+  // The names the folder uses, in the words the feed table already uses.
+  const kindname = [
+    'const KINDNAME={ledger:"Analytical journal listing",chart:"Chart of accounts",',
+    'trial_balance:"Trial balance",stock:"Stock valuation",',
+    'payroll_cost:"Payroll cost analysis",payroll_sheet:"Payroll paysheet listing"};',
+  ].join('');
+  script = kindname + '\n' + script;
+
+  // One button, handed straight back to the host.
+  const handler = [
+    '',
+    '{var RF=document.getElementById("pcpReadFolder");',
+    ' if(RF&&parent!==window)RF.addEventListener("click",function(){',
+    '   RF.disabled=true;RF.textContent="Reading\\u2026";',
+    '   parent.postMessage({type:"pcp-read-folder",key:CID},"*");});}',
+  ].join('\n');
+  const after = "document.querySelectorAll('[data-up]').forEach(b=>b.addEventListener('click',function(){";
+  const at = script.indexOf(after);
+  if (at < 0) throw new Error('the Upload handler is not where it was.');
+  script = script.slice(0, at) + handler.trimStart() + '\n' + script.slice(at);
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

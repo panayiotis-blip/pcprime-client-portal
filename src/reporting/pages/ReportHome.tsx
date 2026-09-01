@@ -29,6 +29,7 @@ import {
 } from '../lib/reports/signoffStore.ts';
 import UploadDialog from '../upload/UploadDialog.tsx';
 import { feedByName, type Feed } from '../upload/feeds.ts';
+import { readFolder } from '../upload/readFolder.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -125,6 +126,42 @@ export default function ReportHome() {
         if (!Number.isFinite(cid) || cid <= 0) return;
         void saveWorkingPapers(cid, d.wp ?? {})
           .catch((err) => setError(err instanceof Error ? err.message : String(err)));
+        return;
+      }
+
+      // “It looks in that folder for changes or updates”. The comparison came
+      // across in the payload; this is the button that acts on it.
+      if (d.type === 'pcp-read-folder' && d.key) {
+        const key = String(d.key);
+        const frame = e.source as Window | null;
+        const cid = Number(key.replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        const who = listed.find((c) => c.id === cid);
+        void (async () => {
+          setReading(who?.name ?? String(cid));
+          try {
+            const r = await readFolder(cid, (step) => {
+              setReading(`${who?.name ?? cid} — ${step}`);
+              frame?.postMessage({ type: 'pcp-progress', key, text: `${step}…` }, '*');
+            });
+            const said = r.done.length
+              ? `Read ${r.done.length} file${r.done.length === 1 ? '' : 's'}.`
+              : 'Nothing was read.';
+            const bad = r.failed.length
+              ? ` ${r.failed.length} could not be read: ` + r.failed.map((x) => `${x.fileName} (${x.why})`).join('; ')
+              : '';
+            frame?.postMessage({ type: 'pcp-progress', key, text: said + bad }, '*');
+            // What was built no longer includes what has just been read.
+            blocks.delete(key);
+            void forgetCachedBlock(cid);
+            setStale(who?.name ?? String(cid));
+            if (r.failed.length) setError(said + bad);
+          } catch (err) {
+            const why = err instanceof Error ? err.message : String(err);
+            frame?.postMessage({ type: 'pcp-progress', key, text: 'Could not read the folder: ' + why }, '*');
+            setError(why);
+          } finally { setReading(null); }
+        })();
         return;
       }
 

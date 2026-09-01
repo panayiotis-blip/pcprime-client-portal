@@ -36,6 +36,8 @@ export type PortalFile = {
   warnings: string[];
   /** The file's own control figures, as they were at the time of saving. */
   facts: Record<string, string>;
+  /** sha256 of the content, from the gate. Empty for a file saved before it. */
+  digest: string;
 };
 
 /** The folder, made the first time it is wanted — subfolders and all. */
@@ -332,9 +334,10 @@ export async function listBtmsFolder(
     problems: string[] | null;
     warnings: string[] | null;
     facts: Record<string, string> | null;
+    digest: string | null;
   };
   const checks = await supabase.schema('reporting').from('btms_file_checks')
-    .select('document_id, kind, period, verdict, problems, warnings, facts')
+    .select('document_id, kind, period, verdict, problems, warnings, facts, digest')
     .in('document_id', rows.map((r) => r.id));
   // A failure here costs speed, not correctness: every file falls back to being
   // opened, which is what this used to do for all of them.
@@ -362,6 +365,7 @@ export async function listBtmsFolder(
       problems: [],
       warnings: [],
       facts: {},
+      digest: '',
     };
 
     const k = byDoc.get(r.id);
@@ -376,6 +380,7 @@ export async function listBtmsFolder(
         problems: k.problems ?? [],
         warnings: k.warnings ?? [],
         facts: k.facts ?? {},
+        digest: k.digest ?? '',
       });
       continue;
     }

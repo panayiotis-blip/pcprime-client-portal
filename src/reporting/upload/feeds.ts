@@ -134,6 +134,22 @@ export function feedsForFolder(categoryKey: string | null | undefined): Feed[] {
   return mine.length ? mine : FEEDS;
 }
 
+/**
+ * The feed a file in the folder belongs to.
+ *
+ * The gate records a kind, not a feed, and one kind can be two feeds: a trial
+ * balance is monthly or annual and the importer is told which. The period says
+ * which -- a bare year is a year end, a month is a month -- because that is the
+ * distinction the person drew when they filed it.
+ */
+export function feedForKind(kind: string, period: string | null): Feed | null {
+  if (kind === 'trial_balance') {
+    const annual = !!period && /^\d{4}$/.test(period);
+    return FEEDS.find((f) => f.key === (annual ? 'trial_balance_annual' : 'trial_balance_monthly')) ?? null;
+  }
+  return FEEDS.find((f) => f.kind === kind) ?? null;
+}
+
 /** The period as it is recorded against the file: 'YYYY', 'YYYY-MM' or a date. */
 export function periodValue(kind: PeriodKind, value: string): string | null {
   const v = value.trim();
