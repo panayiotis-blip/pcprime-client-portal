@@ -58,24 +58,19 @@ export default function ReportHome() {
   // The Upload button on the template's own Data import table opens this. It is
   // a dialog over the report, never a screen: every way out returns here.
   const [upload, setUpload] = useState<{ feed: Feed; clientId: number; clientName: string } | null>(null);
-  const [stale, setStale] = useState<string | null>(null);
   const started = useRef(false);
 
   /**
-   * Rebuild means rebuild. The in-memory map dies with the tab anyway; what
-   * outlives it is the block kept in IndexedDB against the data stamp, and
-   * clearing that was the one thing this button did not do — so a person who
-   * pressed Rebuild because the report looked wrong got the same stored copy
-   * back, and nothing they could press would say otherwise.
+   * Build the frame and the client list.
    *
-   * Only on the button. The opening build must NOT forget: that is every page
-   * load, and throwing the cache away there is the ninety seconds this was
-   * built to stop paying.
+   * There was a Rebuild button beside this and it is gone: the partner could
+   * not tell what it did, and a person should not have to know when a report
+   * has gone stale. It goes stale on one event -- something being imported --
+   * and the report refreshes itself on that event now.
    */
-  const build = useCallback(async (forget = false) => {
+  const build = useCallback(async () => {
     setBusy('Reading the client list'); setError(null);
     try {
-      if (forget) await forgetCachedBlock();
       const list = await buildClientList();
       setBusy('Opening');
       const blob = await buildTemplateHtml(list.json);
@@ -192,11 +187,12 @@ export default function ReportHome() {
             // What was built no longer includes what has just been read.
             blocks.delete(key);
             void forgetCachedBlock(cid);
-            setStale(who?.name ?? String(cid));
             // A file that would not import is news, not a catastrophe: the
             // others went in, and the person is still reading the report. It
             // used to call setError, which unmounted the frame under them.
             setNotice({ text: said + bad, bad: r.failed.length > 0 });
+            // What is on screen predates what was just read into the ledger.
+            if (r.done.length) frame?.postMessage({ type: 'pcp-refresh', key }, '*');
             frame?.postMessage(
               { type: 'pcp-folder-done', key, text: said + bad, ok: r.failed.length === 0 }, '*',
             );
@@ -327,7 +323,10 @@ export default function ReportHome() {
             const key = 'c' + upload.clientId;
             blocks.delete(key);
             void forgetCachedBlock(upload.clientId);
-            setStale(upload.clientName);
+            // The frame is showing a report built before this file arrived.
+            const frame = (document.querySelector('iframe') as HTMLIFrameElement | null)
+              ?.contentWindow;
+            frame?.postMessage({ type: 'pcp-refresh', key }, '*');
           }}
         />
       )}
@@ -353,16 +352,7 @@ export default function ReportHome() {
             >dismiss</button>
           </span>
         )}
-        {stale && (
-          <span style={{ color: '#b45309' }}>
-            {stale} has new data — sign in again, or Rebuild, to see it.
-          </span>
-        )}
         {reading && <span style={{ color: '#334155' }}>{reading}…</span>}
-        <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto', padding: '1px 8px' }}
-          disabled={!!busy} onClick={() => void build(true)}>
-          {busy ? 'Rebuilding…' : 'Rebuild'}
-        </button>
       </div>
     </div>
   );

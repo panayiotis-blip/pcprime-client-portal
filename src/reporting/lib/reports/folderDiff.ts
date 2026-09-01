@@ -25,6 +25,7 @@ import { allRows } from '../import/pages.ts';
 import { supabase } from '../../../lib/supabase';
 import { listBtmsFolder, type PortalFile } from '../import/portalFolder.ts';
 import { FEEDS as GATE_FEEDS, type DocKind } from '../import/checkFile.ts';
+import { derivedLabel, periodLabel } from '../import/naming.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -32,10 +33,16 @@ export type FolderState = 'new' | 'changed' | 'loaded';
 
 export type FolderItem = {
   documentId: number;
+  /** What the file is, in the words a person reads: "Trial balance — January 2026". */
+  label: string;
+  /** What BTMS called the export. What somebody searches for to find it again. */
+  original: string;
   fileName: string;
   kind: DocKind;
   /** As the gate recorded it: 'YYYY', 'YYYY-MM', a date, or a range. */
   period: string | null;
+  /** The same period as a person writes it: January 2026, 2026, 31 Dec 2025. */
+  periodLabel: string;
   state: FolderState;
 };
 
@@ -131,15 +138,26 @@ export async function buildFolderDiff(clientId: number): Promise<FolderDiff> {
       state = 'new';
     }
 
+    // The name BTMS gave the export is kept on the row as a note; where the
+    // file was uploaded through the app it is there, and where it was migrated
+    // from the old bucket the file name IS the original.
+    const original = f.originalName || f.fileName;
     items.push({
-      documentId: f.id, fileName: f.fileName, kind: f.kind, period, state,
+      documentId: f.id,
+      label: derivedLabel(f.kind, period),
+      original,
+      fileName: f.fileName,
+      kind: f.kind,
+      period,
+      periodLabel: periodLabel(period, f.kind),
+      state,
     });
   }
 
   // New first, then changed, then what is already in: the order a person reads
   // it in is the order they would act on it.
   const rank: Record<FolderState, number> = { new: 0, changed: 1, loaded: 2 };
-  items.sort((a, b) => rank[a.state] - rank[b.state] || a.fileName.localeCompare(b.fileName));
+  items.sort((a, b) => rank[a.state] - rank[b.state] || a.label.localeCompare(b.label));
 
   return {
     items,

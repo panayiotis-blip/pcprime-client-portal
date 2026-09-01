@@ -402,13 +402,16 @@ if (today) {
     ' var g="";',
     ' if(pend.length){',
     '   g+=\'<div class="note" style="border-color:var(--warn)">\';',
-    '   g+="<b>The folder has "+FD.fresh+" new and "+FD.changed+" changed "+(pend.length===1?"file":"files")+"</b>";',
-    '   g+="Compared with what has been read, by content rather than by name. ";',
-    '   g+="A file re-exported after a correction reads as changed even where nothing about its name or period has.";',
-    '   g+=\'<table style="margin-top:8px"><thead><tr><th>File</th><th>What it is</th><th>Period</th><th>State</th></tr></thead><tbody>\';',
+    '   g+="<b>In the folder, not yet read into the ledger</b>";',
+    '   g+="These files are in the client\'s BTMS folder and have not been imported. ";',
+    '   g+="The comparison is by content, not by name \\u2014 so a file re-exported after a ";',
+    '   g+="correction reads as changed even though its name and period did not.";',
+    '   g+=\'<table style="margin-top:8px"><thead><tr><th>File</th><th>Period</th><th>State</th></tr></thead><tbody>\';',
     '   pend.forEach(function(x){',
-    '     g+="<tr><td>"+x.fileName+"</td><td>"+(KINDNAME[x.kind]||x.kind)+"</td>"+',
-    '        "<td>"+(x.period||"\\u2014")+"</td>"+',
+    '     g+="<tr><td><b>"+x.label+"</b>"+',
+    '        (x.original&&x.original!==x.label',
+    '          ? \'<div style="font-size:.82em;color:var(--ink-3)">\'+x.original+"</div>" : "")+"</td>"+',
+    '        "<td>"+(x.periodLabel||"\\u2014")+"</td>"+',
     '        \'<td><span class="chip \'+(x.state==="new"?"s-med":"s-high")+\'">\'+x.state+"</span></td></tr>";});',
     '   g+="</tbody></table>";',
     '   g+=\'<p style="margin:10px 0 0"><button class="sgn" id="pcpReadFolder">Read the new and changed files</button>\';',
@@ -424,13 +427,10 @@ if (today) {
   ].join('\n');
   script = script.replace(anchor, block);
 
-  // The names the folder uses, in the words the feed table already uses.
-  const kindname = [
-    'const KINDNAME={ledger:"Analytical journal listing",chart:"Chart of accounts",',
-    'trial_balance:"Trial balance",stock:"Stock valuation",',
-    'payroll_cost:"Payroll cost analysis",payroll_sheet:"Payroll paysheet listing"};',
-  ].join('');
-  script = kindname + '\n' + script;
+  // The kind's name used to be looked up here, from a copy of the list. It is
+  // not any more: folderDiff sends the label already made, so the panel, the
+  // portal's document cards and the backfilled file names all read the same
+  // words because they are all made in the same place.
 
   // One button, handed straight back to the host.
   const handler = [
@@ -608,6 +608,27 @@ script += `
       parent.postMessage({ type:'pcp-need-client', key:key }, '*');
     });
   }
+
+  // Something was imported, so what is on screen predates it. The report
+  // refreshes itself rather than asking a person to know when to press a
+  // button — which is what the Rebuild button was, and why it is gone.
+  //
+  // Registered before the sign-in guard below, which returns early when the
+  // sign-in elements are missing. A refresh has nothing to do with signing in.
+  window.addEventListener('message', function(e){
+    var d = e.data;
+    if (!d || d.type !== 'pcp-refresh' || d.key !== CID) return;
+    ask(CID).then(function(block){
+      if (!block) return;
+      ALL.clients[CID] = block;
+      bindClient();
+      // Redraw whatever the person is looking at, and nothing else.
+      var sel = document.querySelector('nav.tabs button[aria-selected="true"]');
+      applyFeatures();
+      if (sel && RENDER[sel.dataset.v]) RENDER[sel.dataset.v]();
+      setStatus();
+    }).catch(function(){ /* the host has already said so in its own strip */ });
+  });
 
   var note = document.getElementById('loginNote');
   var said = note ? note.textContent : '';

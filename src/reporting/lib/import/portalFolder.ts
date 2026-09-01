@@ -11,13 +11,17 @@
 // for at upload, beside the file, rather than guessed from a name afterwards.
 
 import { supabase } from '../../../lib/supabase';
+import { derivedFileName } from './naming.ts';
 import { readSheetRows } from './sheet.ts';
 import { identify, suggestedDate, type FeedKind } from './folder.ts';
 import {
-  checkBtmsFile, FEEDS, KIND_LABEL, type DocKind, type FileCheck, type Verdict,
+  checkBtmsFile, FEEDS, type DocKind, type FileCheck, type Verdict,
 } from './checkFile.ts';
 
 const BUCKET = 'documents';
+
+/** How the BTMS export's own name is kept on the document row. */
+const AS_EXPORTED = 'As exported:';
 
 export type PortalFile = {
   id: number;
@@ -38,6 +42,11 @@ export type PortalFile = {
   facts: Record<string, string>;
   /** sha256 of the content, from the gate. Empty for a file saved before it. */
   digest: string;
+  /**
+   * The name BTMS gave the export, where the stored name is derived from the
+   * type and period. Empty for a file whose stored name IS the original.
+   */
+  originalName: string;
 };
 
 /** The folder, made the first time it is wanted — subfolders and all. */
@@ -72,10 +81,7 @@ async function folderForKind(clientId: number, kind: DocKind): Promise<number> {
  * search for when they go looking for the export itself.
  */
 export function derivedName(kind: DocKind, period: string | null, original: string): string {
-  const dot = original.lastIndexOf('.');
-  const ext = dot > 0 ? original.slice(dot) : '';
-  const label = KIND_LABEL[kind] ?? 'Document';
-  return period ? `${label} — ${period}${ext}` : `${label}${ext}`;
+  return derivedFileName(kind, period, original);
 }
 
 /** A safe storage segment, matching what the portal does elsewhere. */
@@ -138,7 +144,7 @@ export async function uploadToBtmsFolder(
     period_end: check.kind === 'stock' && period && /^d{4}-d{2}-d{2}$/.test(period)
       ? period : null,
     file_name: named,
-    notes: `As exported: ${file.name}`,
+    notes: `${AS_EXPORTED} ${file.name}`,
     mime_type: file.type || 'application/vnd.ms-excel',
     storage_path: path,
     storage_bucket: BUCKET,
@@ -314,7 +320,7 @@ export async function listBtmsFolder(
   await btmsFolderId(clientId);          // makes the folder and its subfolders
   const { data, error } = await supabase
     .from('documents')
-    .select('id, file_name, storage_path, year, month, created_at')
+    .select('id, file_name, storage_path, year, month, created_at, notes')
     .eq('client_id', clientId).eq('category', 'btms')
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
@@ -322,7 +328,7 @@ export async function listBtmsFolder(
 
   const rows = (data ?? []) as {
     id: number; file_name: string; storage_path: string;
-    year: string | null; month: string | null; created_at: string;
+    year: string | null; month: string | null; created_at: string; notes: string | null;
   }[];
   if (!rows.length) return [];
 
@@ -366,6 +372,10 @@ export async function listBtmsFolder(
       warnings: [],
       facts: {},
       digest: '',
+      // Written by uploadToBtmsFolder as "As exported: <name>".
+      originalName: (r.notes ?? '').startsWith(AS_EXPORTED)
+        ? (r.notes ?? '').slice(AS_EXPORTED.length).trim()
+        : '',
     };
 
     const k = byDoc.get(r.id);
