@@ -405,6 +405,8 @@ const KIND_SUMMARY: Record<string, string> = {
   payroll_sheet: 'Paysheet listing — by employee',
   vat_summary: 'VAT figures summary — a filed period',
   detailed_ledger: 'Detailed ledger — kept for the review',
+  vat_return: 'VAT return as filed — kept for the review',
+  sales_listing: 'Sales invoice listing — kept for the review',
   bank_statement: 'Bank statement — kept for the review',
   other: 'Kept with the client for the review',
   unknown: 'Not recognised as a BTMS export',

@@ -6,7 +6,9 @@ import { PanelSkeleton } from '../ui';
 // The BTMS folders are the one place in the portal where the document types are
 // not the general list. They are the feeds the reporting application can read,
 // and they are defined once, beside the application that reads them.
-import { FEEDS as BTMS_FEEDS, periodValue, filedUnderPeriod } from '../../reporting/upload/feeds';
+import {
+  FEEDS as BTMS_FEEDS, feedsForFolder, periodValue, periodRequired, filedUnderPeriod,
+} from '../../reporting/upload/feeds';
 import { storeInBtmsFolder } from '../../reporting/lib/import/portalFolder';
 
 const DOC_TYPES = [
@@ -223,7 +225,7 @@ export default function ClientDocuments({ clientId }: Props) {
         // the subfolder for its kind, and it is named from the type and the
         // period rather than from whatever the export happened to be called.
         const period = periodValue(feed.period, btmsPeriod);
-        if (feed.period !== 'none' && !period) {
+        if (periodRequired(feed) && !period) {
           throw new Error('Choose the period this file covers before loading it.');
         }
         for (const f of Array.from(files)) {
@@ -258,7 +260,29 @@ export default function ClientDocuments({ clientId }: Props) {
   // BTMS data and every subfolder under it. Keyed off the category, as migration
   // 215 arranges it, so a folder somebody renamed still behaves correctly.
   const isBtmsFolder = !!activeFolder?.category_key?.startsWith('btms');
-  const feed = BTMS_FEEDS.find((f) => f.key === btmsFeed) ?? BTMS_FEEDS[0];
+  // The subfolder IS the report type, so it decides what may be uploaded into
+  // it. In the parent everything is offered, and the form says where it will go.
+  const folderFeeds = feedsForFolder(activeFolder?.category_key);
+  const onlyFeed = folderFeeds.length === 1 ? folderFeeds[0] : null;
+  const feed = onlyFeed ?? folderFeeds.find((f) => f.key === btmsFeed) ?? folderFeeds[0];
+  // Where a file chosen in the BTMS data parent will actually be filed. Read off
+  // the folder tree rather than a second copy of the mapping, so a subfolder
+  // somebody renamed shows the name they gave it.
+  const flatten = (nodes: FolderNode[]): FolderNode[] =>
+    nodes.flatMap((n) => [n, ...flatten(n.children ?? [])]);
+  const targetFolderName =
+    flatten(folders).find((f) => f.category_key === feed?.folder)?.name ?? '';
+
+  // Moving between subfolders must not leave the previous folder's feed
+  // selected — it is not on offer here, and the form would be filing something
+  // the heading does not name.
+  useEffect(() => {
+    if (!isBtmsFolder) return;
+    if (!folderFeeds.some((f) => f.key === btmsFeed)) {
+      setBtmsFeed(folderFeeds[0].key);
+      setBtmsPeriod('');
+    }
+  }, [activeFolder?.id]);
 
   // Auto-set doc type when folder changes
   useEffect(() => {
@@ -418,17 +442,29 @@ export default function ClientDocuments({ clientId }: Props) {
                     <div className="form-group">
                       <label>Document Type</label>
                       {isBtmsFolder ? (
-                        <select
-                          value={btmsFeed}
-                          onChange={(e) => { setBtmsFeed(e.target.value); setBtmsPeriod(''); }}
-                          className="form-input"
-                        >
-                          {BTMS_FEEDS.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}
-                        </select>
+                        onlyFeed ? (
+                          // One thing can go in this folder, and the folder is
+                          // already named above. A dropdown of one asks a
+                          // question that has no second answer.
+                          <div style={{ padding: '8px 0', fontWeight: 500 }}>{onlyFeed.name}</div>
+                        ) : (
+                          <select
+                            value={feed.key}
+                            onChange={(e) => { setBtmsFeed(e.target.value); setBtmsPeriod(''); }}
+                            className="form-input"
+                          >
+                            {folderFeeds.map(f => <option key={f.key} value={f.key}>{f.name}</option>)}
+                          </select>
+                        )
                       ) : (
                         <select value={uploadType} onChange={(e) => setUploadType(e.target.value)} className="form-input">
                           {DOC_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
+                      )}
+                      {isBtmsFolder && !onlyFeed && targetFolderName && (
+                        <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                          This will be saved in <b>{targetFolderName}</b>.
+                        </p>
                       )}
                     </div>
                     {isBtmsFolder ? (
@@ -441,7 +477,12 @@ export default function ClientDocuments({ clientId }: Props) {
                         </div>
                       ) : (
                         <div className="form-group">
-                          <label>{feed.ask}</label>
+                          <label>
+                            {feed.ask}
+                            {feed.optional && (
+                              <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}> (optional)</span>
+                            )}
+                          </label>
                           {feed.period === 'date' ? (
                             <input type="date" value={btmsPeriod} onChange={(e) => setBtmsPeriod(e.target.value)} className="form-input" />
                           ) : feed.period === 'year' ? (

@@ -38,7 +38,8 @@ import { parseCostAnalysis, parsePaysheet } from '../btms/payroll.ts';
 import type { Row } from '../btms/types.ts';
 
 /** What a file is kept as. The feeds are read; the rest is evidence. */
-export type DocKind = FeedKind | 'bank_statement' | 'detailed_ledger' | 'other';
+export type DocKind = FeedKind
+  | 'bank_statement' | 'detailed_ledger' | 'vat_return' | 'sales_listing' | 'other';
 
 export type Verdict = 'ok' | 'warning' | 'blocked';
 
@@ -72,6 +73,8 @@ export const KIND_LABEL: Record<DocKind, string> = {
   payroll_sheet: 'Payroll — paysheet',
   vat_summary: 'VAT figures summary',
   detailed_ledger: 'Detailed ledger',
+  vat_return: 'VAT return as filed',
+  sales_listing: 'Sales invoice listing',
   bank_statement: 'Bank statement',
   other: 'Other document',
   unknown: 'Not recognised',

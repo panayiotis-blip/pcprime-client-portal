@@ -31,7 +31,7 @@ import { storeInBtmsFolder } from '../lib/import/portalFolder.ts';
 import { checkBtmsFile, type FileCheck } from '../lib/import/checkFile.ts';
 import { alreadyLoaded, type Already } from './existing.ts';
 import { runImport } from './runImport.ts';
-import { filedUnderPeriod, periodValue, type Feed } from './feeds.ts';
+import { filedUnderPeriod, periodRequired, periodValue, type Feed } from './feeds.ts';
 
 type Phase = 'pick' | 'checking' | 'checked' | 'repeat' | 'working' | 'done' | 'failed';
 
@@ -67,9 +67,11 @@ export default function UploadDialog({
     return () => window.removeEventListener('keydown', onKey);
   }, [phase, onClose]);
 
-  const needsPeriod = feed.period !== 'none';
+  // Shown wherever there is a period to give; required unless the feed says a
+  // blank is honest — a supporting document may not be about a period at all.
+  const showPeriod = feed.period !== 'none';
   const stated = periodValue(feed.period, period);
-  const ready = !!file && (!needsPeriod || !!stated);
+  const ready = !!file && (!periodRequired(feed) || !!stated);
 
   /** Step 3: parse and check, before anything is stored. */
   const doCheck = useCallback(async () => {
@@ -152,7 +154,7 @@ export default function UploadDialog({
               style={{ marginBottom: 14, width: '100%' }}
             />
 
-            {needsPeriod && (
+            {showPeriod && (
               <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, color: '#475569', marginBottom: 4 }}>
                   {feed.ask}
