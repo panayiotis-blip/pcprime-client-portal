@@ -83,6 +83,9 @@ export const KIND_LABEL: Record<DocKind, string> = {
 /** The feeds the reporting application actually reads. */
 export const FEEDS: DocKind[] = [
   'chart', 'ledger', 'trial_balance', 'stock', 'payroll_cost', 'payroll_sheet',
+  // Read since the VAT importer was written: BTMS's own computation of a
+  // quarter, set against what this application rebuilds from the journal.
+  'vat_summary',
 ];
 
 /**
@@ -180,7 +183,7 @@ export async function checkBtmsFile(
     case 'vat_summary':
       return finish({
         ...shell,
-        warnings: ['Kept with the client, but the reporting app has no feed for this yet — the VAT figures are built from the postings.'],
+        warnings: ['Read as BTMS’s own computation of the quarter, and set against the figures rebuilt from the postings.'],
       });
     default:
       // A spreadsheet that recognises itself as nothing. Almost always a BTMS

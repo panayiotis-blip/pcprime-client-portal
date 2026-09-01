@@ -107,7 +107,11 @@ export default function UploadDialog({
         const r = await runImport(clientId, feed, file, src, stated, (s) => setStep(s));
         said += ' ' + r;
       } else {
-        said += ' It is kept with the client for the review; there is no importer for this one yet.';
+        // Not every feed is read, and the ones that are not are not failures.
+        // “There is no importer for this one yet” read like an apology for
+        // something broken; a bank statement is kept as evidence on purpose.
+        said += ' It is kept with the client as evidence for the review — this one is held,'
+          + ' not read into the ledger.';
       }
       setOutcome(said);
       setPhase('done');

@@ -16,6 +16,7 @@ import { prepareChartImport, commitChartImport } from '../lib/import/chartImport
 import { prepareTrialBalanceImport, commitTrialBalanceImport } from '../lib/import/trialBalanceImport.ts';
 import { prepareStockImport, commitStockImport } from '../lib/import/stockImport.ts';
 import { preparePayrollImport, commitPayrollImport } from '../lib/import/payrollImport.ts';
+import { prepareVatSummaryImport, commitVatSummaryImport } from '../lib/import/vatImport.ts';
 import type { Feed } from './feeds.ts';
 
 const n = (v: number) => v.toLocaleString('en-GB');
@@ -68,6 +69,15 @@ export async function runImport(
     if (!p.parse.ok) throw new Error(p.parse.notes[0]?.message ?? 'refused at the parsing stage');
     const r = await commitStockImport(clientId, file, p, source, period, step);
     return `${n(r.items)} items, ${r.value.toFixed(2)} against ${r.ledgerValue.toFixed(2)} in the ledger.`;
+  }
+
+  if (feed.kind === 'vat_summary') {
+    if (!period) throw new Error('A VAT figures summary needs the quarter it covers.');
+    const p = await prepareVatSummaryImport(file, period, step);
+    if (!p.parse.ok) throw new Error(p.parse.notes[0]?.message ?? 'refused at the parsing stage');
+    const r = await commitVatSummaryImport(clientId, file, p, source, step);
+    return `BTMS computes box 3 ${r.box3.toFixed(2)} and box 4 ${r.box4.toFixed(2)} for `
+      + `${r.period}` + (r.prior ? `, with ${r.prior.toFixed(2)} of prior-period items beside it.` : '.');
   }
 
   if (feed.kind === 'payroll_cost' || feed.kind === 'payroll_sheet') {

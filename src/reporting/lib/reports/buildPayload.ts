@@ -102,11 +102,12 @@ export async function buildClientBlock(
   const c = client as { id: number; name: string; client_code: string | null };
 
   const { data: settingsRow } = await rep().from('client_settings')
-    .select('year_end_month, currency, report_name, section_overrides')
+    .select('year_end_month, currency, report_name, section_overrides, vat_quarter_offset')
     .eq('client_id', clientId).maybeSingle();
   const settings = settingsRow as {
     year_end_month: number; currency: string; report_name: string | null;
     section_overrides: Record<string, boolean> | null;
+    vat_quarter_offset: number | null;
   } | null;
 
   onProgress('Reading the months held');
@@ -346,6 +347,66 @@ export async function buildClientBlock(
   };
   const vat = vatOut.monthly ?? {};
   const vatq = vatOut.quarters ?? [];
+
+  // ---- what BTMS computed, and what was filed --------------------------
+  //
+  // Three figures for every box, and the point is that they are three: what
+  // this application rebuilds from the postings, what BTMS computed in its
+  // own VAT summary, and what was actually submitted. They are not expected
+  // to agree, and where they do not the screen says so.
+  onProgress('Reading the VAT quarters');
+  const vatPeriodRows = await allRows<{
+    period: string; box1: number; box2: number; box3: number; box4: number; box5: number;
+    out_base: number | null; in_base: number | null; by_code: Record<string, unknown> | null;
+  }>((f, t) => rep().from('vat_periods')
+    .select('period, box1, box2, box3, box4, box5, out_base, in_base, by_code')
+    .eq('client_id', clientId).range(f, t));
+  const vatReturnRows = await allRows<{
+    period: string; source: string;
+    box1: number; box2: number; box3: number; box4: number; box5: number;
+    prior_box1: number | null; prior_box4: number | null; prior_box5: number | null;
+  }>((f, t) => rep().from('vat_returns')
+    .select('period, source, box1, box2, box3, box4, box5, prior_box1, prior_box4, prior_box5')
+    .eq('client_id', clientId).range(f, t));
+
+  // vat_periods and vat_returns key a quarter by the month it ends in;
+  // vat_figures labels it ‘2026 Q2’. The two line up only on the standard
+  // cycle: a client whose quarters are shifted (vat_quarter_offset) has
+  // boundaries this arithmetic would get wrong, and attaching a quarter to
+  // the wrong one is worse than not attaching it, so those are left off.
+  const shifted = (settings?.vat_quarter_offset ?? 0) !== 0;
+  const quarterKey = (period: string): string | null => {
+    if (shifted) return null;
+    const m = period.match(/^(d{4})-(d{2})/);
+    if (!m) return null;
+    return `${m[1]} Q${Math.ceil(Number(m[2]) / 3)}`;
+  };
+
+  const vatBtms = vatPeriodRows.map((r) => {
+    const extra = (r.by_code ?? {}) as Record<string, unknown>;
+    return {
+      q: quarterKey(r.period),
+      box1: Number(r.box1), box2: Number(r.box2), box3: Number(r.box3),
+      box4: Number(r.box4), box5: Number(r.box5),
+      outBase: Number(r.out_base ?? 0), inBase: Number(r.in_base ?? 0),
+      priorBox1: Number(extra.prior_box1 ?? 0),
+      priorBox4: Number(extra.prior_box4 ?? 0),
+      priorMonths: (extra.prior_months as string[] | undefined) ?? [],
+    };
+  }).filter((x) => x.q);
+
+  const vatFiled = vatReturnRows.map((r) => ({
+    q: quarterKey(r.period),
+    source: r.source,
+    box1: Number(r.box1), box2: Number(r.box2), box3: Number(r.box3),
+    box4: Number(r.box4), box5: Number(r.box5),
+    priorBoxes: {
+      box1: Number(r.prior_box1 ?? 0), box2: 0,
+      box3: Number(r.prior_box1 ?? 0),
+      box4: Number(r.prior_box4 ?? 0),
+      box5: Number(r.prior_box5 ?? 0),
+    },
+  })).filter((x) => x.q);
 
   // ---- stock ----------------------------------------------------------
   // Stored with the ledger figure beside it, so the difference §6.6 insists on
@@ -592,7 +653,7 @@ export async function buildClientBlock(
             ? `Opening balances derived from the ${openingFrom} trial balance.`
             : 'No trial balance imported: the balance sheet is movement since the first month held, not a position.',
         },
-        vatFiled: [],
+        vatFiled, vatBtms,
         deb: ageing.deb, cre: ageing.cre,
         agetot: ageing.agetot, ageHist: ageing.ageHist, ageFlags: ageing.ageFlags,
         cashflow, cashmove: {}, cashjrn: {},
@@ -686,6 +747,12 @@ export async function buildTemplateHtml(json: string): Promise<Blob> {
  * The order is the template's order, and every feed appears whether or not it
  * has been loaded: a feed that is missing is the row that matters most.
  */
+const READ_FEEDS = new Set([
+  'journal_listing', 'trial_balance_monthly', 'trial_balance_annual',
+  'chart_of_accounts', 'vat_summary', 'payroll_cost_analysis', 'payroll_paysheet',
+  'stock_valuation',
+]);
+
 const FEED_ROWS: { feed: string; name: string; why: string; freq: string }[] = [
   { feed: 'journal_listing', name: 'Analytical journal listing', freq: 'Monthly',
     why: 'The audit trail. Every posting for the month with its journal, batch, VAT code and analysis tags — this drives every report.' },
@@ -711,8 +778,13 @@ const FEED_ROWS: { feed: string; name: string; why: string; freq: string }[] = [
     why: 'camt.053 statement for the bank reconciliation.' },
 ];
 
-/** [name, what it is for, frequency, last file, uploaded, covers to, present]. */
-export type FeedRow = [string, string, string, string, string, string, number];
+/**
+ * [name, what it is for, frequency, last file, uploaded, covers to, present,
+ *  read]. The last says whether this application reads the feed at all: one it
+ * only holds for the review is STORED once loaded, not OUTSTANDING, which read
+ * as a failed import.
+ */
+export type FeedRow = [string, string, string, string, string, string, number, number];
 
 async function buildFeedTable(clientId: number): Promise<FeedRow[]> {
   const { data, error } = await rep().from('feed_status')
@@ -736,7 +808,10 @@ async function buildFeedTable(clientId: number): Promise<FeedRow[]> {
       : '';
     // lbl() reads YYYY-MM out of this; a date gets cut back to its month.
     const covers = got?.covers_to ? String(got.covers_to).slice(0, 7) : '';
-    return [f.name, f.why, f.freq, got?.last_file ?? '', when, covers, got ? 1 : 0];
+    return [
+      f.name, f.why, f.freq, got?.last_file ?? '', when, covers,
+      got ? 1 : 0, READ_FEEDS.has(f.feed) ? 1 : 0,
+    ];
   });
 }
 
@@ -847,7 +922,9 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
     post: { ep: null, acc: [], jrn: [], rd: [], td: [], a: [], d: [], r: [], t: [], v: [], j: [] },
     exceptions: [], tb: [], vat: {}, vatq: [], stock: [], payroll: {},
     // Every feed, none of them present — the same shape buildFeedTable returns.
-    feeds: FEED_ROWS.map((f): FeedRow => [f.name, f.why, f.freq, '', '', '', 0]),
+    feeds: FEED_ROWS.map((f): FeedRow => [
+      f.name, f.why, f.freq, '', '', '', 0, READ_FEEDS.has(f.feed) ? 1 : 0,
+    ]),
     folder: { items: [], fresh: 0, changed: 0, loaded: 0, evidence: 0 },
     postings: 0,
     counts: { postings: 0, accounts: 0 },
@@ -859,7 +936,7 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
       features: off,
       notes: 'Nothing has been imported for this client yet.',
     },
-    vatFiled: [], deb: [], cre: [],
+    vatFiled: [], vatBtms: [], deb: [], cre: [],
     agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
     budget: {}, audit: {}, wp: {}, review: {}, untagged: [], projects: [],
   };

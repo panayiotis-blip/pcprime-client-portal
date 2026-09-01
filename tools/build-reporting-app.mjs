@@ -565,6 +565,86 @@ script += `
   ].join('\n'));
 }
 
+// ---- patch 13: VAT — three figures for every box ----------------------
+//
+// The screen compared two: what this application rebuilds from the journal, and
+// what was filed. BTMS's own computation was missing, because nothing read the
+// VAT figures summary — it was stored and never opened, and the row sat at
+// OUTSTANDING as though the upload had failed.
+//
+// There are three, and the point of the screen is that they are three. On A&F
+// Q2 2026 the rebuild gives box 4 of 64.100,43 against BTMS's 64.914,16 — which
+// is exactly what was filed. Without the middle column the 813,73 looks like an
+// argument between this application and the tax office; with it, the ledger is
+// the odd one out and the question becomes what the journal is missing.
+
+{
+  const found = 'const C=QS.find(x=>x.q===q), FI=(D.vatFiled||[]).find(x=>x.q===q);';
+  if (!script.includes(found)) throw new Error('the VAT quarter lookup is not where it was.');
+  script = script.replace(found,
+    found + '\n  const BT=(D.vatBtms||[]).find(x=>x.q===q);');
+
+  const head = '`<table><thead><tr><th>Box</th><th>What it holds</th><th class="num">Computed from the ledger</th>`+';
+  if (!script.includes(head)) throw new Error('the VAT box header is not where it was.');
+  script = script.replace(head, head
+    + '\n    (BT?`<th class="num">BTMS computed</th><th class="num">Ledger vs BTMS</th>`:"")+');
+
+  const cell = 'let cells=`<td class="num"><b>${eur(cv,2)}</b></td>`;';
+  if (!script.includes(cell)) throw new Error('the VAT box cell is not where it was.');
+  script = script.replace(cell, cell + [
+    '',
+    '    if(BT){const bv=BT[k],db=cv-bv,okb=Math.abs(db)<0.005;',
+    '      cells+=`<td class="num">${eur(bv,2)}</td>`+',
+    '        `<td class="num"${okb?"":\' style="color:var(--crit)"\'}>${okb?"\\u2014":eur(db,2)}</td>`;}',
+  ].join('\n'));
+}
+
+// ---- patch 14: attaching the filed return does something --------------
+//
+// vatAttachTo took a file, wrote its NAME into browser storage, and said the
+// figures would be read "on the next import run — reading a newly attached file
+// is build phase P1". So the return was never anywhere, and the comparison
+// against it could never happen.
+//
+// It now asks the host, which takes the file and the five boxes together. The
+// boxes are keyed rather than parsed because a filed return is usually the PDF
+// the tax office gave back, and there is nothing in it this application can
+// read — the file is the evidence for what was keyed, not the source of it.
+
+{
+  const open = 'function vatAttachTo(q){';
+  const shut = '\n  inp.click();\n}';
+  const a = script.indexOf(open);
+  const b = script.indexOf(shut, a);
+  if (a < 0 || b < 0) throw new Error('vatAttachTo is not where it was.');
+  script = script.slice(0, a) + [
+    'function vatAttachTo(q){',
+    '  if(parent===window){alert("Attaching a return works inside the portal.");return;}',
+    '  parent.postMessage({type:"pcp-vat-filed",key:CID,q:q},"*");',
+    '}',
+  ].join('\n') + script.slice(b + shut.length);
+}
+
+// ---- patch 15: a stored file is not outstanding -----------------------
+//
+// A feed held for the review rather than read showed OUTSTANDING once its file
+// had been loaded, which reads as a failed import. It gets its own state.
+
+{
+  const chip = '`<td><span class="chip" style="color:${got?(late?"var(--warn)":"var(--good)"):"var(--warn)"}">'
+    + '${got?(late?"overdue":"loaded"):"outstanding"}</span></td>`';
+  if (!script.includes(chip)) throw new Error('the feed status chip is not where it was.');
+  script = script.replace(chip,
+    '`<td><span class="chip" style="color:${got?(read===0?"var(--ink-3)":(late?"var(--warn)":"var(--good)")):"var(--warn)"}">'
+    + '${got?(read===0?"stored":(late?"overdue":"loaded")):"outstanding"}</span></td>`');
+
+  // The eighth column of a feed row says whether the app reads it at all.
+  const loop = '(D.feeds&&D.feeds.length?D.feeds:FEEDS).forEach(([n,why,fr,file,when,covers,got])=>{';
+  if (!script.includes(loop)) throw new Error('the feed loop is not where it was.');
+  script = script.replace(loop,
+    '(D.feeds&&D.feeds.length?D.feeds:FEEDS).forEach(([n,why,fr,file,when,covers,got,read])=>{');
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

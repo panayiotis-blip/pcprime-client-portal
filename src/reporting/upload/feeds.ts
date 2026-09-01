@@ -68,7 +68,7 @@ export const FEEDS: Feed[] = [
   {
     key: 'vat_summary', name: 'VAT figures summary', kind: 'vat_summary',
     folder: 'btms_vat',
-    period: 'quarter', ask: 'Which quarter does this cover?', imported: false,
+    period: 'quarter', ask: 'Which quarter does this cover?', imported: true,
   },
   {
     key: 'vat_return_filed', name: 'VAT return as filed', kind: 'vat_return',

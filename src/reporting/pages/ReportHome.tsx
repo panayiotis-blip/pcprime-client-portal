@@ -28,6 +28,7 @@ import {
   type ReviewMap, type WorkingPapers,
 } from '../lib/reports/signoffStore.ts';
 import UploadDialog from '../upload/UploadDialog.tsx';
+import VatFiledDialog from '../upload/VatFiledDialog.tsx';
 import { feedByName, type Feed } from '../upload/feeds.ts';
 import { readFolder } from '../upload/readFolder.ts';
 import { setSection } from '../lib/reports/sectionStore.ts';
@@ -58,6 +59,8 @@ export default function ReportHome() {
   // The Upload button on the template's own Data import table opens this. It is
   // a dialog over the report, never a screen: every way out returns here.
   const [upload, setUpload] = useState<{ feed: Feed; clientId: number; clientName: string } | null>(null);
+  // Attaching the return that was actually filed, from the VAT screen.
+  const [vatFiled, setVatFiled] = useState<{ clientId: number; clientName: string; quarter: string } | null>(null);
   const started = useRef(false);
 
   /**
@@ -97,7 +100,7 @@ export default function ReportHome() {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const d = e.data as
-        ({ type?: string; key?: string; feed?: string; feature?: string; on?: boolean;
+        ({ type?: string; key?: string; feed?: string; feature?: string; on?: boolean; q?: string;
            wp?: WorkingPapers; review?: ReviewMap }
           & Partial<BudgetMessage>) | null;
       if (!d) return;
@@ -139,6 +142,20 @@ export default function ReportHome() {
             text: 'The working paper was not saved: ' + (err instanceof Error ? err.message : String(err)),
             bad: true,
           }));
+        return;
+      }
+
+      // The return as filed, keyed beside the file it came on. The VAT screen
+      // asks for it; the figures cannot be read out of a tax office PDF.
+      if (d.type === 'pcp-vat-filed' && d.key && d.q) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        const who = listed.find((c) => c.id === cid);
+        setVatFiled({
+          clientId: cid,
+          clientName: who?.name ?? `Client ${cid}`,
+          quarter: String(d.q),
+        });
         return;
       }
 
@@ -309,6 +326,24 @@ export default function ReportHome() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      {vatFiled && (
+        <VatFiledDialog
+          clientId={vatFiled.clientId}
+          clientName={vatFiled.clientName}
+          quarter={vatFiled.quarter}
+          onClose={() => setVatFiled(null)}
+          onSaved={() => {
+            const key = 'c' + vatFiled.clientId;
+            blocks.delete(key);
+            void forgetCachedBlock(vatFiled.clientId);
+            const frame = (document.querySelector('iframe') as HTMLIFrameElement | null)
+              ?.contentWindow;
+            frame?.postMessage({ type: 'pcp-refresh', key }, '*');
+            setNotice({ text: `The filed return for ${vatFiled.quarter} is saved.`, bad: false });
+          }}
+        />
+      )}
+
       {upload && (
         <UploadDialog
           clientId={upload.clientId}
