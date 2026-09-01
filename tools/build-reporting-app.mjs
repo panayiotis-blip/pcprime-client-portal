@@ -864,13 +864,77 @@ script += `
 const declaresCharset = /<meta[^>]+charset/i.test(html.slice(0, 4000));
 const head = declaresCharset ? '' : '<meta charset="utf-8">\n';
 
-const shell =
+// ---- the stylesheet patch --------------------------------------------
+//
+// Everything above rewrites the template's SCRIPT. This is the one thing that
+// rewrites its LOOK, and it is a different kind of change: the screens are the
+// specification, and their design moves when the partner moves the prototype.
+// These are here because he asked for them in REVIEW-2 and the prototype is not
+// mine to redraw — so they are appended as overrides rather than edited into
+// his rules, and dropping this block puts the template back exactly as it was.
+//
+// Appended last so they win on equal specificity without !important.
+
+const STYLE_PATCH = `
+/* ---------- appended by tools/build-reporting-app.mjs ---------- */
+
+/* REVIEW-2 1a and 2a — use the width. The page was boxed at 1280px, which left
+   a wide empty margin down the right on any ordinary screen, on the two screens
+   where horizontal room matters most: the management summary has the months
+   across it and the overview has the charts. Prose is capped on its own so the
+   lines stay readable at any window width. */
+.wrap{max-width:1880px}
+.sub,.cap,.note,#ovPeriodNote{max-width:96ch}
+
+/* REVIEW-2 1b — sales by month is the important chart, so it gets the width
+   rather than half of it. Gross margin follows underneath. The charts carry a
+   viewBox and no fixed width, so they grow into whatever they are given. */
+#v-overview .grid2{display:block}
+#v-overview .grid2 > .card{margin-bottom:16px}
+
+/* REVIEW-2 3a — headings a step bigger and bolder. They sat close enough to the
+   body text in size and weight that a long table read as one undifferentiated
+   block. */
+h2{font-size:1.6rem;font-weight:700}
+h3{font-size:1.16rem;font-weight:700}
+
+/* REVIEW-2 3b — one family and one size for everything that is data. The
+   monospace face was carrying two jobs: a typographic one nobody asked for, and
+   lining the digits up. Tabular figures do the second without a second font, so
+   the face goes and the columns still line up. */
+table, th, td, .mono, td.clr, .tile .k, .tile .v, tr.sec td, .note b, nav.tabs .grp{
+  font-family:"Source Sans 3",system-ui,sans-serif;
+}
+table, .tile .v, .mono{font-variant-numeric:tabular-nums}
+table{font-size:14px}
+.mono, td.clr{font-size:14px}
+/* A column heading is a label rather than data: it keeps its small uppercase
+   treatment, in the one face, one step up in size now that it is not monospace. */
+th{font-size:11px}
+`;
+
+// The slicing below uses offsets measured on `html`, so the stylesheet is
+// patched AFTER the shell is assembled and never before. Inserting it into
+// `html` first shifts every one of those offsets by its own length — and
+// </style> sits before the afdata block, so the payload marker landed in the
+// middle of a paragraph's style attribute and the afdata tag disappeared
+// altogether. The shell still built, and still weighed about the right amount.
+const assembled =
   head +
   html.slice(0, dataStart) +            // everything up to and including the afdata open tag
   '__PAYLOAD__' +
   html.slice(dataEnd, appOpen) +        // </script> and whatever sits between the two
   '<script src="__APP_JS__"></script>' +
   html.slice(appEnd + '</script>'.length);
+
+if (!assembled.includes('</style>')) throw new Error('the template has no stylesheet to patch.');
+const shell = assembled.replace('</style>', STYLE_PATCH + '</style>');
+
+// Cheap proof that the assembly is intact, because the failure above was
+// silent: the payload marker has to sit inside the afdata tag it replaces.
+if (!/<script id="afdata" type="application\/json">__PAYLOAD__/.test(shell)) {
+  throw new Error('the payload marker is not inside the afdata block — the shell is misassembled.');
+}
 
 writeFileSync(SHELL, shell, 'utf8');
 writeFileSync(APP, script, 'utf8');
