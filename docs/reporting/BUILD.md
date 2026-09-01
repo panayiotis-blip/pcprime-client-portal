@@ -1,3 +1,6 @@
+> **`STATUS.md` says where the build stands today.** This file is the
+> specification and does not move with it.
+
 # PC Prime client reporting platform — build specification
 
 **Read this file completely before writing any code.** It is the specification for a

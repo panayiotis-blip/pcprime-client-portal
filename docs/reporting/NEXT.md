@@ -1,3 +1,6 @@
+> **`STATUS.md` says where the build stands.** All three changes here are built.
+> This file is kept as the record of what was asked for.
+
 # Three changes the partner asked for — what was built
 
 All three are done. This file is now the record of what was wanted and

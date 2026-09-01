@@ -1,3 +1,7 @@
+> **`STATUS.md` says where the build stands.** This file is a work order that is
+> finished: §0–§5 are all built and deployed. It is kept as the record of what was
+> asked for and why.
+
 # The fix order — read this before BUILD.md, STATUS.md or NEXT.md
 
 This file outranks the other three. Do what is in here, in this order.

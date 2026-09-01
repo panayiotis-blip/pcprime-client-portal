@@ -1,15 +1,15 @@
 # Reporting platform — where the build actually stands
 
-Written 1 September 2026, after working through `FIX.md` §0–§5 and re-reading the
-live database. `BUILD.md` says what the application is meant to be; `FIX.md` is the
-order the work was done in; this file says what exists today.
+Written 1 September 2026, after working through `FIX.md` §0–§5, the three changes
+in `NEXT.md`, and all eight items of `FIX-2.md` — the partner’s review of the
+built app. `BUILD.md` says what the application is meant to be; the three work
+orders say what was asked for and in what order; this file says what exists.
 
-**All of `FIX.md` is done, and all three changes in `NEXT.md`.** What is left is not
-building but looking: none of it has been seen in a signed-in session. See *What is
-unverified* at the foot of this file, which is the part to read first.
+**Everything asked for is built and deployed.** What is left is looking: almost
+none of it has been seen in a signed-in session. Read *What is verified, and what
+is not* at the foot of this file first — it is the part that matters.
 
 ---
-
 ## The shape of the thing now
 
 **There is one application and it is the template.** `ReportingApp.tsx` signs a
@@ -33,7 +33,7 @@ Writing one in React is building the second application again.
 
 Do not rebuild any of this.
 
-- **Schema**: migrations 190–216 applied. Note the migration ledger holds only 207
+- **Schema**: migrations 190–218 applied. Note the migration ledger holds only 207
   and 211–216, so it has never been the record of what is applied —
   `supabase/migrations/` is. Two of them reached the database before they reached the
   repo, and 216 turned out to be a no-op because the grant was already there.
@@ -64,9 +64,17 @@ no new feed and no new query except the review engine's own exceptions.
 | **Cash flow** | `cashflow.ts` — arithmetic on the profit and loss and the balance sheet |
 | **Budget** | `reporting.budgets`, keyed by hand and never generated |
 | **Monthly audit** | `audit.ts` — materiality, analytical review, vouching, cut-off, journals, the month's checks |
+| **VAT** | three figures per box — rebuilt from the journal, computed by BTMS, filed |
 | **Projects** | correctly still off: gated on T-Analysis tags, and A&F has none |
 
-Every flag follows its data, as `BUILD.md` §8 requires. `ledgers` is on when there
+**Which sections a client gets is now a person’s decision**, taken on Client setup
+and before any file is imported (migration 217). `section_overrides` holds it, one
+key per section: absent means nobody decided and the default below applies;
+present outranks anything the data says. Import a stock valuation into a client
+whose Stock was switched off and it stays off, because that is what switching it
+off meant.
+
+The default, where nobody has decided, follows the data as `BUILD.md` §8 requires. `ledgers` is on when there
 are aged accounts, `cash` when there are periods to show, `audit` when there are two
 financial years to compare — one gives the analytical review nothing to say. `budget`
 is on regardless, because the screen is how a budget gets keyed in the first place
@@ -136,6 +144,16 @@ rather than quietly fixed:
    the screen dead on an undefined year, or reading somebody else's. It reads
    `AU.years`, `AU.partial` and `AU.basis` now.
 
+5. **The coverage grid** ticked months from literals — `m === "2026-07"` for the
+   trial balance, a hardcoded list for the stock counts. A&F’s own coverage, shown
+   under every client’s name. It reads what that client has loaded now.
+
+**That is the shape to look for if a sixth turns up:** a month, a year, a filename
+or a browser-storage key left as a literal in the prototype. Five of them were
+found by reading the code rather than by anything failing, because none of them
+fails — they quietly show one client’s figures under another client’s name, which
+is the one thing this application must never do.
+
 The seven months was already wrong for A&F: the ledger runs to August 2026, so the
 last year holds **eight**, and the annualised column was scaling eight months as
 though they were seven. Nothing said so.
@@ -161,40 +179,98 @@ the database disagree with the application.
 **Migration 215.** The ten subfolders, `btms_folder_for()`, and
 `documents.period_end` for the one date no export contains.
 
+**Migration 216.** The reporting schema reachable by `service_role`, which is what
+let the mover read `imports.original_filename`. It was already granted when it was
+applied, so 216 records in the repo what the database already did.
+
+**Migration 217.** `section_overrides`, and `has_stock` / `has_payroll` /
+`has_branches` made nullable so null can mean "nobody has decided". The 211
+triggers now write only where the column is still null, so they remain a record
+that the client HAS the data and can no longer contradict a person. Worth knowing:
+those two columns were read by nothing at all — the payload computed both straight
+from the data — so the triggers had been maintaining columns no screen consulted.
+
+**Migration 218.** The seventeen migrated files renamed from their type and period,
+with the BTMS name moved onto the row as a note.
+
 ---
 
-## What is done since, and what is left
+## The partner’s review, and what it turned into
 
-**The seventeen objects have moved.** They are in the client’s BTMS data folder,
-in their subfolders, with their real names back: six journal listings, four trial
-balances, four stock valuations, the chart of accounts, and the payroll pair. Both
-buckets read 17 objects and 41,3 MB — nothing was deleted, and `reporting-imports`
-is intact until somebody looks and agrees it is redundant. All 20 import rows are
-repointed, including the rejected and withdrawn ones, and the four stock valuations
-point at the new path.
+`FIX-2.md` is his review of the built app: eight items, ordered so the two that
+discredit everything else came first. All eight are done.
 
-Migration 216 grants the reporting schema to `service_role`, which is what let the
-mover read `reporting.imports` for the files’ real names. Worth knowing: the grant
-was **already in place** when it was applied, so 216 changed nothing — it records in
-the repo what the database already did. `service_role` bypasses RLS, so anything
-holding that key now reads every client’s reporting data unfiltered; not new in kind,
-but the reporting data joining the set.
+**1. "Read the new and changed files" signed you out.** Not the router, as the
+review supposed. Every error from an action taken inside the frame went to
+`setError`, and the full-screen "the report could not be built" renders ABOVE the
+iframe — so any failure unmounted the frame and the template came back at its own
+sign-in. Worse: the handler called it when ANY file failed, so a partial success
+destroyed the session too. For A&F exactly one file fails, so reading the folder
+was guaranteed to throw the person out while quietly importing the rest. Errors
+from inside the report now go to a notice beside it and the frame stays.
 
-**The folder comparison is built.** On opening a client the folder is compared with
-what has been read, by sha256, and the result sits at the top of the Data import
-screen with one button that reads the new and changed files. Its first real test,
-run against A&F straight after the move:
+**2. Every decimal printed two full stops.** `toLocaleString("en-GB").replace(/,/g,".")`
+converts the thousands separator and never the decimal point: 516.283.99. Whole
+numbers came out right, which is why it survived. Fixed in the method rather than
+the separator — `de-DE` writes numbers the way the practice does — and the build now
+fails if a comma-replacing formatter comes back.
+
+**3.** The Client setup switches are a real per-client decision, taken before any
+import. **4.** The Rebuild button is gone and the report refreshes itself on the
+one event that stales it. **5.** The folder panel says what it is for, names files
+by type and period, and the migrated ones were renamed to match. **6.** The portal
+cards say what each file is and carry Move to…, so a misfiling is a correction
+rather than a deletion and a re-upload — which would destroy the date the client
+sent it.
+
+**7. VAT.** Both feeds are read now. The figures summary — which is not a summary
+of five boxes but the analytical listing, grouped by VAT type and month — goes into
+`vat_periods` as BTMS’s own computation, split into what belongs to the quarter and
+what was posted late and swept in. The return as filed goes into `vat_returns`, its
+boxes keyed rather than parsed, because a filed return is usually the PDF the tax
+office gave back.
+
+The parser reproduces A&F’s Q2 2026 to the cent: in-period output 91.749,07 and
+input 64.914,16, against the file’s own stated totals of 92.627,88 and 65.084,36.
+And that is the point of the third column:
+
+```
+                 rebuilt    BTMS computed    filed
+box 4          64.100,43       64.914,16   64.914,16
+```
+
+BTMS computed exactly what was filed, so **the ledger is the odd one out** and the
+813,73 stops being an argument between this application and the tax office. The
+question becomes what the journal is missing, which is a better question.
+
+**8.** The reconciliation panel leads with what it is for — the journal balancing
+proves every posting has its contra and cannot prove nothing is MISSING — turns its
+instruction into a button that opens the upload with the month filled in, and asks
+only for what that client and that year are due.
+
+---
+
+## The files, and what is left of them
+
+**The seventeen objects moved.** They are in the client’s subfolders with their real
+names back. Both buckets read 17 objects and 41,3 MB — nothing was deleted, and
+`reporting-imports` is intact until somebody agrees it is redundant. All 20 import
+rows are repointed, the rejected and withdrawn ones included.
+
+**The folder comparison’s first real test**, run straight after the move:
 
 ```
 16 loaded  ·  1 not read  —  a&f tb 01 2026.xls
 ```
 
-That one is right. Its import was withdrawn (the ghost `trialBalanceImport.ts`
-documents), so the file is in the folder and not in the ledger, and the screen now
-says so instead of nobody knowing.
+That one is right: its import was withdrawn, so the file is in the folder and not
+in the ledger, and the screen says so instead of nobody knowing.
 
-**Nothing from the three work orders is outstanding.** `FIX.md` §1–§5 and all three
-of `NEXT.md` are built and shipped.
+**Two things need doing once, by hand.** The VAT figures summary is in A&F’s folder
+but was never read — it was not an importable feed when it was uploaded — so it
+should appear in the comparison as **new**. And the filed return has to be keyed
+once, on the VAT screen, for 2026 Q2. Until both are done the third column is empty
+and the 813,73 does not appear.
 
 ---
 ## What is verified, and what is not
@@ -220,22 +296,31 @@ materiality €8.570,83), eleven P&L postings in 2026 at or above performance
 materiality, 264 postings within three days of a year end, 515 manual journal postings
 across 17 journal types, and 625 exceptions across eight checks.
 
-Still to meet by eye, in the order they are worth doing:
+That was checked before the eight review items were built, and **none of those has
+been looked at at all.** The list below is in the order it is worth doing, hardest
+and newest first.
 
-- **Data import** should now say *the folder is fully read* — all 17 files, with the
-  one exception it should be naming: `a&f tb 01 2026.xls` as not read, because its
-  import was withdrawn. This is the newest code and the least looked at, and it is the
-  screen that would show the move and the comparison disagreeing.
+- **The VAT screen.** The largest new thing and the only one with a figure to check
+  against: read the summary already in the folder, key the filed return for 2026 Q2,
+  and box 4 should read 64.100,43 rebuilt against 64.914,16 computed and filed, with
+  813,73 flagged. If the middle column is empty the summary has not been read; if it
+  is empty on a client with a shifted VAT cycle, that is the caveat in `vatImport.ts`
+  and not a fault.
+- **"Read the new and changed files".** The fix that unblocks judging anything else
+  on that screen. It should read the files, report what it did, name
+  `a&f tb 01 2026.xls` as the one that would not, and **leave you in the report**.
+  Being thrown to sign-in means item 1 is not fixed and the diagnosis was wrong.
+- **Any figure with decimals** — the reconciliation should read `516.283,99` and
+  `1.820` postings, and nothing anywhere should contain two full stops.
+- **The Client setup switches**, on a client with no data: turn Stock off and Cash
+  movement on, sign out and back in, and the choices should hold. Then import a stock
+  valuation and Stock should stay off, because somebody said so.
 - **The Overview**: 174.026 postings and profit before tax €139.505,95 for Jan–Jul
-  2026 — the figures the whole build was measured against.
-- **The rail** carries every screen in the prototype except Projects.
-- **One upload end to end.** Press Upload on "Trial balance, monthly", answer
-  "July 2026": it should store in the client's folder and move the row to LOADED
-  without leaving the report, and doing it again should warn and offer to replace.
-- **One sign-off.** Sign a working paper on the audit, then open the client in another
-  browser. If the signature is there, `exception_signoff` is doing its job and the
-  "af" key is really gone; if it is not, it is still living in one browser.
-
+  2026 — the figures the whole build was measured against, still unseen.
+- **One upload end to end**, and the same file again to see the repeat warning.
+- **One sign-off across two browsers.** The only remaining claim where a silent
+  failure looks exactly like success from a single machine: sign a working paper,
+  open the client elsewhere, and see whether the signature is there.
 `report_figures(1754, …)` refuses to answer without a session — `no access to client
 1754` — which is the access model working, not a fault. If a screen still comes up
 empty, capture what the frame says: the lazy path replies with the error text, so the
