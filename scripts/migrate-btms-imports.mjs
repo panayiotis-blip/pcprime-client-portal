@@ -71,21 +71,44 @@ const ADMIN_EMAIL = process.argv[2] && !process.argv[2].startsWith('--')
 const ADMIN_PASSWORD = process.argv[3] && !process.argv[3].startsWith('--')
   ? process.argv[3] : process.env.SUPABASE_ADMIN_PASSWORD || '';
 
-if (!SUPABASE_URL || !ANON_KEY) {
-  console.error('Missing SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY (.env or .env.scripts).');
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const AS_ADMIN = !!(ADMIN_EMAIL && ADMIN_PASSWORD);
+
+if (!SUPABASE_URL) {
+  console.error('Missing SUPABASE_URL (.env or .env.scripts).');
   process.exit(1);
 }
-if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
-  console.error('Admin credentials required: SUPABASE_ADMIN_EMAIL / SUPABASE_ADMIN_PASSWORD');
-  console.error('in .env.scripts, or passed as the first two arguments.');
+if (!AS_ADMIN && !SERVICE_KEY) {
+  console.error('No credential. Either set SUPABASE_ADMIN_EMAIL / SUPABASE_ADMIN_PASSWORD in');
+  console.error('.env.scripts (preferred), or SUPABASE_SERVICE_ROLE_KEY.');
+  process.exit(1);
+}
+if (AS_ADMIN && !ANON_KEY) {
+  console.error('Missing SUPABASE_PUBLISHABLE_KEY, which the admin sign-in needs.');
   process.exit(1);
 }
 
 const DRY = process.argv.includes('--dry-run');
-const db = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+
+// Signing in as a person is the better way round and stays the default: the
+// move then happens under the same access model as the application, so a file
+// cannot land anywhere a person could not have put it.
+//
+// The service role is the fallback, and a blunter instrument. It bypasses RLS,
+// so the only thing keeping a file with its own client is the client id this
+// script reads from the object's own path. Migration 216 is what lets it reach
+// the reporting schema at all.
+const db = createClient(SUPABASE_URL, AS_ADMIN ? ANON_KEY : SERVICE_KEY, {
+  auth: { persistSession: false },
+});
 const rep = () => db.schema('reporting');
 
 async function signIn() {
+  if (!AS_ADMIN) {
+    console.log('Running as the service role — row-level security is bypassed, and');
+    console.log('every file is filed under the client id in its own path.\n');
+    return null;
+  }
   const { data, error } = await db.auth.signInWithPassword({
     email: ADMIN_EMAIL, password: ADMIN_PASSWORD,
   });
@@ -203,7 +226,7 @@ async function main() {
   console.log(DRY ? '— dry run: nothing will be written —\n' : '— migrating —\n');
 
   const me = await signIn();
-  console.log(`signed in as ${ADMIN_EMAIL}\n`);
+  if (me) console.log(`signed in as ${ADMIN_EMAIL}\n`);
 
   const objects = await listAll();
   console.log(`${objects.length} object${objects.length === 1 ? '' : 's'} in ${OLD}\n`);
@@ -373,7 +396,9 @@ async function main() {
     }
   }
 
-  console.log(`\n${moved} moved · ${skipped} already there · ${failed} failed`);
+  // "17 moved" at the foot of a dry run is a line somebody will read back later
+  // and believe.
+  console.log(`\n${moved} ${DRY ? 'would move' : 'moved'} · ${skipped} already there · ${failed} failed`);
   if (!DRY && moved) {
     console.log(
       `\nThe old objects are still in ${OLD}. Nothing deletes them; that is a` +
