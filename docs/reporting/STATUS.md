@@ -197,11 +197,22 @@ says so instead of nobody knowing.
 of `NEXT.md` are built and shipped.
 
 ---
-## What is unverified
+## What is verified, and what is not
 
-**None of this has been seen in a signed-in session.** Everything above was checked by
-reading the database directly, and by typecheck and build. Nothing has been opened in
-a browser as a signed-in member of staff.
+**The Monthly audit has been opened and read, signed in, and it is right.** Pete
+checked it on 1 September. That is the first thing in this build confirmed by eye
+rather than by SQL, and it carries more than the one screen with it: for that tab to
+render at all, A&F had to open, which means the sign-in answered, `pcp-need-client`
+was served and `buildClientBlock` ran to completion — and that build now computes the
+ageing, the cash flow, the budget, the audit and the folder comparison. Any one of
+them throwing would have failed the whole block and the client would not have opened.
+
+So the payload build works end to end, the `audit` flag gated correctly, and patch 7
+took: the year columns are this client's own rather than the calendar baked into the
+prototype.
+
+**Everything else was checked by reading the database, and by typecheck and build.**
+It has not been looked at.
 
 The figures that *were* checked directly: A&F's 174.026 postings across 68 months,
 FY2025 revenue €1.523.703,29 (so planning materiality €11.427,77 and performance
@@ -209,14 +220,21 @@ materiality €8.570,83), eleven P&L postings in 2026 at or above performance
 materiality, 264 postings within three days of a year end, 515 manual journal postings
 across 17 journal types, and 625 exceptions across eight checks.
 
-Still to meet by eye:
+Still to meet by eye, in the order they are worth doing:
 
-- A&F opens showing **174.026 postings** and **profit before tax €139.505,95** for
-  Jan–Jul 2026.
-- Its rail carries every screen in the prototype except Projects.
-- Pressing Upload on "Trial balance, monthly", choosing a file and answering
-  "July 2026", stores it in the client's folder and moves the row to LOADED without
-  leaving the report — and doing it again warns and offers to replace.
+- **Data import** should now say *the folder is fully read* — all 17 files, with the
+  one exception it should be naming: `a&f tb 01 2026.xls` as not read, because its
+  import was withdrawn. This is the newest code and the least looked at, and it is the
+  screen that would show the move and the comparison disagreeing.
+- **The Overview**: 174.026 postings and profit before tax €139.505,95 for Jan–Jul
+  2026 — the figures the whole build was measured against.
+- **The rail** carries every screen in the prototype except Projects.
+- **One upload end to end.** Press Upload on "Trial balance, monthly", answer
+  "July 2026": it should store in the client's folder and move the row to LOADED
+  without leaving the report, and doing it again should warn and offer to replace.
+- **One sign-off.** Sign a working paper on the audit, then open the client in another
+  browser. If the signature is there, `exception_signoff` is doing its job and the
+  "af" key is really gone; if it is not, it is still living in one browser.
 
 `report_figures(1754, …)` refuses to answer without a session — `no access to client
 1754` — which is the access model working, not a fault. If a screen still comes up
