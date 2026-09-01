@@ -2,10 +2,15 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { initSentry, SentryErrorBoundary } from './sentry';
+import { consumeSsoHandoff, hasSsoHandoff } from './lib/ssoHandoff';
 import './index.css';
 import './styles/design-system.css';
 
 initSentry();
+
+// Is the mobile app handing someone across right now? Read once, before
+// anything else can clear the fragment.
+const ssoPending = hasSsoHandoff();
 
 // Clean up any leftover service worker / caches from previous PWA builds.
 // A stale SW paints the OLD cached app first, then the new bundle swaps in —
@@ -25,7 +30,11 @@ if ('serviceWorker' in navigator) {
     }
     // Only reload if this page was actually being served by the old SW — and
     // only once per session — so a fresh (uncontrolled) load never reloads.
-    if (controlled && !sessionStorage.getItem('pc_sw_cleaned')) {
+    // Never mid-hand-off: the code is spent on first use, so a reload landing
+    // between reading it and setting the session would drop the person back on
+    // the sign-in screen. The stale SW is already unregistered by this point;
+    // skipping the reload costs one cosmetic flash on one visit.
+    if (controlled && !ssoPending && !sessionStorage.getItem('pc_sw_cleaned')) {
       sessionStorage.setItem('pc_sw_cleaned', '1');
       window.location.reload();
     }
@@ -56,10 +65,22 @@ function ErrorFallback() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <SentryErrorBoundary fallback={<ErrorFallback />}>
-      <App />
-    </SentryErrorBoundary>
-  </StrictMode>
-);
+function mount() {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <SentryErrorBoundary fallback={<ErrorFallback />}>
+        <App />
+      </SentryErrorBoundary>
+    </StrictMode>
+  );
+}
+
+// A hand-off from the app has to finish before React mounts. A tree that
+// renders first would flash the sign-in screen, and AuthContext would already
+// have decided nobody is here. A code that fails falls through to that same
+// screen, which is the right place to end up.
+if (ssoPending) {
+  consumeSsoHandoff().finally(mount);
+} else {
+  mount();
+}
