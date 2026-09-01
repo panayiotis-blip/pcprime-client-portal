@@ -593,6 +593,10 @@ export async function buildClientBlock(
       .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     return {
       period,
+      // Carried rather than inferred from the label: the coverage grid has to
+      // tell a year end from a month end, and reading that back out of
+      // “Year ended December 2025” is a rule waiting to be broken by wording.
+      annual,
       label: annual ? `Year ended ${when}` : when,
       file: '',
       rows,
@@ -623,6 +627,21 @@ export async function buildClientBlock(
   // exist: they are set when the client is set up, before any file is loaded.
   applyOverrides(features, settings?.section_overrides);
 
+  // ---- what is actually loaded, month by month -------------------------
+  //
+  // The coverage grid was written against A&F: the months it ticked were
+  // literals -- m==="2026-07" for the trial balance, a hardcoded list for the
+  // stock counts -- so every client saw A&F's coverage under its own name.
+  // These are that client’s own months, from what has been imported.
+  const coverage = {
+    ledger: months.slice(),
+    trial_balance_monthly: tb.filter((t) => !t.annual).map((t) => t.period),
+    trial_balance_annual: tb.filter((t) => t.annual).map((t) => t.period),
+    stock: stock.map((x) => String(x.date).slice(0, 7)),
+    vat_summary: vatBtms.map((v) => v.q),
+    payroll: Object.keys(payroll),
+  };
+
   onProgress('Reading what has been loaded');
   const feeds = await buildFeedTable(clientId);
 
@@ -641,6 +660,7 @@ export async function buildClientBlock(
         months, lines, pl, bs, bsOpen, accounts, post, exceptions, tb, vat, vatq, stock, payroll,
         feeds,
         folder,
+        coverage,
         postings: post.v.length,
         counts: { postings: post.v.length, accounts: accounts.length },
         cfg: {
@@ -926,6 +946,10 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
       f.name, f.why, f.freq, '', '', '', 0, READ_FEEDS.has(f.feed) ? 1 : 0,
     ]),
     folder: { items: [], fresh: 0, changed: 0, loaded: 0, evidence: 0 },
+    coverage: {
+      ledger: [], trial_balance_monthly: [], trial_balance_annual: [],
+      stock: [], vat_summary: [], payroll: [],
+    },
     postings: 0,
     counts: { postings: 0, accounts: 0 },
     cfg: {

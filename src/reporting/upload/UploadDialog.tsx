@@ -39,16 +39,22 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function UploadDialog({
-  clientId, clientName, feed, onClose, onLoaded,
+  clientId, clientName, feed, initialPeriod, onClose, onLoaded,
 }: {
   clientId: number;
   clientName: string;
   feed: Feed;
+  /**
+   * The period the caller already knows. The reconciliation panel opens this
+   * for a named month, and asking again for something it just told us is how a
+   * button that should act becomes a form.
+   */
+  initialPeriod?: string;
   onClose: () => void;
   onLoaded: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
-  const [period, setPeriod] = useState('');
+  const [period, setPeriod] = useState(initialPeriod ?? '');
   const [phase, setPhase] = useState<Phase>('pick');
   const [check, setCheck] = useState<FileCheck | null>(null);
   const [already, setAlready] = useState<Already | null>(null);

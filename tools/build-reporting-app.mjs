@@ -645,6 +645,113 @@ script += `
     '(D.feeds&&D.feeds.length?D.feeds:FEEDS).forEach(([n,why,fr,file,when,covers,got,read])=>{');
 }
 
+// ---- patch 16: the coverage grid is this client's, and asks only what it needs
+//
+// renderCov ticked months from literals:
+//
+//   ["Trial balance, monthly", m => m === "2026-07"]
+//   ["Stock valuation", m => ["2024-12","2025-12","2026-01", … ].includes(m)]
+//
+// A&F's own coverage, shown under every client's name — the same leak as the
+// hardcoded feed table, and the same fix: read what THIS client has loaded.
+//
+// And it asked for everything of everything. A closed year showed Trial balance
+// monthly 0/12 in a wall of dashes, when the annual trial balance is all that is
+// wanted for a closed year and the row beneath already said it was loaded. A
+// grid of blanks reads as failure; a grid should ask for what is actually due.
+//
+// So: a feed appears only if that section is on for this client, the monthly
+// trial balance is not asked for in a year whose annual one is in, and the
+// legend says what a blank means rather than leaving it to be guessed.
+
+{
+  const open = 'function renderCov(){';
+  const shut = "\n  document.getElementById('tblCov').innerHTML=h;\n}";
+  const a = script.indexOf(open);
+  const b = script.indexOf(shut, a);
+  if (a < 0 || b < 0) throw new Error('renderCov is not where it was.');
+
+  script = script.slice(0, a) + [
+    'function renderCov(){',
+    '  var CV=D.coverage||{}, F=D.cfg.features||{};',
+    '  var has=function(k,m){return (CV[k]||[]).indexOf(m)>=0;};',
+    '  /* Only what this client is actually expected to file. */',
+    '  var feeds=[["Analytical journal listing","ledger",true]];',
+    '  feeds.push(["Trial balance, monthly","trial_balance_monthly",true]);',
+    '  if(F.stock)   feeds.push(["Stock valuation","stock",true]);',
+    '  if(F.vat)     feeds.push(["VAT figures summary","vat_summary",false]);',
+    '  if(F.payroll) feeds.push(["Payroll","payroll",true]);',
+    '  var yrs=[...new Set(M.map(function(m){return m.slice(0,4)}))];',
+    '  var h=`<table><thead><tr><th>Feed</th>${MN.map(function(x){return `<th class="num">${x}</th>`}).join("")}<th class="num">Done</th></tr></thead><tbody>`;',
+    '  yrs.forEach(function(y){',
+    '    var closed=(CV.trial_balance_annual||[]).some(function(p){return p.slice(0,4)===y});',
+    '    h+=`<tr class="sec"><td colspan="14">${y}${closed?" \\u2014 closed":""}</td></tr>`;',
+    '    feeds.forEach(function(fd){',
+    '      var n=fd[0], key=fd[1], monthly=fd[2];',
+    '      /* A closed year wants its annual trial balance and not twelve monthly',
+    '         ones. Asking anyway is what produced the wall of dashes. */',
+    '      if(key==="trial_balance_monthly"&&closed){',
+    '        h+=`<tr><td>${n}</td><td colspan="12" style="color:var(--ink-3)">Not wanted for a closed year \\u2014 the annual trial balance below proves it.</td><td class="num mono">n/a</td></tr>`;',
+    '        return;}',
+    '      var got=0,due=0;',
+    '      var cells=MN.map(function(_,k){',
+    '        var m=y+"-"+String(k+1).padStart(2,"0");',
+    '        if(idx(m)<0)return `<td class="num"><span class="cell c-miss">\\u00b7</span></td>`;',
+    '        /* A quarterly feed is due in the month its quarter ends, not every month. */',
+    '        if(!monthly&&(k+1)%3!==0)return `<td class="num"><span class="cell c-miss">\\u00b7</span></td>`;',
+    '        due++;',
+    '        var ok=key==="vat_summary"?has(key,y+" Q"+Math.ceil((k+1)/3)):has(key,m);',
+    '        if(ok)got++;',
+    '        return `<td class="num"><span class="cell ${ok?"c-ok":"c-miss"}">${ok?"\\u2713":"\\u2014"}</span></td>`});',
+    '      h+=`<tr><td>${n}</td>`+cells.join("")+`<td class="num mono">${got}/${due}</td></tr>`;});',
+    '    h+=`<tr><td>Chart of accounts</td><td colspan="12" style="color:var(--ink-3)">Loaded once and re-imported only when the client adds an account &#8212; not a monthly feed.</td><td class="num mono">n/a</td></tr>`;',
+    '    h+=`<tr><td>Trial balance, annual</td><td colspan="12" style="color:var(--ink-3)">${closed?"Loaded for the closed year.":"Not due until the year is closed."}</td><td class="num mono">${closed?"1/1":"n/a"}</td></tr>`;',
+    '  });',
+    '  h+="</tbody></table>";',
+    '  h+=`<p class="cap" style="margin-top:8px">A dash is a month this client is expected to file and has not; a dot is a month outside the ledger, or one the feed is not due in. Only the feeds switched on for this client are asked for.</p>`;',
+    "  document.getElementById('tblCov').innerHTML=h;",
+    '}',
+  ].join('\n') + script.slice(b + shut.length);
+}
+
+// ---- patch 17: the reconciliation leads with the point ----------------
+//
+// "The journal balances on its own" is a result, not an explanation, and the
+// instruction under it — "Import the BTMS trial balance for the period" — was a
+// sentence asking a person to go and find the right screen.
+//
+// It is the completeness control and the reason a month can be signed off: the
+// journal balancing proves it is internally consistent, and only agreeing it to
+// the trial balance BTMS produced for the same period proves nothing is
+// missing. Lead with that, then make it act.
+
+{
+  const note = '`<b>No trial balance for this period</b>The journal balances on its own, which proves it is internally consistent \\u2014 but not that it is complete. Import the BTMS trial balance for the period to prove nothing is missing.`';
+  if (!script.includes(note)) throw new Error('the reconciliation note is not where it was.');
+  script = script.replace(note, [
+    '`<b>Nothing here proves the month is complete yet</b>`+',
+    '`The journal balances on its own, which proves it is internally consistent \\u2014 that every `+',
+    '`posting has its contra. It cannot prove nothing is MISSING: a month that never reached `+',
+    '`this app balances just as well as one that did. Only the trial balance BTMS produced for `+',
+    '`the same period can settle that.`+',
+    '(parent!==window?`<p style="margin:10px 0 0"><button class="sgn" id="rcGetTb">Import the BTMS trial balance for ${lbl(M[b])}</button></p>`:"")',
+  ].join('\n      '));
+
+  // Wired after the note is written, with the feed and the period already known.
+  const set = "  const n=document.getElementById('rcNote');";
+  if (!script.includes(set)) throw new Error('the reconciliation note element is not where it was.');
+  script = script.replace(
+    "}\n\n/* ---------- sales analysis ---------- */",
+    [
+      '  {var gb=document.getElementById("rcGetTb");',
+      '   if(gb)gb.addEventListener("click",function(){',
+      '     parent.postMessage({type:"pcp-upload",feed:"Trial balance, monthly",key:CID,period:M[b]},"*");});}',
+      '}',
+      '',
+      '/* ---------- sales analysis ---------- */',
+    ].join('\n'));
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

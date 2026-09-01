@@ -58,7 +58,8 @@ export default function ReportHome() {
   const [notice, setNotice] = useState<{ text: string; bad: boolean } | null>(null);
   // The Upload button on the template's own Data import table opens this. It is
   // a dialog over the report, never a screen: every way out returns here.
-  const [upload, setUpload] = useState<{ feed: Feed; clientId: number; clientName: string } | null>(null);
+  const [upload, setUpload] = useState<
+    { feed: Feed; clientId: number; clientName: string; period?: string } | null>(null);
   // Attaching the return that was actually filed, from the VAT screen.
   const [vatFiled, setVatFiled] = useState<{ clientId: number; clientName: string; quarter: string } | null>(null);
   const started = useRef(false);
@@ -100,7 +101,7 @@ export default function ReportHome() {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const d = e.data as
-        ({ type?: string; key?: string; feed?: string; feature?: string; on?: boolean; q?: string;
+        ({ type?: string; key?: string; feed?: string; feature?: string; on?: boolean; q?: string; period?: string;
            wp?: WorkingPapers; review?: ReviewMap }
           & Partial<BudgetMessage>) | null;
       if (!d) return;
@@ -231,7 +232,11 @@ export default function ReportHome() {
         const cid = Number(String(d.key).replace(/^c/, ''));
         if (!f || !Number.isFinite(cid) || cid <= 0) return;
         const who = listed.find((c) => c.id === cid);
-        setUpload({ feed: f, clientId: cid, clientName: who?.name ?? `Client ${cid}` });
+        setUpload({
+          feed: f, clientId: cid, clientName: who?.name ?? `Client ${cid}`,
+          // The reconciliation panel names the month it wants.
+          period: typeof d.period === 'string' ? d.period : undefined,
+        });
         return;
       }
 
@@ -349,6 +354,7 @@ export default function ReportHome() {
           clientId={upload.clientId}
           clientName={upload.clientName}
           feed={upload.feed}
+          initialPeriod={upload.period}
           onClose={() => setUpload(null)}
           onLoaded={() => {
             // What was built is now out of date by exactly the file that was
