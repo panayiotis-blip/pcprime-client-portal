@@ -112,6 +112,18 @@ function kindOf(objectPath) {
 
 const safe = (name) => name.replace(/[^\w.\-]+/g, '_').slice(0, 120);
 
+/** The same words checkFile.ts uses, for a file the old bucket never named. */
+const KIND_LABEL = {
+  ledger: 'Journal listing',
+  chart: 'Chart of accounts',
+  trial_balance: 'Trial balance',
+  stock: 'Stock valuation',
+  // No dash inside the label: the period is joined with one, and
+  // "Payroll — paysheet — 2026-08" reads like a mistake.
+  payroll_cost: 'Payroll cost analysis',
+  payroll_sheet: 'Payroll paysheet',
+};
+
 /** Everything under a prefix, depth-first — the API lists one level at a time. */
 async function listAll(prefix = '') {
   const { data, error } = await db.storage.from(OLD).list(prefix, { limit: 1000 });
@@ -203,7 +215,20 @@ async function main() {
     'period_to, months_covered, row_count, total_debit, total_credit, uploaded_by, status',
   );
   if (imports.error) throw new Error(`imports: ${imports.error.message}`);
-  const byPath = new Map((imports.data ?? []).map((i) => [i.storage_path, i]));
+
+  // One object can carry several import rows: a rejected attempt, a withdrawal,
+  // and the one that stands. Keyed naively the LAST row wins, which for A&F's
+  // chart of accounts is a rejected one — so the move would have described the
+  // file by a failed attempt and repointed that row while the committed import
+  // went on pointing at the old bucket. The committed row is the one whose
+  // filename and period describe what is actually in the folder.
+  const byPath = new Map();
+  for (const i of imports.data ?? []) {
+    const held = byPath.get(i.storage_path);
+    if (!held || (held.status !== 'committed' && i.status === 'committed')) {
+      byPath.set(i.storage_path, i);
+    }
+  }
 
   let moved = 0, skipped = 0, failed = 0;
 
@@ -211,7 +236,31 @@ async function main() {
     const clientId = Number(obj.path.split('/')[0]);
     const kind = kindOf(obj.path);
     const imp = byPath.get(obj.path) ?? null;
-    const fileName = imp?.original_filename ?? obj.path.split('/').pop();
+
+    // The paysheet is the one object with no import row of its own: payroll is
+    // committed as a pair and the record names the cost analysis. Left alone it
+    // would be the only file in the folder still called by its checksum, which
+    // is the thing the derived names exist to end. Its period is its partner's,
+    // and it is only borrowed where the pairing is unambiguous.
+    let paired = null;
+    if (!imp && kind === 'payroll_sheet') {
+      const payrolls = (imports.data ?? []).filter(
+        (i) => i.client_id === clientId && i.feed === 'payroll_calc' && i.status === 'committed',
+      );
+      if (payrolls.length === 1) paired = payrolls[0];
+    }
+
+    // A name from the type and the period, as portalFolder derives one, rather
+    // than the checksum the old bucket named its objects by.
+    const derived = () => {
+      const p = paired?.period_to ?? paired?.period_from ?? null;
+      const raw = obj.path.split('/').pop() ?? '';
+      const dot = raw.lastIndexOf('.');
+      const ext = dot > 0 ? raw.slice(dot) : '';
+      const label = KIND_LABEL[kind] ?? 'BTMS export';
+      return p ? `${label} — ${String(p).slice(0, 7)}${ext}` : `${label}${ext}`;
+    };
+    const fileName = imp?.original_filename ?? derived();
 
     if (!Number.isFinite(clientId)) {
       console.log(`  x ${obj.path} — no client in the path; left alone`);
@@ -221,11 +270,12 @@ async function main() {
 
     // The period, as the import recorded it. A journal listing covers a span.
     let period = null;
-    if (imp) {
-      const months = imp.months_covered ?? [];
+    const from = imp ?? paired;
+    if (from) {
+      const months = from.months_covered ?? [];
       period = kind === 'ledger' && months.length > 1
         ? `${months[0]} to ${months[months.length - 1]}`
-        : (imp.period_to ?? imp.period_from ?? null);
+        : (from.period_to ?? from.period_from ?? null);
     }
     const digest = imp?.checksum ?? null;
 
@@ -303,7 +353,12 @@ async function main() {
       if (chk.error) throw new Error(`btms_file_checks: ${chk.error.message}`);
 
       if (imp) {
-        const u = await rep().from('imports').update({ storage_path: newPath }).eq('id', imp.id);
+        // Every row pointing at this object, not just the one that named it.
+        // A rejected attempt and the committed import can share a path, and
+        // leaving either of them pointing into a bucket that is being retired
+        // is leaving a record that names a file nobody can find.
+        const u = await rep().from('imports').update({ storage_path: newPath })
+          .eq('client_id', clientId).eq('storage_path', obj.path);
         if (u.error) throw new Error(`imports update: ${u.error.message}`);
         const sv = await rep().from('stock_valuations')
           .update({ file_path: newPath }).eq('client_id', clientId).eq('file_path', obj.path);
