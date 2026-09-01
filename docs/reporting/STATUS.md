@@ -1,12 +1,12 @@
 # Reporting platform — where the build actually stands
 
-Written 1 September 2026, after working through `FIX.md` §1–§4 and re-reading the
+Written 1 September 2026, after working through `FIX.md` §0–§5 and re-reading the
 live database. `BUILD.md` says what the application is meant to be; `FIX.md` is the
 order the work was done in; this file says what exists today.
 
-**`FIX.md` §1–§4 are done, with one exception**: the seventeen objects still sitting
-in the `reporting-imports` bucket have not been moved, and cannot be until somebody
-supplies a credential. That is the only part of the fix order outstanding.
+**All of `FIX.md` is done, and all three changes in `NEXT.md`.** What is left is not
+building but looking: none of it has been seen in a signed-in session. See *What is
+unverified* at the foot of this file, which is the part to read first.
 
 ---
 
@@ -33,9 +33,10 @@ Writing one in React is building the second application again.
 
 Do not rebuild any of this.
 
-- **Schema**: migrations 190–216 applied. 215 went on on 31 August and is in the
-  migration ledger — but note the ledger holds only 207 and 211–215, so it has never
-  been the record of what is applied. `supabase/migrations/` is.
+- **Schema**: migrations 190–216 applied. Note the migration ledger holds only 207
+  and 211–216, so it has never been the record of what is applied —
+  `supabase/migrations/` is. Two of them reached the database before they reached the
+  repo, and 216 turned out to be a no-op because the grant was already there.
 - **Import**: the journal listing, trial balance, chart of accounts, stock and
   payroll parsers all work. Six years of A&F journal listings are committed.
 - **The ledger**: 174.026 postings for Antonis & Foulis, 2021-01 to 2026-08,
