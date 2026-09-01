@@ -1,36 +1,26 @@
-# Three changes the partner has asked for
+# Three changes the partner asked for — what was built
 
-All three are front-end work in this repo. The database side of each is already
-there — do not add tables, columns or functions for any of them.
+All three are done bar one step. This file is now the record of what was wanted and
+what it became; `STATUS.md` says where the whole build stands, and `FIX.md` is the
+order the work was done in.
 
 The partner's summary of the whole idea, in his own words: *the BTMS data folder is
 where the CSV or Excel files are stored that are uploaded, or re-uploaded, on the
-app.* One folder per client, in the portal, holding what was received; the reporting
-app reads from it and never keeps its own copy.
+app.* One folder per client, in the portal, holding what was received.
+
+| | | |
+|---|---|---|
+| **1** | The BTMS tick on the client record | **Built** |
+| **2** | The client's folder as the single store | **Built, except the sha256 comparison — and the seventeen existing files have not been moved** |
+| **3** | BTMS feeds as the document types in that folder | **Built** (§3 as written here was superseded by `FIX.md` §4, which is what was built) |
 
 ---
 
-## 1. Choose the reporting clients from the client record, not from a separate screen
+## 1. Choose the reporting clients from the client record
 
-**Built.** `BooksInBtms.tsx` on Client info, writing through
-`src/services/reportingSettings.ts`; the two bulk buttons are gone from
-`ReportingSetup.tsx`.
-
-**What is wanted:** a tick on the client's own page in the portal that says whether
-this client's books are on BTMS, and whose BTMS. Only clients marked one of those
-appear in the reporting app's client picker.
-
-**What already exists:**
-
-- `reporting.client_settings.data_source` — `'none' | 'btms_local' | 'btms_client' | 'other'`,
-  with `other_program` for the name of whatever else they use.
-- `reporting.clients_for_reporting()` already returns only `btms_local` and `btms_client`.
-- The values are set today, from the partner's own list: **32 on our BTMS, 4 on the
-  client's own, 27 not offered.** PC Prime's own books are deliberately out.
-
-**What to build:** put the control on the client record — the Documents tab beside
-the BTMS data folder is the natural home, or Client info if that reads better.
-Three states, plainly worded, in the partner's own language:
+**Built.** `BooksInBtms.tsx` sits on the Client info tab and writes through
+`src/services/reportingSettings.ts` to `reporting.client_settings`. Three states, in
+the partner's own words:
 
 ```
 Books kept in BTMS
@@ -39,152 +29,122 @@ Books kept in BTMS
   ( ) On the client's BTMS   → data_source 'btms_client'
 ```
 
-Write straight to `reporting.client_settings` for that `client_id`, upserting the row
-if it does not exist. The reporting app's own setup screen can stay as the bulk view,
-but the client record is now the place a person changes one client.
+Picking "Not on BTMS" offers an optional box for what they *do* use, which records
+`'other'` with the program named, so nobody has to ask again. Only the two BTMS states
+are offered by `clients_for_reporting()`, which is unchanged.
 
-**Remove the two bulk buttons** on `ReportingSetup.tsx` — "All on our BTMS" and "All
-on the client's BTMS". One of them is how all 63 clients came to be marked as ours,
-which is what made the picker useless. A per-client decision should take a per-client
-action.
+It writes straight through rather than joining the tab's Edit / Save cycle: the value
+is not a column on `public.clients`, it is one row in another schema, and threading it
+through the whole client form for a single radio would be a great deal of machinery
+for a fact that takes one click. The upsert names only `data_source` and
+`other_program`, so the row's other settings — year end, VAT scheme, `has_stock` —
+survive a change of mind.
+
+**The two bulk buttons are gone** from `ReportingSetup.tsx`. One of them is how all 63
+clients came to carry `btms_local`, which is what made the client picker useless. A
+per-client decision takes a per-client action. The screen keeps its bulk view and its
+count of clients nobody has placed yet; that count now says where to place them
+instead of offering to guess.
 
 ---
 
-## 2. One place for a client's BTMS files: the client's own folder in the portal
+## 2. One place for a client's BTMS files: the client's own folder
 
-**Step 1 built.** `portalFolder.ts` is the only thing that stores a BTMS file:
-`storeInBtmsFolder()` checks it and puts it in the client’s folder, and the five
-importers take an `ImportSource` and record where the folder put it instead of
-uploading a second copy. Nothing in `src/` writes to `reporting-imports` any more.
+**What was wanted:** every client's BTMS exports live in that client's **BTMS data**
+folder in the portal. That folder is the single store, and there are two ways a file
+gets into it and only one place it lands — filed on the portal in the ordinary way, or
+uploaded by whoever is reviewing, without leaving the report.
 
-**Step 2 blocked.** `scripts/migrate-btms-imports.mjs` is written and dry-runnable.
-All 17 objects belong to client 1754 and their names are bare checksums, so the
-move needs `reporting.imports.original_filename` to give them their names back --
-and nothing that can run the script can read that schema. `.env.scripts` has
-`SUPABASE_ADMIN_EMAIL` / `SUPABASE_ADMIN_PASSWORD` present but empty, and migration
-190 granted the reporting schema to `authenticated` only, so the service role gets
-"permission denied for schema reporting". Either fill in the admin credentials, or
-grant the reporting schema to `service_role` and let the script use that.
+**Built:**
 
-**Steps 3 to 5 not started.** The new / changed / already-in comparison by sha256
-on opening a client is the piece that makes the folder the way in.
+- `portalFolder.ts` is the only code that stores a BTMS file. `storeInBtmsFolder()`
+  checks it and puts it in the client's folder; the five importers take an
+  `ImportSource` and record where the folder put it instead of uploading a second
+  copy. **Nothing in `src/` writes to `reporting-imports` any more.**
+- Both ways in go through that one door, so a file uploaded on the report is
+  afterwards indistinguishable from one filed on the portal: same check, same
+  subfolder, same derived name, same `public.documents` row.
+- The folder never loses anything on import. Replacing marks the earlier copy
+  superseded — it stays as the record of what was reported at the time — and "Keep
+  both" is offered because two exports of one month are sometimes two different
+  things, and that is the person's call rather than the code's.
 
-**What is wanted:** every client's BTMS exports live in that client's **BTMS data**
-folder in the portal. The reporting app reads from there — it looks in the folder for
-anything new or changed when the client is opened, and offers to import it. Nothing
-is loaded from a folder on somebody's laptop, and no file can land under the wrong
-client because the folder *is* the client.
+**Not built — the sha256 comparison.** On opening a client, list the folder and
+compare against `reporting.btms_file_checks` by digest: show what is **new**, what has
+**changed** since it was last imported, and what is already in, then import the new
+and the changed in one action. This is the "looks in that folder for changes or
+updates" the partner asked for, and it is the piece that makes the folder the way in
+rather than merely the place things end up. Everything it needs already exists —
+`listBtmsFolder()` reads the folder and `btms_file_checks.digest` holds the hash.
 
-**What already exists — all of it:**
-
-- `public.btms_data_folder(client_id)` (migration 204) creates the client's "BTMS
-  data" folder on demand, in the portal's own `folders` / `documents` tables, under
-  the private `documents` bucket, governed by the portal's access model.
-- `src/reporting/lib/import/portalFolder.ts` already uploads into that folder,
-  records the `public.documents` row, and logs `reporting.btms_file_checks`.
-- `PortalFolderPanel.tsx` already lists it and imports from it.
-
-**What is wrong:** there are still two paths. Five importers upload to a *separate*
-`reporting-imports` bucket instead:
-
-```
-src/reporting/lib/import/ledgerImport.ts        → storage.from('reporting-imports')
-src/reporting/lib/import/chartImport.ts         → storage.from('reporting-imports')
-src/reporting/lib/import/trialBalanceImport.ts  → storage.from('reporting-imports')
-src/reporting/lib/import/stockImport.ts         → storage.from('reporting-imports')
-src/reporting/lib/import/payrollImport.ts       → storage.from('reporting-imports')
-```
-
-That is where every file loaded so far actually went — 17 objects in
-`reporting-imports`, and **nothing** in the client's BTMS data folder. The right path
-was built and then bypassed.
-
-**What to build:**
-
-1. Make `portalFolder.ts` the only way a file is stored. The five importers keep
-   their parsing and their commit logic; they stop calling
-   `storage.from('reporting-imports')` and take the file from the client's folder
-   instead.
-2. Migrate the 17 existing objects into the client's BTMS data folder, with a
-   `public.documents` row each, then leave the `reporting-imports` bucket empty. Do
-   not delete the bucket in the same change.
-3. On opening a client, list the folder and compare against
-   `reporting.btms_file_checks` by sha256. Show what is **new**, what has **changed**
-   since it was last imported, and what is already in — then let the person import
-   the new and changed ones in one action. This is the "looks in that folder for
-   changes or updates" the partner asked for.
-4. The folder stays the record of what was received: never delete from it on import.
-5. **Re-uploading is normal, not an error.** A month gets re-exported from BTMS after
-   a correction, and the new file must be able to sit beside the old one. Keep both
-   documents; the newest for a feed and period is the one the app offers, the older
-   one stays as the record of what was reported at the time. `commit_ledger_import`
-   already replaces only the months the file covers, so a re-import of one month does
-   not disturb the rest.
-
-**Acceptance:** loading a client's six journal listings, chart of accounts, trial
-balances, stock valuations and payroll files into the client's BTMS data folder from
-the portal, then opening that client in the reporting app, offers exactly those files
-for import and nothing else — with no upload step inside the reporting app at all.
+**Blocked — the seventeen existing objects.** They are still in `reporting-imports`
+and the client folders are empty. `scripts/migrate-btms-imports.mjs` is written,
+dry-runnable and safe to run twice; it files them into the right subfolders with a
+document row and a check row each, repoints `imports.storage_path` and
+`stock_valuations.file_path`, and deletes nothing. It cannot run until somebody
+supplies a credential — see **What is not done** in `STATUS.md` for exactly why and
+the two ways out.
 
 ---
 
 ## 3. In the BTMS data folder, the document type is the BTMS feed
 
-**What is wanted:** the upload box inside a client's **BTMS data** folder should offer
-the files we are actually allowed to import — not the portal's general document types
-— and then ask for the period in the form that feed needs.
+**Built, by way of `FIX.md` §4**, which superseded the plan written here: the
+subfolders came with it, so the type now decides the folder as well as the questions.
 
-The generic list (Invoice received, Credit note, Receipt, Contract, Agreement,
-Certificate…) is right for every other folder and wrong for this one. Nothing in it
-names a journal listing, so a file loaded there cannot be recognised.
+The eleven feeds, and what each one is asked (`src/reporting/upload/feeds.ts` — one
+list, used by the report's Upload button and the portal's Documents tab alike):
 
-**The list, and what each one needs asked:**
-
-| Document type | Period control | Goes to |
+| Document type | Period control | Subfolder |
 |---|---|---|
-| Analytical journal listing | Year, or from/to month | `feed = 'ledger'` |
-| Trial balance — monthly | Month | `trial_balance`, `is_annual = false` |
-| Trial balance — annual | Year | `trial_balance`, `is_annual = true` |
-| Chart of accounts | none — it is not a period | `coa_accounts` |
-| VAT figures summary | Quarter | `vat_periods` |
-| VAT return as filed | Quarter | `vat_returns` |
-| Payroll cost analysis | Month | `payroll_periods` / `payroll_lines` |
-| Payroll paysheet listing | Month | `payroll_periods` / `payroll_lines` |
-| Stock valuation | **Exact date** — the count date | `stock_valuations.valued_at` |
-| Sales invoice listing | Month | later |
-| Bank statement (camt.053 XML) | Month | later |
-| Other / supporting document | Month, optional | held, not parsed |
+| Analytical journal listing | Year | Journal listings |
+| Trial balance, monthly | Month | Trial balances |
+| Trial balance, annual | Year | Trial balances |
+| Chart of accounts | none — it is not a period | Chart of accounts |
+| VAT figures summary | Quarter | VAT |
+| VAT return as filed | Quarter | VAT |
+| Payroll cost analysis | Month | Payroll |
+| Payroll paysheet listing | Month | Payroll |
+| Stock valuation | **Exact date** — the count date | Stock |
+| Sales invoice listing | Month | Sales |
+| Bank statement (XML) | Month | Bank |
 
-Three shapes of period control, not one: **month** (what the box does today), **year**
-(journal listing, annual trial balance), and **an exact date** (stock valuation — the
-date the count was taken, which no BTMS export contains and which nobody can recover
-afterwards). Quarter can be a month picker labelled as the quarter end if that is
-simpler.
+Three shapes of period control, because there are three shapes of period. It matters
+beyond tidiness: the trial balance's period and the stock count date exist **nowhere
+else at all** — neither is in the BTMS file — so they are asked for while the person
+still knows. `documents.year` and `documents.month` carry the first;
+`documents.period_end` (migration 215) carries the count date.
 
-**Why it matters beyond tidiness:** the period the person types here is the only place
-two facts exist at all — the trial balance's period and the stock count date. Both are
-absent from the BTMS file itself. `public.documents` already has `year` and `month`
-columns waiting for exactly this; a date column or a `period_end` on the document row
-covers the stock case.
+The name is derived from the type and the period — "Trial balance — 2026-07.xls" —
+never keyed, and never the checksum the old bucket named its objects by. What BTMS
+called the export is kept as a note on the row, because that is what a person searches
+for when they go looking for the file itself.
 
-**Scope it to the folder.** Only the BTMS data folder gets this list — every other
-folder keeps the portal's general document types. Key it off
-`folders.category_key = 'btms'`.
-
-**Then the reporting app has no upload of its own.** It reads the folder, sees a file
-tagged "Trial balance — monthly, July 2026", and knows what it is and what period it
-covers before it opens it. That is the whole point of putting the files here.
+**Scoped to the folder**, keyed off `folders.category_key` starting `btms`, so a
+folder somebody renames still behaves and every other folder in the portal keeps the
+general document types.
 
 ---
 
 ## Do not change
 
 - `reporting.staff_can_access()` and `reporting.is_reporting_staff()` — settled in
-  migration 214 and now match `isStaffRole()` in `src/services/api.ts` exactly:
-  owner, supervisor, admin, staff. `app_user` is a client-side mini-app login and is
-  correctly excluded. If a person needs the reporting app they are given a staff
-  role on the users screen.
-- The VAT sign rule in `reporting.vat_figures` — migration 211. It was adding
-  purchase returns to input tax instead of subtracting them.
+  migration 214, and matching `isStaffRole()` in `src/services/api.ts` exactly: owner,
+  supervisor, admin, staff. `app_user` is a client-side mini-app login and is
+  correctly excluded. If a person needs the reporting app they are given a staff role
+  on the users screen.
+- The VAT sign rule in `reporting.vat_figures` — migration 211. It was adding purchase
+  returns to input tax instead of subtracting them.
 - `has_stock` / `has_payroll` — migration 211 backfilled them and added triggers so
   they follow the data. Do not reintroduce a switch someone has to remember.
+- `btms_folder_for()` — migration 215. The mapping from a report's kind to its folder
+  lives in the database because both ways in have to agree, and two copies of the same
+  rule is how they stop agreeing.
+- The keys sign-offs are stored under. The review's is the **template's** own —
+  `check|month|account|reference|amount` — not `reporting.exceptions.ex_key`, which is
+  the database's key for the same row and matches nothing the template ever wrote.
+  Working papers are namespaced `wp|month|ref|prep` so the two cannot collide.
+- `public/reporting-template.html`. It is the specification. If a screen must change,
+  the partner changes the prototype and it is rebuilt from that; everything the
+  application needs to alter is a named, anchored patch in
+  `tools/build-reporting-app.mjs` that fails the build if the template moves under it.
