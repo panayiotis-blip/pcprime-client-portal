@@ -667,6 +667,10 @@ export async function buildClientBlock(
           name,
           short: c.client_code || name.slice(0, 12),
           yearEnd: settings?.year_end_month ?? 12,
+          // Which cycle this client's quarters run on. The period control
+          // snaps Quarter to it, because a quarter that is not one of the
+          // client's quarters is not a period they have ever reported.
+          vatOffset: settings?.vat_quarter_offset ?? 0,
           currency: settings?.currency ?? 'EUR',
           features,
           notes: openingFrom
@@ -956,6 +960,7 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
       name,
       short: name.slice(0, 12),
       yearEnd: 12,
+      vatOffset: 0,
       currency: 'EUR',
       features: off,
       notes: 'Nothing has been imported for this client yet.',

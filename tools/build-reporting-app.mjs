@@ -752,6 +752,135 @@ script += `
     ].join('\n'));
 }
 
+// ---- patch 18: the period controls ------------------------------------
+//
+// Two dropdowns that argued with each other. REPORTING PERIOD offered Quarter
+// and PERIOD ENDING offered any month, so Quarter with a period ending of Jul 26
+// produced a quarter ending in July — three months that are not one of the
+// client's quarters and never were. The screen also opened on Jul 26 with the
+// ledger running to Aug 26, and said nothing about why.
+//
+// Four changes, as REVIEW-2 §1d sets them out:
+//
+//   * one row of buttons, and the month picker only where it is needed;
+//   * Quarter snaps to the client's own quarters, from vat_quarter_offset —
+//     the same cycle the VAT return is filed on, because a quarter that is not
+//     one of the client's quarters is not a period they have ever reported;
+//   * the resolved range is always printed in full, with the comparative it is
+//     measured against beside it;
+//   * it opens on the latest COMPLETE month and says that is what it did.
+//
+// This is one control shared by most screens, so the old modes are kept as the
+// state underneath — the buttons set them, and periodRange still answers.
+
+{
+  const open = 'function periodCtl(id,host,onchange,opts){';
+  const shut = '\n}\nfunction periodRange(id){';
+  const a = script.indexOf(open);
+  const b = script.indexOf(shut, a);
+  if (a < 0 || b < 0) throw new Error('periodCtl is not where it was.');
+
+  script = script.slice(0, a) + [
+    '/* The last month that has actually ended. The ledger can hold the month in',
+    '   progress, and opening a report on a part month invites a comparison',
+    '   nobody meant to make. */',
+    'function latestComplete(){',
+    '  var now=new Date(), cur=now.getUTCFullYear()+"-"+String(now.getUTCMonth()+1).padStart(2,"0");',
+    '  for(var i=NM-1;i>=0;i--) if(M[i]<cur) return M[i];',
+    '  return M[NM-1];',
+    '}',
+    'const MFULL=["January","February","March","April","May","June","July",',
+    '  "August","September","October","November","December"];',
+    'function firstDay(m){return "1 "+MFULL[+m.slice(5,7)-1]+" "+m.slice(0,4);}',
+    'function lastDay(m){var y=+m.slice(0,4),n=+m.slice(5,7);',
+    '  return new Date(Date.UTC(y,n,0)).getUTCDate()+" "+MFULL[n-1]+" "+y;}',
+    'function fullRange(a,b){return firstDay(M[a])+" to "+lastDay(M[b]);}',
+    '',
+    "/* The client's own quarter ends. Offset 0 is Mar/Jun/Sep/Dec; 1 is",
+    '   Jan/Apr/Jul/Oct; 2 is Feb/May/Aug/Nov — the same rule migration 201 uses',
+    '   to decide which quarter a posting falls in. */',
+    'function quarterEnds(){',
+    '  var o=(D.cfg&&D.cfg.vatOffset)||0;',
+    '  return o===0?[3,6,9,12]:[o,o+3,o+6,o+9];',
+    '}',
+    '/* The quarter the anchor month belongs to, as [startMonthIndex,endIndex]. */',
+    'function quarterOf(bi){',
+    '  var ends=quarterEnds(), y=+M[bi].slice(0,4), m=+M[bi].slice(5,7), e=null, ey=y;',
+    '  for(var i=0;i<ends.length;i++) if(ends[i]>=m){e=ends[i];break;}',
+    '  if(e===null){e=ends[0];ey=y+1;}',
+    '  var end=new Date(Date.UTC(ey,e-1,1)), start=new Date(Date.UTC(ey,e-3,1));',
+    '  var key=function(d){return d.getUTCFullYear()+"-"+String(d.getUTCMonth()+1).padStart(2,"0");};',
+    '  var si=M.indexOf(key(start)), ei=M.indexOf(key(end));',
+    '  /* A quarter can run past what is loaded, or start before it. Clip to the',
+    '     ledger and let the printed range say what was actually covered. */',
+    '  if(si<0)si=0; if(ei<0)ei=NM-1;',
+    '  return [Math.min(si,ei),Math.max(si,ei)];',
+    '}',
+    '',
+    'function periodCtl(id,host,onchange,opts){',
+    '  opts=opts||{};',
+    '  var st=PER[id]||(PER[id]={mode:opts.mode||(opts.asAt?"month":"ytd"),',
+    '    from:M[0],to:latestComplete(),pick:opts.asAt?null:"this"});',
+    '  if(M.indexOf(st.from)<0)st.from=M[0];',
+    '  if(M.indexOf(st.to)<0)st.to=latestComplete();',
+    '  /* This month and Last month resolve their anchor on every render, so they',
+    '     stay right as new months arrive rather than sticking where they were. */',
+    '  if(st.pick==="this")st.to=latestComplete();',
+    '  if(st.pick==="last")st.to=M[Math.max(0,M.indexOf(latestComplete())-1)];',
+    '  var el=document.getElementById(host); if(!el)return;',
+    '  var btns=opts.asAt',
+    '    ?[["Month end","month",null],["Year end","yearend",null]]',
+    '    :[["This month","month","this"],["Last month","month","last"],',
+    '      ["Quarter","quarter",null],["Year to date","ytd",null],',
+    '      ["Full year","year",null],["Custom","range",null]];',
+    '  var needsMonth=st.mode!=="range"&&!(st.mode==="month"&&st.pick);',
+    '  var h=\'<div class="perbtns">\'+btns.map(function(x,i){',
+    '    var on=st.mode===x[1]&&(st.pick||null)===x[2];',
+    '    return \'<button class="perbtn\'+(on?" on":"")+\'" data-i="\'+i+\'">\'+x[0]+"</button>";',
+    '  }).join("")+"</div>";',
+    '  if(st.mode==="range"){',
+    '    h+=\'<span><label class="ctl">From</label><select data-k="from">\'+',
+    '      M.map(function(m){return \'<option value="\'+m+\'"\'+(st.from===m?" selected":"")+">"+lbl(m)+"</option>"}).join("")+',
+    '      \'</select></span><span><label class="ctl">To</label><select data-k="to">\'+',
+    '      M.map(function(m){return \'<option value="\'+m+\'"\'+(st.to===m?" selected":"")+">"+lbl(m)+"</option>"}).join("")+',
+    '      "</select></span>";',
+    '  } else if(needsMonth){',
+    '    h+=\'<span><label class="ctl">\'+(opts.asAt?"At":"Ending")+\'</label><select data-k="to">\'+',
+    '      M.map(function(m){return \'<option value="\'+m+\'"\'+(st.to===m?" selected":"")+">"+lbl(m)+"</option>"}).join("")+',
+    '      "</select></span>";',
+    '  }',
+    '  h+=\'<div class="perwhat" data-r="desc"></div>\';',
+    '  el.innerHTML=h;',
+    '  el.querySelectorAll(".perbtn").forEach(function(bt){',
+    '    bt.addEventListener("click",function(){',
+    '      var x=btns[+bt.dataset.i];',
+    '      st.mode=x[1]; st.pick=x[2];',
+    '      periodCtl(id,host,onchange,opts); onchange();});});',
+    '  el.querySelectorAll("select").forEach(function(sel){',
+    '    sel.addEventListener("change",function(e){',
+    '      st[e.target.dataset.k]=e.target.value;',
+    '      /* Choosing a month by hand is no longer "this month". */',
+    '      if(e.target.dataset.k==="to")st.pick=null;',
+    '      if(st.mode==="range"&&M.indexOf(st.from)>M.indexOf(st.to))st.from=st.to;',
+    '      periodCtl(id,host,onchange,opts); onchange();});});',
+    '  /* Say what the buttons resolved to, in full, and what it is measured',
+    '     against. The old control printed "Jan 26 to Jul 26" and left the rest to',
+    '     be inferred. */',
+    '  var r=periodRange(id), pr=priorRange(id);',
+    '  var said=opts.asAt?("At "+lastDay(M[r[1]])):fullRange(r[0],r[1]);',
+    '  if(!opts.asAt)said+=pr?(" \\u00b7 against "+fullRange(pr[0],pr[1])):" \\u00b7 no comparative loaded";',
+    '  if(st.pick==="this")said+=" \\u00b7 the latest complete month";',
+    '  if(st.mode==="quarter")said+=" \\u00b7 the client\\u2019s own quarter";',
+    '  el.querySelector(\'[data-r="desc"]\').textContent=said;',
+    '}',
+  ].join('\n') + script.slice(b + 2);   // keep "function periodRange(id){"
+
+  // Quarter no longer means "the calendar quarter the anchor happens to sit in".
+  const q = 'if(st.mode==="quarter"){const q=Math.floor((+M[b].slice(5,7)-1)/3)*3+1;\n    const s=M.indexOf(y+"-"+String(q).padStart(2,"0")); return [s<0?b:s,b];}';
+  if (!script.includes(q)) throw new Error('the quarter branch is not where it was.');
+  script = script.replace(q, 'if(st.mode==="quarter") return quarterOf(b);');
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings
@@ -891,6 +1020,16 @@ const STYLE_PATCH = `
    viewBox and no fixed width, so they grow into whatever they are given. */
 #v-overview .grid2{display:block}
 #v-overview .grid2 > .card{margin-bottom:16px}
+
+/* REVIEW-2 1d — the period control is a row of buttons and, where it needs
+   one, a month. The resolved range is printed underneath in full, because
+   "Jan 26 to Jul 26" left the rest to be inferred. */
+.perbtns{display:flex;flex-wrap:wrap;gap:6px;margin-right:10px}
+.perbtn{font:inherit;font-size:13px;padding:5px 12px;border:1px solid var(--rule);
+  background:var(--surface);color:var(--ink-2);border-radius:4px;cursor:pointer}
+.perbtn:hover{border-color:var(--ink-3);color:var(--ink)}
+.perbtn.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.perwhat{flex-basis:100%;font-size:12.5px;color:var(--ink-2);margin-top:6px}
 
 /* REVIEW-2 3a — headings a step bigger and bolder. They sat close enough to the
    body text in size and weight that a long table read as one undifferentiated
