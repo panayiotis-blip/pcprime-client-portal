@@ -72,6 +72,25 @@ export type BuildResult = {
   sectionsOff: string[];
 };
 
+/**
+ * A person’s decisions, applied over the computed defaults.
+ *
+ * Absent means nobody decided and the default stands. Present means somebody
+ * chose, and nothing the data says may argue with it -- import a stock
+ * valuation into a client whose Stock section was switched off and it stays
+ * off, because that is what switching it off meant.
+ */
+export function applyOverrides(
+  features: Record<string, number>,
+  overrides: Record<string, boolean> | null | undefined,
+): void {
+  if (!overrides) return;
+  for (const [key, on] of Object.entries(overrides)) {
+    if (typeof on !== 'boolean') continue;      // not a decision, not applied
+    if (!(key in features)) continue;           // not a section this app has
+    features[key] = on ? 1 : 0;
+  }
+}
 export async function buildClientBlock(
   clientId: number,
   onProgress: BuildProgress = () => {},
@@ -83,9 +102,12 @@ export async function buildClientBlock(
   const c = client as { id: number; name: string; client_code: string | null };
 
   const { data: settingsRow } = await rep().from('client_settings')
-    .select('year_end_month, currency, report_name').eq('client_id', clientId).maybeSingle();
-  const settings = settingsRow as
-    { year_end_month: number; currency: string; report_name: string | null } | null;
+    .select('year_end_month, currency, report_name, section_overrides')
+    .eq('client_id', clientId).maybeSingle();
+  const settings = settingsRow as {
+    year_end_month: number; currency: string; report_name: string | null;
+    section_overrides: Record<string, boolean> | null;
+  } | null;
 
   onProgress('Reading the months held');
   const { data: lm, error: lmErr } = await rep().rpc('ledger_months', { p_client: clientId });
@@ -518,6 +540,9 @@ export async function buildClientBlock(
 
   // A section with no feed behind it is switched OFF rather than shown empty.
   // BUILD.md §8: a switched-off section is hidden from the rail.
+  //
+  // This is the DEFAULT, worked out from what the client has. A person's own
+  // decision is applied over the top of it below, and outranks all of it.
   const features: Record<string, number> = {
     pl: 1, bs: 1, summary: 1, expenses: 1, sales: 1,
     accounts: 1, stmt: 1, trans: 1, mapping: 1, data: 1, review: 1,
@@ -531,6 +556,11 @@ export async function buildClientBlock(
     audit: audit && audit.years.length >= 2 ? 1 : 0,
     cashmove: 0, projects: 0,
   };
+
+  // What somebody decided, over what the data implies. A section switched off
+  // stays off when its data arrives, which is the whole reason the switches
+  // exist: they are set when the client is set up, before any file is loaded.
+  applyOverrides(features, settings?.section_overrides);
 
   onProgress('Reading what has been loaded');
   const feeds = await buildFeedTable(clientId);
@@ -738,13 +768,24 @@ export async function buildClientList(): Promise<{
     );
   }
 
+  // One query for every client’s section decisions. A client with nothing
+  // loaded is opened from this list and never built, so without them its
+  // switches would read as off however they were set -- and the switches are
+  // meant to be set BEFORE anything is loaded, which is exactly that client.
+  const settings = await rep().from('client_settings').select('client_id, section_overrides');
+  const overrideOf = new Map<number, Record<string, boolean>>();
+  for (const r of (settings.data ?? []) as
+    { client_id: number; section_overrides: Record<string, boolean> | null }[]) {
+    if (r.section_overrides) overrideOf.set(Number(r.client_id), r.section_overrides);
+  }
+
   const clients: Record<string, ClientBlock> = {};
   const order: string[] = [];
   const listed: { id: number; name: string; postings: number }[] = [];
   for (const c of offered) {
     const key = `c${c.client_id}`;
     order.push(key);
-    clients[key] = emptyClient(c.client_name);
+    clients[key] = emptyClient(c.client_name, overrideOf.get(Number(c.client_id)));
     listed.push({ id: c.client_id, name: c.client_name, postings: Number(c.postings) || 0 });
   }
 
@@ -770,11 +811,17 @@ export function oneClientPayload(built: BuildResult): string {
  * section is switched off, so it opens on a plain statement of that rather than
  * on a page of zeroes that reads like a report.
  */
-function emptyClient(name: string): ClientBlock {
+function emptyClient(name: string, overrides?: Record<string, boolean>): ClientBlock {
   const off: Record<string, number> = {
     pl: 0, bs: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
-    stmt: 0, trans: 0, mapping: 0, review: 0, vat: 0, stock: 0, payroll: 0,
+    stmt: 0, trans: 0, review: 0, vat: 0, stock: 0, payroll: 0,
     budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
+    // Account mapping is ON. With Company setup and Client setup -- which the
+    // template always shows -- these are the three screens a person needs
+    // BEFORE the first file, and a client with no data is exactly the client
+    // that has not had one yet. The master lines are there to be mapped
+    // against whether or not a posting exists.
+    mapping: 1,
     // Data import is ON, and shows the truth: eleven feeds, none of them
     // loaded. That is the most useful screen a client with nothing can open on
     // — it is the list of what still has to come out of BTMS. It was off for a
@@ -791,6 +838,8 @@ function emptyClient(name: string): ClientBlock {
   // empty first client did: a sign-in page with nothing to choose. A client
   // with no data still has a month it has no data FOR.
   const month = new Date().toISOString().slice(0, 7);
+
+  applyOverrides(off, overrides);
 
   return {
     client: name,

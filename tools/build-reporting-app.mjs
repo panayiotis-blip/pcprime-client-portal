@@ -521,6 +521,50 @@ script += `
   }
 }
 
+// ---- patch 12: the Client setup switches are a decision ---------------
+//
+// The ON/OFF column read back what the payload builder had worked out from the
+// data. It has to be the other way round: the person decides which sections a
+// client gets, when the client is set up and before a single file is imported,
+// and the data never argues with them afterwards.
+//
+// So the chip becomes a button. Pressing it tells the host, which writes
+// reporting.client_settings.section_overrides; the section appears or
+// disappears at once rather than after a rebuild, because a switch that takes
+// effect later is a switch nobody trusts.
+//
+// The optimistic update is deliberate and safe: if the write fails the host
+// says so in the notice strip, and the next sign-in reads the stored value —
+// which is the truth — rather than this one.
+
+{
+  const chip = 'h+=`<tr><td><b>${n}</b></td><td>${d}</td><td class="num">'
+    + '<span class="chip" style="color:${v?"var(--good)":"var(--ink-3)"}">${v?"on":"off"}</span></td></tr>`;});';
+  if (!script.includes(chip)) throw new Error('the Client setup switches are not where they were.');
+  script = script.replace(chip, [
+    'h+=`<tr><td><b>${n}</b></td><td>${d}</td><td class="num">'
+      + '<button class="sgn" data-feat="${k}" style="color:${v?"var(--good)":"var(--ink-3)"}">'
+      + '${v?"on":"off"}</button></td></tr>`;});',
+  ].join(''));
+
+  // Wired after the table is written, as the feed table's buttons are.
+  const close = "document.getElementById('tblSetup').innerHTML=h;";
+  if (!script.includes(close)) throw new Error('the Client setup table close is not where it was.');
+  script = script.replace(close, close + [
+    '',
+    "  document.querySelectorAll('[data-feat]').forEach(function(b){",
+    "    b.addEventListener('click',function(){",
+    '      var k=this.dataset.feat, now=!D.cfg.features[k];',
+    '      if(parent===window){alert("Setting sections works inside the portal.");return;}',
+    '      D.cfg.features[k]=now?1:0;',
+    '      applyFeatures();',
+    '      renderSetup();',
+    '      parent.postMessage({type:"pcp-feature",key:CID,feature:k,on:now},"*");',
+    '    });',
+    '  });',
+  ].join('\n'));
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings

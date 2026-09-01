@@ -30,6 +30,7 @@ import {
 import UploadDialog from '../upload/UploadDialog.tsx';
 import { feedByName, type Feed } from '../upload/feeds.ts';
 import { readFolder } from '../upload/readFolder.ts';
+import { setSection } from '../lib/reports/sectionStore.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -101,7 +102,8 @@ export default function ReportHome() {
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const d = e.data as
-        ({ type?: string; key?: string; feed?: string; wp?: WorkingPapers; review?: ReviewMap }
+        ({ type?: string; key?: string; feed?: string; feature?: string; on?: boolean;
+           wp?: WorkingPapers; review?: ReviewMap }
           & Partial<BudgetMessage>) | null;
       if (!d) return;
 
@@ -120,8 +122,6 @@ export default function ReportHome() {
         return;
       }
 
-      // “I want to be able to upload data” — on the screen that already says
-      // what is loaded, without leaving the report.
       // A sign-off is somebody putting their name to work having been done:
       // an exception cleared with a reason, or a working paper prepared and
       // reviewed. The reviewer is not the preparer and is not on the same
@@ -142,6 +142,27 @@ export default function ReportHome() {
         void saveWorkingPapers(cid, d.wp ?? {})
           .catch((err) => setNotice({
             text: 'The working paper was not saved: ' + (err instanceof Error ? err.message : String(err)),
+            bad: true,
+          }));
+        return;
+      }
+
+      // Which sections a client gets, decided on Client setup. The frame has
+      // already shown the change; this is what makes it outlast the tab.
+      if (d.type === 'pcp-feature' && d.key && d.feature) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        const section = String(d.feature);
+        const on = d.on === true;
+        void setSection(cid, section, on)
+          .then(() => {
+            // Built before the decision, so it no longer matches.
+            blocks.delete(String(d.key));
+            void forgetCachedBlock(cid);
+          })
+          .catch((err) => setNotice({
+            text: `${section} was not saved: ` + (err instanceof Error ? err.message : String(err))
+              + ' — the switch will read its stored value again on the next sign-in.',
             bad: true,
           }));
         return;
@@ -190,6 +211,8 @@ export default function ReportHome() {
         return;
       }
 
+      // “I want to be able to upload data” — on the screen that already says
+      // what is loaded, without leaving the report.
       if (d.type === 'pcp-upload' && d.key && d.feed) {
         const f = feedByName(String(d.feed));
         const cid = Number(String(d.key).replace(/^c/, ''));
