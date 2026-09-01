@@ -10,6 +10,7 @@ import {
   FEEDS as BTMS_FEEDS, feedsForFolder, periodValue, periodRequired, filedUnderPeriod,
 } from '../../reporting/upload/feeds';
 import { storeInBtmsFolder } from '../../reporting/lib/import/portalFolder';
+import { tagsFor, retagDocument, type BtmsTag } from '../../reporting/lib/import/retag';
 
 const DOC_TYPES = [
   { value: 'invoice', label: 'Invoice (Received)' },
@@ -68,6 +69,11 @@ export default function ClientDocuments({ clientId }: Props) {
   // Inside a BTMS folder: which feed this file is, and the period it covers.
   const [btmsFeed, setBtmsFeed] = useState(BTMS_FEEDS[0].key);
   const [btmsPeriod, setBtmsPeriod] = useState('');
+  // What each BTMS document in this folder actually is, so a card can say so.
+  const [tags, setTags] = useState<Map<number, BtmsTag>>(new Map());
+  // The card being re-filed, and the answers so far.
+  const [moving, setMoving] = useState<{ id: number; feed: string; period: string } | null>(null);
+  const [movingBusy, setMovingBusy] = useState(false);
   const [activeYear, setActiveYear] = useState<string>('');
   const [activeMonth, setActiveMonth] = useState<string>('');
   // Covers the whole opening sequence — folders, then that folder's documents.
@@ -170,6 +176,19 @@ export default function ClientDocuments({ clientId }: Props) {
     }
     loadDocuments().finally(() => setLoading(false));
   }, [clientId, activeFolder, activeYear, activeMonth]);
+
+  // The cards need to know what each file is, and that lives on the check row
+  // rather than on the document. One query per folderful, not one per card.
+  useEffect(() => {
+    const btms = documents.filter((d: any) => d.category === 'btms' || isBtmsFolder);
+    if (!btms.length) { setTags(new Map()); return; }
+    let cancelled = false;
+    void tagsFor(btms.map((d: any) => ({ id: d.id, file_name: d.file_name, notes: d.notes })))
+      .then((m) => { if (!cancelled) setTags(m); })
+      .catch(() => { if (!cancelled) setTags(new Map()); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documents]);
 
   const toggleExpanded = (id: number) => {
     setExpanded(prev => {
@@ -571,10 +590,21 @@ export default function ClientDocuments({ clientId }: Props) {
                       </div>
                       <div className="doc-body">
                         <p className="doc-name">{doc.file_name}</p>
-                        <p className="doc-meta">
-                          {doc.month && <span>{doc.month}</span>}
-                          {doc.doc_type && <span className="doc-type-tag">{doc.doc_type.replace(/_/g, ' ')}</span>}
-                        </p>
+                        {/* A BTMS export says what report it is and what period
+                            it covers. It used to read "Btms Export" with a bare
+                            number badge — the month, with nothing to say that is
+                            what it was. */}
+                        {tags.get(doc.id) ? (
+                          <p className="doc-meta">
+                            <span className="doc-type-tag">{tags.get(doc.id)!.kindName}</span>
+                            {tags.get(doc.id)!.when && <span>{tags.get(doc.id)!.when}</span>}
+                          </p>
+                        ) : (
+                          <p className="doc-meta">
+                            {doc.month && <span>{doc.month}</span>}
+                            {doc.doc_type && <span className="doc-type-tag">{doc.doc_type.replace(/_/g, ' ')}</span>}
+                          </p>
+                        )}
                         {doc.notes && <p className="doc-notes">{doc.notes}</p>}
                         <p className="doc-uploaded">Uploaded {formatDate(doc.created_at)}</p>
                       </div>
@@ -588,10 +618,91 @@ export default function ClientDocuments({ clientId }: Props) {
                             } catch (err: any) { alert(err.message); }
                           }}
                         >View</button>
+                        {/* A misfiled export is a correction, not a deletion and
+                            a fresh upload: re-uploading destroys the date the
+                            client actually sent it, which is the record. */}
+                        {isStaffRole(user) && tags.get(doc.id) && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setMoving({
+                              id: doc.id,
+                              feed: BTMS_FEEDS.find((x) => x.kind === tags.get(doc.id)!.kind)?.key
+                                ?? BTMS_FEEDS[0].key,
+                              period: tags.get(doc.id)!.period ?? '',
+                            })}
+                          >Move to…</button>
+                        )}
                         {isStaffRole(user) && (
                           <button className="btn btn-danger btn-sm" onClick={async () => { if (confirm('Delete?')) { await api.deleteDocument(doc.id); await loadFolders(); await loadDocuments(); } }}>X</button>
                         )}
                       </div>
+
+                      {moving?.id === doc.id && (() => {
+                        // Bound and checked once: the closure cannot narrow the
+                        // state from the guard outside it.
+                        const mv = moving;
+                        if (!mv) return null;
+                        const f = BTMS_FEEDS.find((x) => x.key === mv.feed) ?? BTMS_FEEDS[0];
+                        const ok = f.period === 'none' || !periodRequired(f)
+                          || !!periodValue(f.period, mv.period);
+                        return (
+                          <div style={{
+                            gridColumn: '1 / -1', borderTop: '1px solid var(--border)',
+                            marginTop: 8, paddingTop: 10,
+                          }}>
+                            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                              Change what this file is. It moves to the matching folder, the
+                              reporting app reads it as the new report, and its name follows.
+                            </p>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                              <select
+                                className="form-input" style={{ maxWidth: 240 }} value={mv.feed}
+                                onChange={(e) => setMoving({ ...moving, feed: e.target.value, period: '' })}
+                              >
+                                {BTMS_FEEDS.map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
+                              </select>
+                              {f.period !== 'none' && (
+                                f.period === 'date' ? (
+                                  <input type="date" className="form-input" style={{ maxWidth: 180 }}
+                                    value={mv.period}
+                                    onChange={(e) => setMoving({ ...moving, period: e.target.value })} />
+                                ) : f.period === 'year' ? (
+                                  <select className="form-input" style={{ maxWidth: 140 }}
+                                    value={mv.period}
+                                    onChange={(e) => setMoving({ ...moving, period: e.target.value })}>
+                                    <option value="">Year…</option>
+                                    {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - i)
+                                      .map((y) => <option key={y} value={String(y)}>{y}</option>)}
+                                  </select>
+                                ) : (
+                                  <input type="month" className="form-input" style={{ maxWidth: 180 }}
+                                    value={mv.period.slice(0, 7)}
+                                    onChange={(e) => setMoving({ ...moving, period: e.target.value })} />
+                                )
+                              )}
+                              <button
+                                className="btn btn-primary btn-sm" disabled={!ok || movingBusy}
+                                onClick={async () => {
+                                  setMovingBusy(true);
+                                  try {
+                                    await retagDocument(
+                                      clientId, doc.id, f.kind,
+                                      f.period === 'none' ? null : periodValue(f.period, mv.period),
+                                    );
+                                    setMoving(null);
+                                    await loadFolders();
+                                    await loadDocuments();
+                                  } catch (err: any) {
+                                    alert(err.message);
+                                  } finally { setMovingBusy(false); }
+                                }}
+                              >{movingBusy ? 'Moving…' : 'Move it'}</button>
+                              <button className="btn btn-secondary btn-sm" disabled={movingBusy}
+                                onClick={() => setMoving(null)}>Cancel</button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
