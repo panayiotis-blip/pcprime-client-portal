@@ -338,6 +338,21 @@ export async function buildClientBlock(
     budget[b.line_id][mi] = Number(b.amount);
   }
 
+  // ---- money in and out, by where it actually went (FIX-3 7) -------------
+  // The indirect statement above explains the movement; this one lists it.
+  // Every bank posting attributed to the other side of its own transaction,
+  // by migration 222 -- no new import, and it ties to the ledger's own bank
+  // movement exactly, in every month and on every account.
+  onProgress('Reading the money in and out');
+  const { data: cioData, error: cioErr } = await rep().rpc('cash_direct', { p_client: clientId });
+  if (cioErr) throw new Error(`cash_direct: ${cioErr.message}`);
+  const cashio = (cioData ?? {}) as { acc?: [string, string][] } & Record<string, unknown>;
+  // The report line for each account in it. Taken from the mapping rather than
+  // from `accounts` above, which drops an account whose movement nets to nought
+  // over the whole ledger -- a supplier paid and refunded in the same year is
+  // exactly that, and is exactly the kind of thing this screen is asked about.
+  cashio.line = (cashio.acc ?? []).map(([code]) => lineFor.get(String(code)) ?? '');
+
   // ---- the columns the partner keyed himself (FIX-3 3) ------------------
   // Read like the budget: nothing here is derived and nothing else consumes
   // it. The profit and loss offers a keyed column only when the period on
@@ -629,6 +644,9 @@ export async function buildClientBlock(
     stock: stock.length ? 1 : 0,
     payroll: Object.keys(payroll).length ? 1 : 0,
     cash: cashflow.length ? 1 : 0,
+    // On when there is a bank posting to list. A client whose books have no
+    // bank account gets nothing from this screen but an explanation.
+    cashio: (cashio.v as unknown[] | undefined)?.length ? 1 : 0,
     budget: 1,
     audit: audit && audit.years.length >= 2 ? 1 : 0,
     cashmove: 0, projects: 0,
@@ -707,6 +725,7 @@ export async function buildClientBlock(
         agetot: ageing.agetot, ageHist: ageing.ageHist, ageFlags: ageing.ageFlags,
         cashflow, cashmove: {}, cashjrn: {},
         budget,
+        cashio,
         keyed,
         audit: audit ?? {},
         // What has been signed, in the two shapes the template reads.
@@ -938,7 +957,7 @@ export function oneClientPayload(built: BuildResult): string {
  */
 function emptyClient(name: string, overrides?: Record<string, boolean>): ClientBlock {
   const off: Record<string, number> = {
-    pl: 0, bs: 0, ratios: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
+    pl: 0, bs: 0, ratios: 0, cashio: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
     stmt: 0, trans: 0, review: 0, vat: 0, stock: 0, payroll: 0,
     budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
     // Account mapping is ON. With Company setup and Client setup -- which the
@@ -995,6 +1014,7 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
     },
     vatFiled: [], vatBtms: [], deb: [], cre: [],
     agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
+    cashio: { ep: null, acc: [], line: [], rd: [], td: [], jr: [], d: [], b: [], c: [], v: [], r: [], t: [], j: [], x: [] },
     budget: {}, keyed: [], audit: {}, wp: {}, review: {}, untagged: [], projects: [],
   };
 }
