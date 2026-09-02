@@ -138,8 +138,15 @@ const preTo = src.indexOf('function renderPl(');
 if (preFrom < 0 || preFrom > preTo) throw new Error('the renderPl preamble is not where it was');
 const plPre = src.slice(preFrom, preTo);
 
+// The expenses screen keeps its view state and its column helpers above the
+// function, the way the profit and loss keeps KEYFOCUS above renderPl.
+const expFrom = src.indexOf('/* Expense analysis (FIX-3');
+const expTo = src.indexOf('function renderExp(');
+if (expFrom < 0 || expFrom > expTo) throw new Error('the renderExp preamble is not where it was');
+const expPre = src.slice(expFrom, expTo);
+
 vm.runInContext([cmpBlock, grab('lblShort'), plPre, grab('renderPl'), grab('renderBs'),
-                 grab('renderExp')].join('\n'), ctx);
+                 expPre, grab('renderExp')].join('\n'), ctx);
 
 const strip = (s) => s.replace(/<[^>]+>/g, '').split('').filter(Boolean);
 // CMP is a lexical const inside the sandbox, so reach it by evaluating its name.
@@ -225,11 +232,13 @@ ok('bs debtors and movement', rowOf(t, 'Debtors'), ['230', '223', '7', '211', '1
 CMP['exp'] = [{ kind: 'py' }, { kind: 'at', to: '2024-07' }];
 ctx.renderExp();
 t = html['tblExp'];
+// FIX-3 §8 rebuilt this screen: the sparkline is gone, the columns are the
+// same comparison list, and the line names now carry a twist to open them.
 ok('exp headings', heads(t),
-   ['Line', 'Jan 26–Jul 26', '% of sales', 'Jan 25–Jul 25', '% of sales', 'Jul 26 vs Jul 25',
-    'Jan 24–Jul 24', '% of sales', 'Jul 25 vs Jul 24', 'Monthly shape']);
+   ['Line', 'Jan 26–Jul 26', '%', 'Jan 25–Jul 25', '%', 'Jul 26 vs Jul 25',
+    'Jan 24–Jul 24', '%', 'Jul 25 vs Jul 24']);
 // admin is 7 a month throughout, so seven months is 49 in every year and nothing moves
-ok('exp admin across three years', rowOf(t, 'Admin').slice(0, 8),
+ok('exp admin across three years', rowOf(t, '<span class="twist">▸</span>Admin'),
    ['49', '5.8%', '49', '6.4%', '0', '49', '7.0%', '0']);
 
 // =====================================================================
