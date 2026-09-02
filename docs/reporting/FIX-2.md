@@ -1,3 +1,6 @@
+> **`STATUS.md` is the record of what exists.** All four work orders are built;
+> this file is kept for what it asked for and why.
+
 > **All eight items are built and deployed.** `STATUS.md` says where the build
 > stands and what is still unlooked-at. This file is kept as the record of the
 > review and what each item turned into.

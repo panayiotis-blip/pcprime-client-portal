@@ -1,3 +1,6 @@
+> **`STATUS.md` says where the build stands.** This file is the specification
+> and still outranks it on what the application is meant to be.
+
 > **`STATUS.md` says where the build stands today.** This file is the
 > specification and does not move with it.
 

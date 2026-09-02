@@ -31,5 +31,16 @@ and a phased build order.
 The working prototype it is specified against is `docs/reporting/prototype.html` —
 open it in a browser before writing code.
 
+**`docs/reporting/STATUS.md` says what actually exists**, what each work order
+turned into, and — at the foot, which is the part that matters — what has and has
+not been looked at in a browser. Read it before believing anything is finished.
+
+**One application, and it is the template.** No screen is written in React. The
+report is `public/reporting-template.html`, split and patched into a shell and a
+script by `tools/build-reporting-app.mjs`; run `node tools/build-reporting-app.mjs`
+after touching either, and `node tools/check-*.cjs` to see whether it still adds up.
+Every patch is anchored and throws if the template has moved. Patch blocks run in
+reverse authoring order — see the note in STATUS.md before adding one.
+
 The overriding rule for that work, which outranks everything else: **the
 application must never mix up client data or client information.**

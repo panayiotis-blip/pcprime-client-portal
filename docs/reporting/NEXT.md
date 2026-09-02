@@ -1,3 +1,6 @@
+> **`STATUS.md` is the record of what exists.** All four work orders are built;
+> this file is kept for what it asked for and why.
+
 > **`STATUS.md` says where the build stands.** All three changes here are built.
 > This file is kept as the record of what was asked for.
 

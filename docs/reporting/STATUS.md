@@ -1,8 +1,9 @@
 # Reporting platform — where the build actually stands
 
-Written 1 September 2026, after working through `FIX.md` §0–§5, the three changes
-in `NEXT.md`, and all eight items of `FIX-2.md` — the partner’s review of the
-built app. `BUILD.md` says what the application is meant to be; the three work
+Written 1 September 2026 and brought up to date on 2 September, after working
+through `FIX.md` §0–§5, the three changes in `NEXT.md`, all eight items of
+`FIX-2.md` — the partner’s first review of the built app — and all of `FIX-3.md`,
+the second. `BUILD.md` says what the application is meant to be; the four work
 orders say what was asked for and in what order; this file says what exists.
 
 **Everything asked for is built and deployed.** What is left is looking: almost
@@ -33,10 +34,15 @@ Writing one in React is building the second application again.
 
 Do not rebuild any of this.
 
-- **Schema**: migrations 190–218 applied. Note the migration ledger holds only 207
-  and 211–216, so it has never been the record of what is applied —
-  `supabase/migrations/` is. Two of them reached the database before they reached the
-  repo, and 216 turned out to be a no-op because the grant was already there.
+- **Schema**: migrations 190–222 applied. Note the migration ledger has never been
+  the record of what is applied — `supabase/migrations/` is. Two of them reached
+  the database before they reached the repo, and 216 turned out to be a no-op
+  because the grant was already there. The four from the second review:
+  **219** `keyed_columns`, the comparison columns the partner types himself;
+  **220** `chart_choices`, which overview charts a client gets;
+  **221** `pack_options`, what that client's pack looks like;
+  **222** `cash_direct`, which attributes every bank posting to the other side of
+  its own transaction.
 - **Import**: the journal listing, trial balance, chart of accounts, stock and
   payroll parsers all work. Six years of A&F journal listings are committed.
 - **The ledger**: 174.026 postings for Antonis & Foulis, 2021-01 to 2026-08,
@@ -65,6 +71,8 @@ no new feed and no new query except the review engine's own exceptions.
 | **Budget** | `reporting.budgets`, keyed by hand and never generated |
 | **Monthly audit** | `audit.ts` — materiality, analytical review, vouching, cut-off, journals, the month's checks |
 | **VAT** | three figures per box — rebuilt from the journal, computed by BTMS, filed |
+| **Ratios** | derived, from the profit and loss and the balance sheet together (FIX-3 §6) |
+| **Cash in and out** | `reporting.cash_direct` — the direct statement, from the postings (FIX-3 §7) |
 | **Projects** | correctly still off: gated on T-Analysis tags, and A&F has none |
 
 **Which sections a client gets is now a person’s decision**, taken on Client setup
@@ -250,6 +258,113 @@ only for what that client and that year are due.
 
 ---
 
+## The second review, and what it turned into
+
+`FIX-3.md` is the work order; this is what each item became. §1 (the period
+control) and the typography and width items were already done when it was written.
+
+**§2 — comparison columns are a list, not a choice.** COMPARE WITH was one dropdown
+and one answer. A screen now holds a LIST, shared by Profit & loss, Balance sheet
+and Expense analysis: as many columns as wanted, each any period end the ledger
+reaches, with year ends offered first from the client's own year end. Three or five
+years across is one click. Budget is a column chosen deliberately and never a
+default, and where none is keyed the column says so. Movement is against the column
+to its left and the heading names the two it compares.
+
+Sales analysis is the fourth screen §2 names and it is NOT wired to this. Its table
+runs months down the side with a year earlier beside each, so columns there are a
+different table; §9 gave it its own comparison columns on the ratios block instead.
+
+**§3 — a column the partner types into.** `reporting.keyed_columns` (migration 219),
+keyed on client, period and name. Named by the partner, more than one kept, marked
+as keyed everywhere it appears, and offered only when the screen shows the period it
+was keyed against — a target for seven months is not a target for twelve. A blank is
+not a nought: an empty line is left out of the total rather than pulling it to
+nothing. Only the profit and loss offers it; the balance sheet and expense analysis
+say so rather than quietly answering nothing. It feeds no statement, review or audit.
+
+**§4 — the overview draws what the client was given.** Eight charts, chosen per
+client on Client setup (`chart_choices`, migration 220): the three the prototype
+drew plus overheads by month, cash and bank, debtors and creditors ageing, sales by
+customer, and expenses against budget. The three originals are the defaults, so
+nobody's front page changed. A chart with nothing behind it says so rather than
+drawing an empty picture. "Where the money went" already had the width and was
+STRETCHING into it — one 760 viewBox blown up to 1880 takes its labels with it — so
+`barsChart` draws wide when it is given the width. And a month row under the
+year-to-date row: that month's revenue, gross profit, overheads and profit, with the
+movement on debtors, creditors and cash.
+
+**§5 — the management summary.** Percentages on or off, kept per client
+(`pack_options`, migration 221), because with them off a month is one column instead
+of two. A from and a to month beside the year, offering only the months the ledger
+holds. The total column is the total of the months SHOWN and its heading says which
+they are — "Jan–Jul", and "Year" only when all twelve are there.
+
+**§6 — a ratios screen.** Nineteen ratios in five groups, on their own screen after
+the balance sheet, with the four a month end can answer alone repeated at the foot
+of the balance sheet. Every ratio shows the two figures it is made from; every one
+runs across the same columns as the statements; one that cannot be worked out says
+why. Days are measured over the days each column covers rather than annualised, and
+the screen says so. Growth is measured against the column to the RIGHT — the older
+one — so the current column has a growth figure. `bsAt()` reads the balance sheet
+exactly as `renderBs` builds it, and the check holds the two together.
+
+**§7 — Cash in and out.** The direct statement, beside the indirect one, with a line
+on Cash flow saying how they differ. No new import: migration 222 attributes every
+bank posting to the other side of its own transaction.
+
+What counts as one transaction is the whole of it. `journal_code` + `journal_no` +
+`batch_no` does NOT identify one — on A&F that gives 27.415 groups averaging 6,3
+lines and running to 861, which is a batch. Adding `posted_on` and `reference` gives
+31.028 groups touching a bank account, of which **31.020 balance — 99,97 per cent** —
+with at most eight lines on the other side. A payment covering several invoices
+splits in proportion to them.
+
+Transfers between the client's own accounts are not movement: 4.449 of A&F's bank
+transactions have no non-bank line at all. They are kept out of money in and out on
+the combined view and shown as real movement when one account is looked at alone.
+
+**It proves out.** The direct statement ties to the ledger's own bank movement
+exactly — **−38.991,27 both ways over 43.727 rows**, and across all 239
+month-and-account pairs not one disagrees by half a cent.
+
+**§8 — Expense analysis.** Months across for a year, or years across through the §2
+list. The MONTHLY SHAPE sparkline is gone; it was too small to read a figure off.
+Two levels of drill-down: a line opens to the nominal accounts beneath it across the
+same columns, an account opens to its postings with the journal and reference. The
+postings span EVERY column shown, because "what was in it last year that is not in
+it this year" needs both years in front of you. Sort by any column; nil lines hidden
+by default and retrievable.
+
+**§9 — Sales analysis.** Additions only, as asked. Five more tiles — new customers,
+customers lost, top ten as a share, credit notes as a share, sales per month — and a
+sales ratios block with its own comparison columns, under the same three rules as
+§6. "Average days to pay" is a table: the ledger holds no matching of receipts to
+invoices, so the honest answer is each customer's balance measured against what they
+buy, and the screen says that is what it is.
+
+One correction went with it. `custSales` decided which accounts were the sales
+ledger by testing `/^221/` on the code — A&F's chart and nobody else's, so any other
+client would have had an empty screen and nothing to say why. It uses the client's
+own mapping now, with the prefix as a fallback. On A&F the two agree exactly: the
+one Trade debtors account outside 221 is Bills Receivable and it carries no sales
+journal line.
+
+**§10 — the left rail.** The four group headings were 9,5px in the lightest ink on
+the screen against 13,5px items; they are a step bigger, bolder and darker. The
+practice's own name was wrapping because the MARKUP carried a `<br>`, so no
+stylesheet would ever have fixed it. **The rail is 52px wider** — 212px to 264px —
+because the name does not fit on one line at rail-item size in 212px. That width is
+an estimate of the text and is the one thing in that section that wants a browser.
+
+**§11 — VAT, left alone as the work order says.** Its premise is now stale: the
+importers and the box-by-box comparison it names as outstanding were built as item 7
+of the first review. What is still outstanding there is two manual steps and no
+code — reading the VAT summary already in A&F's folder, and keying the filed return
+for 2026 Q2.
+
+---
+
 ## The files, and what is left of them
 
 **The seventeen objects moved.** They are in the client’s subfolders with their real
@@ -271,6 +386,28 @@ but was never read — it was not an importable feed when it was uploaded — so
 should appear in the comparison as **new**. And the filed return has to be keyed
 once, on the VAT screen, for 2026 Q2. Until both are done the third column is empty
 and the 813,73 does not appear.
+
+**The generator, and one thing about it worth knowing.**
+`tools/build-reporting-app.mjs` splits `public/reporting-template.html` into the
+shell and the script and applies twenty-nine anchored patches. Every patch throws if
+its anchor has moved, so the template drifting is a build failure and not a silent
+one.
+
+Patch blocks are inserted ABOVE the previous one, so after 19 they run in **reverse
+authoring order**. Today that is:
+
+    1 3 4 … 19  ·  26 27 25 24 22 23 21 20 2  ·  28 29
+
+Three times in the second review a patch was written that ran before the one it
+depended on, and twice the guard did not catch it because the string it matched
+also existed in the template's own copy of the function — the balance sheet's ratio
+foot was written and then thrown away by the patch that replaced `renderBs`
+wholesale. If a patch must run after another, it goes in BELOW it, and the reason
+belongs in its header. Patches 28 and 29 say so, which is why they sit at the end.
+
+Check the order with:
+
+    grep -n "^// ---- patch" tools/build-reporting-app.mjs
 
 ---
 ## What is verified, and what is not
@@ -296,9 +433,54 @@ materiality €8.570,83), eleven P&L postings in 2026 at or above performance
 materiality, 264 postings within three days of a year end, 515 manual journal postings
 across 17 journal types, and 625 exceptions across eight checks.
 
-That was checked before the eight review items were built, and **none of those has
-been looked at at all.** The list below is in the order it is worth doing, hardest
-and newest first.
+That was checked before the two reviews were built, and **nothing from either has
+been looked at at all.**
+
+**What the second review added instead is seven check suites**, in `tools/`, run by
+`node tools/check-*.cjs`. They are not a browser and they do not pretend to be:
+each one loads the SHIPPED `public/reporting-app.js`, pulls the real functions out
+of it, and runs them against a made-up ledger small enough that every expected
+figure can be worked out by hand. What they prove is that the arithmetic and the
+shape are right. What they cannot see is whether any of it looks right, or whether
+a control is reachable with a mouse.
+
+| Suite | What it holds |
+|---|---|
+| `check-comparison-columns` | §2 and §3 — the column list, the shapes, the keyed column, the number formats |
+| `check-overview-charts` | §4 — which charts a client gets, the month row, and that the frame and the host know the same chart list |
+| `check-summary-range` | §5 — the month range, the percentages switch, the total column's name |
+| `check-ratios` | §6 — every ratio against figures done in the head, and that it agrees with the balance sheet |
+| `check-cash-in-out` | §7 — the categories, the transfers, the balances, the drill-down |
+| `check-expenses` | §8 — both views, the drill-down, the sort, the nil lines |
+| `check-sales-ratios` | §9 — the tiles, the ratios, and that the mapping change moves nothing |
+
+Four of them caught real bugs before anything shipped: an inverted sort that put the
+smallest expense line at the top, a drill-down whose posting range ran backwards, a
+concentration share dividing net by gross, and a chart-list check that passed while
+the two lists genuinely differed. That last one is worth remembering — a check that
+agrees about nothing agrees.
+
+The list below is in the order it is worth looking, hardest and newest first.
+
+**From the second review, none of it seen:**
+
+- **Cash in and out.** The largest new thing and the one with a figure to check: the
+  net movement for a month should equal the movement on the cash and bank line of
+  the balance sheet for the same month, and the closing balance should follow the
+  opening one. It ties exactly in SQL; what is unseen is whether the screen says so.
+  Press a figure and it should name who is behind it.
+- **The ratios screen**, and the four repeated at the foot of the balance sheet. The
+  two should agree, and both should agree with the balance sheet above them.
+- **Expense analysis.** Twelve month columns plus four is a wide table and it has
+  not been rendered. Open a line, then an account, and the postings should be there.
+- **The left rail.** The one place a browser is genuinely needed: the practice's name
+  should sit on ONE line inside the widened rail. If it wraps or the rail scrolls
+  sideways, the width estimate was wrong and only the number needs changing.
+- **The overview's five new charts**, none of which has been drawn against real data.
+- **A keyed column end to end**: type one, name it, save it, sign out and back in,
+  and it should be offered again for the same period and not for another.
+
+**From the first review, still unseen:**
 
 - **The VAT screen.** The largest new thing and the only one with a figure to check
   against: read the summary already in the folder, key the filed return for 2026 Q2,
