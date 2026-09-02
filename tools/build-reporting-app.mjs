@@ -1324,6 +1324,25 @@ th.sortable{cursor:pointer;user-select:none}
 th.sortable:hover{color:var(--ink)}
 th.sorted{text-decoration:underline}
 
+/* FIX-3 §10a — the four group headings were 9,5px and the lightest ink on
+   the screen, against 13,5px items beneath them, so the rail read as one
+   long list. One step bigger, bolder and darker makes it four groups. */
+nav.tabs .grp{font-size:11.5px;font-weight:700;letter-spacing:.1em;
+  color:var(--ink-2);padding:20px 18px 6px}
+nav.tabs .grp:first-child{padding-top:4px}
+
+/* §10b — the practice's own name, at the same size as the rail items and on
+   one line. It does not fit in a 212px rail at 13,5px, so the rail is
+   widened to hold it. The width is an ESTIMATE of the text: 36 characters at
+   13,5px in this face come to roughly 230px, and 264 leaves 240 inside the
+   padding. If the real metrics are wider the rail scrolls sideways rather
+   than spilling, which is visible rather than silent — but it wants one look
+   in a browser, which nothing here can give it. */
+:root{--side-w:264px}
+.side-foot{font-family:inherit;font-size:13.5px;letter-spacing:0;
+  color:var(--ink-2);white-space:nowrap;
+  padding:16px 12px 0;margin:26px 0 0}
+
 /* REVIEW-2 3a — headings a step bigger and bolder. They sat close enough to the
    body text in size and weight that a long table read as one undifferentiated
    block. */
@@ -1531,6 +1550,16 @@ let assembled =
     '<div class="tw" id="tblSlPay"></div>',
     sn,
     ''].join(''));
+}
+
+{
+  // FIX-3 §10b — the practice's own name, on a document that goes to a client.
+  // It was broken onto two lines by a <br> in the markup, so no amount of
+  // stylesheet would have put it on one.
+  const foot = '<div class="side-foot">PC Prime &amp; Calculate<br>Consultants Ltd</div>';
+  if (!assembled.includes(foot)) throw new Error('the practice name is not where it was.');
+  assembled = assembled.replace(foot,
+    '<div class="side-foot">PC Prime &amp; Calculate Consultants Ltd</div>');
 }
 
 {
