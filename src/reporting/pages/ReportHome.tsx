@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildClientList, buildClientBlock, buildTemplateHtml } from '../lib/reports/buildPayload.ts';
 import { readCachedBlock, writeCachedBlock, forgetCachedBlock } from '../lib/reports/blockCache.ts';
 import { saveBudget, type BudgetMessage } from '../lib/reports/budgetStore.ts';
+import { saveKeyedColumn, deleteKeyedColumn } from '../lib/reports/keyedStore.ts';
 import {
   saveReviewSignoffs, saveWorkingPapers,
   type ReviewMap, type WorkingPapers,
@@ -102,7 +103,8 @@ export default function ReportHome() {
     const onMessage = (e: MessageEvent) => {
       const d = e.data as
         ({ type?: string; key?: string; feed?: string; feature?: string; on?: boolean; q?: string; period?: string;
-           wp?: WorkingPapers; review?: ReviewMap }
+           wp?: WorkingPapers; review?: ReviewMap;
+           from?: string; to?: string; name?: string; amounts?: Record<string, number | null> }
           & Partial<BudgetMessage>) | null;
       if (!d) return;
 
@@ -116,6 +118,32 @@ export default function ReportHome() {
         void saveBudget(cid, { months: d.months ?? [], budget: d.budget ?? {} })
           .catch((err) => setNotice({
             text: 'The budget was not saved: ' + (err instanceof Error ? err.message : String(err)),
+            bad: true,
+          }));
+        return;
+      }
+
+      // A column the partner keyed himself, sitting with a client: a target, a
+      // what-if, an agreed adjustment. Saved against the client AND the period
+      // it was typed against, because a target for seven months is not a target
+      // for twelve. Nothing derives these figures and nothing else reads them —
+      // not the statements, not the review, not the audit.
+      if ((d.type === 'pcp-keyed-save' || d.type === 'pcp-keyed-delete') && d.key) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        const from = String(d.from ?? ''), to = String(d.to ?? ''), name = String(d.name ?? '');
+        const doing = d.type === 'pcp-keyed-save'
+          ? saveKeyedColumn(cid, { from, to, name, amounts: d.amounts ?? {} }).then(() => undefined)
+          : deleteKeyedColumn(cid, from, to, name);
+        void doing
+          .then(() => setNotice({
+            text: d.type === 'pcp-keyed-save'
+              ? `“${name}” is saved against this client and this period.`
+              : `“${name}” has been removed.`,
+            bad: false,
+          }))
+          .catch((err) => setNotice({
+            text: 'The keyed column was not saved: ' + (err instanceof Error ? err.message : String(err)),
             bad: true,
           }));
         return;

@@ -37,28 +37,64 @@ const html = {};
 /* Enough of a DOM for the control to register its handlers and for the test to
    fire one: the buttons are found by reading back the markup the control just
    wrote, so what is clicked is what a person would click. */
-const bound = {};
-const fake = (id, sel, attr, val) => ({
-  dataset: { [attr]: val },
-  addEventListener(ev, fn) { (bound[id + ' ' + sel] = bound[id + ' ' + sel] || []).push(fn); },
-});
+/* Enough of a DOM for the controls to register their handlers and for a test to
+   fire one. Elements are built from the markup the code just wrote and cached
+   until it writes again, so what the test clicks or types into is the same
+   object the code bound its listener to — which is the whole point. */
+// Handlers are given a real-looking event: the control reads e.target.value.
+const fire = (el, ev) => (el.listeners[ev] || []).slice().forEach((f) => f({ target: el }));
+const elems = {};                 // id -> {sel -> element[]}
+const build = (id, sel) => {
+  const out = [];
+  const tag = /<(input|button|span|select)\b([^>]*)>/g;
+  let m;
+  while ((m = tag.exec(html[id] || ''))) {
+    const at = m[2];
+    const cls = (at.match(/class="([^"]*)"/) || [, ''])[1].split(/\s+/);
+    if (cls.indexOf(sel.slice(1)) < 0) continue;
+    const dataset = {};
+    let d; const dre = /data-([a-z]+)="([^"]*)"/g;
+    while ((d = dre.exec(at))) dataset[d[1]] = d[2];
+    const listeners = {};
+    out.push({
+      dataset, listeners,
+      value: (at.match(/value="([^"]*)"/) || [, ''])[1],
+      textContent: '',
+      addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
+      focus() {}, select() {}, blur() { fire(this, "change"); },
+    });
+  }
+  return out;
+};
+const all = (id, sel) => {
+  const per = elems[id] = elems[id] || {};
+  if (!per[sel]) per[sel] = build(id, sel);
+  return per[sel];
+};
 const node = (id) => ({
   get innerHTML() { return html[id] || ''; },
-  set innerHTML(v) { html[id] = v; delete bound[id + ' .cmpshape']; delete bound[id + ' .cmpx']; },
-  querySelectorAll(sel) {
-    const attr = sel === '.cmpshape' ? 'y' : 'k';
-    const re = new RegExp('class="[^"]*' + sel.slice(1) + '[^"]*" data-' + attr + '="([^"]*)"', 'g');
-    const out = []; let m;
-    while ((m = re.exec(html[id] || ''))) out.push(fake(id, sel, attr, m[1]));
-    return out;
+  set innerHTML(v) { html[id] = v; elems[id] = {}; },
+  querySelectorAll(sel) { return all(id, sel); },
+  querySelector(sel) {
+    // Only ever asked for '.cmpadd' or one keyed cell by its two data values.
+    const m = sel.match(/^\.keyin\[data-k="([^"]*)"\]\[data-l="([^"]*)"\]$/);
+    if (m) return all(id, '.keyin').filter((x) => x.dataset.k === m[1] && x.dataset.l === m[2])[0] || null;
+    return all(id, sel)[0] || { addEventListener() {} };
   },
-  querySelector: () => ({ addEventListener() {} }),
   addEventListener() {},
 });
 const press = (id, sel, i) => {
-  const el = node(id).querySelectorAll(sel)[i];
-  if (!el) throw new Error('no ' + sel + ' in ' + id);
-  (bound[id + ' ' + sel] || [])[i]();
+  const el = all(id, sel)[i];
+  if (!el) throw new Error('no ' + sel + ' ' + i + ' in ' + id);
+  fire(el, "click");
+  return el;
+};
+const typeInto = (id, sel, i, v) => {
+  const el = all(id, sel)[i];
+  if (!el) throw new Error('no ' + sel + ' ' + i + ' in ' + id);
+  el.value = v;
+  fire(el, "change");
+  return el;
 };
 
 const ctx = {
@@ -67,7 +103,9 @@ const ctx = {
     { id: 'B-010', name: 'Fixed assets' }, { id: 'B-110', name: 'Debtors' },
     { id: 'B-210', name: 'Creditors' }, { id: 'B-410', name: 'Long-term loans' },
     { id: 'B-610', name: 'Share capital' }, { id: 'B-640', name: 'Reserves' },
-    { id: 'B-650', name: 'Profit for the period' } ] },
+    { id: 'B-650', name: 'Profit for the period' } ],
+    // One column already keyed against Jan-Jul 2026 and saved.
+    keyed: [{ from: '2026-01', to: '2026-07', name: 'Target', amounts: { 'P-100': 900 } }] },
   LI: { 'P-100': { name: 'Sales' }, 'P-200': { name: 'Purchases' }, 'P-300': { name: 'Selling' },
         'P-400': { name: 'Admin' }, 'P-500': { name: 'Interest' }, 'P-600': { name: 'Sundry' } },
   REV: ['P-100'], COS: ['P-200'], SD: ['P-300'], ADM: ['P-400'], FIN: ['P-500'], OI: ['P-600'],
@@ -85,10 +123,22 @@ const ctx = {
   eur: (v) => (v < 0 ? '(' : '') + Math.abs(v).toLocaleString('de-DE') + (v < 0 ? ')' : ''),
   pct: (p) => p === null ? '—' : p.toFixed(1) + '%',
   notes: () => {}, periodCtl: () => {},
+  // The keyed column needs a client to belong to and a host to post to.
+  CID: 'c1754',
+  POSTED: [],
+  parent: { postMessage(m) { ctx.POSTED.push(m); } },
+  window: {},
+  alert: () => {},
   document: { getElementById: node },
 };
 vm.createContext(ctx);
-vm.runInContext([cmpBlock, grab('lblShort'), grab('renderPl'), grab('renderBs'),
+// KEYFOCUS and keyNum sit above renderPl and belong to it.
+const preFrom = src.indexOf('/* Where the cursor should land');
+const preTo = src.indexOf('function renderPl(');
+if (preFrom < 0 || preFrom > preTo) throw new Error('the renderPl preamble is not where it was');
+const plPre = src.slice(preFrom, preTo);
+
+vm.runInContext([cmpBlock, grab('lblShort'), plPre, grab('renderPl'), grab('renderBs'),
                  grab('renderExp')].join('\n'), ctx);
 
 const strip = (s) => s.replace(/<[^>]+>/g, '').split('').filter(Boolean);
@@ -178,6 +228,90 @@ ok('exp headings', heads(t),
 // admin is 7 a month throughout, so seven months is 49 in every year and nothing moves
 ok('exp admin across three years', rowOf(t, 'Admin').slice(0, 8),
    ['49', '5.8%', '49', '6.4%', '0', '49', '7.0%', '0']);
+
+// =====================================================================
+// FIX-3 §3 — a column the partner types into
+// =====================================================================
+const keyed = () => all('tblPl', '.keyin');
+const valueOf = (line) => (keyed().filter((x) => x.dataset.l === line)[0] || {}).value;
+
+// --- picking the one already saved against this period ---
+CMP['pl'] = [];
+ctx.renderPl();
+typeInto('plCmpBar', '.cmpadd', 0, 'h:Target');
+ok('a saved column is offered and added', CMP['pl'], [{ kind: 'hand', name: 'Target' }]);
+ok('the column says it is keyed, in its heading', heads(html['tblPl']),
+   ['Line', 'Jan 26–Jul 26', '%', 'Target keyed', '%', 'Jul 26 vs Target', '%']);
+ok('what was keyed is in the box', valueOf('P-100'), '900');
+ok('a line never keyed is an empty box, not a nought', valueOf('P-400'), '');
+// 840 of sales against a target of 900, so 60 short
+ok('the movement is computed against it', rowOf(html['tblPl'], 'Total revenue'),
+   ['840', '100.0%', '900', '100.0%', '(60)', '-6.7%']);
+
+// --- every line is offered, including ones the ledger has never touched ---
+ok('nil lines are shown while a column is being typed',
+   /<td>Sundry<\/td>/.test(html['tblPl']), true);
+
+// --- typing moves the arithmetic, and the practice's number format is read ---
+typeInto('tblPl', '.keyin', keyed().findIndex((x) => x.dataset.l === 'P-200'), '1.234,56');
+ok('1.234,56 is read as 1234,56', rowOf(html['tblPl'], 'Total cost of sales').slice(2, 3), ['1.234,56']);
+typeInto('tblPl', '.keyin', keyed().findIndex((x) => x.dataset.l === 'P-200'), '1234.56');
+ok('1234.56 is read the same way', rowOf(html['tblPl'], 'Total cost of sales').slice(2, 3), ['1.234,56']);
+typeInto('tblPl', '.keyin', keyed().findIndex((x) => x.dataset.l === 'P-200'), '1.234');
+ok('1.234 is read as a thousand', rowOf(html['tblPl'], 'Total cost of sales').slice(2, 3), ['1.234']);
+// 900 of revenue less 1.234 of cost, nothing else keyed
+ok('profit before tax follows what was keyed',
+   rowOf(html['tblPl'], 'Profit before tax').slice(2, 3), ['(334)']);
+
+// --- a blank is not a nought ---
+typeInto('tblPl', '.keyin', keyed().findIndex((x) => x.dataset.l === 'P-200'), '');
+ok('clearing a line takes it out of the column',
+   rowOf(html['tblPl'], 'Total cost of sales').slice(2, 3), ['—']);
+ok('and the total is what is left', rowOf(html['tblPl'], 'Profit before tax').slice(2, 3), ['900']);
+
+// --- Save posts it against the client and the period it was keyed against ---
+ctx.POSTED.length = 0;
+press('plCmpBar', '.cmpsave', 0);
+ok('Save posts one message', ctx.POSTED.length, 1);
+ok('with the client, the period and the name', {
+  type: ctx.POSTED[0].type, key: ctx.POSTED[0].key,
+  from: ctx.POSTED[0].from, to: ctx.POSTED[0].to, name: ctx.POSTED[0].name,
+  amounts: ctx.POSTED[0].amounts,
+}, { type: 'pcp-keyed-save', key: 'c1754', from: '2026-01', to: '2026-07',
+     name: 'Target', amounts: { 'P-100': 900 } });
+
+// --- renaming makes a second column and leaves the first alone ---
+typeInto('plCmpBar', '.cmpname', 0, 'Discussed 3 Sep');
+ok('the partner names it', CMP['pl'], [{ kind: 'hand', name: 'Discussed 3 Sep' }]);
+ok('and it is named in the heading', heads(html['tblPl'])[3], 'Discussed 3 Sep keyed');
+
+// --- the same column against a different period is not the same column ---
+PLRANGE = [24, 35];   // Jan 26 to Dec 26
+ctx.renderPl();
+ok('a target for seven months is not a target for twelve',
+   heads(html['tblPl']).slice(3, 4), ['Discussed 3 Sep']);
+ok('and it says why', /not keyed for this period/.test(html['plCmpBar']), true);
+PLRANGE = [24, 30];
+
+// --- Forget appears only once there is something saved to forget ---
+ctx.renderPl();
+ok('a renamed column has nothing to forget yet', all('plCmpBar', '.cmpforget').length, 0);
+press('plCmpBar', '.cmpsave', 0);
+ok('once saved, it can be forgotten', all('plCmpBar', '.cmpforget').length, 1);
+
+// --- and Forget needs two presses ---
+ctx.POSTED.length = 0;
+press('plCmpBar', '.cmpforget', 0);
+ok('one press only arms it', ctx.POSTED.length, 0);
+press('plCmpBar', '.cmpforget', 0);
+ok('the second posts the delete', (ctx.POSTED[0] || {}).type, 'pcp-keyed-delete');
+
+// --- it never reaches the balance sheet ---
+CMP['bs'] = [{ kind: 'hand', name: 'Target' }];
+ctx.renderBs();
+ok('the balance sheet refuses a keyed column, and says so',
+   /keyed columns are on the profit and loss/.test(html['bsCmpBar']), true);
+ok('and it prints nothing rather than noughts', rowOf(html['tblBs'], 'Debtors'), ['230', '—', '—']);
 
 console.log(bad ? '\n' + bad + ' failed' : '\nall passed');
 process.exit(bad ? 1 : 0);

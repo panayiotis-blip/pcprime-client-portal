@@ -33,6 +33,7 @@ import { buildCashflow } from './cashflow.ts';
 import { buildAudit } from './audit.ts';
 import { loadSignoffs } from './signoffStore.ts';
 import { buildFolderDiff } from './folderDiff.ts';
+import { loadKeyedColumns } from './keyedStore.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -332,6 +333,13 @@ export async function buildClientBlock(
     if (!budget[b.line_id]) budget[b.line_id] = {};
     budget[b.line_id][mi] = Number(b.amount);
   }
+
+  // ---- the columns the partner keyed himself (FIX-3 3) ------------------
+  // Read like the budget: nothing here is derived and nothing else consumes
+  // it. The profit and loss offers a keyed column only when the period on
+  // screen is the period it was keyed against, so both ends travel with it.
+  onProgress('Reading the keyed columns');
+  const keyed = await loadKeyedColumns(clientId);
 
   // ---- VAT ------------------------------------------------------------
   // No feed of its own: every posting carries its code, rate and amount, and
@@ -682,6 +690,7 @@ export async function buildClientBlock(
         agetot: ageing.agetot, ageHist: ageing.ageHist, ageFlags: ageing.ageFlags,
         cashflow, cashmove: {}, cashjrn: {},
         budget,
+        keyed,
         audit: audit ?? {},
         // What has been signed, in the two shapes the template reads.
         wp: signoffs.wp, review: signoffs.review,
@@ -967,6 +976,6 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
     },
     vatFiled: [], vatBtms: [], deb: [], cre: [],
     agetot: {}, ageHist: {}, ageFlags: {}, cashflow: [], cashmove: {}, cashjrn: {},
-    budget: {}, audit: {}, wp: {}, review: {}, untagged: [], projects: [],
+    budget: {}, keyed: [], audit: {}, wp: {}, review: {}, untagged: [], projects: [],
   };
 }
