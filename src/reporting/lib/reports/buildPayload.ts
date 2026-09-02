@@ -343,10 +343,28 @@ export async function buildClientBlock(
   // Every bank posting attributed to the other side of its own transaction,
   // by migration 222 -- no new import, and it ties to the ledger's own bank
   // movement exactly, in every month and on every account.
+  //
+  // IT MUST NOT BE ABLE TO STOP THE CLIENT OPENING. It was written to throw, and
+  // that was wrong: a screen added last week could then take the balance sheet
+  // down with it, and the person would see "could not read this client" with no
+  // way to tell which of a dozen reads had failed. It degrades instead — the
+  // section goes off, the reason travels with the payload, and the rest of the
+  // report opens exactly as it did before this existed.
+  //
+  // It is also the largest thing in the payload after the postings themselves —
+  // 43.727 rows for A&F — so a client that has switched the section off does not
+  // pay for it at all.
   onProgress('Reading the money in and out');
-  const { data: cioData, error: cioErr } = await rep().rpc('cash_direct', { p_client: clientId });
-  if (cioErr) throw new Error(`cash_direct: ${cioErr.message}`);
-  const cashio = (cioData ?? {}) as { acc?: [string, string][] } & Record<string, unknown>;
+  let cashio: { acc?: [string, string][] } & Record<string, unknown> = {};
+  let cashioWhy: string | null = null;
+  if (settings?.section_overrides?.cashio === false) {
+    cashioWhy = 'Cash in and out is switched off for this client.';
+  } else {
+    const { data: cioData, error: cioErr } = await rep().rpc('cash_direct', { p_client: clientId });
+    if (cioErr) cashioWhy = cioErr.message;
+    else cashio = (cioData ?? {}) as { acc?: [string, string][] } & Record<string, unknown>;
+  }
+  cashio.why = cashioWhy;
   // The report line for each account in it. Taken from the mapping rather than
   // from `accounts` above, which drops an account whose movement nets to nought
   // over the whole ledger -- a supplier paid and refunded in the same year is
@@ -357,8 +375,15 @@ export async function buildClientBlock(
   // Read like the budget: nothing here is derived and nothing else consumes
   // it. The profit and loss offers a keyed column only when the period on
   // screen is the period it was keyed against, so both ends travel with it.
+  // Degrades for the same reason: a comparison column somebody typed is worth
+  // having, and it is not worth the whole client failing to open over.
   onProgress('Reading the keyed columns');
-  const keyed = await loadKeyedColumns(clientId);
+  let keyed: Awaited<ReturnType<typeof loadKeyedColumns>> = [];
+  try {
+    keyed = await loadKeyedColumns(clientId);
+  } catch (e) {
+    console.warn('keyed_columns:', e instanceof Error ? e.message : String(e));
+  }
 
   // ---- VAT ------------------------------------------------------------
   // No feed of its own: every posting carries its code, rate and amount, and
@@ -646,7 +671,7 @@ export async function buildClientBlock(
     cash: cashflow.length ? 1 : 0,
     // On when there is a bank posting to list. A client whose books have no
     // bank account gets nothing from this screen but an explanation.
-    cashio: (cashio.v as unknown[] | undefined)?.length ? 1 : 0,
+    cashio: !cashioWhy && (cashio.v as unknown[] | undefined)?.length ? 1 : 0,
     budget: 1,
     audit: audit && audit.years.length >= 2 ? 1 : 0,
     cashmove: 0, projects: 0,
