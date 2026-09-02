@@ -104,9 +104,34 @@ export async function buildClientBlock(
   if (cErr) throw new Error(`client: ${cErr.message}`);
   const c = client as { id: number; name: string; client_code: string | null };
 
-  const { data: settingsRow } = await rep().from('client_settings')
-    .select('year_end_month, currency, report_name, section_overrides, vat_quarter_offset, chart_choices, pack_options')
+  // This read decides the client's year end, its currency, which sections it has,
+  // which quarters its VAT runs on, its charts and its pack. It USED TO DISCARD
+  // ITS ERROR: on any failure settingsRow came back null and the client silently
+  // got a December year end, EUR, every section on, and quarters starting in
+  // January — wrong, and invisible, and attributed to nobody.
+  //
+  // That mattered the moment this select grew two columns. A database that has
+  // the columns but a schema cache that has not caught up fails the WHOLE select,
+  // and every client would have been quietly reconfigured. So: ask for the two
+  // newest columns, and if that fails ask again without them, and only give up if
+  // the core settings cannot be read either. A client with no settings row at all
+  // is not a failure and never was — maybeSingle returns no row and no error.
+  const CORE = 'year_end_month, currency, report_name, section_overrides, vat_quarter_offset';
+  let held = await rep().from('client_settings')
+    .select(CORE + ', chart_choices, pack_options')
     .eq('client_id', clientId).maybeSingle();
+  if (held.error) {
+    console.warn('client_settings: ' + held.error.message + ' — reading the core settings without the newest columns.');
+    held = await rep().from('client_settings').select(CORE)
+      .eq('client_id', clientId).maybeSingle();
+  }
+  if (held.error) {
+    throw new Error(
+      'This client’s settings could not be read, and going on would give it a ' +
+      'December year end, EUR and every section switched on, none of which may be ' +
+      'true: ' + held.error.message);
+  }
+  const settingsRow = held.data;
   const settings = settingsRow as {
     year_end_month: number; currency: string; report_name: string | null;
     section_overrides: Record<string, boolean> | null;
