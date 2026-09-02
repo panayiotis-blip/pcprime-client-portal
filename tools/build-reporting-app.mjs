@@ -924,6 +924,67 @@ script += `
   script = script.replace(q, 'if(st.mode==="quarter") return quarterOf(b);');
 }
 
+// ---- patch 19: comparison columns are a list --------------------------
+//
+// FIX-3 §2. Shared machinery: four screens want it, and building it per screen
+// is how the period control came to disagree with itself. Appended whole rather
+// than spliced, because it is new code and not a rewrite of the template’s.
+
+script += "\n/* ---------- comparison columns (FIX-3 §2) ---------- */\n/*\n * COMPARE WITH was one dropdown and one answer: last year, the preceding\n * period, or nothing. The partner wants a list — August 2026 beside December\n * 2025 AND December 2024, the current position against the last two audited\n * year ends, which is what a conversation with a client actually needs.\n *\n * So a screen holds a LIST of comparison columns and this resolves it. It is\n * built once here because four screens want it, and building it per screen is\n * how the period control came to disagree with itself.\n */\nconst CMP={};\nfunction cmpList(id){ if(!CMP[id])CMP[id]=[{kind:\"py\"}]; return CMP[id]; }\nfunction spanLbl(r){ return r[0]===r[1]?lbl(M[r[1]]):lbl(M[r[0]])+\"–\"+lbl(M[r[1]]); }\n\n/* Year ends first in the picker: they are the common case, and the reason the\n   list exists at all. Taken from the client's own year end, not December. */\nfunction yearEndMonths(){\n  var ye=(D.cfg&&D.cfg.yearEnd)||12, out=[];\n  for(var i=NM-1;i>=0;i--) if(+M[i].slice(5,7)===ye) out.push(M[i]);\n  return out;\n}\n\n/* One column, resolved against the period the screen is showing. */\nfunction cmpCols(id,opts){\n  opts=opts||{};\n  var r=periodRange(id), a=r[0], b=r[1], n=b-a+1;\n  return cmpList(id).map(function(c){\n    if(c.kind===\"budget\"){\n      /* Chosen deliberately and never a default (§2c). Where nothing is\n         keyed for the period the column says so, rather than showing a\n         column of noughts and calling the whole period a variance. */\n      return BUsum(BLINES(),a,b)===null\n        ?{label:\"Budget\",missing:\"none keyed for this period\"}\n        :{label:\"Budget\",budget:true,keyed:true};\n    }\n    if(c.kind===\"py\"){\n      var p=priorRange(id);\n      return p?{label:spanLbl(p),range:p}\n              :{label:\"Same period last year\",missing:\"not in the ledger\"};\n    }\n    if(c.kind===\"prev\"){\n      var pb=a-1, pa=pb-n+1;\n      return pa>=0?{label:spanLbl([pa,pb]),range:[pa,pb]}\n                  :{label:\"Preceding period\",missing:\"not enough history\"};\n    }\n    /* An \"at\" column ends where it says and runs the same length as the period\n       on screen, so a year-to-date sits against a year-to-date rather than\n       against a single month. A balance sheet is one month either way. */\n    var ei=clampIdx(c.to), si=opts.asAt?ei:Math.max(0,ei-n+1);\n    return {label:spanLbl([si,ei]),range:[si,ei]};\n  });\n}\n\n/* What a column is worth for a set of report lines. Null means it cannot be\n   answered — no ledger behind it, or no budget keyed — and null is printed as\n   such rather than as a nought, because a nought is a figure and this is not. */\nfunction cmpValue(col,ids,sum){\n  if(col.missing)return null;\n  if(col.budget){ var v=BUsum(ids,CMPA,CMPB); return v; }\n  return sum(ids,col.range[0],col.range[1]);\n}\nvar CMPA=0,CMPB=0;   /* the period on screen, for the budget column */\n\nfunction cmpCtl(id,host,onchange,opts){\n  opts=opts||{};\n  var el=document.getElementById(host); if(!el)return;\n  var list=cmpList(id), cols=cmpCols(id,opts);\n  var h='<label class=\"ctl\">Compare with</label><div class=\"cmpchips\">';\n  cols.forEach(function(c,k){\n    h+='<span class=\"cmpchip'+(c.missing?\" bad\":\"\")+'\">'+c.label\n      +(c.keyed?' <em>keyed</em>':'')\n      +(c.missing?' <em>'+c.missing+'</em>':'')\n      +'<button class=\"cmpx\" data-k=\"'+k+'\" title=\"Remove this column\">×</button></span>';\n  });\n  if(!cols.length)h+='<span class=\"cmpnone\">no comparison</span>';\n  h+='</div>';\n\n  var ye=yearEndMonths(), rest=monthChoices().slice().reverse();\n  h+='<select class=\"cmpadd\"><option value=\"\">Add a column…</option>'\n    +'<option value=\"k:py\">Same period last year</option>'\n    +'<option value=\"k:prev\">Preceding period</option>'\n    +'<option value=\"k:budget\">Budget</option>';\n  if(ye.length){\n    h+='<optgroup label=\"Year ends\">'\n      +ye.map(function(m){return '<option value=\"at:'+m+'\">'+lbl(m)+'</option>'}).join(\"\")\n      +'</optgroup>';\n  }\n  h+='<optgroup label=\"Any month end\">'\n    +rest.map(function(m){return '<option value=\"at:'+m+'\">'+lbl(m)+'</option>'}).join(\"\")\n    +'</optgroup></select>';\n  h+='<button class=\"perbtn cmpshape\" data-y=\"3\">3 years across</button>'\n    +'<button class=\"perbtn cmpshape\" data-y=\"5\">5 years across</button>';\n  el.innerHTML=h;\n\n  el.querySelectorAll(\".cmpx\").forEach(function(x){\n    x.addEventListener(\"click\",function(){\n      list.splice(+x.dataset.k,1); cmpCtl(id,host,onchange,opts); onchange();});});\n  el.querySelector(\".cmpadd\").addEventListener(\"change\",function(e){\n    var v=e.target.value; if(!v)return;\n    if(v.slice(0,2)===\"k:\")list.push({kind:v.slice(2)});\n    else list.push({kind:\"at\",to:v.slice(3)});\n    cmpCtl(id,host,onchange,opts); onchange();});\n  /* Three or five years across in one click: the same period end, that many\n     years back, so a line that has drifted upward reads as a trend rather than\n     as one number against last year. */\n  el.querySelectorAll(\".cmpshape\").forEach(function(bt){\n    bt.addEventListener(\"click\",function(){\n      var years=+bt.dataset.y, r=periodRange(id), end=M[r[1]], out=[];\n      for(var k=1;k<years;k++){\n        var y=+end.slice(0,4)-k, m=y+end.slice(4);\n        if(clampIdx(m)>=0&&M.indexOf(m)>=0)out.push({kind:\"at\",to:m});\n      }\n      CMP[id]=out; cmpCtl(id,host,onchange,opts); onchange();});});\n}\n";
+
+// ---- patch 22: Expense analysis takes the same columns ----
+//
+// The fourth screen §2 names is Sales analysis, and it is NOT done here: its
+// table runs months down the side with a year earlier beside each, so columns
+// there are a different table and belong with the §9 rebuild.
+//
+// Expenses keeps its sparkline for now. §8a replaces it with real month
+// columns; the column list is what §8a needs for "years across" either way.
+{
+  const [a, b] = cutFn(script, 'renderExp');
+  script = script.slice(0, a) + "function renderExp(){\n  periodCtl(\"exp\",\"expCtl\",renderExp);\n  cmpCtl(\"exp\",\"expCmpBar\",renderExp);\n  const [a,i]=periodRange(\"exp\");\n  CMPA=a; CMPB=i;\n  const S=(ids,f,tt)=>ids.reduce((x,id)=>x+PL(id).slice(f,tt+1).reduce((q,w)=>q+w,0),0);\n  const cols=[{label:spanLbl([a,i]),range:[a,i]}].concat(cmpCols(\"exp\"));\n  const cv=(ids,c)=>c.range?S(ids,c.range[0],c.range[1]):(c.budget?BUsum(ids,CMPA,CMPB):null);\n  const revs=cols.map(c=>cv(REV,c));\n\n  const ids=[...SD,...ADM,...FIN];\n  const rows=ids.map(id=>({id,n:LI[id].name,vs:cols.map(c=>cv([id],c)),\n                           m:PL(id).slice(a,i+1)}))\n    .filter(r=>r.vs.some(v=>v!==null&&Math.abs(v)>0.005))\n    .sort((x,y)=>(y.vs[0]||0)-(x.vs[0]||0));\n  const mx=Math.max(...rows.flatMap(r=>r.m.map(Math.abs)),1);\n\n  let h=`<table><thead><tr><th>Line</th>`;\n  cols.forEach(function(c,k){\n    h+=`<th class=\"num\">${c.label}</th><th class=\"num pcol\">% of sales</th>`;\n    if(k>0)h+=`<th class=\"num\">${lblShort(cols[k-1].label)} vs ${lblShort(c.label)}</th>`;\n  });\n  h+=`<th>Monthly shape</th></tr></thead><tbody>`;\n\n  rows.forEach(r=>{\n    const w=520/Math.max(1,r.m.length);\n    const spark=`<svg viewBox=\"0 0 520 26\" style=\"width:190px\"> ${r.m.map((v,k)=>{\n      const hh=Math.max(1.5,Math.abs(v)/mx*22);\n      return `<rect x=\"${(k*w+1).toFixed(1)}\" y=\"${(24-hh).toFixed(1)}\" width=\"${(w-2).toFixed(1)}\" height=\"${hh.toFixed(1)}\" rx=\"2\" fill=\"var(--c1)\" opacity=\"${v<0?.35:.85}\"><title>${lbl(M[a+k])}: ${eur(v)}</title></rect>`}).join(\"\")}</svg>`;\n    let cells=\"\";\n    r.vs.forEach(function(v,k){\n      const rv=revs[k];\n      cells+=`<td class=\"num\">${v===null?\"—\":eur(v)}</td>`\n           + `<td class=\"num pcol\">${(v===null||rv===null||Math.abs(rv)<1)?\"—\":(v/rv*100).toFixed(1)+\"%\"}</td>`;\n      if(k>0){const l=r.vs[k-1], d=(l===null||v===null)?null:l-v;\n        cells+=`<td class=\"num\">${d===null?\"—\":eur(d)}</td>`;}\n    });\n    h+=`<tr><td>${r.n}</td>${cells}<td>${spark}</td></tr>`;});\n  h+=\"</tbody></table>\";\n  document.getElementById('tblExp').innerHTML=h;\n  notes(\"expNotes\",\"exp\");\n}\n" + script.slice(b);
+}
+
+// ---- patch 21: the profit and loss takes the same columns ----
+//
+// FIX-3 §2 wants the list on Profit & loss as well as the Balance sheet, with
+// the budget among the choices (§2c) and each movement named for the two
+// columns it sits between (§2d). The old function resolved ONE comparison out
+// of a dropdown and hard-coded seven columns of markup, so it is replaced
+// rather than widened.
+{
+  const [a, b] = cutFn(script, 'renderPl');
+  script = script.slice(0, a) + "function renderPl(){\n  periodCtl(\"pl\",\"plCtl\",renderPl);\n  cmpCtl(\"pl\",\"plCmpBar\",renderPl);\n  const [a1,b1]=periodRange(\"pl\");\n  CMPA=a1; CMPB=b1;\n  const S=(ids,f,tt)=>ids.reduce((x,id)=>x+PL(id).slice(f,tt+1).reduce((q,w)=>q+w,0),0);\n\n  /* Column one is the period on screen; the rest are the list the person has\n     built. A column that cannot be answered keeps its place, so the movement\n     headings opposite it still name the right two columns. */\n  const cols=[{label:spanLbl([a1,b1]),range:[a1,b1]}].concat(cmpCols(\"pl\"));\n  const cv=(ids,c)=>c.range?S(ids,c.range[0],c.range[1]):(c.budget?BUsum(ids,CMPA,CMPB):null);\n  /* A budget may be keyed on some lines and not others. Nothing keyed at all is\n     not an answer and prints as none; something keyed is answered with what is\n     there, rather than with a nought that reads as a figure. */\n  const sub=(x,y)=>(x===null&&y===null)?null:((x||0)-(y||0));\n  const revs=cols.map(c=>cv(REV,c));\n\n  const span=1+cols.length*2+(cols.length-1)*2;\n  let h=`<table><thead><tr><th>Line</th>`;\n  cols.forEach(function(c,k){\n    h+=`<th class=\"num\">${c.label}</th><th class=\"num pcol\">%</th>`;\n    if(k>0)h+=`<th class=\"num\">${lblShort(cols[k-1].label)} vs ${lblShort(c.label)}</th><th class=\"num\">%</th>`;\n  });\n  h+=`</tr></thead><tbody>`;\n\n  /* Percentages are of that column's own revenue, so a comparison year is read\n     against its own sales and not against this year's. */\n  function cells(vs){\n    let out=\"\";\n    vs.forEach(function(v,k){\n      const r=revs[k];\n      out+=`<td class=\"num\">${v===null?\"—\":eur(v)}</td>`\n         + `<td class=\"num pcol\">${(v===null||r===null||Math.abs(r)<1)?\"—\":(v/r*100).toFixed(1)+\"%\"}</td>`;\n      if(k>0){\n        const l=vs[k-1], d=(l===null||v===null)?null:l-v,\n              p=(l===null||v===null||Math.abs(v)<1)?null:(l/v-1)*100;\n        out+=`<td class=\"num\">${d===null?\"—\":eur(d)}</td><td class=\"num\">${pct(p)}</td>`;\n      }\n    });\n    return out;\n  }\n  const row=(nm,vs,strong)=>{h+=`<tr${strong?' class=\"sub\"':''}><td>${nm}</td>`+cells(vs)+`</tr>`;};\n  const sec=(title,ids,totName)=>{\n    h+=`<tr class=\"sec\"><td colspan=\"${span}\">${title}</td></tr>`;\n    ids.forEach(id=>{const vs=cols.map(c=>cv([id],c));\n      if(vs.every(v=>v===null||Math.abs(v)<0.005))return;\n      row(LI[id].name,vs);});\n    row(totName,cols.map(c=>cv(ids,c)),true);};\n\n  sec(\"Revenue\",REV,\"Total revenue\"); sec(\"Cost of sales\",COS,\"Total cost of sales\");\n  row(\"Gross profit\",cols.map(c=>sub(cv(REV,c),cv(COS,c))),true);\n  sec(\"Other income\",OI,\"Total other income\");\n  sec(\"Selling and distribution\",SD,\"Total selling and distribution\");\n  sec(\"Administration\",ADM,\"Total administration\");\n  sec(\"Finance costs\",FIN,\"Total finance costs\");\n  row(\"Profit before tax\",cols.map(function(c){\n    const p=[cv(REV,c),cv(COS,c),cv(OI,c),cv(SD,c),cv(ADM,c),cv(FIN,c)];\n    if(p.every(x=>x===null))return null;\n    return (p[0]||0)-(p[1]||0)+(p[2]||0)-(p[3]||0)-(p[4]||0)-(p[5]||0);}),true);\n  h+=\"</tbody></table>\";\n  document.getElementById('tblPl').innerHTML=h;\n  notes(\"plNotes\",\"pl\");\n}\n" + script.slice(b);
+}
+
+// A function replaced whole ends at the first closing brace in column one:
+// every function in the template is top level and everything inside one is
+// indented. "Up to the next function declaration" was the first rule tried and
+// it silently swallowed the VAT constants sitting between renderExp and the
+// function after it — valid JavaScript, and a screen that throws on open.
+function cutFn(script, name) {
+  const open = 'function ' + name + '(';
+  const a = script.indexOf(open);
+  if (a < 0) throw new Error(name + ' is not where it was.');
+  const b = script.indexOf('\n}\n', a + open.length);
+  if (b < 0) throw new Error('the end of ' + name + ' could not be found.');
+  return [a, b + 3];
+}
+// ---- patch 20: the balance sheet takes as many columns as wanted ------
+//
+// FIX-3 §2a, and the case it calls the plain one: August 2026 beside December
+// 2025 and December 2024 -- the current position against the last two audited
+// year ends. COMPARE WITH offered one column and one answer.
+//
+// Movement sits against the column to its LEFT and its heading says which two
+// it compares (§2d), because three columns across otherwise read as one pair
+// and a spare.
+
+{
+  const [a, b] = cutFn(script, 'renderBs');
+  script = script.slice(0, a) + "function renderBs(){\n  periodCtl(\"bs\",\"bsCtl\",renderBs,{asAt:true,mode:\"month\"});\n  cmpCtl(\"bs\",\"bsCmpBar\",renderBs,{asAt:true});\n  const i=periodRange(\"bs\")[1], m=M[i];\n  CMPA=i; CMPB=i;\n  const cum=j=>{const a=ytdStart(j);\n    return sumL(REV,a,j)-sumL(COS,a,j)+sumL(OI,a,j)-sumL(SD,a,j)-sumL(ADM,a,j)-sumL(FIN,a,j);};\n  const val=(id,j)=>id===\"B-650\"?cum(j):BS(id)[j];\n  const secTot=(pre,j)=>D.lines.filter(l=>l.id.startsWith(pre)&&!l.sub&&l.id!==\"B-640\")\n    .reduce((t,l)=>t+val(l.id,j),0);\n  const plug=j=>{\n    const na=secTot(\"B-0\",j)+secTot(\"B-1\",j)-secTot(\"B-2\",j)-secTot(\"B-4\",j);\n    return na-secTot(\"B-6\",j);};\n  const get=(id,j)=>id===\"B-640\"?plug(j):val(id,j);\n\n  /* Every column, the position on screen first. A balance sheet column is one\n     month end, so a comparison is the position at that month and nothing else. */\n  const cols=[{label:lbl(m),at:i}].concat(cmpCols(\"bs\",{asAt:true}).map(function(c){\n    return c.missing?{label:c.label,missing:c.missing}\n                    :(c.budget?{label:c.label,missing:\"a balance sheet has no budget\"}\n                              :{label:c.label,at:c.range[1]});\n  }));\n  const at=(id,c)=>c.missing?null:get(id,c.at);\n\n  const secs=[[\"Non-current assets\",\"B-0\"],[\"Current assets\",\"B-1\"],[\"Current liabilities\",\"B-2\"],[\"Non-current liabilities\",\"B-4\"],[\"Equity\",\"B-6\"]];\n  /* Movement sits against the column to its LEFT and the heading says which two\n     it compares, so three columns across read as two movements and not as one\n     unexplained pair. */\n  const span=1+(cols.length-1)*2;\n  let h=`<table><thead><tr><th>Line</th>`;\n  cols.forEach(function(c,k){\n    h+=`<th class=\"num\">${c.label}</th>`;\n    if(k>0)h+=`<th class=\"num\">${lblShort(cols[k-1].label)} vs ${lblShort(c.label)}</th>`;\n  });\n  h+=`</tr></thead><tbody>`;\n\n  const tot={};\n  secs.forEach(([nm,pre])=>{\n    h+=`<tr class=\"sec\"><td colspan=\"${span+1}\">${nm}</td></tr>`;\n    const running=cols.map(()=>0);\n    D.lines.filter(l=>l.id.startsWith(pre)&&!l.sub).forEach(l=>{\n      const vs=cols.map(c=>at(l.id,c));\n      vs.forEach((v,k)=>{ if(v!==null)running[k]+=v; });\n      if(vs.every(v=>v===null||Math.abs(v)<0.005))return;\n      h+=`<tr><td>${l.name}</td>`+cells(vs)+`</tr>`;\n    });\n    tot[pre]=running;\n    h+=`<tr class=\"sub\"><td>${nm}</td>`+cells(running)+`</tr>`;\n  });\n\n  function cells(vs){\n    let out=\"\";\n    vs.forEach(function(v,k){\n      out+=`<td class=\"num\">${v===null?\"—\":eur(v)}</td>`;\n      if(k>0){\n        const l=vs[k-1], mv=(l===null||v===null)?null:l-v;\n        out+=`<td class=\"num\"${mv!==null&&Math.abs(mv)>0.005?' style=\"color:var(--ink-2)\"':''}>${mv===null?\"—\":eur(mv)}</td>`;\n      }\n    });\n    return out;\n  }\n\n  const netAssets=cols.map((c,k)=>c.missing?null:\n    (tot[\"B-0\"][k]+tot[\"B-1\"][k]-tot[\"B-2\"][k]-tot[\"B-4\"][k]));\n  h+=`<tr class=\"tot\"><td>Net assets</td>`+cells(netAssets)+`</tr>`;\n  h+=\"</tbody></table>\";\n  document.getElementById('tblBs').innerHTML=h;\n  notes(\"bsNotes\",\"bs\");\n}\n/* \"Aug 26\" out of \"Aug 26\" or \"Jan 26–Aug 26\": a movement heading names two\n   points, not two spans, or it will not fit. */\nfunction lblShort(s){ const p=String(s).split(\"–\"); return p[p.length-1]; }\n" + script.slice(b);
+}
+
 // ---- patch 2: ask the portal for a client at sign-in -----------------
 //
 // The sign-in screen needs names, not figures. Sixty-three clients' postings
@@ -1072,7 +1133,23 @@ const STYLE_PATCH = `
   background:var(--surface);color:var(--ink-2);border-radius:4px;cursor:pointer}
 .perbtn:hover{border-color:var(--ink-3);color:var(--ink)}
 .perbtn.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-.perwhat{flex-basis:100%;font-size:12.5px;color:var(--ink-2);margin-top:6px}
+.perwhat{flex-basis:100%;margin-top:8px}
+/* FIX-3 1c — the resolved range is the headline; what qualifies it sits under. */
+.perrange{display:block;font-size:15.5px;font-weight:700;color:var(--ink)}
+.perside{display:block;font-size:12.5px;color:var(--ink-2);margin-top:2px}
+
+/* FIX-3 §2 — comparison columns are a list, so they read as a list. */
+.cmpbar{align-items:flex-start}
+.cmpchips{display:flex;flex-wrap:wrap;gap:6px;margin-right:8px}
+.cmpchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
+  padding:3px 6px 3px 10px;border:1px solid var(--rule);border-radius:999px;
+  background:var(--surface)}
+.cmpchip.bad{border-color:var(--warn);color:var(--ink-2)}
+.cmpchip em{font-style:normal;font-size:11px;color:var(--ink-3)}
+.cmpx{border:none;background:none;cursor:pointer;color:var(--ink-3);font-size:14px;
+  line-height:1;padding:0 2px}
+.cmpx:hover{color:var(--crit)}
+.cmpnone{font-size:12.5px;color:var(--ink-3)}
 
 /* REVIEW-2 3a — headings a step bigger and bolder. They sat close enough to the
    body text in size and weight that a long table read as one undifferentiated
@@ -1101,13 +1178,53 @@ th{font-size:11px}
 // </style> sits before the afdata block, so the payload marker landed in the
 // middle of a paragraph's style attribute and the afdata tag disappeared
 // altogether. The shell still built, and still weighed about the right amount.
-const assembled =
+let assembled =
   head +
   html.slice(0, dataStart) +            // everything up to and including the afdata open tag
   '__PAYLOAD__' +
   html.slice(dataEnd, appOpen) +        // </script> and whatever sits between the two
   '<script src="__APP_JS__"></script>' +
   html.slice(appEnd + '</script>'.length);
+
+// FIX-3 §2 — the Compare-with dropdowns become hosts the column list renders
+// into. Markup, patched on the ASSEMBLED shell for the same reason the
+// stylesheet is: every offset above was measured on the unpatched html.
+{
+  // The sentence under each heading described the one dropdown that used to be
+  // there. FIX-3 §2 replaced it with a list, so the sentence is replaced too.
+  const SUBS = [
+    [
+      "Month and year to date against the same period last year, with the variance in value and percent.",
+      "Month and year to date, against as many comparison columns as are chosen — a period end, a preceding period, or a keyed budget — with the movement and percent against the column to the left of each."
+    ],
+    [
+      "At the month end selected, against the same month last year. Prior year results sit unposted while the audit is open &#8212; line B-640 &#8212; which is what makes the statement balance.",
+      "At the month end selected, against as many earlier month ends as are chosen — the last two audited year ends beside the current position, if that is the conversation. Prior year results sit unposted while the audit is open &#8212; line B-640 &#8212; which is what makes the statement balance."
+    ],
+    [
+      "Overheads by line for the year to date, with the monthly shape beside each and the movement against last year.",
+      "Overheads by line, with the monthly shape beside each and a movement against every comparison column chosen."
+    ]
+  ];
+  for (const [was, now] of SUBS) {
+    if (!assembled.includes(was)) throw new Error('a screen subtitle is not where it was: ' + was.slice(0, 40));
+    assembled = assembled.replace(was, now);
+  }
+}
+{
+  const ec = '<div class="controls" id="expCtl"></div>';
+  if (!assembled.includes(ec)) throw new Error('the Expense analysis controls are not where they were.');
+  assembled = assembled.replace(ec, ec + '<div class="chartbar cmpbar" id="expCmpBar"></div>');
+}
+for (const [id, host] of [["plCmp", "plCmpBar"], ["bsCmp", "bsCmpBar"]]) {
+  const from = assembled.indexOf('<div class="chartbar"><label class="ctl" for="' + id + '">');
+  if (from < 0) throw new Error(id + ': the Compare with control is not where it was.');
+  const to = assembled.indexOf('</select></div>', from);
+  if (to < 0) throw new Error(id + ': its select is not closed where expected.');
+  assembled = assembled.slice(0, from)
+    + '<div class="chartbar cmpbar" id="' + host + '"></div>'
+    + assembled.slice(to + '</select></div>'.length);
+}
 
 if (!assembled.includes('</style>')) throw new Error('the template has no stylesheet to patch.');
 const shell = assembled.replace('</style>', STYLE_PATCH + '</style>');
