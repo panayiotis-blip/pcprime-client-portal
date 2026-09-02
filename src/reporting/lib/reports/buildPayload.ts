@@ -621,7 +621,7 @@ export async function buildClientBlock(
   // This is the DEFAULT, worked out from what the client has. A person's own
   // decision is applied over the top of it below, and outranks all of it.
   const features: Record<string, number> = {
-    pl: 1, bs: 1, summary: 1, expenses: 1, sales: 1,
+    pl: 1, bs: 1, ratios: 1, summary: 1, expenses: 1, sales: 1,
     accounts: 1, stmt: 1, trans: 1, mapping: 1, data: 1, review: 1,
     vat: 1,
     // On only when there is something behind them.
@@ -938,7 +938,7 @@ export function oneClientPayload(built: BuildResult): string {
  */
 function emptyClient(name: string, overrides?: Record<string, boolean>): ClientBlock {
   const off: Record<string, number> = {
-    pl: 0, bs: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
+    pl: 0, bs: 0, ratios: 0, summary: 0, expenses: 0, sales: 0, ledgers: 0, accounts: 0,
     stmt: 0, trans: 0, review: 0, vat: 0, stock: 0, payroll: 0,
     budget: 0, cash: 0, cashmove: 0, projects: 0, audit: 0,
     // Account mapping is ON. With Company setup and Client setup -- which the

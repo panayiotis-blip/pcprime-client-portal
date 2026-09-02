@@ -145,7 +145,10 @@ const strip = (s) => s.replace(/<[^>]+>/g, '').split('').filter(Boolean);
 // CMP is a lexical const inside the sandbox, so reach it by evaluating its name.
 const CMP = vm.runInContext('CMP', ctx);
 
-const heads = (t) => (t.match(/<th[^>]*>(.*?)<\/th>/g) || []).map(x => x.replace(/<[^>]+>/g, ''));
+// Only the statement's own heading row: the balance sheet grew a second table
+// under it in FIX-3 §6, and its headings are not this table's.
+const heads = (t) => ((t.split('</thead>')[0] || '').match(/<th[^>]*>(.*?)<\/th>/g) || [])
+  .map(x => x.replace(/<[^>]+>/g, ''));
 const rowOf = (t, name) => {
   const re = new RegExp('<tr[^>]*><td>' + name + '</td>(.*?)</tr>');
   const m = t.match(re);

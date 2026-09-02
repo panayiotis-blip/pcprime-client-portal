@@ -13,9 +13,9 @@ import { supabase } from '../../../lib/supabase';
 
 const rep = () => supabase.schema('reporting');
 
-/** The twenty sections the template knows. Anything else is not a section. */
+/** Every section the template knows. Anything else is not a section. */
 export const SECTIONS = [
-  'pl', 'bs', 'summary', 'budget', 'cash', 'cashmove', 'expenses', 'sales',
+  'pl', 'bs', 'ratios', 'summary', 'budget', 'cash', 'cashmove', 'expenses', 'sales',
   'stock', 'ledgers', 'accounts', 'vat', 'payroll', 'projects', 'review',
   'audit', 'stmt', 'trans', 'mapping', 'data',
 ] as const;
