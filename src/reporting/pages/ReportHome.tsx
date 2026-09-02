@@ -33,6 +33,7 @@ import VatFiledDialog from '../upload/VatFiledDialog.tsx';
 import { feedByName, type Feed } from '../upload/feeds.ts';
 import { readFolder } from '../upload/readFolder.ts';
 import { setSection } from '../lib/reports/sectionStore.ts';
+import { setChart } from '../lib/reports/chartStore.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -204,6 +205,27 @@ export default function ReportHome() {
           .catch((err) => setNotice({
             text: `${section} was not saved: ` + (err instanceof Error ? err.message : String(err))
               + ' — the switch will read its stored value again on the next sign-in.',
+            bad: true,
+          }));
+        return;
+      }
+
+      // Which charts the overview draws, decided on the same screen. Kept apart
+      // from the sections because a chart is not a section: switching one off
+      // hides a picture, not a screen, and the rail must not move because of it.
+      if (d.type === 'pcp-chart' && d.key && d.feature) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        const chart = String(d.feature);
+        void setChart(cid, chart, d.on === true)
+          .then(() => {
+            // Built before the decision, so it no longer matches.
+            blocks.delete(String(d.key));
+            void forgetCachedBlock(cid);
+          })
+          .catch((err) => setNotice({
+            text: `The chart was not saved: ` + (err instanceof Error ? err.message : String(err))
+              + ' — it will read its stored value again on the next sign-in.',
             bad: true,
           }));
         return;

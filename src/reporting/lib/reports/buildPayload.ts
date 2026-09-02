@@ -34,6 +34,7 @@ import { buildAudit } from './audit.ts';
 import { loadSignoffs } from './signoffStore.ts';
 import { buildFolderDiff } from './folderDiff.ts';
 import { loadKeyedColumns } from './keyedStore.ts';
+import { defaultCharts, applyChartChoices } from './chartStore.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -103,11 +104,12 @@ export async function buildClientBlock(
   const c = client as { id: number; name: string; client_code: string | null };
 
   const { data: settingsRow } = await rep().from('client_settings')
-    .select('year_end_month, currency, report_name, section_overrides, vat_quarter_offset')
+    .select('year_end_month, currency, report_name, section_overrides, vat_quarter_offset, chart_choices')
     .eq('client_id', clientId).maybeSingle();
   const settings = settingsRow as {
     year_end_month: number; currency: string; report_name: string | null;
     section_overrides: Record<string, boolean> | null;
+    chart_choices: Record<string, boolean> | null;
     vat_quarter_offset: number | null;
   } | null;
 
@@ -635,6 +637,12 @@ export async function buildClientBlock(
   // exist: they are set when the client is set up, before any file is loaded.
   applyOverrides(features, settings?.section_overrides);
 
+  // Which charts the overview draws, the same way: the application decides the
+  // default and a person outranks it. Absent from chart_choices means nobody
+  // has looked at this client yet, not that they said no.
+  const charts = defaultCharts();
+  applyChartChoices(charts, settings?.chart_choices);
+
   // ---- what is actually loaded, month by month -------------------------
   //
   // The coverage grid was written against A&F: the months it ticked were
@@ -681,6 +689,7 @@ export async function buildClientBlock(
           vatOffset: settings?.vat_quarter_offset ?? 0,
           currency: settings?.currency ?? 'EUR',
           features,
+          charts,
           notes: openingFrom
             ? `Opening balances derived from the ${openingFrom} trial balance.`
             : 'No trial balance imported: the balance sheet is movement since the first month held, not a position.',
@@ -972,6 +981,7 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
       vatOffset: 0,
       currency: 'EUR',
       features: off,
+      charts: defaultCharts(),
       notes: 'Nothing has been imported for this client yet.',
     },
     vatFiled: [], vatBtms: [], deb: [], cre: [],
