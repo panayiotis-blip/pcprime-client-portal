@@ -116,7 +116,7 @@ ok('and the drawing follows the list', drawn, ['reg', 'reg', 'bars:wide']);
 // §4c — the month row, for July alone: revenue 120, cost 48, overheads 12,
 // finance 1, so profit before tax is 59.
 ok('the month row names its month', html['ovMonthNote'], 'The month on its own — Jul 26.');
-ok('the month row is the month, not the year', tilesIn(html['ovMonth']),
+ok('the month row is the month, not the year', tilesIn(html['ovMonthRow']),
    [['Revenue', '120'], ['Gross profit', '72'], ['Overheads', '12'], ['Profit before tax', '59'],
     ['Debtors moved', '1'], ['Creditors moved', '0'], ['Cash moved', '2']]);
 // and the year-to-date row above it is still the year: seven months of 120

@@ -35,6 +35,7 @@ import { loadSignoffs } from './signoffStore.ts';
 import { buildFolderDiff } from './folderDiff.ts';
 import { loadKeyedColumns } from './keyedStore.ts';
 import { defaultCharts, applyChartChoices } from './chartStore.ts';
+import { defaultPack, applyPackOptions } from './packStore.ts';
 
 const rep = () => supabase.schema('reporting');
 
@@ -104,12 +105,13 @@ export async function buildClientBlock(
   const c = client as { id: number; name: string; client_code: string | null };
 
   const { data: settingsRow } = await rep().from('client_settings')
-    .select('year_end_month, currency, report_name, section_overrides, vat_quarter_offset, chart_choices')
+    .select('year_end_month, currency, report_name, section_overrides, vat_quarter_offset, chart_choices, pack_options')
     .eq('client_id', clientId).maybeSingle();
   const settings = settingsRow as {
     year_end_month: number; currency: string; report_name: string | null;
     section_overrides: Record<string, boolean> | null;
     chart_choices: Record<string, boolean> | null;
+    pack_options: Record<string, boolean> | null;
     vat_quarter_offset: number | null;
   } | null;
 
@@ -643,6 +645,11 @@ export async function buildClientBlock(
   const charts = defaultCharts();
   applyChartChoices(charts, settings?.chart_choices);
 
+  // And how the pack is laid out. Same rule again: the application decides the
+  // default and a person outranks it.
+  const pack = defaultPack();
+  applyPackOptions(pack, settings?.pack_options);
+
   // ---- what is actually loaded, month by month -------------------------
   //
   // The coverage grid was written against A&F: the months it ticked were
@@ -690,6 +697,7 @@ export async function buildClientBlock(
           currency: settings?.currency ?? 'EUR',
           features,
           charts,
+          pack,
           notes: openingFrom
             ? `Opening balances derived from the ${openingFrom} trial balance.`
             : 'No trial balance imported: the balance sheet is movement since the first month held, not a position.',
@@ -982,6 +990,7 @@ function emptyClient(name: string, overrides?: Record<string, boolean>): ClientB
       currency: 'EUR',
       features: off,
       charts: defaultCharts(),
+      pack: defaultPack(),
       notes: 'Nothing has been imported for this client yet.',
     },
     vatFiled: [], vatBtms: [], deb: [], cre: [],

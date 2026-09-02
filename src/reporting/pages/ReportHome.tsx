@@ -34,6 +34,7 @@ import { feedByName, type Feed } from '../upload/feeds.ts';
 import { readFolder } from '../upload/readFolder.ts';
 import { setSection } from '../lib/reports/sectionStore.ts';
 import { setChart } from '../lib/reports/chartStore.ts';
+import { setPackOption } from '../lib/reports/packStore.ts';
 import { supabase } from '../../lib/supabase';
 
 /** Built once per tab: rebuilding the frame on every visit would feel broken. */
@@ -225,6 +226,26 @@ export default function ReportHome() {
           })
           .catch((err) => setNotice({
             text: `The chart was not saved: ` + (err instanceof Error ? err.message : String(err))
+              + ' — it will read its stored value again on the next sign-in.',
+            bad: true,
+          }));
+        return;
+      }
+
+      // How this client’s pack is laid out — today, whether the management
+      // summary prints percentages. Kept apart from the sections and the charts
+      // because it is neither: it changes the shape of a table, not what exists.
+      if (d.type === 'pcp-pack' && d.key && d.feature) {
+        const cid = Number(String(d.key).replace(/^c/, ''));
+        if (!Number.isFinite(cid) || cid <= 0) return;
+        void setPackOption(cid, String(d.feature), d.on === true)
+          .then(() => {
+            // Built before the decision, so it no longer matches.
+            blocks.delete(String(d.key));
+            void forgetCachedBlock(cid);
+          })
+          .catch((err) => setNotice({
+            text: 'The pack option was not saved: ' + (err instanceof Error ? err.message : String(err))
               + ' — it will read its stored value again on the next sign-in.',
             bad: true,
           }));
